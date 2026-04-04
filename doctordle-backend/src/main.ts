@@ -18,7 +18,7 @@ async function bootstrap() {
 
   app.enableCors(createCorsOptions());
 
-  const port = env.PORT;
+  const port = Number(process.env.PORT ?? env.PORT ?? 8080);
   const host = '0.0.0.0';
 
   await app.listen(port, host);

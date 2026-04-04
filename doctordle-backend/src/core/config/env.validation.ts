@@ -17,7 +17,7 @@ const envSchema = z.object({
   CLERK_JWT_AUDIENCE: z.string().min(1),
   OPENAI_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   HOST: z.preprocess(emptyToUndefined, z.string().min(1).optional()).default('0.0.0.0'),
-  PORT: z.coerce.number().int().positive().default(3000),
+  PORT: z.coerce.number().int().positive().optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']),
   DEV_BYPASS_DAILY_LIMIT: z
     .string()
