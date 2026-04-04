@@ -1,7 +1,9 @@
 import { Controller, Get } from '@nestjs/common';
 import { getEnv } from './core/config/env.validation';
+import { Public } from './auth/public.decorator';
 
 @Controller()
+@Public()
 export class HealthController {
   @Get('health')
   health() {
