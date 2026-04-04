@@ -5,14 +5,6 @@ import { AppModule } from './app.module';
 import { createCorsOptions } from './core/config/cors.util';
 import { validateEnv } from './core/config/env.validation';
 
-function resolveNetworkHost(networkHost?: string): string | null {
-  if (networkHost?.trim()) {
-    return networkHost;
-  }
-
-  return null;
-}
-
 async function bootstrap() {
   const env = validateEnv();
   const app = await NestFactory.create(AppModule);
@@ -26,16 +18,16 @@ async function bootstrap() {
 
   app.enableCors(createCorsOptions());
 
-  const host = env.HOST;
   const port = env.PORT;
 
-  await app.listen(port, host);
+  await app.listen(port);
 
-  const networkHost = resolveNetworkHost(env.NETWORK_HOST);
-  console.log(`✅ Server listening on ${host}:${port}`);
+  const publicUrl = await app.getUrl();
+  console.log(`✅ Server listening on ${publicUrl}`);
   console.log(`✅ Environment: ${env.NODE_ENV}`);
   console.log(`✅ API available at http://localhost:${port} (from container)`);
-  if (networkHost) {
+  if (env.NETWORK_HOST?.trim()) {
+    const networkHost = env.NETWORK_HOST.trim();
     console.log(`✅ Network accessible at http://${networkHost}:${port}`);
   }
 }
