@@ -19,12 +19,11 @@ async function bootstrap() {
   app.enableCors(createCorsOptions());
 
   const port = env.PORT;
-  const host = env.HOST?.trim() || '0.0.0.0';
+  const host = '0.0.0.0';
 
   await app.listen(port, host);
 
-  const publicUrl = await app.getUrl();
-  console.log(`✅ Server listening on ${publicUrl}`);
+  console.log(`✅ Server listening on http://${host}:${port}`);
   console.log(`✅ Environment: ${env.NODE_ENV}`);
   console.log(`✅ API available at http://localhost:${port} (from container)`);
   if (env.NETWORK_HOST?.trim()) {
