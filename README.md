@@ -23,6 +23,10 @@ Wardle stack with separate frontend(s), backend API, and analytics dashboard.
 - Frontend (`doctordle-game`) on Vercel
 - Backend + Postgres + Redis on Railway
 
+For Vercel frontend env setup, use:
+
+- `doctordle-game/.env.vercel.example`
+
 See full deployment checklist in:
 
 - `docs/deployment-vercel-railway.md`

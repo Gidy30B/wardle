@@ -15,6 +15,12 @@ Create a Railway project with:
 - Redis service
 - Backend service from `doctordle-backend`
 
+Source settings for backend service:
+
+- Root directory: `doctordle-backend`
+- Use the existing `Dockerfile` in that directory
+- Railpack config: `doctordle-backend/railpack.json` provides an explicit start command
+
 Backend commands:
 
 - Build: `npm install && npm run build`
@@ -33,6 +39,17 @@ Required backend env vars:
 - `CLERK_JWKS_URL` (optional override)
 - `ALLOWED_ORIGINS=https://<your-vercel-domain>`
 
+Use template:
+
+- `doctordle-backend/.env.railway.example`
+
+Railway variable mapping tip:
+
+- Set `DATABASE_URL` from Railway PostgreSQL service connection URL
+- Set `REDIS_URL` from Railway Redis service connection URL
+- Keep `HOST=0.0.0.0`
+- Do not hardcode localhost URLs in production
+
 Also set app-specific scoring/model vars from `doctordle-backend/.env.example`.
 
 ## 3) Vercel Frontend Setup (`doctordle-game`)
@@ -47,7 +64,10 @@ Frontend env vars:
 - `VITE_CLERK_PUBLISHABLE_KEY`
 - `VITE_CLERK_JWT_AUDIENCE=your-api`
 - `VITE_API_BASE_URL=https://<railway-backend-domain>/api`
+- `VITE_API_URL=https://<railway-backend-domain>/api` (optional fallback)
 - `VITE_SHARE_URL=https://<your-vercel-domain>`
+
+Use `doctordle-game/.env.vercel.example` as the source template when entering values in Vercel Project Settings → Environment Variables.
 
 ## 4) Clerk Dashboard Alignment
 
@@ -68,3 +88,9 @@ Verify issuer/audience consistency:
 - Call authenticated flow in app (e.g. game start)
 - Confirm backend accepts token (no audience/issuer mismatch)
 - Confirm sharing links resolve to production domain
+
+Railway quick checks:
+
+- Backend deploy logs show `Nest application successfully started`
+- Backend is reachable on Railway public URL
+- Login + protected API call succeed from Vercel frontend
