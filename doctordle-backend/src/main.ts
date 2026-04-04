@@ -8,6 +8,7 @@ import { validateEnv } from './core/config/env.validation';
 async function bootstrap() {
   const env = validateEnv();
   const app = await NestFactory.create(AppModule);
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -18,17 +19,15 @@ async function bootstrap() {
 
   app.enableCors(createCorsOptions());
 
-  const port = Number(process.env.PORT ?? env.PORT ?? 8080);
+  // 🔥 CRITICAL: DO NOT trust env.PORT for Railway
+  const port = parseInt(process.env.PORT || '', 10) || 8080;
   const host = '0.0.0.0';
 
   await app.listen(port, host);
 
-  console.log(`✅ Server listening on http://${host}:${port}`);
-  console.log(`✅ Environment: ${env.NODE_ENV}`);
-  console.log(`✅ API available at http://localhost:${port} (from container)`);
-  if (env.NETWORK_HOST?.trim()) {
-    const networkHost = env.NETWORK_HOST.trim();
-    console.log(`✅ Network accessible at http://${networkHost}:${port}`);
-  }
+  console.log(`🚀 Server running on ${host}:${port}`);
+  console.log(`🌍 Environment: ${env.NODE_ENV}`);
+  console.log(`📡 Health endpoint: /health`);
 }
+
 bootstrap();
