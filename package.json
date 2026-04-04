@@ -1,0 +1,12 @@
+{
+  "name": "dxlab",
+  "private": true,
+  "scripts": {
+    "precompose": "ts-node scripts/check-env.ts",
+    "check:env": "ts-node scripts/check-env.ts"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

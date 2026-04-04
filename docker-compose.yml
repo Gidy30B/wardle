@@ -1,0 +1,99 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: doctordle-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./doctordle-backend
+    container_name: doctordle-backend
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      REDIS_URL: redis://cache:6379
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      CLERK_JWT_ISSUER: ${CLERK_JWT_ISSUER}
+      CLERK_JWT_AUDIENCE: ${CLERK_JWT_AUDIENCE}
+      CLERK_JWKS_URL: ${CLERK_JWKS_URL}
+      NODE_ENV: ${NODE_ENV}
+      DEV_BYPASS_DAILY_LIMIT: ${DEV_BYPASS_DAILY_LIMIT}
+      LOG_LEVEL: ${LOG_LEVEL}
+      HOST: ${HOST}
+      PORT: ${PORT}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      NETWORK_HOST: ${NETWORK_HOST}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+      EVALUATOR_VERSION: ${EVALUATOR_VERSION}
+      SCORE_WEIGHT_EXACT: ${SCORE_WEIGHT_EXACT}
+      SCORE_WEIGHT_SYNONYM: ${SCORE_WEIGHT_SYNONYM}
+      SCORE_WEIGHT_FUZZY: ${SCORE_WEIGHT_FUZZY}
+      SCORE_WEIGHT_EMBEDDING: ${SCORE_WEIGHT_EMBEDDING}
+      SCORE_WEIGHT_ONTOLOGY: ${SCORE_WEIGHT_ONTOLOGY}
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  cache:
+    image: redis:7-alpine
+    container_name: doctordle-cache
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./analytics-dashboard
+      args:
+        VITE_BACKEND_URL: ${VITE_BACKEND_URL}
+    container_name: doctordle-frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+  game-frontend:
+    build:
+      context: ./doctordle-game
+      args:
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_CLERK_JWT_AUDIENCE: ${VITE_CLERK_JWT_AUDIENCE}
+    container_name: doctordle-game
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "8081:80"
+volumes:
+  db_data:
+    driver: local

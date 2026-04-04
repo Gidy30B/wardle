@@ -1,0 +1,16 @@
+node_modules
+dist
+.env
+.env.local
+.env.*.local
+.git
+.gitignore
+README.md
+docker-compose.yml
+.dockerignore
+coverage
+.jest
+.eslintcache
+*.log
+.vscode
+.idea

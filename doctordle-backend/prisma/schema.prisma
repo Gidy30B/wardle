@@ -1,0 +1,176 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Diagnosis {
+  id          String               @id @default(uuid())
+  name        String               @unique
+  system      String?
+  embeddings  DiagnosisEmbedding[]
+  synonyms    Synonym[]
+  cases       Case[]
+}
+
+model DiagnosisEmbedding {
+  id          String                  @id @default(uuid())
+  diagnosisId String
+  vector      Unsupported("vector(1536)")
+  type        String
+  createdAt   DateTime                @default(now())
+  diagnosis   Diagnosis               @relation(fields: [diagnosisId], references: [id], onDelete: Cascade)
+
+  @@index([diagnosisId])
+  @@index([type])
+}
+
+model Synonym {
+  id          String    @id @default(uuid())
+  term        String    @unique
+  diagnosisId String
+  diagnosis   Diagnosis @relation(fields: [diagnosisId], references: [id], onDelete: Cascade)
+
+  @@index([diagnosisId])
+}
+
+model Case {
+  id          String    @id @default(uuid())
+  date        DateTime  @unique
+  difficulty  String
+  history     String
+  symptoms    String[]
+  labs        Json?
+  diagnosisId String
+  diagnosis   Diagnosis @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
+  attempts    Attempt[]
+  sessions    GameSession[]
+  dailyCases  DailyCase[]
+
+  @@index([diagnosisId])
+}
+
+model GameSession {
+  id          String    @id @default(uuid())
+  caseId                 String
+  userId                 String
+  dailyCaseId            String
+  userTierAtStart        String?
+  currentClueIndexLegacy Int?      @default(0)
+  xpAwardedAt            DateTime?
+  startedAt              DateTime   @default(now())
+  completedAt            DateTime?
+  status                 String
+  case                   Case       @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  user                   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyCase              DailyCase  @relation(fields: [dailyCaseId], references: [id], onDelete: Cascade)
+  attempts               Attempt[]
+
+  @@index([caseId])
+  @@index([dailyCaseId])
+  @@index([userId])
+  @@index([status])
+  @@index([startedAt])
+  @@index([userId, status, completedAt])
+}
+
+model Attempt {
+  id               String   @id @default(uuid())
+  caseId           String
+  userId           String?
+  sessionId        String
+  guess            String
+  normalizedGuess  String
+  score            Float
+  result           String
+  signals          Json
+  evaluatorVersion String
+  clueIndexAtAttempt Int?
+  createdAt        DateTime @default(now())
+  session          GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  case             Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@index([caseId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([sessionId, normalizedGuess, createdAt])
+  @@index([result, guess])
+}
+
+model User {
+  id               String             @id
+  clerkId          String?            @unique
+  email            String?
+  subscriptionTier String             @default("free")
+  lastPlayedAt     DateTime?
+  sessions         GameSession[]
+  attempts         Attempt[]
+  stats            UserStats?
+  progress         UserProgress?
+  leaderboard      LeaderboardEntry[]
+
+  @@index([subscriptionTier])
+}
+
+model UserProgress {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  xpTotal        Int      @default(0)
+  level          Int      @default(1)
+  xpCurrentLevel Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([xpTotal])
+}
+
+model UserStats {
+  userId        String   @id
+  currentStreak Int      @default(0)
+  bestStreak    Int      @default(0)
+  lastPlayedDate DateTime? @db.Date
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DailyCase {
+  id        String   @id @default(uuid())
+  caseId    String
+  date      DateTime @unique @db.Date
+  createdAt DateTime @default(now())
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  sessions  GameSession[]
+  leaderboardEntries LeaderboardEntry[]
+
+  @@index([caseId])
+}
+
+model LeaderboardEntry {
+  id              String   @id @default(uuid())
+  userId          String
+  dailyCaseId     String
+  score           Int
+  attemptsCount   Int
+  timeToComplete  Int?
+  completedAt     DateTime
+  rankLegacy      Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyCase       DailyCase @relation(fields: [dailyCaseId], references: [id], onDelete: Cascade)
+
+  @@unique([dailyCaseId, userId])
+  @@index([dailyCaseId, score(sort: Desc), attemptsCount(sort: Asc), completedAt(sort: Asc)])
+  @@index([userId, completedAt(sort: Desc)])
+}
