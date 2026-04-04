@@ -32,9 +32,11 @@ async function bootstrap() {
   await app.listen(port, host);
 
   const networkHost = resolveNetworkHost(env.NETWORK_HOST);
-  console.log(`Server listening on http://localhost:${port}`);
+  console.log(`✅ Server listening on ${host}:${port}`);
+  console.log(`✅ Environment: ${env.NODE_ENV}`);
+  console.log(`✅ API available at http://localhost:${port} (from container)`);
   if (networkHost) {
-    console.log(`Server listening on http://${networkHost}:${port}`);
+    console.log(`✅ Network accessible at http://${networkHost}:${port}`);
   }
 }
 bootstrap();
