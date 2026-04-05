@@ -4,6 +4,7 @@ import { ClerkProvider } from '@clerk/clerk-react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './app/App'
+import AppErrorBoundary from './app/components/AppErrorBoundary'
 
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
@@ -25,7 +26,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ClerkProvider publishableKey={clerkPublishableKey}>
       <QueryClientProvider client={queryClient}>
-        <App />
+        <AppErrorBoundary>
+          <App />
+        </AppErrorBoundary>
       </QueryClientProvider>
     </ClerkProvider>
   </StrictMode>,
