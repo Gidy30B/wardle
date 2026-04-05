@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
 import { createCorsOptions } from './core/config/cors.util';
 import { validateEnv } from './core/config/env.validation';
@@ -16,6 +17,11 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    console.log('Incoming request:', req.url);
+    next();
+  });
 
   app.enableCors(createCorsOptions());
   app.setGlobalPrefix('api');

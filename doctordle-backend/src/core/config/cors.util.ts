@@ -49,7 +49,11 @@ function isAllowedOrigin(origin: string, configuredAllowedOrigins: ReadonlyArray
 
 export function createCorsOptions(): CorsOptions {
   const env = getEnv();
-  const configuredAllowedOrigins = parseAllowedOrigins(env.ALLOWED_ORIGINS);
+  const configuredAllowedOrigins = [
+    'https://wardle-nu.vercel.app',
+    'http://localhost:5173',
+    ...parseAllowedOrigins(env.ALLOWED_ORIGINS),
+  ];
   const isProduction = env.NODE_ENV.toLowerCase() === 'production';
 
   if (isProduction && configuredAllowedOrigins.includes('*')) {
@@ -64,7 +68,7 @@ export function createCorsOptions(): CorsOptions {
         return;
       }
 
-      callback(new Error('CORS origin not allowed'), false);
+      callback(null, false);
     },
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,

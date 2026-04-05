@@ -3,7 +3,7 @@ import { ClerkAuthGuard } from './clerk-auth.guard';
 import { UserProgressService } from '../modules/gameplay/user-progress.service';
 import type { AuthenticatedRequest } from './authenticated-request.interface';
 
-@Controller('api/auth')
+@Controller('auth')
 export class AuthController {
   constructor(
     private readonly userProgressService: UserProgressService,

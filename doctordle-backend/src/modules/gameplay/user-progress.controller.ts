@@ -3,7 +3,7 @@ import type { AuthenticatedRequest } from '../../auth/authenticated-request.inte
 import { RateLimitGuard } from './guards/rate-limit.guard';
 import { UserProgressService } from './user-progress.service';
 
-@Controller('api/user')
+@Controller('user')
 @UseGuards(RateLimitGuard)
 export class UserProgressController {
   constructor(private readonly userProgressService: UserProgressService) {}
