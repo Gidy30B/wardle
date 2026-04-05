@@ -2,6 +2,7 @@ type ShareResult = 'correct' | 'failed'
 type AttemptLabel = 'correct' | 'close' | 'wrong'
 
 const FALLBACK_SHARE_URL = 'https://wardle.app'
+const PLACEHOLDER_HOSTS = new Set(['your-app.vercel.app', 'example.com'])
 
 const emojiByAttempt: Record<AttemptLabel, string> = {
   correct: '🟩',
@@ -19,7 +20,7 @@ export function buildShareGrid(attemptLabels: AttemptLabel[]): string {
 
 export function getShareUrl() {
   const envUrl = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_SHARE_URL?.trim()
-  if (envUrl) {
+  if (envUrl && isValidShareUrl(envUrl)) {
     return envUrl
   }
 
@@ -28,6 +29,23 @@ export function getShareUrl() {
   }
 
   return FALLBACK_SHARE_URL
+}
+
+function isValidShareUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    if (PLACEHOLDER_HOSTS.has(parsed.hostname)) {
+      return false
+    }
+
+    if (parsed.hostname.includes('your-app') || parsed.hostname.includes('example')) {
+      return false
+    }
+
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+  } catch {
+    return false
+  }
 }
 
 export function buildShareText(data: {
