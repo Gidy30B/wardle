@@ -20,7 +20,7 @@ export default function GuessInput({
 }: GuessInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const isDisabled = Boolean(!hasActiveSession || isLoading || isGameOver)
-  const hasValue = value.trim().length > 0
+  const isPremiumLocked = !hasActiveSession && !isLoading && !isGameOver
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -31,7 +31,12 @@ export default function GuessInput({
       className="flex items-center gap-3"
       onSubmit={(event) => {
         event.preventDefault()
-        if (!isDisabled && hasValue) onSubmit()
+        if (isPremiumLocked) {
+          console.log('Go Premium clicked')
+          return
+        }
+
+        onSubmit()
       }}
     >
       <motion.input
@@ -62,22 +67,25 @@ export default function GuessInput({
 
       <motion.button
         type="submit"
-        disabled={isDisabled || !hasValue}
+        disabled={isLoading || isGameOver || (!value.trim() && hasActiveSession)}
         whileTap={{ scale: 0.96 }}
-        whileHover={!isDisabled && hasValue ? { scale: 1.02 } : {}}
-        className={`
-          h-14 rounded-2xl px-5 text-sm font-semibold transition-all
-
-          ${
-            isDisabled
-              ? 'cursor-not-allowed bg-white/10 text-white/40'
-              : hasValue
-              ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20'
-              : 'bg-white/10 text-white/50'
-          }
-        `}
+        whileHover={!isLoading && !isGameOver ? { scale: 1.02 } : {}}
+        className={`h-14 rounded-2xl px-5 text-sm font-semibold transition active:scale-[0.99]
+  ${
+    isPremiumLocked
+      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+      : 'bg-slate-950 text-white'
+  }
+  disabled:cursor-not-allowed disabled:bg-slate-400
+`}
       >
-        {isLoading ? 'Sending...' : isGameOver ? 'Done' : !hasActiveSession ? 'Unavailable' : 'Submit'}
+        {isLoading
+          ? 'Sending...'
+          : isPremiumLocked
+          ? 'Go Premium'
+          : isGameOver
+          ? 'Trial ended'
+          : 'Submit'}
       </motion.button>
     </form>
   )
