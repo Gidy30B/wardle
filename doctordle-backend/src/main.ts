@@ -18,6 +18,7 @@ async function bootstrap() {
   );
 
   app.enableCors(createCorsOptions());
+  app.setGlobalPrefix('api');
 
   // 🔥 CRITICAL: DO NOT trust env.PORT for Railway
   const port = parseInt(process.env.PORT || '', 10) || 8080;
@@ -27,7 +28,8 @@ async function bootstrap() {
 
   console.log(`🚀 Server running on ${host}:${port}`);
   console.log(`🌍 Environment: ${env.NODE_ENV}`);
-  console.log(`📡 Health endpoint: /health`);
+  console.log(`📡 Global prefix: /api`);
+  console.log(`📡 Health endpoint: /api/health`);
 }
 
 bootstrap();
