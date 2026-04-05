@@ -26,6 +26,6 @@ COPY package*.json ./
 
 EXPOSE 3000
 
-HEALTHCHECK CMD wget --spider -q http://localhost:3000/health || exit 1
+HEALTHCHECK CMD wget --spider -q http://localhost:3000/api/health || exit 1
 
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
