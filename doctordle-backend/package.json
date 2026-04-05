@@ -12,7 +12,7 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main.js",
+    "start:prod": "node dist/main.js || node dist/src/main.js",
     "embed:diagnoses": "ts-node ./scripts/embed-diagnoses.ts",
     "backfill:daily-case": "ts-node ./scripts/backfill-daily-case.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
