@@ -13,7 +13,9 @@ export function useGameSession() {
   const submittingRef = useRef(false)
   const [guess, setGuess] = useState('')
   const [result, setResult] = useState<GameResult | null>(null)
-  const [attemptLabels, setAttemptLabels] = useState<Array<'correct' | 'close' | 'wrong'>>([])
+  const [attemptLabels, setAttemptLabels] = useState<
+    Array<{ guess: string; label: 'correct' | 'close' | 'wrong' }>
+  >([])
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [caseData, setCaseData] = useState<GameCase | null>(null)
   const [caseLoading, setCaseLoading] = useState(true)
@@ -89,7 +91,7 @@ export function useGameSession() {
     try {
       const response = await submitGuessApi(request, { guess: trimmed, sessionId })
       setResult(response)
-      setAttemptLabels((previous) => [...previous, response.label])
+      setAttemptLabels((previous) => [...previous, { guess: trimmed, label: response.label }])
       if (response.case) {
         setCaseData(response.case)
       }

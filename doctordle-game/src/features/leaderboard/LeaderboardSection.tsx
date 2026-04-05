@@ -52,11 +52,11 @@ function LeaderboardSection({
   )
 
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition-opacity duration-200">
+    <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-sm transition-opacity duration-200">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Leaderboard</p>
-          <h2 className="mt-1 text-lg font-semibold text-slate-950">Top players</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Leaderboard</p>
+          <h2 className="mt-1 text-lg font-semibold text-white">Top players</h2>
         </div>
         <div className="flex gap-2">
           <button
@@ -64,8 +64,8 @@ function LeaderboardSection({
             onClick={handleModeChange('daily')}
             className={`rounded-full border px-3 py-1 text-xs font-semibold ${
               mode === 'daily'
-                ? 'border-sky-200 bg-sky-50 text-sky-700'
-                : 'border-slate-200 bg-white text-slate-600'
+                ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300'
+                : 'border-white/10 bg-white/5 text-white/70'
             }`}
           >
             Daily
@@ -75,8 +75,8 @@ function LeaderboardSection({
             onClick={handleModeChange('weekly')}
             className={`rounded-full border px-3 py-1 text-xs font-semibold ${
               mode === 'weekly'
-                ? 'border-sky-200 bg-sky-50 text-sky-700'
-                : 'border-slate-200 bg-white text-slate-600'
+                ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300'
+                : 'border-white/10 bg-white/5 text-white/70'
             }`}
           >
             Weekly
@@ -88,14 +88,14 @@ function LeaderboardSection({
         {error ? (
           <p className="text-sm text-rose-600">Failed to load leaderboard.</p>
         ) : loading ? (
-          <p className="text-sm text-slate-600">Loading leaderboard...</p>
+          <p className="text-sm text-white/70">Loading leaderboard...</p>
         ) : leaderboard.length === 0 ? (
-          <p className="text-sm text-slate-600">No entries yet.</p>
+          <p className="text-sm text-white/70">No entries yet.</p>
         ) : (
           <div className="min-h-[240px] overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-700">
+            <table className="w-full text-left text-sm text-white/80">
               <thead>
-                <tr className="text-xs uppercase tracking-[0.12em] text-slate-500">
+                <tr className="text-xs uppercase tracking-[0.12em] text-white/60">
                   <th className="pb-2">Rank #</th>
                   <th className="pb-2">User</th>
                   <th className="pb-2">Score</th>
@@ -110,8 +110,8 @@ function LeaderboardSection({
                   return (
                     <tr
                       key={`${mode}-${entry.rank}-${entry.userId}`}
-                      className={`border-t border-slate-100 transition-colors ${
-                        isCurrentUser ? 'border-l-4 border-l-sky-500 bg-sky-50 font-semibold' : ''
+                      className={`border-t border-white/10 transition-colors ${
+                        isCurrentUser ? 'border-l-4 border-l-emerald-400 bg-emerald-500/10 font-semibold' : ''
                       }`}
                     >
                       <td className="py-2">{entry.rank}</td>
@@ -130,8 +130,8 @@ function LeaderboardSection({
         )}
 
         {!loading && currentUserId && !isCurrentUserInTopList && (
-          <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm text-slate-700">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-700">Your position</p>
+          <div className="mt-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-white/80">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-300">Your position</p>
             {currentUserPosition ? (
               <div className="mt-2 grid grid-cols-5 gap-2">
                 <p>#{currentUserPosition.rank}</p>

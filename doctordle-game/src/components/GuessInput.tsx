@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { motion } from 'framer-motion'
 
 type GuessInputProps = {
   value: string
@@ -19,6 +20,7 @@ export default function GuessInput({
 }: GuessInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const isDisabled = Boolean(!hasActiveSession || isLoading || isGameOver)
+  const hasValue = value.trim().length > 0
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -29,27 +31,54 @@ export default function GuessInput({
       className="flex items-center gap-3"
       onSubmit={(event) => {
         event.preventDefault()
-        onSubmit()
+        if (!isDisabled && hasValue) onSubmit()
       }}
     >
-      <input
+      <motion.input
         ref={inputRef}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         disabled={isDisabled}
-        placeholder="Enter diagnosis"
-        className="h-14 flex-1 rounded-2xl border border-slate-300 bg-white px-4 text-base text-slate-950 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100 disabled:bg-slate-100"
+        placeholder={
+          isGameOver
+            ? 'Trial complete'
+            : !hasActiveSession
+            ? 'Session unavailable'
+            : 'Enter diagnosis...'
+        }
+        className={`
+          h-14 flex-1 rounded-2xl px-4 text-base outline-none transition-all
+          border border-white/10 bg-white/5 text-white placeholder:text-white/40
+
+          focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/10
+
+          ${isDisabled ? 'cursor-not-allowed opacity-60' : ''}
+        `}
+        whileFocus={{ scale: 1.01 }}
         autoComplete="off"
         autoCapitalize="off"
         autoCorrect="off"
       />
-      <button
+
+      <motion.button
         type="submit"
-        disabled={isDisabled || !value.trim()}
-        className="h-14 rounded-2xl bg-slate-950 px-5 text-sm font-semibold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-400"
+        disabled={isDisabled || !hasValue}
+        whileTap={{ scale: 0.96 }}
+        whileHover={!isDisabled && hasValue ? { scale: 1.02 } : {}}
+        className={`
+          h-14 rounded-2xl px-5 text-sm font-semibold transition-all
+
+          ${
+            isDisabled
+              ? 'cursor-not-allowed bg-white/10 text-white/40'
+              : hasValue
+              ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20'
+              : 'bg-white/10 text-white/50'
+          }
+        `}
       >
-        {isLoading ? 'Sending...' : !hasActiveSession ? 'Unavailable' : isGameOver ? 'Trial ended' : 'Submit'}
-      </button>
+        {isLoading ? 'Sending...' : isGameOver ? 'Done' : !hasActiveSession ? 'Unavailable' : 'Submit'}
+      </motion.button>
     </form>
   )
 }

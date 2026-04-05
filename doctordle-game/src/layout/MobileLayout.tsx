@@ -8,7 +8,7 @@ type MobileLayoutProps = {
 
 export default function MobileLayout({ children, header, footer }: MobileLayoutProps) {
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-950">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-black text-white">
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col sm:px-6">
         {header}
 
@@ -16,7 +16,7 @@ export default function MobileLayout({ children, header, footer }: MobileLayoutP
           <div className="space-y-4">{children}</div>
         </main>
 
-        <footer className="sticky bottom-0 border-t border-slate-200 bg-slate-100/95 px-4 pb-[env(safe-area-inset-bottom)] pt-3 backdrop-blur">
+        <footer className="sticky bottom-0 border-t border-white/10 bg-black/80 px-4 pb-[env(safe-area-inset-bottom)] pt-3 backdrop-blur">
           {footer}
         </footer>
       </div>

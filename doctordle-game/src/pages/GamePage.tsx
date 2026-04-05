@@ -74,7 +74,7 @@ export default function GamePage() {
         }
       >
         <ProgressSection progress={progress.progress} loading={progress.loading} />
-        <button type="button" onClick={() => openSheet('leaderboard')} className="-mt-2 text-xs text-sky-600">
+        <button type="button" onClick={() => openSheet('leaderboard')} className="-mt-2 text-xs text-emerald-400">
           View leaderboard →
         </button>
 
@@ -92,7 +92,7 @@ export default function GamePage() {
           attemptLabels={game.attemptLabels}
         />
         {game.result?.label === 'correct' ? (
-          <button type="button" onClick={() => openSheet('explanation')} className="-mt-2 text-sm text-sky-600">
+          <button type="button" onClick={() => openSheet('explanation')} className="-mt-2 text-sm text-emerald-400">
             View explanation →
           </button>
         ) : null}
@@ -114,24 +114,24 @@ export default function GamePage() {
         {game.explanation ? (
           <ExplanationPage explanation={game.explanation} onBack={() => setActiveSheet(null)} />
         ) : (
-          <p className="text-sm text-slate-600">No explanation available yet.</p>
+          <p className="text-sm text-white/70">No explanation available yet.</p>
         )}
       </BottomSheet>
 
       <BottomSheet isOpen={activeSheet === 'menu'} onClose={() => setActiveSheet(null)}>
         <div className="space-y-5">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-slate-950">Wardle</h2>
-            <button type="button" onClick={() => setActiveSheet(null)} className="text-sm text-slate-600">
+            <h2 className="text-lg font-bold text-white">Wardle</h2>
+            <button type="button" onClick={() => setActiveSheet(null)} className="text-sm text-white/70">
               Close
             </button>
           </div>
 
           <div>
-            <p className="mb-1 text-xs text-slate-500">Play</p>
+            <p className="mb-1 text-xs text-white/60">Play</p>
             <button
               type="button"
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-left text-sm"
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white/80"
               onClick={() => openSheet('leaderboard')}
             >
               🏆 Leaderboard
@@ -139,10 +139,10 @@ export default function GamePage() {
           </div>
 
           <div>
-            <p className="mb-1 text-xs text-slate-500">Learn</p>
+            <p className="mb-1 text-xs text-white/60">Learn</p>
             <button
               type="button"
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-left text-sm"
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white/80"
               onClick={() => openSheet('howto')}
             >
               💡 How to play
@@ -150,21 +150,21 @@ export default function GamePage() {
           </div>
 
           <div>
-            <p className="mb-1 text-xs text-slate-500">Account</p>
+            <p className="mb-1 text-xs text-white/60">Account</p>
             <button
               type="button"
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-left text-sm"
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white/80"
               onClick={() => setActiveSheet(null)}
             >
               📊 Progress
             </button>
           </div>
 
-          <div className="border-t border-slate-200 pt-4">
-            <p className="text-sm text-slate-600">Unlock unlimited cases</p>
+          <div className="border-t border-white/10 pt-4">
+            <p className="text-sm text-white/70">Unlock unlimited cases</p>
             <button
               type="button"
-              className="mt-2 w-full rounded-xl bg-slate-950 px-3 py-2 text-sm font-semibold text-white"
+              className="mt-2 w-full rounded-xl bg-emerald-500 px-3 py-2 text-sm font-semibold text-white"
             >
               Go Premium
             </button>
@@ -174,8 +174,8 @@ export default function GamePage() {
 
       <BottomSheet isOpen={activeSheet === 'howto'} onClose={() => setActiveSheet(null)}>
         <div className="space-y-3">
-          <h2 className="text-lg font-bold text-slate-950">How to play</h2>
-          <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
+          <h2 className="text-lg font-bold text-white">How to play</h2>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-white/70">
             <li>Read the history and revealed symptoms.</li>
             <li>Submit your best diagnosis guess.</li>
             <li>Wrong guesses reveal more clues.</li>

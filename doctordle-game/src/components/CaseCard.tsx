@@ -20,51 +20,51 @@ export default function CaseCard({
 }: CaseCardProps) {
   if (isLoading) {
     return (
-      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Case</p>
-            <h2 className="mt-1 text-lg font-semibold text-slate-950">Case in progress</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Case</p>
+            <h2 className="mt-1 text-lg font-semibold text-white">Case in progress</h2>
           </div>
-          <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
+          <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-400">
             Live
           </span>
         </div>
-        <p className="rounded-2xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">Loading case...</p>
+        <p className="rounded-2xl bg-white/5 p-3 text-sm leading-6 text-white/70">Loading case...</p>
       </section>
     )
   }
 
   if (error) {
     return (
-      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Case</p>
-            <h2 className="mt-1 text-lg font-semibold text-slate-950">Case unavailable</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Case</p>
+            <h2 className="mt-1 text-lg font-semibold text-white">Case unavailable</h2>
           </div>
-          <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
+          <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-400">
             Live
           </span>
         </div>
-        <p className="rounded-2xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">{error}</p>
+        <p className="rounded-2xl bg-white/5 p-3 text-sm leading-6 text-white/70">{error}</p>
       </section>
     )
   }
 
   if (!caseData) {
     return (
-      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Case</p>
-            <h2 className="mt-1 text-lg font-semibold text-slate-950">Case in progress</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Case</p>
+            <h2 className="mt-1 text-lg font-semibold text-white">Case in progress</h2>
           </div>
-          <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
+          <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-400">
             Live
           </span>
         </div>
-        <p className="rounded-2xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">No case available</p>
+        <p className="rounded-2xl bg-white/5 p-3 text-sm leading-6 text-white/70">No case available</p>
       </section>
     )
   }
@@ -76,11 +76,11 @@ export default function CaseCard({
   }
 
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Case</p>
-          <h2 className="mt-1 text-lg font-semibold text-slate-950">{activeCase.title}</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Case</p>
+          <h2 className="mt-1 text-lg font-semibold text-white">{activeCase.title}</h2>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -88,11 +88,11 @@ export default function CaseCard({
             onClick={onOpenExplanation}
             disabled={!canOpenExplanation}
             aria-label="Open case explanation"
-            className="h-7 w-7 rounded-full border border-slate-300 bg-white text-sm font-semibold text-slate-700 transition disabled:cursor-not-allowed disabled:opacity-40"
+            className="h-7 w-7 rounded-full border border-white/10 bg-white/5 text-sm font-semibold text-white/70 transition disabled:cursor-not-allowed disabled:opacity-40"
           >
             i
           </button>
-          <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
+          <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-400">
             Live
           </span>
         </div>
@@ -100,30 +100,30 @@ export default function CaseCard({
 
       <div className="space-y-3">
         <div>
-          <p className="mb-2 text-sm font-semibold text-slate-900">History</p>
-          <p className="rounded-2xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+          <p className="mb-2 text-sm font-semibold text-white">History</p>
+          <p className="rounded-2xl bg-white/5 p-3 text-sm leading-6 text-white/70">
             {activeCase.history}
           </p>
         </div>
 
         <div>
-          <p className="mb-2 text-sm font-semibold text-slate-900">Symptoms</p>
-          <div className="max-h-40 overflow-y-auto rounded-2xl bg-slate-50 p-3">
+          <p className="mb-2 text-sm font-semibold text-white">Symptoms</p>
+          <div className="max-h-40 overflow-y-auto rounded-2xl bg-white/5 p-3">
             <div className="flex flex-wrap gap-2">
               {activeCase.symptoms.map((symptom, index) => (
                 <span
                   key={`${symptom}-${index}`}
-                  className={`rounded-full border px-3 py-1 text-sm text-slate-700 transition-colors ${
+                  className={`rounded-full border px-3 py-1 text-sm text-white/70 transition-colors ${
                     index === activeCase.symptoms.length - 1
-                      ? 'border-sky-200 bg-sky-50'
-                      : 'border-slate-200 bg-white'
+                      ? 'border-emerald-400/30 bg-emerald-500/15'
+                      : 'border-white/10 bg-white/5'
                   }`}
                 >
                   {symptom}
                 </span>
               ))}
               {activeCase.symptoms.length === 0 && (
-                <p className="text-sm text-slate-500">No symptoms revealed yet.</p>
+                <p className="text-sm text-white/60">No symptoms revealed yet.</p>
               )}
             </div>
           </div>

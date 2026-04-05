@@ -29,7 +29,7 @@ export default function FooterInput({
         isLoading={isLoading}
         isGameOver={isGameOver}
       />
-      {!hasActiveSession && blockReason && <p className="text-sm text-slate-600">{blockReason}</p>}
+      {!hasActiveSession && blockReason && <p className="text-sm text-white/60">{blockReason}</p>}
     </div>
   )
 }

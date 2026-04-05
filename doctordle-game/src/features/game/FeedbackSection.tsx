@@ -42,11 +42,12 @@ type FeedbackSectionProps = {
   result: GameResult | null
   currentStreak: number
   xpEarned: number
-  attemptLabels: Array<'correct' | 'close' | 'wrong'>
+  attemptLabels: Array<{ guess: string; label: 'correct' | 'close' | 'wrong' }>
 }
 
 export default function FeedbackSection({ result, currentStreak, xpEarned, attemptLabels }: FeedbackSectionProps) {
   const [shareMessage, setShareMessage] = useState<string | null>(null)
+  const shareAttemptLabels = attemptLabels.map((attempt) => attempt.label)
 
   const canShare = Boolean(result?.gameOver)
 
@@ -60,7 +61,7 @@ export default function FeedbackSection({ result, currentStreak, xpEarned, attem
       score: result.score,
       streak: currentStreak,
       result: result.label === 'correct' ? 'correct' : 'failed',
-      attemptLabels,
+      attemptLabels: shareAttemptLabels,
     })
 
     return {
@@ -165,13 +166,18 @@ export default function FeedbackSection({ result, currentStreak, xpEarned, attem
 
   return (
     <section className="min-h-[120px]">
-      <FeedbackPanel result={result} currentStreak={currentStreak} xpEarned={xpEarned} />
+      <FeedbackPanel
+        result={result}
+        currentStreak={currentStreak}
+        xpEarned={xpEarned}
+        attemptLabels={attemptLabels}
+      />
       {canShare ? (
         <div className="mt-3">
           <button
             type="button"
             onClick={handleShare}
-            className="w-full rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white"
+            className="w-full rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white"
           >
             Share result 🚀
           </button>
@@ -180,27 +186,27 @@ export default function FeedbackSection({ result, currentStreak, xpEarned, attem
             <button
               type="button"
               onClick={handleShareWhatsApp}
-              className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700"
+              className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-medium text-white/70"
             >
               WhatsApp
             </button>
             <button
               type="button"
               onClick={handleShareX}
-              className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700"
+              className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-medium text-white/70"
             >
               X
             </button>
             <button
               type="button"
               onClick={handleCopy}
-              className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700"
+              className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-medium text-white/70"
             >
               Copy
             </button>
           </div>
 
-          {shareMessage ? <p className="mt-2 text-center text-xs text-slate-600">{shareMessage}</p> : null}
+          {shareMessage ? <p className="mt-2 text-center text-xs text-white/70">{shareMessage}</p> : null}
         </div>
       ) : null}
     </section>

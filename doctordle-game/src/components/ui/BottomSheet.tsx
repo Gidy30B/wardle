@@ -16,12 +16,12 @@ export default function BottomSheet({ isOpen, onClose, children }: BottomSheetPr
       <button
         type="button"
         aria-label="Close bottom sheet"
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-black/60"
         onClick={onClose}
       />
 
-      <div className="animate-slide-up relative max-h-[80%] overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl">
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-300" />
+      <div className="animate-slide-up relative max-h-[80%] overflow-y-auto rounded-t-2xl bg-black/80 p-4 shadow-xl backdrop-blur-xl">
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
         {children}
       </div>
     </div>
