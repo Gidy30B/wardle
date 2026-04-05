@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { motion, type Variants } from 'framer-motion'
 import type { GameResult } from '../features/game/game.types'
 
 type FeedbackPanelProps = {
@@ -19,6 +19,42 @@ const containerStyles = {
   close: 'border-amber-400/30 bg-amber-500/5',
   wrong: 'border-rose-400/30 bg-rose-500/5',
 } as const
+
+const gameOverVariants: Variants = {
+  idle: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    x: 0,
+  },
+
+  correct: {
+    opacity: 1,
+    y: 0,
+    scale: [1, 1.03, 1],
+    x: 0,
+    boxShadow: [
+      '0 0 0 rgba(16,185,129,0)',
+      '0 0 20px rgba(16,185,129,0.25)',
+      '0 0 0 rgba(16,185,129,0)',
+    ],
+    transition: {
+      duration: 0.4,
+      ease: 'easeOut',
+    },
+  },
+
+  wrong: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    x: [0, -6, 6, -4, 4, 0],
+    transition: {
+      duration: 0.35,
+      ease: 'easeInOut',
+    },
+  },
+}
 
 export default function FeedbackPanel({
   result,
@@ -55,12 +91,26 @@ export default function FeedbackPanel({
       }
     ).feedback?.signals ?? undefined
 
+  const displaySignals =
+    result.label === 'correct'
+      ? {
+          ...signals,
+          exact: true,
+          synonym: true,
+          embedding: Math.max(signals?.embedding ?? 0, 0.9),
+          ontology: {
+            ...signals?.ontology,
+            score: 1,
+          },
+        }
+      : signals
+
   const feedbackLevel =
-    signals?.exact
+    displaySignals?.exact
       ? 'correct'
-      : signals?.ontology?.score === 1 || signals?.synonym
+      : displaySignals?.ontology?.score === 1 || displaySignals?.synonym
       ? 'close'
-      : (signals?.embedding ?? 0) > 0.5
+      : (displaySignals?.embedding ?? 0) > 0.5
       ? 'close'
       : 'wrong'
 
@@ -76,13 +126,32 @@ export default function FeedbackPanel({
     ? 'Close'
     : 'Try again'
 
+  const gameOverState = result.gameOver ? (feedbackLevel === 'correct' ? 'correct' : 'wrong') : 'idle'
+
   return (
     <motion.section
-      className={`rounded-3xl border p-4 shadow-sm ${containerStyles[feedbackLevel]}`}
+      className={`relative rounded-3xl border p-4 shadow-sm ${containerStyles[result.label]}`}
       initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
+      animate={gameOverState}
+      variants={gameOverVariants}
     >
+      {result.gameOver && result.label === 'correct' && (
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          {['🎉', '✨', '🧠', '🏆'].map((emoji, index) => (
+            <motion.span
+              key={emoji}
+              className="absolute text-lg"
+              style={{ left: `${18 + index * 20}%`, bottom: '10%' }}
+              initial={{ opacity: 0, y: 0, scale: 0.9 }}
+              animate={{ opacity: [0, 0.95, 0], y: [0, -28, -52], scale: [0.9, 1, 1] }}
+              transition={{ duration: 0.9, delay: index * 0.08, ease: 'easeOut' }}
+            >
+              {emoji}
+            </motion.span>
+          ))}
+        </div>
+      )}
+
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Feedback</p>
@@ -153,25 +222,27 @@ export default function FeedbackPanel({
             {feedbackLevel === 'correct' && (
               <>
                 <p className="text-emerald-300">✔ Strong clinical match</p>
-                {signals?.exact && <p>✔ Exact match</p>}
-                {signals?.synonym && <p>✔ Equivalent clinical term</p>}
-                {(signals?.embedding ?? 0) > 0.5 && <p>✔ High semantic similarity</p>}
-                {signals?.ontology?.score === 1 && <p>✔ Same disease category</p>}
+                {displaySignals?.exact && <p>✔ Exact match</p>}
+                {displaySignals?.synonym && <p>✔ Equivalent clinical term</p>}
+                {(displaySignals?.embedding ?? 0) > 0.5 && <p>✔ High semantic similarity</p>}
+                {displaySignals?.ontology?.score === 1 && <p>✔ Same disease category</p>}
               </>
             )}
 
             {feedbackLevel === 'close' && (
               <>
-                {(signals?.embedding ?? 0) > 0.5 && <p>✔ Clinically similar condition</p>}
-                {signals?.ontology?.score === 1 && <p>✔ Related disease category</p>}
-                {!signals?.exact && <p className="text-amber-300">• Not an exact match</p>}
+                {(displaySignals?.embedding ?? 0) > 0.5 && <p>✔ Clinically similar condition</p>}
+                {displaySignals?.ontology?.score === 1 && <p>✔ Related disease category</p>}
+                {!displaySignals?.exact && <p className="text-amber-300">• Not an exact match</p>}
               </>
             )}
 
             {feedbackLevel === 'wrong' && (
               <>
                 <p className="text-rose-300">✖ No strong clinical match</p>
-                {(signals?.embedding ?? 0) > 0.2 && <p className="text-white/50">• Slight semantic similarity detected</p>}
+                {(displaySignals?.embedding ?? 0) > 0.2 && (
+                  <p className="text-white/50">• Slight semantic similarity detected</p>
+                )}
               </>
             )}
           </div>
@@ -183,12 +254,36 @@ export default function FeedbackPanel({
               {result.gameOverReason === 'clues_exhausted' ? 'Case ended' : 'Diagnosis complete'}
             </p>
 
+            {result.label !== 'correct' && (
+              <div className="mt-2 rounded-xl border border-amber-400/30 bg-amber-500/10 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-300">Answer</p>
+                <p className="mt-1 text-sm font-semibold text-white">
+                  {result.explanation?.diagnosis ?? 'Diagnosis unavailable'}
+                </p>
+              </div>
+            )}
+
             <div className="mt-2 flex items-center justify-between text-sm">
               <span className="text-white/80">+{xpEarned} XP</span>
               <span className="text-white/70">
                 🔥 <span className="font-semibold text-emerald-400">{currentStreak}</span>
               </span>
             </div>
+
+            <details className="mt-3">
+              <summary className="cursor-pointer list-none rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-medium text-white/85">
+                View explanation
+              </summary>
+
+              <div className="mt-2 rounded-xl border border-white/10 bg-black/20 p-3">
+                <p className="text-sm font-semibold text-white">
+                  {result.explanation?.diagnosis ?? 'Diagnosis unavailable'}
+                </p>
+                <p className="mt-1 text-sm leading-6 text-white/70">
+                  {result.explanation?.summary ?? 'Explanation not available yet.'}
+                </p>
+              </div>
+            </details>
           </div>
         )}
       </div>

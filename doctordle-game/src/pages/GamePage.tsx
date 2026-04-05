@@ -60,7 +60,7 @@ export default function GamePage() {
   return (
     <>
       <MobileLayout
-        header={<AppHeader progressSummary={progress.progressSummary} onOpenMenu={() => openSheet('menu')} />}
+        header={<AppHeader onOpenMenu={() => openSheet('menu')} />}
         footer={
           <FooterInput
             value={game.guess}
@@ -73,10 +73,11 @@ export default function GamePage() {
           />
         }
       >
-        <ProgressSection progress={progress.progress} loading={progress.loading} />
-        <button type="button" onClick={() => openSheet('leaderboard')} className="-mt-2 text-xs text-emerald-400">
-          View leaderboard →
-        </button>
+        <ProgressSection
+          progress={progress.progress}
+          loading={progress.loading}
+          onOpenLeaderboard={() => openSheet('leaderboard')}
+        />
 
         <GamePlaySection
           caseData={game.caseData}
@@ -91,11 +92,6 @@ export default function GamePage() {
           xpEarned={progress.xpEarned}
           attemptLabels={game.attemptLabels}
         />
-        {game.result?.label === 'correct' ? (
-          <button type="button" onClick={() => openSheet('explanation')} className="-mt-2 text-sm text-emerald-400">
-            View explanation →
-          </button>
-        ) : null}
       </MobileLayout>
 
       <BottomSheet isOpen={activeSheet === 'leaderboard'} onClose={() => setActiveSheet(null)}>

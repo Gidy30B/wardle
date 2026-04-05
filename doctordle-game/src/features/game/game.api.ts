@@ -59,6 +59,8 @@ export async function getUserProgressApi(request: RequestJson): Promise<UserProg
     level: number
     rank: string
     xpTotal: number
+    xpCurrentLevel?: number
+    xpToNextLevel?: number
   }>('/user/progress')
 
   return {
@@ -67,5 +69,7 @@ export async function getUserProgressApi(request: RequestJson): Promise<UserProg
     level: response.level,
     rank: response.rank,
     xpTotal: response.xpTotal,
+    xpCurrentLevel: response.xpCurrentLevel ?? 0,
+    xpToNextLevel: response.xpToNextLevel ?? 1,
   }
 }

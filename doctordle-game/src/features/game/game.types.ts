@@ -81,6 +81,8 @@ export type UserProgress = {
   level: number
   rank: string
   xpTotal: number
+  xpCurrentLevel: number
+  xpToNextLevel: number
 }
 
 export type GameSessionState = {

@@ -47,6 +47,7 @@ type FeedbackSectionProps = {
 
 export default function FeedbackSection({ result, currentStreak, xpEarned, attemptLabels }: FeedbackSectionProps) {
   const [shareMessage, setShareMessage] = useState<string | null>(null)
+  const [showShareOptions, setShowShareOptions] = useState(false)
   const shareAttemptLabels = attemptLabels.map((attempt) => attempt.label)
 
   const canShare = Boolean(result?.gameOver)
@@ -68,61 +69,6 @@ export default function FeedbackSection({ result, currentStreak, xpEarned, attem
       text,
       url: getShareUrl(),
       title: 'Wardle — Daily Diagnosis',
-    }
-  }
-
-  const handleShare = async () => {
-    const payload = getSharePayload()
-    if (!payload) {
-      return
-    }
-
-    try {
-      const sharePayload = {
-        title: payload.title,
-        text: payload.text,
-        url: payload.url,
-      }
-
-      if (navigator.share && (!navigator.canShare || navigator.canShare(sharePayload))) {
-        await navigator.share({
-          title: sharePayload.title,
-          text: sharePayload.text,
-          url: sharePayload.url,
-        })
-        setShareMessage('Shared! 🚀')
-        return
-      }
-
-      const copyResult = await copyTextWithFallback(payload.text)
-      if (copyResult === 'copied') {
-        setShareMessage('Copied! Share it 🔥')
-        return
-      }
-
-      if (copyResult === 'manual') {
-        setShareMessage('Manual copy opened. Share it 🔥')
-        return
-      }
-
-      const encoded = encodeURIComponent(payload.text)
-      window.open(`https://wa.me/?text=${encoded}`, '_blank', 'noopener,noreferrer')
-      setShareMessage('Opened share app 🚀')
-    } catch {
-      const copyResult = await copyTextWithFallback(payload.text)
-      if (copyResult === 'copied') {
-        setShareMessage('Copied! Share it 🔥')
-        return
-      }
-
-      if (copyResult === 'manual') {
-        setShareMessage('Manual copy opened. Share it 🔥')
-        return
-      }
-
-      const encoded = encodeURIComponent(payload.text)
-      window.open(`https://wa.me/?text=${encoded}`, '_blank', 'noopener,noreferrer')
-      setShareMessage('Opened share app 🚀')
     }
   }
 
@@ -176,35 +122,37 @@ export default function FeedbackSection({ result, currentStreak, xpEarned, attem
         <div className="mt-3">
           <button
             type="button"
-            onClick={handleShare}
+            onClick={() => setShowShareOptions((previous) => !previous)}
             className="w-full rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white"
           >
-            Share result 🚀
+            Share result
           </button>
 
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={handleShareWhatsApp}
-              className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-medium text-white/70"
-            >
-              WhatsApp
-            </button>
-            <button
-              type="button"
-              onClick={handleShareX}
-              className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-medium text-white/70"
-            >
-              X
-            </button>
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-medium text-white/70"
-            >
-              Copy
-            </button>
-          </div>
+          {showShareOptions ? (
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={handleShareWhatsApp}
+                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-medium text-white/70"
+              >
+                WhatsApp
+              </button>
+              <button
+                type="button"
+                onClick={handleShareX}
+                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-medium text-white/70"
+              >
+                X
+              </button>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-medium text-white/70"
+              >
+                Copy
+              </button>
+            </div>
+          ) : null}
 
           {shareMessage ? <p className="mt-2 text-center text-xs text-white/70">{shareMessage}</p> : null}
         </div>
