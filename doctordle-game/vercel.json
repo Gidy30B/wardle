@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://wardle-production-610b.up.railway.app/api/:path*"
+    }
+  ]
+}
