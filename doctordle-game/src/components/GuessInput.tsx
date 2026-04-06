@@ -21,6 +21,7 @@ export default function GuessInput({
   const inputRef = useRef<HTMLInputElement>(null)
   const isDisabled = Boolean(!hasActiveSession || isLoading || isGameOver)
   const isPremiumLocked = !hasActiveSession && !isLoading && !isGameOver
+  const hasValue = value.trim().length > 0
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -28,7 +29,7 @@ export default function GuessInput({
 
   return (
     <form
-      className="flex items-center gap-3"
+      className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-2"
       onSubmit={(event) => {
         event.preventDefault()
         if (isPremiumLocked) {
@@ -52,8 +53,8 @@ export default function GuessInput({
             : 'Enter diagnosis...'
         }
         className={`
-          h-14 flex-1 rounded-2xl px-4 text-base outline-none transition-all
-          border border-white/10 bg-white/5 text-white placeholder:text-white/40
+          h-14 flex-1 rounded-xl px-4 text-base outline-none transition-all
+          border border-white/10 bg-black/20 text-white placeholder:text-white/40
 
           focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/10
 
@@ -69,15 +70,15 @@ export default function GuessInput({
         type="submit"
         disabled={isLoading || isGameOver || (!value.trim() && hasActiveSession)}
         whileTap={{ scale: 0.96 }}
-        whileHover={!isLoading && !isGameOver ? { scale: 1.02 } : {}}
-        className={`h-14 rounded-2xl px-5 text-sm font-semibold transition active:scale-[0.99]
-  ${
-    isPremiumLocked
-      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
-      : 'bg-slate-950 text-white'
-  }
-  disabled:cursor-not-allowed disabled:bg-slate-400
-`}
+        whileHover={!isLoading && !isGameOver && (hasValue || isPremiumLocked) ? { scale: 1.02 } : {}}
+        className={`h-14 rounded-xl px-5 text-sm font-semibold transition active:scale-[0.99]
+          ${
+            isPremiumLocked || hasValue
+              ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+              : 'border border-white/10 bg-white/5 text-white/80'
+          }
+          disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/40
+        `}
       >
         {isLoading
           ? 'Sending...'
