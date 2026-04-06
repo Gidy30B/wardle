@@ -3,6 +3,7 @@ import type { GameResult } from '../features/game/game.types'
 
 type FeedbackPanelProps = {
   result: GameResult | null
+  hasActiveSession?: boolean
   currentStreak?: number
   xpEarned?: number
   attemptLabels?: { guess: string; label: 'correct' | 'close' | 'wrong' }[]
@@ -58,6 +59,7 @@ const gameOverVariants: Variants = {
 
 export default function FeedbackPanel({
   result,
+  hasActiveSession = true,
   currentStreak = 0,
   xpEarned = 0,
   attemptLabels,
@@ -70,7 +72,7 @@ export default function FeedbackPanel({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25 }}
       >
-        Submit a guess to see feedback.
+        {hasActiveSession ? 'Submit a guess to see feedback' : 'Daily limit reached'}
       </motion.section>
     )
   }

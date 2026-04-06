@@ -88,6 +88,7 @@ export default function GamePage() {
         />
         <FeedbackSection
           result={game.result}
+          hasActiveSession={game.hasActiveSession}
           currentStreak={progress.progress?.currentStreak ?? 0}
           xpEarned={progress.xpEarned}
           attemptLabels={game.attemptLabels}

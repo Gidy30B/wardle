@@ -40,12 +40,19 @@ async function copyTextWithFallback(text: string) {
 
 type FeedbackSectionProps = {
   result: GameResult | null
+  hasActiveSession: boolean
   currentStreak: number
   xpEarned: number
   attemptLabels: Array<{ guess: string; label: 'correct' | 'close' | 'wrong' }>
 }
 
-export default function FeedbackSection({ result, currentStreak, xpEarned, attemptLabels }: FeedbackSectionProps) {
+export default function FeedbackSection({
+  result,
+  hasActiveSession,
+  currentStreak,
+  xpEarned,
+  attemptLabels,
+}: FeedbackSectionProps) {
   const [shareMessage, setShareMessage] = useState<string | null>(null)
   const [showShareOptions, setShowShareOptions] = useState(false)
   const shareAttemptLabels = attemptLabels.map((attempt) => attempt.label)
@@ -114,6 +121,7 @@ export default function FeedbackSection({ result, currentStreak, xpEarned, attem
     <section className="min-h-[120px]">
       <FeedbackPanel
         result={result}
+        hasActiveSession={hasActiveSession}
         currentStreak={currentStreak}
         xpEarned={xpEarned}
         attemptLabels={attemptLabels}

@@ -17,7 +17,7 @@ export default function FooterInput({
   hasActiveSession,
   isLoading,
   isGameOver,
-  blockReason,
+  blockReason: _blockReason,
 }: FooterInputProps) {
   return (
     <div className="space-y-2">
@@ -29,7 +29,6 @@ export default function FooterInput({
         isLoading={isLoading}
         isGameOver={isGameOver}
       />
-      {!hasActiveSession && blockReason && <p className="text-sm text-white/60">{blockReason}</p>}
     </div>
   )
 }
