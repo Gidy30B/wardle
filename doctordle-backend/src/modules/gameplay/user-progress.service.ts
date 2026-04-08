@@ -14,15 +14,27 @@ export class UserProgressService {
   ) {}
 
   async getProgress(userId: string) {
-    await this.prisma.user.upsert({
-      where: { id: userId },
-      update: {},
-      create: {
-        id: userId,
-        subscriptionTier: 'free',
-      },
+    const progress = await this.prisma.userProgress.findUnique({
+      where: { userId },
     });
 
+    const xpTotal = progress?.xpTotal ?? 0;
+    const derived = this.xpService.deriveLevelFromXpTotal(xpTotal);
+    const streak = await this.streakService.getCurrentStats(userId);
+
+    return {
+      xpTotal,
+      level: derived.level,
+      xpCurrentLevel: derived.xpCurrentLevel,
+      xpToNextLevel: derived.xpToNextLevel,
+      rank: this.rankService.getRank(derived.level),
+      currentStreak: streak.currentStreak,
+      longestStreak: streak.bestStreak,
+      bestStreak: streak.bestStreak,
+    };
+  }
+
+  async syncProgress(userId: string) {
     const progress = await this.prisma.userProgress.upsert({
       where: { userId },
       update: {},
@@ -32,7 +44,6 @@ export class UserProgressService {
     });
 
     const derived = this.xpService.deriveLevelFromXpTotal(progress.xpTotal);
-    const streak = await this.streakService.getCurrentStats(userId);
 
     if (
       progress.level !== derived.level ||
@@ -47,15 +58,6 @@ export class UserProgressService {
       });
     }
 
-    return {
-      xpTotal: progress.xpTotal,
-      level: derived.level,
-      xpCurrentLevel: derived.xpCurrentLevel,
-      xpToNextLevel: derived.xpToNextLevel,
-      rank: this.rankService.getRank(derived.level),
-      currentStreak: streak.currentStreak,
-      longestStreak: streak.bestStreak,
-      bestStreak: streak.bestStreak,
-    };
+    return this.getProgress(userId);
   }
 }

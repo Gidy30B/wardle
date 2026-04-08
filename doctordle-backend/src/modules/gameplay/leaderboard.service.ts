@@ -3,6 +3,7 @@ import { PrismaService } from '../../core/db/prisma.service';
 import { RedisCacheService } from '../../core/cache/redis-cache.service';
 import { AppLoggerService } from '../../core/logger/app-logger.service';
 import { MetricsService } from '../../core/logger/metrics.service';
+import { CasesService } from '../cases/cases.service';
 
 type LeaderboardMode = 'daily' | 'weekly';
 
@@ -15,6 +16,7 @@ export class LeaderboardService {
     private readonly cache: RedisCacheService,
     private readonly logger: AppLoggerService,
     private readonly metrics: MetricsService,
+    private readonly casesService: CasesService,
   ) {}
 
   async getToday(limit = 50) {
@@ -37,10 +39,7 @@ export class LeaderboardService {
     this.metrics.increment('leaderboard.cache.miss');
     this.logger.info({ key }, 'leaderboard.cache_miss');
 
-    const dailyCase = await this.prisma.dailyCase.findUnique({
-      where: { date: new Date(date) },
-      select: { id: true },
-    });
+    const dailyCase = await this.casesService.getTodayCase();
 
     if (!dailyCase) {
       await this.cache.set(key, JSON.stringify([]), this.leaderboardTtlSeconds);
@@ -48,7 +47,7 @@ export class LeaderboardService {
     }
 
     const rows = await this.prisma.leaderboardEntry.findMany({
-      where: { dailyCaseId: dailyCase.id },
+      where: { dailyCaseId: dailyCase.dailyCaseId },
       orderBy: [
         { score: 'desc' },
         { attemptsCount: 'asc' },
@@ -132,11 +131,7 @@ export class LeaderboardService {
 
   async getUserPosition(input: { userId: string; mode: LeaderboardMode }) {
     if (input.mode === 'daily') {
-      const { date } = this.getUtcDayRange();
-      const dailyCase = await this.prisma.dailyCase.findUnique({
-        where: { date: new Date(date) },
-        select: { id: true },
-      });
+      const dailyCase = await this.casesService.getTodayCase();
 
       if (!dailyCase) {
         return null;
@@ -145,7 +140,7 @@ export class LeaderboardService {
       const entry = await this.prisma.leaderboardEntry.findUnique({
         where: {
           dailyCaseId_userId: {
-            dailyCaseId: dailyCase.id,
+            dailyCaseId: dailyCase.dailyCaseId,
             userId: input.userId,
           },
         },
@@ -163,7 +158,7 @@ export class LeaderboardService {
 
       const betterCount = await this.prisma.leaderboardEntry.count({
         where: {
-          dailyCaseId: dailyCase.id,
+          dailyCaseId: dailyCase.dailyCaseId,
           OR: [
             { score: { gt: entry.score } },
             { score: entry.score, attemptsCount: { lt: entry.attemptsCount } },

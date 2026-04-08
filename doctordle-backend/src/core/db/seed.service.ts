@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
+import { CasesService } from '../../modules/cases/cases.service';
 
 @Injectable()
 export class SeedService {
@@ -7,7 +8,7 @@ export class SeedService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async seedCases(): Promise<void> {
+  async seedCases(casesService: CasesService): Promise<void> {
     this.logger.log('Starting database seeding...');
     const today = new Date().toISOString().slice(0, 10);
 
@@ -48,6 +49,7 @@ export class SeedService {
     // Then seed cases with diagnosis IDs
     const cases = [
       {
+        title: 'Myocardial infarction case',
         id: 'c-2026-04-01',
         date: new Date('2026-04-01'),
         difficulty: 'medium',
@@ -57,6 +59,7 @@ export class SeedService {
         diagnosis: 'myocardial infarction',
       },
       {
+        title: 'Myocardial infarction case',
         id: `c-${today}`,
         date: new Date(`${today}T00:00:00.000Z`),
         difficulty: 'medium',
@@ -68,25 +71,20 @@ export class SeedService {
     ];
 
     for (const caseData of cases) {
-      const existing = await this.prisma.case.findUnique({
-        where: { id: caseData.id },
+      const createdCase = await casesService.createCase({
+        title: caseData.title,
+        history: caseData.history,
+        symptoms: caseData.symptoms,
+        diagnosisId: diagnosisMap[caseData.diagnosis],
+        date: caseData.date.toISOString().slice(0, 10),
       });
 
-      if (!existing) {
-        await this.prisma.case.create({
-          data: {
-            id: caseData.id,
-            date: caseData.date,
-            difficulty: caseData.difficulty,
-            history: caseData.history,
-            symptoms: caseData.symptoms,
-            diagnosisId: diagnosisMap[caseData.diagnosis],
-          },
-        });
-        this.logger.log(`Created case: ${caseData.id}`);
-      } else {
-        this.logger.debug(`Case already exists: ${caseData.id}`);
-      }
+      await casesService.assignDailyCase(
+        caseData.date.toISOString().slice(0, 10),
+        createdCase.id,
+      );
+
+      this.logger.log(`Seeded case lifecycle: ${createdCase.id}`);
     }
 
     this.logger.log('Database seeding completed');

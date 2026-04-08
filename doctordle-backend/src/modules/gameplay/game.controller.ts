@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  InternalServerErrorException,
+  Logger,
   Param,
   Post,
   Query,
@@ -11,12 +13,15 @@ import {
 import { RateLimitGuard } from './guards/rate-limit.guard';
 import { GameSessionService } from './game-session.service';
 import { SubmitGameGuessDto } from './dto/submit-game-guess.dto';
+import { RequestHintDto } from './dto/request-hint.dto';
 import { LeaderboardService } from './leaderboard.service';
 import type { AuthenticatedRequest } from '../../auth/authenticated-request.interface';
 
 @Controller('game')
 @UseGuards(RateLimitGuard)
 export class GameController {
+  private readonly logger = new Logger(GameController.name);
+
   constructor(
     private readonly gameSessionService: GameSessionService,
     private readonly leaderboardService: LeaderboardService,
@@ -27,7 +32,14 @@ export class GameController {
     try {
       return await this.gameSessionService.startGame({ userId: req.user.id });
     } catch (error) {
-      console.error('game.start error:', error);
+      this.logger.error(
+        JSON.stringify({
+          event: 'game.start.failed',
+          userId: req.user.id,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        error instanceof Error ? error.stack : undefined,
+      );
       throw error;
     }
   }
@@ -41,38 +53,81 @@ export class GameController {
         userId: req.user.id,
       });
     } catch (error) {
-      console.error('game.guess error:', error);
+      this.logger.error(
+        JSON.stringify({
+          event: 'game.guess.failed',
+          userId: req.user.id,
+          sessionId: body.sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
+  }
+
+  @Post('hint')
+  async requestHint(@Req() req: AuthenticatedRequest, @Body() body: RequestHintDto) {
+    try {
+      return await this.gameSessionService.requestHint({
+        sessionId: body.sessionId,
+        userId: req.user.id,
+      });
+    } catch (error) {
+      this.logger.error(
+        JSON.stringify({
+          event: 'game.hint.failed',
+          userId: req.user.id,
+          sessionId: body.sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        error instanceof Error ? error.stack : undefined,
+      );
       throw error;
     }
   }
 
   @Get('leaderboard/today')
   async getTodayLeaderboard(@Query('limit') limit?: string) {
-    try {
-      const parsedLimit = Number(limit ?? 50);
-      const safeLimit = Number.isFinite(parsedLimit)
-        ? Math.max(1, Math.min(100, Math.floor(parsedLimit)))
-        : 50;
+    const parsedLimit = Number(limit ?? 50);
+    const safeLimit = Number.isFinite(parsedLimit)
+      ? Math.max(1, Math.min(100, Math.floor(parsedLimit)))
+      : 50;
 
+    try {
       return await this.leaderboardService.getToday(safeLimit);
     } catch (error) {
-      console.error('leaderboard.today error:', error);
-      return [];
+      this.logger.error(
+        JSON.stringify({
+          event: 'leaderboard.today.failed',
+          limit: safeLimit,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new InternalServerErrorException('Failed to load daily leaderboard');
     }
   }
 
   @Get('leaderboard/weekly')
   async getWeeklyLeaderboard(@Query('limit') limit?: string) {
-    try {
-      const parsedLimit = Number(limit ?? 50);
-      const safeLimit = Number.isFinite(parsedLimit)
-        ? Math.max(1, Math.min(100, Math.floor(parsedLimit)))
-        : 50;
+    const parsedLimit = Number(limit ?? 50);
+    const safeLimit = Number.isFinite(parsedLimit)
+      ? Math.max(1, Math.min(100, Math.floor(parsedLimit)))
+      : 50;
 
+    try {
       return await this.leaderboardService.getWeekly(safeLimit);
     } catch (error) {
-      console.error('leaderboard.weekly error:', error);
-      return [];
+      this.logger.error(
+        JSON.stringify({
+          event: 'leaderboard.weekly.failed',
+          limit: safeLimit,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new InternalServerErrorException('Failed to load weekly leaderboard');
     }
   }
 
@@ -81,8 +136,9 @@ export class GameController {
     @Req() req: AuthenticatedRequest,
     @Query('mode') mode?: string,
   ) {
+    const normalizedMode = mode === 'weekly' ? 'weekly' : 'daily';
+
     try {
-      const normalizedMode = mode === 'weekly' ? 'weekly' : 'daily';
       const result = await this.leaderboardService.getUserPosition({
         userId: req.user.id,
         mode: normalizedMode,
@@ -94,13 +150,16 @@ export class GameController {
         mode: normalizedMode,
       };
     } catch (error) {
-      console.error('leaderboard.me error:', error);
-      return {
-        userId: req.user.id,
-        rank: 0,
-        score: 0,
-        mode: mode === 'weekly' ? 'weekly' : 'daily',
-      };
+      this.logger.error(
+        JSON.stringify({
+          event: 'leaderboard.me.failed',
+          userId: req.user.id,
+          mode: normalizedMode,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new InternalServerErrorException('Failed to load user leaderboard position');
     }
   }
 
@@ -109,7 +168,14 @@ export class GameController {
     try {
       return await this.gameSessionService.getSessionState(sessionId);
     } catch (error) {
-      console.error('game.sessionState error:', error);
+      this.logger.error(
+        JSON.stringify({
+          event: 'game.session-state.failed',
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        error instanceof Error ? error.stack : undefined,
+      );
       throw error;
     }
   }

@@ -3,7 +3,10 @@ import { RedisCacheService } from '../../../core/cache/redis-cache.service';
 import { PrismaService } from '../../../core/db/prisma.service';
 import { AppLoggerService } from '../../../core/logger/app-logger.service';
 import { MetricsService } from '../../../core/logger/metrics.service';
-import { EmbeddingService } from '../../../infra/embedding/embedding.service';
+import {
+  EMBEDDING_DIMENSION,
+  EmbeddingService,
+} from '../../../infra/embedding/embedding.service';
 import { OntologyService } from '../../knowledge/ontology.service';
 import { SynonymService } from '../../knowledge/synonym.service';
 import { fuzzySimilarity } from './fuzzy';
@@ -49,8 +52,24 @@ export class RetrievalService {
       this.metricsService.recordCacheHit(false);
     }
 
+    let queryEmbedding: number[];
     try {
-      const queryEmbedding = await this.embeddingService.embed(query);
+      queryEmbedding = await this.embeddingService.embed(query);
+    } catch (error) {
+      this.metricsService.increment('retrieval.embedding.failed');
+      this.logger.warn(
+        {
+          query,
+          topK,
+          expectedEmbeddingDimension: EMBEDDING_DIMENSION,
+          error,
+        },
+        'retrieval.embedding_failed_fallback',
+      );
+      return this.fallbackTopK(query, answerForRerank, topK);
+    }
+
+    try {
       const vectorLiteral = this.toVectorLiteral(queryEmbedding);
       const rows = await this.prismaService.$queryRawUnsafe<
         Array<{ diagnosisId: string; distance: number }>

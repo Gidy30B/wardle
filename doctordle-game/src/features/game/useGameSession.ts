@@ -79,10 +79,10 @@ export function useGameSession() {
     }
   }, [isLoaded, isSignedIn, request])
 
-  const submitGuess = useCallback(async () => {
+  const submitGuess = useCallback(async (): Promise<GameResult> => {
     const trimmed = guess.trim()
     if (!trimmed || !sessionId || submittingRef.current || requestState !== 'idle' || result?.gameOver) {
-      return
+      throw new Error('Cannot submit guess in current state')
     }
 
     submittingRef.current = true
@@ -99,8 +99,10 @@ export function useGameSession() {
       await queryClient.invalidateQueries({ queryKey: ['progress'] })
       setError(null)
       setGuess('')
+      return response
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Unknown error')
+      throw exception instanceof Error ? exception : new Error('Unknown error')
     } finally {
       submittingRef.current = false
       setRequestState(sessionId ? 'idle' : 'blocked')

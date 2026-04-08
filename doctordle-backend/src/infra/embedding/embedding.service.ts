@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import OpenAI from 'openai';
 import { RedisCacheService } from '../../core/cache/redis-cache.service';
+import { AppLoggerService } from '../../core/logger/app-logger.service';
 import { MetricsService } from '../../core/logger/metrics.service';
 import { getEnv } from '../../core/config/env.validation';
+
+export const EMBEDDING_DIMENSION = 1536;
 
 @Injectable()
 export class EmbeddingService {
@@ -12,6 +15,7 @@ export class EmbeddingService {
 
   constructor(
     private readonly cacheService: RedisCacheService,
+    private readonly logger: AppLoggerService,
     private readonly metricsService: MetricsService,
   ) {
     if (this.env.OPENAI_API_KEY) {
@@ -28,9 +32,20 @@ export class EmbeddingService {
 
     if (cached) {
       this.metricsService.recordCacheHit(true);
-      const parsed = this.parseEmbedding(cached);
-      if (parsed) {
-        return parsed;
+      try {
+        const parsed = this.parseEmbedding(cached);
+        if (parsed) {
+          return this.validateEmbedding(parsed);
+        }
+      } catch (error) {
+        this.logger.warn(
+          {
+            cacheKey,
+            error,
+          },
+          'embedding.cache_invalid',
+        );
+        await this.cacheService.delete(cacheKey);
       }
     } else {
       this.metricsService.recordCacheHit(false);
@@ -39,10 +54,21 @@ export class EmbeddingService {
     const embedding = await this.withTimeout(
       this.embedWithProvider(normalizedText),
       500,
-    ).catch(() => this.mockEmbedding(normalizedText));
+    ).catch((error) => {
+      this.logger.warn(
+        {
+          error,
+          model: this.embeddingModel,
+        },
+        'embedding.provider_failed_mock_fallback',
+      );
+      return this.mockEmbedding(normalizedText);
+    });
 
-    await this.cacheService.set(cacheKey, JSON.stringify(embedding), 3600);
-    return embedding;
+    const validated = this.validateEmbedding(embedding);
+
+    await this.cacheService.set(cacheKey, JSON.stringify(validated), 3600);
+    return validated;
   }
 
   private async embedWithProvider(text: string): Promise<number[]> {
@@ -61,7 +87,7 @@ export class EmbeddingService {
       throw new Error('Embedding provider returned empty embedding payload');
     }
 
-    return vector;
+    return this.validateEmbedding(vector);
   }
 
   private withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -96,8 +122,23 @@ export class EmbeddingService {
   }
 
   private mockEmbedding(text: string): number[] {
-    return Array.from({ length: 384 }, (_value, index) =>
+    return Array.from({ length: EMBEDDING_DIMENSION }, (_value, index) =>
       Math.sin(index + text.length),
     );
+  }
+
+  private validateEmbedding(vector: number[]): number[] {
+    if (vector.length !== EMBEDDING_DIMENSION) {
+      this.metricsService.increment('embedding.dimension_mismatch');
+      throw new Error(
+        `Embedding dimension mismatch: expected ${EMBEDDING_DIMENSION}, received ${vector.length}`,
+      );
+    }
+
+    if (!vector.every((value) => Number.isFinite(value))) {
+      throw new Error('Embedding vector contains non-finite values');
+    }
+
+    return vector;
   }
 }

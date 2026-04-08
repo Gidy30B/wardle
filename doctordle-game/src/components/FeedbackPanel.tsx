@@ -7,6 +7,8 @@ type FeedbackPanelProps = {
   currentStreak?: number
   xpEarned?: number
   attemptLabels?: { guess: string; label: 'correct' | 'close' | 'wrong' }[]
+  showAttemptLabels?: boolean
+  showProgressSummary?: boolean
 }
 
 const labelStyles: Record<GameResult['label'], string> = {
@@ -63,6 +65,8 @@ export default function FeedbackPanel({
   currentStreak = 0,
   xpEarned = 0,
   attemptLabels,
+  showAttemptLabels = true,
+  showProgressSummary = true,
 }: FeedbackPanelProps) {
   if (!result) {
     return (
@@ -165,7 +169,7 @@ export default function FeedbackPanel({
       </div>
 
       <div className="rounded-2xl bg-white/5 p-3">
-        {attemptLabels && attemptLabels.length > 0 && (
+        {showAttemptLabels && attemptLabels && attemptLabels.length > 0 && (
           <motion.div
             className="mb-3 space-y-2"
             initial="hidden"
@@ -265,12 +269,14 @@ export default function FeedbackPanel({
               </div>
             )}
 
-            <div className="mt-2 flex items-center justify-between text-sm">
-              <span className="text-white/80">+{xpEarned} XP</span>
-              <span className="text-white/70">
-                🔥 <span className="font-semibold text-emerald-400">{currentStreak}</span>
-              </span>
-            </div>
+            {showProgressSummary && (
+              <div className="mt-2 flex items-center justify-between text-sm">
+                <span className="text-white/80">+{xpEarned} XP</span>
+                <span className="text-white/70">
+                  🔥 <span className="font-semibold text-emerald-400">{currentStreak}</span>
+                </span>
+              </div>
+            )}
 
             <details className="mt-3">
               <summary className="cursor-pointer list-none rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-medium text-white/85">

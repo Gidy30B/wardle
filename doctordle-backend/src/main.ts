@@ -9,6 +9,7 @@ import { validateEnv } from './core/config/env.validation';
 async function bootstrap() {
   const env = validateEnv();
   const app = await NestFactory.create(AppModule);
+  app.enableShutdownHooks();
 
   app.useGlobalPipes(
     new ValidationPipe({

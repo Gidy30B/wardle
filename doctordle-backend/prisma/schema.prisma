@@ -44,6 +44,7 @@ model Synonym {
 
 model Case {
   id          String    @id @default(uuid())
+  title       String
   date        DateTime  @unique
   difficulty  String
   history     String
@@ -54,8 +55,32 @@ model Case {
   attempts    Attempt[]
   sessions    GameSession[]
   dailyCases  DailyCase[]
+  hints       HintContent[]
+  explanations ExplanationContent[]
 
   @@index([diagnosisId])
+}
+
+model HintContent {
+  id        String   @id @default(uuid())
+  caseId    String   @unique
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+}
+
+model ExplanationContent {
+  id        String   @id @default(uuid())
+  caseId    String   @unique
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
 }
 
 model GameSession {
@@ -66,6 +91,8 @@ model GameSession {
   userTierAtStart        String?
   currentClueIndexLegacy Int?      @default(0)
   xpAwardedAt            DateTime?
+  processingAt           DateTime?
+  processedAt            DateTime?
   startedAt              DateTime   @default(now())
   completedAt            DateTime?
   status                 String
@@ -78,6 +105,9 @@ model GameSession {
   @@index([dailyCaseId])
   @@index([userId])
   @@index([status])
+  @@index([processingAt])
+  @@index([processedAt])
+  @@index([processedAt, processingAt])
   @@index([startedAt])
   @@index([userId, status, completedAt])
 }

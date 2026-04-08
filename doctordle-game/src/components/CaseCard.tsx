@@ -11,6 +11,8 @@ type CaseCardProps = {
   canOpenExplanation?: boolean
 }
 
+const MAX_SYMPTOMS = 6
+
 export default function CaseCard({
   caseData,
   isLoading,
@@ -20,114 +22,101 @@ export default function CaseCard({
 }: CaseCardProps) {
   if (isLoading) {
     return (
-      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-sm">
-        <div className="mb-3 flex items-center justify-between gap-3">
+      <section className="rounded-2xl border border-white/10 bg-white/5 p-3">
+        <div className="mb-3 flex items-center justify-between gap-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Case</p>
-            <h2 className="mt-1 text-lg font-semibold text-white">Case in progress</h2>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">Case</p>
+            <h2 className="text-lg font-semibold text-white">Diagnosis?</h2>
           </div>
-          <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-400">
+          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
             Live
           </span>
         </div>
-        <p className="rounded-2xl bg-white/5 p-3 text-sm leading-6 text-white/70">Loading case...</p>
+        <p className="mt-1 text-[15px] leading-snug text-white/70">Loading case...</p>
       </section>
     )
   }
 
   if (error) {
     return (
-      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-sm">
-        <div className="mb-3 flex items-center justify-between gap-3">
+      <section className="rounded-2xl border border-white/10 bg-white/5 p-3">
+        <div className="mb-3 flex items-center justify-between gap-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Case</p>
-            <h2 className="mt-1 text-lg font-semibold text-white">Case unavailable</h2>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">Case</p>
+            <h2 className="text-lg font-semibold text-white">Diagnosis?</h2>
           </div>
-          <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-400">
+          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
             Live
           </span>
         </div>
-        <p className="rounded-2xl bg-white/5 p-3 text-sm leading-6 text-white/70">{error}</p>
+        <p className="mt-1 text-[15px] leading-snug text-white/70 line-clamp-2">{error}</p>
       </section>
     )
   }
 
   if (!caseData) {
     return (
-      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-sm">
-        <div className="mb-3 flex items-center justify-between gap-3">
+      <section className="rounded-2xl border border-white/10 bg-white/5 p-3">
+        <div className="mb-3 flex items-center justify-between gap-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Case</p>
-            <h2 className="mt-1 text-lg font-semibold text-white">Case in progress</h2>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">Case</p>
+            <h2 className="text-lg font-semibold text-white">Diagnosis?</h2>
           </div>
-          <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-400">
+          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
             Live
           </span>
         </div>
-        <p className="rounded-2xl bg-white/5 p-3 text-sm leading-6 text-white/70">No case available</p>
+        <p className="mt-1 text-[15px] leading-snug text-white/70">No case available</p>
       </section>
     )
   }
 
   const activeCase = {
-    title: caseData.difficulty ? `${caseData.difficulty} case` : 'Case in progress',
     history: caseData.history,
     symptoms: caseData.symptoms,
   }
 
+  const symptomSlots = Array.from({ length: MAX_SYMPTOMS }, (_, index) => activeCase.symptoms[index] ?? null)
+
   return (
-    <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Case</p>
-          <h2 className="mt-1 text-lg font-semibold text-white">{activeCase.title}</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onOpenExplanation}
-            disabled={!canOpenExplanation}
-            aria-label="Open case explanation"
-            className="h-7 w-7 rounded-full border border-white/10 bg-white/5 text-sm font-semibold text-white/70 transition disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            i
-          </button>
-          <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-400">
-            Live
-          </span>
-        </div>
+    <section className="rounded-2xl border border-white/10 bg-white/5 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold text-white">Diagnosis?</h2>
+        <button
+          type="button"
+          onClick={onOpenExplanation}
+          disabled={!canOpenExplanation}
+          aria-label="Open case explanation"
+          className="text-xs text-white/50 underline transition disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
+        >
+          Details
+        </button>
       </div>
 
-      <div className="space-y-3">
-        <div>
-          <p className="mb-2 text-sm font-semibold text-white">History</p>
-          <p className="rounded-2xl bg-white/5 p-3 text-sm leading-6 text-white/70">
-            {activeCase.history}
-          </p>
-        </div>
+      <p className="mt-1 text-[15px] leading-snug text-white/70 line-clamp-2">{activeCase.history}</p>
 
-        <div>
-          <p className="mb-2 text-sm font-semibold text-white">Symptoms</p>
-          <div className="max-h-40 overflow-y-auto rounded-2xl bg-white/5 p-3">
-            <div className="flex flex-wrap gap-2">
-              {activeCase.symptoms.map((symptom, index) => (
-                <span
-                  key={`${symptom}-${index}`}
-                  className={`rounded-full border px-3 py-1 text-sm text-white/70 transition-colors ${
-                    index === activeCase.symptoms.length - 1
-                      ? 'border-emerald-400/30 bg-emerald-500/15'
-                      : 'border-white/10 bg-white/5'
-                  }`}
-                >
-                  {symptom}
-                </span>
-              ))}
-              {activeCase.symptoms.length === 0 && (
-                <p className="text-sm text-white/60">No symptoms revealed yet.</p>
+      <div className="mt-2 grid grid-rows-6 gap-1">
+        {symptomSlots.map((symptom, index) => {
+          const isRevealed = Boolean(symptom)
+          const isLatest = isRevealed && index === activeCase.symptoms.length - 1
+
+          return (
+            <div
+              key={index}
+              className={`flex h-10 w-full items-center rounded-lg px-2.5 text-[15px] transition-all duration-300 ease-out ${
+                isRevealed
+                  ? 'bg-white/10 text-white'
+                  : 'bg-white/5 text-white/30'
+              } ${isLatest ? 'ring-2 ring-white/20 animate-[popIn_0.25s_ease]' : ''}`}
+            >
+              {isRevealed ? (
+                <span className="truncate">{symptom}</span>
+              ) : (
+                <span className="italic">— hidden —</span>
               )}
             </div>
-          </div>
-        </div>
+          )
+        })}
       </div>
     </section>
   )

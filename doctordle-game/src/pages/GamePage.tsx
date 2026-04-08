@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
-import MobileLayout from '../layout/MobileLayout'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useGameSession } from '../features/game/useGameSession'
 import GamePlaySection from '../features/game/GamePlaySection'
+import { FloatingReward } from '../features/game/FloatingReward'
 import ProgressSection from '../features/game/ProgressSection'
-import FeedbackSection from '../features/game/FeedbackSection'
-import FooterInput from '../features/game/FooterInput'
+import GameKeyboard from '../features/game/GameKeyboard'
+import { useGameFlow } from '../features/game/useGameFlow'
 import { useLeaderboard } from '../features/leaderboard/leaderboard.hook'
 import LeaderboardSection from '../features/leaderboard/LeaderboardSection'
 import { useUserProgress } from '../features/user-progress/useUserProgress'
@@ -18,10 +18,13 @@ type SheetType = 'leaderboard' | 'explanation' | 'menu' | 'howto' | null
 export default function GamePage() {
   const [activeSheet, setActiveSheet] = useState<SheetType>(null)
   const [mode, setMode] = useState<LeaderboardMode>('daily')
+  const [now, setNow] = useState(() => Date.now())
   const transitionTimeoutRef = useRef<number | null>(null)
   const game = useGameSession()
   const progress = useUserProgress()
   const leaderboard = useLeaderboard(mode)
+
+  const flow = useGameFlow(game)
 
   const openSheet = (sheet: Exclude<SheetType, null>) => {
     if (transitionTimeoutRef.current !== null) {
@@ -57,43 +60,169 @@ export default function GamePage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (flow.state.type !== 'WAITING') {
+      return
+    }
+
+    const waitingState = flow.state
+
+    const tick = () => {
+      const current = Date.now()
+      setNow(current)
+      const remaining = waitingState.nextCaseAt.getTime() - current
+      if (remaining <= 0) {
+        return undefined
+      }
+
+      const timeout = window.setTimeout(tick, Math.min(1000, remaining))
+      return timeout
+    }
+
+    const initialTimeout = tick()
+
+    return () => {
+      if (initialTimeout !== undefined) {
+        window.clearTimeout(initialTimeout)
+      }
+    }
+  }, [flow.state])
+
+  const waitingCountdownText = useMemo(() => {
+    if (flow.state.type !== 'WAITING') {
+      return null
+    }
+
+    const msLeft = Math.max(0, flow.state.nextCaseAt.getTime() - now)
+    const totalSeconds = Math.floor(msLeft / 1000)
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = totalSeconds % 60
+
+    const hh = String(hours).padStart(2, '0')
+    const mm = String(minutes).padStart(2, '0')
+    const ss = String(seconds).padStart(2, '0')
+    return `${hh}:${mm}:${ss}`
+  }, [flow.state, now])
+
+  const renderScreen = () => {
+    switch (flow.state.type) {
+      case 'PLAYING':
+      case 'SUBMITTING':
+        return (
+          <GamePlaySection
+            caseData={game.caseData}
+            caseLoading={game.caseLoading}
+            error={game.error}
+            attemptLabels={game.attemptLabels}
+            onOpenExplanation={() => openSheet('explanation')}
+            canOpenExplanation={Boolean(game.explanation)}
+          />
+        )
+      case 'FINAL_FEEDBACK':
+        return (
+          <GamePlaySection
+            caseData={game.caseData}
+            caseLoading={false}
+            error={null}
+            attemptLabels={game.attemptLabels}
+            finalResult={flow.state.result}
+            streak={progress.progress?.currentStreak}
+            onContinue={flow.continueGame}
+            onWhy={() => openSheet('explanation')}
+            onOpenExplanation={() => openSheet('explanation')}
+            canOpenExplanation={Boolean(game.explanation)}
+          />
+        )
+      case 'WAITING':
+        return (
+          <div className="space-y-3">
+            <ProgressSection
+              progress={progress.progress}
+              loading={progress.loading}
+              onOpenLeaderboard={() => openSheet('leaderboard')}
+            />
+            <section className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center">
+              <p className="text-sm text-white/60">Case completed</p>
+              <p className="text-sm text-white/70">Next case available in</p>
+              <p className="mt-1 text-2xl font-semibold text-white">{waitingCountdownText ?? '00:00:00'}</p>
+            </section>
+          </div>
+        )
+      default:
+        return null
+    }
+  }
+
+  // Helper to get badge color for attempt result  
+  const getBadgeColor = (label: 'correct' | 'close' | 'wrong') => {
+    switch (label) {
+      case 'correct':
+        return 'bg-emerald-500/20 border-emerald-500/50 text-emerald-200'
+      case 'close':
+        return 'bg-yellow-500/20 border-yellow-500/50 text-yellow-200'
+      case 'wrong':
+        return 'bg-gray-500/20 border-gray-500/50 text-gray-300'
+    }
+  }
+
   return (
     <>
-      <MobileLayout
-        header={<AppHeader onOpenMenu={() => openSheet('menu')} />}
-        footer={
-          <FooterInput
-            value={game.guess}
-            onChange={game.setGuess}
-            onSubmit={game.submitGuess}
-            hasActiveSession={game.hasActiveSession}
-            isLoading={game.loading}
-            isGameOver={game.isGameOver}
-            blockReason={game.blockReason}
-          />
-        }
-      >
-        <ProgressSection
-          progress={progress.progress}
-          loading={progress.loading}
-          onOpenLeaderboard={() => openSheet('leaderboard')}
-        />
+      <div className="min-h-screen flex flex-col bg-black">
+        <div className="mx-auto flex min-h-screen w-full max-w-md flex-col">
+          <header className="shrink-0 border-b border-white/10 bg-black">
+            <AppHeader onOpenMenu={() => openSheet('menu')} />
+          </header>
 
-        <GamePlaySection
-          caseData={game.caseData}
-          caseLoading={game.caseLoading}
-          error={game.error}
-          onOpenExplanation={() => openSheet('explanation')}
-          canOpenExplanation={Boolean(game.explanation)}
-        />
-        <FeedbackSection
-          result={game.result}
-          hasActiveSession={game.hasActiveSession}
-          currentStreak={progress.progress?.currentStreak ?? 0}
-          xpEarned={progress.xpEarned}
-          attemptLabels={game.attemptLabels}
-        />
-      </MobileLayout>
+          <main className="flex-1 px-2">
+            <div className="flex flex-col gap-3 py-2">
+              {renderScreen()}
+
+              <section>
+                {game.attemptLabels.length > 0 && (() => {
+                  const latest = game.attemptLabels.at(-1)
+
+                  if (!latest) {
+                    return null
+                  }
+
+                  return (
+                    <div
+                      className={`w-full rounded-lg border px-3 py-2 text-center text-sm ${getBadgeColor(latest.label)}`}
+                    >
+                      {latest.guess}
+                    </div>
+                  )
+                })()}
+              </section>
+
+              <section>
+                <div className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-center text-sm text-white">
+                  {game.guess || <span className="text-white/30">Type diagnosis…</span>}
+                </div>
+              </section>
+            </div>
+          </main>
+
+          <div className="shrink-0" />
+
+          <div
+            className="sticky bottom-0 bg-black"
+            style={{
+              paddingBottom: 'env(safe-area-inset-bottom)',
+            }}
+          >
+            <GameKeyboard
+              value={game.guess}
+              onChange={game.setGuess}
+              onSubmit={flow.submitGuess}
+              disabled={flow.isSubmitting || game.loading}
+            />
+          </div>
+        </div>
+      </div>
+
+      <FloatingReward reward={progress.rewardEvent} />
 
       <BottomSheet isOpen={activeSheet === 'leaderboard'} onClose={() => setActiveSheet(null)}>
         <LeaderboardSection

@@ -27,6 +27,7 @@ const envSchema = z.object({
   ALLOWED_ORIGINS: z.preprocess(emptyToUndefined, z.string().optional()),
   NETWORK_HOST: z.preprocess(emptyToUndefined, z.string().optional()),
   CLERK_JWKS_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
+  INTERNAL_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   EMBEDDING_MODEL: z.string().min(1),
   SCORE_WEIGHT_EXACT: z.coerce.number(),
   SCORE_WEIGHT_SYNONYM: z.coerce.number(),

@@ -3,17 +3,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, Case as CaseModel } from '@prisma/client';
 import { RedisCacheService } from '../../core/cache/redis-cache.service';
 import { PrismaService } from '../../core/db/prisma.service';
 import { AppLoggerService } from '../../core/logger/app-logger.service';
 import { MetricsService } from '../../core/logger/metrics.service';
+import { CasesService } from '../cases/cases.service';
 import { normalize } from '../diagnostics/pipeline/normalize';
 import { EvaluatorApiService } from '../diagnostics/services/evaluator-api.service';
+import { QueueService } from '../queue/queue.service';
 import { AttemptService } from './attempt.service';
 import { DailyLimitService } from './daily-limit.service';
 import { ScoringService } from './scoring.service';
-import { GameEventsService } from './events/game-events.service';
 
 @Injectable()
 export class GameSessionService {
@@ -27,7 +28,8 @@ export class GameSessionService {
     private readonly attemptService: AttemptService,
     private readonly dailyLimitService: DailyLimitService,
     private readonly scoringService: ScoringService,
-    private readonly gameEventsService: GameEventsService,
+    private readonly queueService: QueueService,
+    private readonly casesService: CasesService,
     private readonly logger: AppLoggerService,
     private readonly metrics: MetricsService,
   ) {}
@@ -40,12 +42,58 @@ export class GameSessionService {
     return this.submitDailyGuess(input);
   }
 
+  async requestHint(input: { userId: string; sessionId: string }) {
+    const session = await this.prisma.gameSession.findUnique({
+      where: { id: input.sessionId },
+      select: {
+        id: true,
+        userId: true,
+        caseId: true,
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Session not found');
+    }
+
+    if (session.userId !== input.userId) {
+      throw new BadRequestException('Session does not belong to user');
+    }
+
+    const cacheKey = `ai:hint:${session.caseId}`;
+    const cachedHint = await this.cacheService.get(cacheKey);
+
+    if (cachedHint) {
+      return {
+        status: 'ready',
+        hint: cachedHint,
+      };
+    }
+
+    await this.queueService.enqueueHint(session.caseId);
+
+    return {
+      status: 'processing',
+    };
+  }
+
   async startDailyGame(input: {
     userId: string;
     subscriptionTier?: 'free' | 'premium';
   }) {
     const { start: startOfDayUtc, end: endOfDayUtc, dateKey } =
       this.getUtcDayRange();
+    const todayCase = await this.casesService.getTodayCase();
+    const selectedCase: Pick<
+      CaseModel,
+      'id' | 'history' | 'symptoms' | 'difficulty' | 'date'
+    > = {
+      id: todayCase.case.id,
+      date: todayCase.case.date,
+      difficulty: todayCase.case.difficulty,
+      history: todayCase.case.history,
+      symptoms: todayCase.case.symptoms,
+    };
 
     const result = await this.prisma.$transaction(
       async (tx) => {
@@ -67,51 +115,10 @@ export class GameSessionService {
           endOfDayUtc,
         });
 
-        let dailyCase = await tx.dailyCase.findUnique({
-          where: {
-            date: startOfDayUtc,
-          },
-          include: {
-            case: true,
-          },
-        });
-
-        if (!dailyCase) {
-          const rows = await tx.$queryRaw<
-            Array<{
-              id: string;
-              history: string;
-              symptoms: string[];
-              difficulty: string;
-              date: Date;
-            }>
-          >(Prisma.sql`
-            SELECT id, history, symptoms, difficulty, date
-            FROM "Case"
-            ORDER BY RANDOM()
-            LIMIT 1
-          `);
-
-          const selected = rows[0];
-          if (!selected) {
-            throw new NotFoundException('No cases available');
-          }
-
-          dailyCase = await tx.dailyCase.create({
-            data: {
-              caseId: selected.id,
-              date: startOfDayUtc,
-            },
-            include: {
-              case: true,
-            },
-          });
-        }
-
         const existingSession = await tx.gameSession.findFirst({
           where: {
             userId: user.id,
-            dailyCaseId: dailyCase.id,
+            dailyCaseId: todayCase.dailyCaseId,
             status: 'active',
           },
           include: {
@@ -130,15 +137,19 @@ export class GameSessionService {
         if (existingSession) {
           return {
             session: existingSession,
-            dailyCase,
+            dailyCase: {
+              id: todayCase.dailyCaseId,
+              caseId: todayCase.caseId,
+              case: selectedCase,
+            },
             user,
           };
         }
 
         const session = await tx.gameSession.create({
           data: {
-            caseId: dailyCase.caseId,
-            dailyCaseId: dailyCase.id,
+            caseId: todayCase.caseId,
+            dailyCaseId: todayCase.dailyCaseId,
             userId: user.id,
             userTierAtStart: user.subscriptionTier,
             status: 'active',
@@ -147,7 +158,11 @@ export class GameSessionService {
 
         return {
           session,
-          dailyCase,
+          dailyCase: {
+            id: todayCase.dailyCaseId,
+            caseId: todayCase.caseId,
+            case: selectedCase,
+          },
           user,
         };
       },
@@ -175,6 +190,21 @@ export class GameSessionService {
     const visibleCase = this.buildCasePayloadByClueIndex(
       result.dailyCase.case,
       clueIndex,
+    );
+
+    this.enqueueAiJobsForCase(result.dailyCase.caseId, {
+      userId: result.user.id,
+      source: 'daily_case_selected',
+    });
+
+    this.logger.info(
+      {
+        userId: result.user.id,
+        sessionId: result.session.id,
+        dailyCaseId: result.dailyCase.id,
+        caseId: result.dailyCase.caseId,
+      },
+      'daily.case.selected',
     );
 
     this.logger.info(
@@ -326,14 +356,21 @@ export class GameSessionService {
           throw new Error('CRITICAL: session missing dailyCaseId');
         }
 
-        this.gameEventsService.emitGameCompleted({
+        await this.queueService.enqueueGameCompleted({
           sessionId: session.id,
           userId: input.userId,
-          dailyCaseId: session.dailyCaseId,
-          difficulty: session.case.difficulty,
-          score: computedScore,
-          attemptsCount,
-          completedAt,
+        });
+
+        void this.queueService.enqueueExplanation(session.caseId).catch((error) => {
+          this.logger.error(
+            {
+              caseId: session.caseId,
+              sessionId: session.id,
+              userId: input.userId,
+              error,
+            },
+            'daily.explanation.enqueue_failed',
+          );
         });
       }
     } else if (cluesExhausted) {
@@ -341,7 +378,7 @@ export class GameSessionService {
       gameOver = true;
       gameOverReason = 'clues_exhausted';
 
-      await this.prisma.gameSession.updateMany({
+      const completed = await this.prisma.gameSession.updateMany({
         where: {
           id: session.id,
           status: 'active',
@@ -351,6 +388,20 @@ export class GameSessionService {
           completedAt: new Date(),
         },
       });
+
+      if (completed.count > 0) {
+        void this.queueService.enqueueExplanation(session.caseId).catch((error) => {
+          this.logger.error(
+            {
+              caseId: session.caseId,
+              sessionId: session.id,
+              userId: input.userId,
+              error,
+            },
+            'daily.explanation.enqueue_failed',
+          );
+        });
+      }
     } else {
       nextClueIndex = Math.min(maxClues, nextWrongAttempts);
     }
@@ -433,6 +484,37 @@ export class GameSessionService {
       attempts: session.attempts,
       case: casePayload,
     };
+  }
+
+  private enqueueAiJobsForCase(
+    caseId: string,
+    metadata: { userId?: string; sessionId?: string; source: string },
+  ): void {
+    void this.queueService.enqueueHint(caseId).catch((error) => {
+      this.logger.error(
+        {
+          caseId,
+          source: metadata.source,
+          userId: metadata.userId,
+          sessionId: metadata.sessionId,
+          error,
+        },
+        'ai.hint.enqueue_failed',
+      );
+    });
+
+    void this.queueService.enqueueExplanation(caseId).catch((error) => {
+      this.logger.error(
+        {
+          caseId,
+          source: metadata.source,
+          userId: metadata.userId,
+          sessionId: metadata.sessionId,
+          error,
+        },
+        'ai.explanation.enqueue_failed',
+      );
+    });
   }
 
   async getCaseBySession(sessionId: string) {
