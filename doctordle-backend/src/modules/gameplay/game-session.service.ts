@@ -15,6 +15,9 @@ import { QueueService } from '../queue/queue.service';
 import { AttemptService } from './attempt.service';
 import { DailyLimitService } from './daily-limit.service';
 import { ScoringService } from './scoring.service';
+import { StreakService } from './streak.service';
+import { XpService } from './xp.service';
+import type { SubmitGameGuessResponseDto } from './dto/submit-game-guess.dto';
 
 @Injectable()
 export class GameSessionService {
@@ -28,6 +31,8 @@ export class GameSessionService {
     private readonly attemptService: AttemptService,
     private readonly dailyLimitService: DailyLimitService,
     private readonly scoringService: ScoringService,
+    private readonly streakService: StreakService,
+    private readonly xpService: XpService,
     private readonly queueService: QueueService,
     private readonly casesService: CasesService,
     private readonly logger: AppLoggerService,
@@ -38,7 +43,11 @@ export class GameSessionService {
     return this.startDailyGame({ userId: input.userId });
   }
 
-  async submitGuess(input: { sessionId: string; guess: string; userId: string }) {
+  async submitGuess(input: {
+    sessionId: string;
+    guess: string;
+    userId: string;
+  }): Promise<SubmitGameGuessResponseDto> {
     return this.submitDailyGuess(input);
   }
 
@@ -231,7 +240,7 @@ export class GameSessionService {
     userId: string;
     sessionId: string;
     guess: string;
-  }) {
+  }): Promise<SubmitGameGuessResponseDto> {
     const session = await this.prisma.gameSession.findUnique({
       where: { id: input.sessionId },
       include: {
@@ -279,10 +288,11 @@ export class GameSessionService {
       );
 
       return {
-        result: duplicateAttempt.result,
+        result: duplicateAttempt.result as 'correct' | 'close' | 'wrong',
         score: duplicateAttempt.score,
         attemptsCount: session.attempts.length,
         clueIndex: this.getDerivedClueIndex(session.attempts, maxClues),
+        isTerminalCorrect: false,
         duplicate: true,
       };
     }
@@ -328,6 +338,9 @@ export class GameSessionService {
     let nextClueIndex = clueIndex;
     let gameOver = false;
     let gameOverReason: 'correct' | 'clues_exhausted' | null = null;
+    let completedAt: Date | null = null;
+    let shouldEnqueueGameCompleted = false;
+    let shouldEnqueueExplanation = false;
     const isCorrect = evaluation.label === 'correct';
     const nextWrongAttempts =
       session.attempts.filter((item) => item.result !== 'correct').length +
@@ -339,7 +352,8 @@ export class GameSessionService {
       gameOver = true;
       gameOverReason = 'correct';
 
-      const completedAt = new Date();
+      completedAt = new Date();
+
       const completed = await this.prisma.gameSession.updateMany({
         where: {
           id: session.id,
@@ -355,28 +369,14 @@ export class GameSessionService {
         if (!session.dailyCaseId) {
           throw new Error('CRITICAL: session missing dailyCaseId');
         }
-
-        await this.queueService.enqueueGameCompleted({
-          sessionId: session.id,
-          userId: input.userId,
-        });
-
-        void this.queueService.enqueueExplanation(session.caseId).catch((error) => {
-          this.logger.error(
-            {
-              caseId: session.caseId,
-              sessionId: session.id,
-              userId: input.userId,
-              error,
-            },
-            'daily.explanation.enqueue_failed',
-          );
-        });
+        shouldEnqueueGameCompleted = true;
+        shouldEnqueueExplanation = true;
       }
     } else if (cluesExhausted) {
       nextClueIndex = maxClues;
       gameOver = true;
       gameOverReason = 'clues_exhausted';
+      completedAt = new Date();
 
       const completed = await this.prisma.gameSession.updateMany({
         where: {
@@ -385,25 +385,61 @@ export class GameSessionService {
         },
         data: {
           status: 'completed',
-          completedAt: new Date(),
+          completedAt,
         },
       });
 
       if (completed.count > 0) {
-        void this.queueService.enqueueExplanation(session.caseId).catch((error) => {
-          this.logger.error(
-            {
-              caseId: session.caseId,
-              sessionId: session.id,
-              userId: input.userId,
-              error,
-            },
-            'daily.explanation.enqueue_failed',
-          );
-        });
+        shouldEnqueueExplanation = true;
       }
     } else {
       nextClueIndex = Math.min(maxClues, nextWrongAttempts);
+    }
+
+    const isTerminalCorrect =
+      evaluation.label === 'correct' && gameOverReason === 'correct';
+    const hasValidRewardPreviewInputs =
+      Number.isFinite(clueIndex) &&
+      Number.isFinite(attemptsCount) &&
+      attemptsCount > 0;
+    const streakAfter =
+      isTerminalCorrect && completedAt && hasValidRewardPreviewInputs
+        ? await this.streakService.previewOnCompletion({
+            userId: input.userId,
+            completedAt,
+          })
+        : undefined;
+    const xpAwarded =
+      isTerminalCorrect && hasValidRewardPreviewInputs && streakAfter !== undefined
+        ? this.xpService.calculateReward({
+            isCorrect: true,
+            clueIndex,
+            attemptsCount,
+            streak: streakAfter,
+          }).xpAwarded
+        : undefined;
+
+    if (shouldEnqueueGameCompleted) {
+      await this.queueService.enqueueGameCompleted({
+        sessionId: session.id,
+        userId: input.userId,
+        ...(isTerminalCorrect && xpAwarded !== undefined ? { previewXpAwarded: xpAwarded } : {}),
+        ...(isTerminalCorrect && streakAfter !== undefined ? { previewStreakAfter: streakAfter } : {}),
+      });
+    }
+
+    if (shouldEnqueueExplanation) {
+      void this.queueService.enqueueExplanation(session.caseId).catch((error) => {
+        this.logger.error(
+          {
+            caseId: session.caseId,
+            sessionId: session.id,
+            userId: input.userId,
+            error,
+          },
+          'daily.explanation.enqueue_failed',
+        );
+      });
     }
 
     const visibleCase = this.buildCasePayloadByClueIndex(session.case, nextClueIndex);
@@ -424,10 +460,13 @@ export class GameSessionService {
       attemptsCount,
       semanticScore: evaluation.score,
       clueIndex: nextClueIndex,
+      isTerminalCorrect,
       case: visibleCase,
       gameOver,
       gameOverReason,
       explanation,
+      ...(isTerminalCorrect && xpAwarded !== undefined ? { xpAwarded } : {}),
+      ...(isTerminalCorrect && streakAfter !== undefined ? { streakAfter } : {}),
       feedback: {
         signals: evaluation.signals,
         evaluatorVersion: evaluation.evaluatorVersion ?? 'v2',

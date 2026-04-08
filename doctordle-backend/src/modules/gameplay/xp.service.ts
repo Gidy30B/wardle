@@ -11,6 +11,12 @@ type ComputeXpInput = {
   streak: number;
 };
 
+export type CalculateRewardInput = ComputeXpInput;
+
+export type CalculateRewardResult = {
+  xpAwarded: number;
+};
+
 @Injectable()
 export class XpService {
   constructor(
@@ -19,7 +25,7 @@ export class XpService {
     private readonly metrics: MetricsService,
   ) {}
 
-  computeXP(input: ComputeXpInput): number {
+  calculateReward(input: CalculateRewardInput): CalculateRewardResult {
     const normalizedClueIndex = Math.max(0, Math.floor(input.clueIndex));
     const normalizedAttempts = Math.max(1, Math.floor(input.attemptsCount));
 
@@ -35,7 +41,13 @@ export class XpService {
     const streakBonus =
       input.streak >= 30 ? 150 : input.streak >= 7 ? 50 : input.streak >= 3 ? 10 : 0;
 
-    return Math.max(1, baseXp + streakBonus - attemptPenalty);
+    return {
+      xpAwarded: Math.max(1, baseXp + streakBonus - attemptPenalty),
+    };
+  }
+
+  computeXP(input: ComputeXpInput): number {
+    return this.calculateReward(input).xpAwarded;
   }
 
   deriveLevelFromXpTotal(xpTotal: number): {
@@ -108,6 +120,21 @@ export class XpService {
         };
       }
 
+      if (session.xpAwardedAt) {
+        this.metrics.increment('xp.already_awarded');
+        this.logger.warn({
+          event: 'xp.already_awarded',
+          sessionId: input.sessionId,
+          userId: input.userId,
+          xpAwardedAt: session.xpAwardedAt.toISOString(),
+        });
+
+        return {
+          applied: false,
+          reason: 'already_awarded' as const,
+        };
+      }
+
       const mark = await tx.gameSession.updateMany({
         where: {
           id: input.sessionId,
@@ -121,14 +148,12 @@ export class XpService {
       });
 
       if (mark.count === 0) {
-        this.metrics.increment('xp.duplicate');
-        this.logger.warn(
-          {
-            sessionId: input.sessionId,
-            userId: input.userId,
-          },
-          'xp.already_awarded',
-        );
+        this.metrics.increment('xp.already_awarded');
+        this.logger.warn({
+          event: 'xp.already_awarded',
+          sessionId: input.sessionId,
+          userId: input.userId,
+        });
 
         return {
           applied: false,
@@ -141,12 +166,13 @@ export class XpService {
       const isCorrect = lastAttempt?.result === 'correct';
       const attemptsCount = Math.max(1, input.attemptsCount || session._count.attempts || 1);
 
-      const xpGained = this.computeXP({
+      const reward = this.calculateReward({
         isCorrect,
         clueIndex,
         attemptsCount,
         streak: input.streak,
       });
+      const xpGained = reward.xpAwarded;
 
       const progress = await tx.userProgress.upsert({
         where: { userId: input.userId },
@@ -175,19 +201,17 @@ export class XpService {
 
       this.metrics.increment('xp.awarded');
       this.metrics.observe('xp.gained', xpGained);
-      this.logger.info(
-        {
-          sessionId: input.sessionId,
-          userId: input.userId,
-          xpGained,
-          clueIndex,
-          attemptsCount,
-          isCorrect,
-          xpTotal: updated.xpTotal,
-          level: updated.level,
-        },
-        'xp.awarded',
-      );
+      this.logger.info({
+        event: 'xp.awarded',
+        sessionId: input.sessionId,
+        userId: input.userId,
+        xpGained,
+        clueIndex,
+        attemptsCount,
+        isCorrect,
+        xpTotal: updated.xpTotal,
+        level: updated.level,
+      });
 
       return {
         applied: true as const,

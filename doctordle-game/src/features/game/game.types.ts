@@ -11,6 +11,13 @@ export type GameCase = {
   date?: string
 }
 
+export type RewardEvent = {
+  id: number
+  xp: number
+  streak?: number
+  type: 'correct' | 'close'
+}
+
 export type CaseExplanation = {
   diagnosis: string
   difficulty: string
@@ -29,11 +36,14 @@ export type StartGameResponse = {
 export type GuessApiResponse = {
   result: 'correct' | 'close' | 'wrong'
   score: number
+  isTerminalCorrect: boolean
   attemptsCount?: number
   clueIndex?: number
   case?: GameCase
   gameOver?: boolean
   gameOverReason?: 'correct' | 'clues_exhausted' | null
+  xpAwarded?: number
+  streakAfter?: number
   explanation?: CaseExplanation | null
   feedback?: {
     signals?: {
@@ -55,8 +65,11 @@ export type GameResult = {
   score: number
   attemptsCount?: number
   label: 'correct' | 'close' | 'wrong'
+  isTerminalCorrect: boolean
   gameOver: boolean
   gameOverReason?: 'correct' | 'clues_exhausted' | null
+  xpAwarded?: number
+  streakAfter?: number
   explanation?: CaseExplanation | null
   case?: GameCase
 }

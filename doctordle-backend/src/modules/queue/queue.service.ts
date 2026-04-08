@@ -18,6 +18,8 @@ import {
 export type GameCompletedJobPayload = {
   userId: string;
   sessionId: string;
+  previewXpAwarded?: number;
+  previewStreakAfter?: number;
 };
 
 export type HintGenerateJobPayload = {

@@ -12,7 +12,10 @@ import {
 } from '@nestjs/common';
 import { RateLimitGuard } from './guards/rate-limit.guard';
 import { GameSessionService } from './game-session.service';
-import { SubmitGameGuessDto } from './dto/submit-game-guess.dto';
+import {
+  SubmitGameGuessDto,
+  type SubmitGameGuessResponseDto,
+} from './dto/submit-game-guess.dto';
 import { RequestHintDto } from './dto/request-hint.dto';
 import { LeaderboardService } from './leaderboard.service';
 import type { AuthenticatedRequest } from '../../auth/authenticated-request.interface';
@@ -45,7 +48,10 @@ export class GameController {
   }
 
   @Post('guess')
-  async submitGuess(@Req() req: AuthenticatedRequest, @Body() body: SubmitGameGuessDto) {
+  async submitGuess(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: SubmitGameGuessDto,
+  ): Promise<SubmitGameGuessResponseDto> {
     try {
       return await this.gameSessionService.submitGuess({
         sessionId: body.sessionId,

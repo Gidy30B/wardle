@@ -1,22 +1,59 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { GameEvent } from './events/game.events'
+import { useGameEvents } from './events/useGameEvents'
 
-type RewardEvent = {
+type FloatingRewardState = {
   id: number
   xp: number
   streak?: number
-  type: 'correct' | 'close'
 }
 
-type Props = {
-  reward: RewardEvent | null
-}
-
-export function FloatingReward({ reward }: Props) {
+export function FloatingReward() {
+  const rewardIdRef = useRef(0)
+  const timersRef = useRef<number[]>([])
+  const [queue, setQueue] = useState<FloatingRewardState[]>([])
+  const [activeReward, setActiveReward] = useState<FloatingRewardState | null>(null)
   const [visible, setVisible] = useState(false)
   const [showSecondary, setShowSecondary] = useState(false)
 
+  const handleEvent = useCallback((event: GameEvent) => {
+    if (event.type !== 'REWARD_TRIGGERED') {
+      return
+    }
+
+    rewardIdRef.current += 1
+    setQueue((prev) => {
+      const next = [
+        ...prev,
+        {
+          id: rewardIdRef.current,
+          xp: event.xp,
+          streak: event.streak,
+        },
+      ]
+
+      return next.slice(-5)
+    })
+  }, [])
+
+  useGameEvents(handleEvent)
+
   useEffect(() => {
-    if (!reward) return
+    if (activeReward || queue.length === 0) return
+
+    const delay = setTimeout(() => {
+      setActiveReward(queue[0])
+      setQueue((prev) => prev.slice(1))
+    }, 120)
+
+    return () => clearTimeout(delay)
+  }, [queue, activeReward])
+
+  useEffect(() => {
+    if (!activeReward) return
+
+    timersRef.current.forEach((timerId) => clearTimeout(timerId))
+    timersRef.current = []
 
     setVisible(true)
     setShowSecondary(false)
@@ -27,50 +64,56 @@ export function FloatingReward({ reward }: Props) {
 
     const hideTimer = setTimeout(() => {
       setVisible(false)
-    }, reward.type === 'close' ? 600 : 900)
+    }, 900)
+
+    const clearTimer = setTimeout(() => {
+      setActiveReward(null)
+    }, 1200)
+
+    timersRef.current.push(secondaryTimer, hideTimer, clearTimer)
 
     return () => {
-      clearTimeout(secondaryTimer)
-      clearTimeout(hideTimer)
+      timersRef.current.forEach((timerId) => clearTimeout(timerId))
+      timersRef.current = []
     }
-  }, [reward?.id])
+  }, [activeReward?.id])
 
-  if (!reward || !visible) return null
+  if (!activeReward || !visible || activeReward.xp <= 0) return null
 
-  const isCorrect = reward.type === 'correct'
-  const isClose = reward.type === 'close'
+  const secondaryLabel = activeReward.streak !== undefined ? `Streak ${activeReward.streak}` : 'Correct'
+  const scaleClass =
+    activeReward?.streak && activeReward.streak >= 5
+      ? 'scale-125'
+      : activeReward?.streak && activeReward.streak >= 3
+      ? 'scale-110'
+      : ''
 
   return (
     <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
       <div
         className={`
-          text-center animate-[floatUp_0.8s_ease-out_forwards]
-          ${isClose ? 'opacity-90' : ''}
+          text-center
+          ${scaleClass}
+          animate-[floatUp_0.8s_cubic-bezier(0.22,1,0.36,1)_forwards]
         `}
       >
-        {/* PRIMARY: XP */}
         <div
           className={`
             font-semibold
-            ${isCorrect ? 'text-lg text-white' : 'text-base text-white/90'}
+            text-lg text-white
           `}
         >
-          +{reward.xp} XP
+          +{activeReward.xp} XP
         </div>
 
-        {/* SECONDARY */}
         {showSecondary && (
           <div
             className={`
               mt-1 text-sm animate-[fadeIn_0.2s_ease]
-              ${
-                isCorrect
-                  ? 'text-white/70'
-                  : 'text-yellow-300/80'
-              }
+              text-white/70
             `}
           >
-            {isCorrect ? `🔥 ${reward.streak}` : '↗ Close'}
+            {secondaryLabel}
           </div>
         )}
       </div>

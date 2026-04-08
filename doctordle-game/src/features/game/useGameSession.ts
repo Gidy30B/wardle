@@ -4,13 +4,19 @@ import { useQueryClient } from '@tanstack/react-query'
 import { startGameApi, submitGuessApi } from './game.api'
 import type { GameCase, GameResult, RequestState } from './game.types'
 import { useApi } from '../../lib/api'
+import { emit } from './events/game.eventBus'
 
-export function useGameSession() {
+type UseGameSessionOptions = {
+  currentStreak?: number
+}
+
+export function useGameSession(_options: UseGameSessionOptions = {}) {
   const { isLoaded, isSignedIn } = useAuth()
   const { request } = useApi()
   const queryClient = useQueryClient()
   const hasStartedRef = useRef(false)
   const submittingRef = useRef(false)
+  const rewardedSessionRef = useRef<string | null>(null)
   const [guess, setGuess] = useState('')
   const [result, setResult] = useState<GameResult | null>(null)
   const [attemptLabels, setAttemptLabels] = useState<
@@ -21,6 +27,7 @@ export function useGameSession() {
   const [caseLoading, setCaseLoading] = useState(true)
   const [requestState, setRequestState] = useState<RequestState>('loading')
   const [error, setError] = useState<string | null>(null)
+  const [xpEarned, setXpEarned] = useState(0)
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) {
@@ -47,9 +54,11 @@ export function useGameSession() {
 
           hasActiveSession = true
           setSessionId(session.sessionId)
+          rewardedSessionRef.current = null
           setCaseData(session.case)
           setResult(null)
           setAttemptLabels([])
+          setXpEarned(0)
           setError(null)
         } catch (exception) {
           if (!active) {
@@ -89,12 +98,31 @@ export function useGameSession() {
     setRequestState('submitting')
 
     try {
+      emit({ type: 'SUBMIT_GUESS' })
       const response = await submitGuessApi(request, { guess: trimmed, sessionId })
       setResult(response)
       setAttemptLabels((previous) => [...previous, { guess: trimmed, label: response.label }])
       if (response.case) {
         setCaseData(response.case)
       }
+      emit({ type: 'RESULT_RECEIVED', result: response })
+
+      if (
+        response.isTerminalCorrect &&
+        response.xpAwarded !== undefined &&
+        rewardedSessionRef.current !== sessionId
+      ) {
+        rewardedSessionRef.current = sessionId
+        setXpEarned(response.xpAwarded)
+        emit({
+          type: 'REWARD_TRIGGERED',
+          xp: response.xpAwarded,
+          streak: response.streakAfter,
+        })
+      } else {
+        setXpEarned(0)
+      }
+
       await queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
       await queryClient.invalidateQueries({ queryKey: ['progress'] })
       setError(null)
@@ -123,6 +151,7 @@ export function useGameSession() {
     caseLoading,
     loading,
     error,
+    xpEarned,
     submitGuess,
     isGameOver,
     attemptLabels,

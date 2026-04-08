@@ -23,8 +23,11 @@ export async function submitGuessApi(
     score: response.score,
     attemptsCount: response.attemptsCount,
     label: response.result,
+    isTerminalCorrect: response.isTerminalCorrect,
     gameOver: response.gameOver ?? response.result === 'correct',
     gameOverReason: response.gameOverReason ?? null,
+    xpAwarded: response.xpAwarded,
+    streakAfter: response.streakAfter,
     explanation: response.explanation ?? null,
     case: response.case,
   }

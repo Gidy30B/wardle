@@ -303,6 +303,24 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
       throw new Error(`Unable to award XP for session ${payload.sessionId}`);
     }
 
+    if (
+      awardResult.applied &&
+      ((payload.previewXpAwarded !== undefined &&
+        payload.previewXpAwarded !== awardResult.xpGained) ||
+        (payload.previewStreakAfter !== undefined &&
+          payload.previewStreakAfter !== streak))
+    ) {
+      this.logger.warn({
+        event: 'reward.preview_persisted.mismatch',
+        userId: payload.userId,
+        sessionId: payload.sessionId,
+        previewXp: payload.previewXpAwarded,
+        actualXp: awardResult.xpGained,
+        previewStreak: payload.previewStreakAfter,
+        actualStreak: streak,
+      });
+    }
+
     await this.leaderboardService.upsertCompletion({
       userId: payload.userId,
       dailyCaseId: session.dailyCaseId,
