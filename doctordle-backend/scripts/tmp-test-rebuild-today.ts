@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../src/core/config/load-env.js';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../src/app.module';
 import { CasesService } from '../src/modules/cases/cases.service';

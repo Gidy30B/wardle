@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Case as CaseModel } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
-import { QueueService } from '../queue/queue.service';
+import { AIContentService } from '../ai/ai-content.service';
 import { CreateCaseDto } from './dto/create-case.dto';
 
 export type DiagnosisCatalogItem = {
@@ -50,7 +50,7 @@ export class CasesService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly queueService: QueueService,
+    private readonly aiContentService: AIContentService,
   ) {}
 
   async createCase(dto: CreateCaseDto): Promise<CreatedCaseRecord> {
@@ -114,7 +114,9 @@ export class CasesService {
       await this.assignDailyCase(dto.date, created.id);
     }
 
-    void this.enqueueAiJobs(created.id, 'case_created');
+    void this.aiContentService.scheduleCaseContent(created.id, {
+      source: 'case_created',
+    });
 
     return this.mapCaseRecord(created);
   }
@@ -175,26 +177,56 @@ export class CasesService {
     });
 
     if (existing) {
-      this.logger.log(
-        JSON.stringify({
-          event: 'cases.today.existing',
-          dailyCaseId: existing.id,
-          caseId: existing.caseId,
-          date: existing.date.toISOString(),
-        }),
-      );
+      if (!this.hasPlayableClueArray(existing.case.clues)) {
+        this.logger.warn(
+          JSON.stringify({
+            event: 'cases.today.invalid_daily_case_removed',
+            dailyCaseId: existing.id,
+            caseId: existing.caseId,
+            date: existing.date.toISOString(),
+          }),
+        );
 
-      return this.mapTodayCaseContext(existing);
+        await this.prisma.dailyCase
+          .delete({
+            where: { id: existing.id },
+          })
+          .catch((error) => {
+            const maybePrismaError = error as { code?: string };
+            if (maybePrismaError.code !== 'P2025') {
+              throw error;
+            }
+          });
+      } else {
+        this.logger.log(
+          JSON.stringify({
+            event: 'cases.today.existing',
+            dailyCaseId: existing.id,
+            caseId: existing.caseId,
+            date: existing.date.toISOString(),
+          }),
+        );
+
+        return this.mapTodayCaseContext(existing);
+      }
     }
 
-    const selectedCase = await this.prisma.case.findFirst({
-      orderBy: {
-        date: 'desc',
-      },
+    const selectedCaseId = await this.findLatestPlayableCaseId();
+
+    if (!selectedCaseId) {
+      throw new NotFoundException(
+        'No playable clue-based cases available to assign for today',
+      );
+    }
+
+    const selectedCase = await this.prisma.case.findUnique({
+      where: { id: selectedCaseId },
     });
 
     if (!selectedCase) {
-      throw new NotFoundException('No cases available to assign for today');
+      throw new NotFoundException(
+        `Playable case disappeared before daily assignment: ${selectedCaseId}`,
+      );
     }
 
     try {
@@ -246,6 +278,24 @@ export class CasesService {
 
       return this.mapTodayCaseContext(recovered);
     }
+  }
+
+  private hasPlayableClueArray(value: unknown): boolean {
+    return Array.isArray(value) && value.length > 0;
+  }
+
+  private async findLatestPlayableCaseId(): Promise<string | null> {
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT "id"
+      FROM "Case"
+      WHERE "clues" IS NOT NULL
+        AND jsonb_typeof("clues") = 'array'
+        AND jsonb_array_length("clues") > 0
+      ORDER BY "date" DESC
+      LIMIT 1
+    `;
+
+    return rows[0]?.id ?? null;
   }
 
   async resetTodayCase(): Promise<ResetTodayCaseResult> {
@@ -428,30 +478,6 @@ export class CasesService {
       system: diagnosis.system ?? 'unknown',
       synonyms: diagnosis.synonyms.map((synonym) => synonym.term),
     };
-  }
-
-  private async enqueueAiJobs(caseId: string, source: string): Promise<void> {
-    void this.queueService.enqueueHint(caseId).catch((error) => {
-      this.logger.error(
-        JSON.stringify({
-          event: 'cases.ai.hint.enqueue_failed',
-          caseId,
-          source,
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
-    });
-
-    void this.queueService.enqueueExplanation(caseId).catch((error) => {
-      this.logger.error(
-        JSON.stringify({
-          event: 'cases.ai.explanation.enqueue_failed',
-          caseId,
-          source,
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
-    });
   }
 
   private mapCaseRecord(found: {

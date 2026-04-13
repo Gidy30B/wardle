@@ -75,8 +75,8 @@ export default function GamePage() {
             <AppHeader onOpenMenu={() => openSheet('menu')} />
           </header>
 
-          <main className="flex-1 min-h-0 px-2">
-            <div className="flex flex-col gap-3 py-2">
+          <main className="flex-1 min-h-0 overflow-hidden px-2 pb-2 pt-2">
+            <div className="flex h-full min-h-0 flex-col gap-3">
               {flow.state.type === 'WAITING' ? (
                 <ProgressSection
                   progress={progress.progress}
@@ -85,26 +85,28 @@ export default function GamePage() {
                 />
               ) : null}
 
-              <GamePlaySection
-                state={flow.state}
-                caseData={game.caseData}
-                caseLoading={game.caseLoading}
-                error={game.error}
-                guess={game.guess}
-                onGuessChange={game.setGuess}
-                onSubmit={flow.submitGuess}
-                submitDisabled={flow.isSubmitting || game.loading || !game.canSubmit}
-                result={game.result}
-                attemptLabels={game.attemptLabels}
-                finalResult={flow.state.type === 'FINAL_FEEDBACK' ? flow.state.result : null}
-                blockReason={game.blockReason}
-                xpEarned={game.xpEarned}
-                streak={progress.progress?.currentStreak}
-                onContinue={flow.continueGame}
-                onWhy={() => openSheet('explanation')}
-                onOpenExplanation={() => openSheet('explanation')}
-                canOpenExplanation={Boolean(game.explanation)}
-              />
+              <div className="flex-1 min-h-0">
+                <GamePlaySection
+                  state={flow.state}
+                  caseData={game.caseData}
+                  clueIndex={game.clueIndex}
+                  caseLoading={game.caseLoading}
+                  error={game.error}
+                  guess={game.guess}
+                  onGuessChange={game.setGuess}
+                  onSubmit={flow.submitGuess}
+                  submitDisabled={flow.isSubmitting || game.loading || !game.canSubmit}
+                  result={game.result}
+                  guesses={game.guesses}
+                  finalResult={flow.state.type === 'FINAL_FEEDBACK' ? flow.state.result : null}
+                  blockReason={game.blockReason}
+                  xpEarned={game.xpEarned}
+                  onContinue={flow.continueGame}
+                  onWhy={() => openSheet('explanation')}
+                  onOpenExplanation={() => openSheet('explanation')}
+                  canOpenExplanation={Boolean(game.explanation)}
+                />
+              </div>
             </div>
           </main>
         </div>
@@ -127,9 +129,7 @@ export default function GamePage() {
       <BottomSheet isOpen={activeSheet === 'explanation'} onClose={() => setActiveSheet(null)}>
         {game.explanation ? (
           <ExplanationPage explanation={game.explanation} onBack={() => setActiveSheet(null)} />
-        ) : (
-          <p className="text-sm text-white/70">No explanation available yet.</p>
-        )}
+        ) : null}
       </BottomSheet>
 
       <BottomSheet isOpen={activeSheet === 'menu'} onClose={() => setActiveSheet(null)}>
@@ -190,7 +190,7 @@ export default function GamePage() {
         <div className="space-y-3">
           <h2 className="text-lg font-bold text-white">How to play</h2>
           <ul className="list-disc space-y-1 pl-5 text-sm text-white/70">
-            <li>Read the history and revealed symptoms.</li>
+            <li>Read the revealed clinical clues.</li>
             <li>Submit your best diagnosis guess.</li>
             <li>Wrong guesses reveal more clues.</li>
             <li>Score improves with fewer attempts.</li>

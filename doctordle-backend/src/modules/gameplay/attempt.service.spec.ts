@@ -9,21 +9,20 @@ describe('AttemptService', () => {
       },
     };
 
-    const logger = {
-      info: jest.fn(),
-      error: jest.fn(),
-      warn: jest.fn(),
-    };
-
     const metrics = {
       increment: jest.fn(),
       observe: jest.fn(),
     };
 
+    const rewardOrchestrator = {
+      emitAttemptRecorded: jest.fn().mockResolvedValue(undefined),
+      emitAttemptRecordFailed: jest.fn().mockResolvedValue(undefined),
+    };
+
     const service = new AttemptService(
       prisma as never,
-      logger as never,
       metrics as never,
+      rewardOrchestrator as never,
     );
 
     const attempt = await service.recordAttempt({
@@ -42,5 +41,13 @@ describe('AttemptService', () => {
     expect(create).toHaveBeenCalledTimes(1);
     expect(metrics.increment).toHaveBeenCalledWith('attempt.created');
     expect(metrics.observe).toHaveBeenCalled();
+    expect(rewardOrchestrator.emitAttemptRecorded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caseId: 'c-1',
+        sessionId: 's-1',
+        userId: 'u-1',
+        result: 'correct',
+      }),
+    );
   });
 });

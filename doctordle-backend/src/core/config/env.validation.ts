@@ -1,3 +1,4 @@
+import './load-env.js';
 import { z } from 'zod';
 
 const emptyToUndefined = (value: unknown) => {

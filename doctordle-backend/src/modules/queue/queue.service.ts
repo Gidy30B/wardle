@@ -5,21 +5,20 @@ import {
   Logger,
   OnModuleDestroy,
 } from '@nestjs/common';
-import { Queue, JobsOptions } from 'bullmq';
+import { JobsOptions, Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { getEnv } from '../../core/config/env.validation';
 import {
+  AI_CONTENT_QUEUE_NAME,
   EXPLANATION_GENERATE_JOB_NAME,
   GAME_COMPLETED_JOB_NAME,
+  GAME_COMPLETION_QUEUE_NAME,
   HINT_GENERATE_JOB_NAME,
-  QUEUE_NAME,
 } from './queue.constants';
 
 export type GameCompletedJobPayload = {
   userId: string;
   sessionId: string;
-  previewXpAwarded?: number;
-  previewStreakAfter?: number;
 };
 
 export type HintGenerateJobPayload = {
@@ -28,12 +27,8 @@ export type HintGenerateJobPayload = {
 
 export type ExplanationGenerateJobPayload = {
   caseId: string;
+  userId: string;
 };
-
-type QueueJobPayload =
-  | GameCompletedJobPayload
-  | HintGenerateJobPayload
-  | ExplanationGenerateJobPayload;
 
 type QueueHealth = {
   waiting: number;
@@ -43,11 +38,19 @@ type QueueHealth = {
   lagMs: number;
 };
 
+export type QueueHealthSummary = {
+  gameCompletion: QueueHealth;
+  aiContent: QueueHealth;
+};
+
 @Injectable()
 export class QueueService implements OnModuleDestroy {
   private readonly logger = new Logger(QueueService.name);
   private readonly connection: Redis;
-  private readonly queue: Queue<QueueJobPayload>;
+  private readonly gameCompletionQueue: Queue<GameCompletedJobPayload>;
+  private readonly aiContentQueue: Queue<
+    HintGenerateJobPayload | ExplanationGenerateJobPayload
+  >;
   private readonly enqueueLimitPerSecond = 200;
 
   constructor() {
@@ -60,22 +63,29 @@ export class QueueService implements OnModuleDestroy {
       this.logger.warn(
         JSON.stringify({
           event: 'queue.connection.connect.failed',
-          queue: QUEUE_NAME,
           error: error instanceof Error ? error.message : String(error),
         }),
       );
     });
 
-    this.queue = new Queue<QueueJobPayload>(QUEUE_NAME, {
+    this.gameCompletionQueue = new Queue<GameCompletedJobPayload>(
+      GAME_COMPLETION_QUEUE_NAME,
+      {
+        connection: this.connection,
+      },
+    );
+    this.aiContentQueue = new Queue<
+      HintGenerateJobPayload | ExplanationGenerateJobPayload
+    >(AI_CONTENT_QUEUE_NAME, {
       connection: this.connection,
     });
   }
 
   async enqueueGameCompleted(payload: GameCompletedJobPayload): Promise<void> {
-    await this.assertEnqueueRateLimit();
+    await this.assertEnqueueRateLimit(GAME_COMPLETION_QUEUE_NAME);
 
     const jobOptions: JobsOptions = {
-      jobId: `${GAME_COMPLETED_JOB_NAME}:${payload.sessionId}`,
+      jobId: this.buildJobId(GAME_COMPLETED_JOB_NAME, payload.sessionId),
       attempts: 3,
       backoff: {
         type: 'exponential',
@@ -91,12 +101,31 @@ export class QueueService implements OnModuleDestroy {
       },
     };
 
-    const job = await this.queue.add(GAME_COMPLETED_JOB_NAME, payload, jobOptions);
+    const job = await this.gameCompletionQueue
+      .add(GAME_COMPLETED_JOB_NAME, payload, jobOptions)
+      .catch(async (error) => {
+        const existing = await this.gameCompletionQueue.getJob(jobOptions.jobId!);
+        if (existing) {
+          this.logger.log(
+            JSON.stringify({
+              event: 'queue.job_skipped_duplicate',
+              queue: GAME_COMPLETION_QUEUE_NAME,
+              jobId: existing.id,
+              jobName: GAME_COMPLETED_JOB_NAME,
+              sessionId: payload.sessionId,
+              userId: payload.userId,
+            }),
+          );
+          return existing;
+        }
+
+        throw error;
+      });
 
     this.logger.log(
       JSON.stringify({
         event: 'queue.job.enqueued',
-        queue: QUEUE_NAME,
+        queue: GAME_COMPLETION_QUEUE_NAME,
         jobId: job.id,
         jobName: GAME_COMPLETED_JOB_NAME,
         sessionId: payload.sessionId,
@@ -106,7 +135,7 @@ export class QueueService implements OnModuleDestroy {
   }
 
   async enqueueHint(caseId: string): Promise<void> {
-    await this.addAiJobIfNotExists({
+    await this.addAiJob({
       caseId,
       jobName: HINT_GENERATE_JOB_NAME,
       payload: { caseId },
@@ -114,24 +143,33 @@ export class QueueService implements OnModuleDestroy {
     });
   }
 
-  async enqueueExplanation(caseId: string): Promise<void> {
-    await this.addAiJobIfNotExists({
-      caseId,
+  async enqueueExplanation(payload: ExplanationGenerateJobPayload): Promise<void> {
+    await this.addAiJob({
+      caseId: payload.caseId,
       jobName: EXPLANATION_GENERATE_JOB_NAME,
-      payload: { caseId },
-      jobId: this.getExplanationJobId(caseId),
+      payload,
+      jobId: this.getExplanationJobId(payload.caseId, payload.userId),
     });
   }
 
-  async getHealth(): Promise<QueueHealth> {
-    const counts = await this.queue.getJobCounts(
+  async getHealth(): Promise<QueueHealthSummary> {
+    return {
+      gameCompletion: await this.getQueueHealth(this.gameCompletionQueue),
+      aiContent: await this.getQueueHealth(this.aiContentQueue),
+    };
+  }
+
+  private async getQueueHealth<T extends object>(
+    queue: Queue<T>,
+  ): Promise<QueueHealth> {
+    const counts = await queue.getJobCounts(
       'waiting',
       'active',
       'failed',
       'completed',
     );
 
-    const waitingJobs = await this.queue.getWaiting(0, 0);
+    const waitingJobs = await queue.getWaiting(0, 0);
     const oldestWaiting = waitingJobs[0];
     const lagMs = oldestWaiting
       ? Math.max(0, Date.now() - oldestWaiting.timestamp)
@@ -146,9 +184,9 @@ export class QueueService implements OnModuleDestroy {
     };
   }
 
-  private async assertEnqueueRateLimit(): Promise<void> {
+  private async assertEnqueueRateLimit(queueName: string): Promise<void> {
     const secondBucket = Math.floor(Date.now() / 1000);
-    const key = `queue:enqueue:${QUEUE_NAME}:${secondBucket}`;
+    const key = `queue:enqueue:${queueName}:${secondBucket}`;
     const count = await this.connection.incr(key);
 
     if (count === 1) {
@@ -159,7 +197,7 @@ export class QueueService implements OnModuleDestroy {
       this.logger.warn(
         JSON.stringify({
           event: 'queue.enqueue.rate_limited',
-          queue: QUEUE_NAME,
+          queue: queueName,
           key,
           count,
           limit: this.enqueueLimitPerSecond,
@@ -172,27 +210,13 @@ export class QueueService implements OnModuleDestroy {
     }
   }
 
-  private async addAiJobIfNotExists(input: {
+  private async addAiJob(input: {
     caseId: string;
     jobName: typeof HINT_GENERATE_JOB_NAME | typeof EXPLANATION_GENERATE_JOB_NAME;
     payload: HintGenerateJobPayload | ExplanationGenerateJobPayload;
     jobId: string;
   }): Promise<void> {
-    const existing = await this.queue.getJob(input.jobId);
-    if (existing) {
-      this.logger.log(
-        JSON.stringify({
-          event: 'queue.job_skipped_duplicate',
-          queue: QUEUE_NAME,
-          caseId: input.caseId,
-          jobId: input.jobId,
-          jobName: input.jobName,
-        }),
-      );
-      return;
-    }
-
-    await this.assertEnqueueRateLimit();
+    await this.assertEnqueueRateLimit(AI_CONTENT_QUEUE_NAME);
 
     const jobOptions: JobsOptions = {
       jobId: input.jobId,
@@ -211,12 +235,30 @@ export class QueueService implements OnModuleDestroy {
       },
     };
 
-    const job = await this.queue.add(input.jobName, input.payload, jobOptions);
+    const job = await this.aiContentQueue
+      .add(input.jobName, input.payload, jobOptions)
+      .catch(async (error) => {
+        const existing = await this.aiContentQueue.getJob(input.jobId);
+        if (existing) {
+          this.logger.log(
+            JSON.stringify({
+              event: 'queue.job_skipped_duplicate',
+              queue: AI_CONTENT_QUEUE_NAME,
+              caseId: input.caseId,
+              jobId: existing.id,
+              jobName: input.jobName,
+            }),
+          );
+          return existing;
+        }
+
+        throw error;
+      });
 
     this.logger.log(
       JSON.stringify({
         event: 'queue.job_enqueued',
-        queue: QUEUE_NAME,
+        queue: AI_CONTENT_QUEUE_NAME,
         caseId: input.caseId,
         jobId: job.id,
         jobName: input.jobName,
@@ -225,23 +267,35 @@ export class QueueService implements OnModuleDestroy {
   }
 
   private getHintJobId(caseId: string): string {
-    return `hint-${this.sanitizeJobIdPart(caseId)}`;
+    return this.buildJobId('hint', caseId);
   }
 
-  private getExplanationJobId(caseId: string): string {
-    return `explanation-${this.sanitizeJobIdPart(caseId)}`;
+  private getExplanationJobId(caseId: string, userId: string): string {
+    return this.buildJobId('explanation', `${caseId}_${userId}`);
   }
 
-  private sanitizeJobIdPart(value: string): string {
-    return value.replace(/[:\s]/g, '-');
+  private buildJobId(prefix: string, id: string): string {
+    const normalizedPrefix = prefix.replace(/:/g, '_');
+    const normalizedId = id.replace(/:/g, '_');
+
+    return `${normalizedPrefix}_${normalizedId}`;
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.queue.close().catch((error) => {
+    await this.gameCompletionQueue.close().catch((error) => {
       this.logger.warn(
         JSON.stringify({
           event: 'queue.close.failed',
-          queue: QUEUE_NAME,
+          queue: GAME_COMPLETION_QUEUE_NAME,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    });
+    await this.aiContentQueue.close().catch((error) => {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'queue.close.failed',
+          queue: AI_CONTENT_QUEUE_NAME,
           error: error instanceof Error ? error.message : String(error),
         }),
       );
@@ -250,7 +304,6 @@ export class QueueService implements OnModuleDestroy {
       this.logger.warn(
         JSON.stringify({
           event: 'queue.connection.quit.failed',
-          queue: QUEUE_NAME,
           error: error instanceof Error ? error.message : String(error),
         }),
       );

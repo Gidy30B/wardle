@@ -7,6 +7,15 @@ export type ClerkPrincipal = {
   email?: string | null;
 };
 
+export type SyncedUser = {
+  id: string;
+  clerkId: string | null;
+  email: string | null;
+  subscriptionTier: string;
+  lastPlayedAt: Date | null;
+  role: string;
+};
+
 @Injectable()
 export class UserSyncService {
   constructor(private readonly prisma: PrismaService) {}
@@ -17,15 +26,17 @@ export class UserSyncService {
     });
   }
 
-  async syncUser(principal: ClerkPrincipal) {
+  async syncUser(principal: ClerkPrincipal): Promise<SyncedUser> {
     const existingByClerkId = await this.findByClerkId(principal.clerkId);
     if (existingByClerkId) {
-      return this.prisma.user.update({
+      await this.prisma.user.update({
         where: { id: existingByClerkId.id },
         data: {
           email: principal.email ?? undefined,
         },
       });
+
+      return this.loadSyncedUser(existingByClerkId.id);
     }
 
     const existingById = await this.prisma.user.findUnique({
@@ -33,16 +44,18 @@ export class UserSyncService {
     });
 
     if (existingById && !existingById.clerkId) {
-      return this.prisma.user.update({
+      await this.prisma.user.update({
         where: { id: existingById.id },
         data: {
           clerkId: principal.clerkId,
           email: principal.email ?? undefined,
         },
       });
+
+      return this.loadSyncedUser(existingById.id);
     }
 
-    return this.prisma.user.create({
+    const createdUser = await this.prisma.user.create({
       data: {
         id: randomUUID(),
         clerkId: principal.clerkId,
@@ -50,5 +63,32 @@ export class UserSyncService {
         subscriptionTier: 'free',
       },
     });
+
+    return this.loadSyncedUser(createdUser.id);
+  }
+
+  private async loadSyncedUser(userId: string): Promise<SyncedUser> {
+    const rows = await this.prisma.$queryRawUnsafe<SyncedUser[]>(
+      `
+        SELECT
+          "id",
+          "clerkId",
+          "email",
+          "subscriptionTier",
+          "lastPlayedAt",
+          "role"
+        FROM "User"
+        WHERE "id" = $1
+        LIMIT 1
+      `,
+      userId,
+    );
+
+    const user = rows[0];
+    if (!user) {
+      throw new Error(`User ${userId} not found after sync`);
+    }
+
+    return user;
   }
 }

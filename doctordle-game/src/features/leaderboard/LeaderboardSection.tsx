@@ -38,8 +38,10 @@ function LeaderboardSection({
   currentUserId,
   currentUserPosition,
 }: LeaderboardSectionProps) {
+  const safeLeaderboard = Array.isArray(leaderboard) ? leaderboard : []
+
   const isCurrentUserInTopList = Boolean(
-    currentUserId && leaderboard.some((entry) => entry.userId === currentUserId),
+    currentUserId && safeLeaderboard.some((entry) => entry.userId === currentUserId),
   )
 
   const handleModeChange = useCallback(
@@ -89,7 +91,7 @@ function LeaderboardSection({
           <p className="text-sm text-rose-600">Failed to load leaderboard.</p>
         ) : loading ? (
           <p className="text-sm text-white/70">Loading leaderboard...</p>
-        ) : leaderboard.length === 0 ? (
+        ) : safeLeaderboard.length === 0 ? (
           <p className="text-sm text-white/70">No entries yet.</p>
         ) : (
           <div className="min-h-[240px] overflow-x-auto">
@@ -104,7 +106,7 @@ function LeaderboardSection({
                 </tr>
               </thead>
               <tbody>
-                {leaderboard.map((entry) => {
+                {(safeLeaderboard || []).map((entry) => {
                   const isCurrentUser = entry.userId === currentUserId
 
                   return (

@@ -1,0 +1,4 @@
+ALTER TABLE "Case"
+ADD COLUMN "clues" JSONB,
+ADD COLUMN "explanation" JSONB,
+ADD COLUMN "differentials" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

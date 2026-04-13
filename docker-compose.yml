@@ -26,29 +26,11 @@ services:
         condition: service_healthy
       cache:
         condition: service_healthy
+    env_file:
+      - ./doctordle-backend/.env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
       REDIS_URL: redis://cache:6379
-      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
-      CLERK_JWT_ISSUER: ${CLERK_JWT_ISSUER}
-      CLERK_JWT_AUDIENCE: ${CLERK_JWT_AUDIENCE}
-      CLERK_JWKS_URL: ${CLERK_JWKS_URL}
-      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
-      NODE_ENV: ${NODE_ENV}
-      DEV_BYPASS_DAILY_LIMIT: ${DEV_BYPASS_DAILY_LIMIT}
-      LOG_LEVEL: ${LOG_LEVEL}
-      HOST: ${HOST}
-      PORT: ${PORT}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
-      NETWORK_HOST: ${NETWORK_HOST}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
-      EVALUATOR_VERSION: ${EVALUATOR_VERSION}
-      SCORE_WEIGHT_EXACT: ${SCORE_WEIGHT_EXACT}
-      SCORE_WEIGHT_SYNONYM: ${SCORE_WEIGHT_SYNONYM}
-      SCORE_WEIGHT_FUZZY: ${SCORE_WEIGHT_FUZZY}
-      SCORE_WEIGHT_EMBEDDING: ${SCORE_WEIGHT_EMBEDDING}
-      SCORE_WEIGHT_ONTOLOGY: ${SCORE_WEIGHT_ONTOLOGY}
     ports:
       - "3000:3000"
     healthcheck:
@@ -57,6 +39,22 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  worker:
+    build: ./doctordle-backend
+    container_name: doctordle-worker
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    env_file:
+      - ./doctordle-backend/.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://cache:6379
+    command: ["npm", "run", "start:worker"]
 
   cache:
     image: redis:7-alpine
@@ -75,6 +73,8 @@ services:
       context: ./analytics-dashboard
       args:
         VITE_BACKEND_URL: ${VITE_BACKEND_URL}
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY}
+        VITE_CLERK_JWT_AUDIENCE: ${VITE_CLERK_JWT_AUDIENCE}
     container_name: doctordle-frontend
     restart: always
     depends_on:

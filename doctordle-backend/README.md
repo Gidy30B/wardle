@@ -33,7 +33,7 @@ $ npm install
 
 ## Environment
 
-Create a `.env` file in the project root with at least:
+Create `doctordle-backend/.env` with at least:
 
 ```env
 DATABASE_URL=...
@@ -78,6 +78,9 @@ Run root environment checks before compose:
 $ npm run precompose
 $ docker compose up --build
 ```
+
+For docker compose, root `.env` is used for compose/frontend values and
+`doctordle-backend/.env` is the default source for backend service settings.
 
 Frontend `VITE_*` variables are build-time only. After changing them, rebuild frontend images:
 

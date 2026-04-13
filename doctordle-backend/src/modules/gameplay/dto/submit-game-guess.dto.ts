@@ -9,6 +9,13 @@ export class SubmitGameGuessDto {
   guess!: string;
 }
 
+export type GameplayClinicalClue = {
+  id: string;
+  type: 'history' | 'symptom' | 'vital' | 'lab' | 'exam' | 'imaging';
+  value: string;
+  order: number;
+};
+
 export type SubmitGameGuessResponseDto = {
   result: 'correct' | 'close' | 'wrong';
   score: number;
@@ -21,17 +28,22 @@ export type SubmitGameGuessResponseDto = {
     id: string;
     difficulty: string;
     date: string;
-    history: string;
-    symptoms: string[];
+    clues: GameplayClinicalClue[];
   };
   gameOver?: boolean;
   gameOverReason?: 'correct' | 'clues_exhausted' | null;
-  explanation?: Record<string, unknown> | null;
+  explanation?:
+    | {
+        status: 'ready' | 'processing';
+        content?: string;
+      }
+    | null;
   feedback?: {
     signals?: Record<string, unknown>;
     evaluatorVersion: string;
     retrievalMode: string;
   };
+  rewardStatus?: 'processing';
   xpAwarded?: number;
   streakAfter?: number;
 };

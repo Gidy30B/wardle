@@ -1,52 +1,46 @@
 import type { GameResult } from '../features/game/game.types'
 
 type FeedbackPanelProps = {
-  result: GameResult | null
+  result?: GameResult | null
   hasActiveSession?: boolean
   currentStreak?: number
   xpEarned?: number
-  attemptLabels?: { guess: string; label: 'correct' | 'close' | 'wrong' }[]
+  latestAttempt?: { guess: string; label: 'correct' | 'close' | 'wrong' }
   showAttemptLabels?: boolean
   showProgressSummary?: boolean
 }
 
 export default function FeedbackPanel({
-  result,
-  hasActiveSession = true,
-  currentStreak = 0,
-  xpEarned = 0,
-  showProgressSummary = true,
+  latestAttempt,
 }: FeedbackPanelProps) {
-  if (!result) {
-    return (
-      <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-        {hasActiveSession ? 'Submit a guess to see feedback' : 'Daily limit reached'}
-      </div>
-    )
-  }
+  if (!latestAttempt) return null
 
   const label =
-    result.label === 'correct'
+    latestAttempt.label === 'correct'
       ? 'Correct'
-      : result.label === 'close'
+      : latestAttempt.label === 'close'
       ? 'Close'
       : 'Wrong'
 
-  const colorClass =
-    result.label === 'correct'
+  const bgClass =
+    latestAttempt.label === 'correct'
+      ? 'bg-emerald-500/10 border-emerald-500/20'
+      : latestAttempt.label === 'close'
+      ? 'bg-yellow-500/10 border-yellow-500/20'
+      : 'bg-white/5 border-white/10'
+
+  const textClass =
+    latestAttempt.label === 'correct'
       ? 'text-emerald-400'
-      : result.label === 'close'
+      : latestAttempt.label === 'close'
       ? 'text-yellow-400'
       : 'text-white/70'
 
   return (
-    <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-      <span className={`text-sm font-medium ${colorClass}`}>{label}</span>
+    <div className={`flex items-center justify-between rounded-lg border px-3 py-2 ${bgClass}`}>
+      <span className="text-sm font-medium text-white">{latestAttempt.guess}</span>
 
-      <div className="flex items-center gap-3 text-sm text-white/80">
-        {showProgressSummary && xpEarned > 0 && <span>+{xpEarned} XP</span>}
-        {showProgressSummary && currentStreak > 0 && <span>Streak {currentStreak}</span>}
-      </div>
+      <span className={`text-sm font-semibold ${textClass}`}>{label}</span>
     </div>
   )
 }

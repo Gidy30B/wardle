@@ -50,6 +50,9 @@ model Case {
   history     String
   symptoms    String[]
   labs        Json?
+  clues       Json?
+  explanation Json?
+  differentials String[] @default([])
   diagnosisId String
   diagnosis   Diagnosis @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
   attempts    Attempt[]
@@ -76,6 +79,7 @@ model ExplanationContent {
   id        String   @id @default(uuid())
   caseId    String   @unique
   content   String
+  version   String   @default("ai:v1")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
@@ -141,6 +145,7 @@ model User {
   id               String             @id
   clerkId          String?            @unique
   email            String?
+  role             String             @default("user")
   subscriptionTier String             @default("free")
   lastPlayedAt     DateTime?
   sessions         GameSession[]
@@ -149,6 +154,7 @@ model User {
   progress         UserProgress?
   leaderboard      LeaderboardEntry[]
 
+  @@index([role])
   @@index([subscriptionTier])
 }
 

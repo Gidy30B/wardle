@@ -1,13 +1,12 @@
-import 'dotenv/config';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { validateEnv } from './core/config/env.validation';
-import { QueueWorkerModule } from './modules/queue/queue-worker.module';
+import { WorkerModule } from './modules/queue/worker.module';
 
 async function bootstrap() {
   validateEnv();
   const logger = new Logger('QueueWorkerBootstrap');
-  const app = await NestFactory.createApplicationContext(QueueWorkerModule);
+  const app = await NestFactory.createApplicationContext(WorkerModule);
 
   app.enableShutdownHooks();
 

@@ -18,6 +18,11 @@ Wardle stack with separate frontend(s), backend API, and analytics dashboard.
 3. Start docker stack:
    - `docker compose up --build`
 
+Default env ownership:
+
+- root `.env`: docker compose values and frontend `VITE_*` build args
+- `doctordle-backend/.env`: backend API, workers, Prisma, and case generation defaults
+
 ## Deploy Target (Recommended)
 
 - Frontend (`doctordle-game`) on Vercel

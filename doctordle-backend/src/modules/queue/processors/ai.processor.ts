@@ -3,12 +3,13 @@ import { Job, Worker } from 'bullmq';
 import Redis from 'ioredis';
 import { getEnv } from '../../../core/config/env.validation';
 import { PrismaService } from '../../../core/db/prisma.service';
+import { RedisPubSubService } from '../../../core/redis/redis-pubsub.service';
 import { ExplanationService } from '../../ai/explanation.service';
 import { HintService } from '../../ai/hint.service';
 import {
+  AI_CONTENT_QUEUE_NAME,
   EXPLANATION_GENERATE_JOB_NAME,
   HINT_GENERATE_JOB_NAME,
-  QUEUE_NAME,
 } from '../queue.constants';
 import {
   ExplanationGenerateJobPayload,
@@ -27,6 +28,7 @@ export class AiProcessor implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly hintService: HintService,
     private readonly explanationService: ExplanationService,
+    private readonly redisPubSub: RedisPubSubService,
   ) {
     const redisUrl = getEnv().REDIS_URL;
     this.connection = new Redis(redisUrl, {
@@ -37,7 +39,7 @@ export class AiProcessor implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(
         JSON.stringify({
           event: 'queue.ai.connection.connect.failed',
-          queue: QUEUE_NAME,
+          queue: AI_CONTENT_QUEUE_NAME,
           error: error instanceof Error ? error.message : String(error),
         }),
       );
@@ -45,9 +47,13 @@ export class AiProcessor implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit(): void {
+    console.log('WORKER STARTED');
+
     this.worker = new Worker<AiJobPayload>(
-      QUEUE_NAME,
+      AI_CONTENT_QUEUE_NAME,
       async (job) => {
+        console.log('PROCESSING JOB', job.name, job.data);
+
         if (job.name === HINT_GENERATE_JOB_NAME) {
           await this.processHintJob(job as Job<HintGenerateJobPayload>);
           return;
@@ -55,7 +61,10 @@ export class AiProcessor implements OnModuleInit, OnModuleDestroy {
 
         if (job.name === EXPLANATION_GENERATE_JOB_NAME) {
           await this.processExplanationJob(job as Job<ExplanationGenerateJobPayload>);
+          return;
         }
+
+        throw new Error(`Unexpected job name received: ${job.name}`);
       },
       {
         connection: this.connection,
@@ -67,7 +76,7 @@ export class AiProcessor implements OnModuleInit, OnModuleDestroy {
       this.logger.error(
         JSON.stringify({
           event: 'queue.ai.job.failed',
-          queue: QUEUE_NAME,
+          queue: AI_CONTENT_QUEUE_NAME,
           jobId: job?.id ?? null,
           jobName: job?.name ?? null,
           caseId: job?.data?.caseId ?? null,
@@ -83,7 +92,7 @@ export class AiProcessor implements OnModuleInit, OnModuleDestroy {
       this.logger.error(
         JSON.stringify({
           event: 'queue.ai.worker.error',
-          queue: QUEUE_NAME,
+          queue: AI_CONTENT_QUEUE_NAME,
           error: error instanceof Error ? error.message : String(error),
         }),
         error instanceof Error ? error.stack : undefined,
@@ -96,7 +105,7 @@ export class AiProcessor implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(
         JSON.stringify({
           event: 'queue.ai.worker.close.failed',
-          queue: QUEUE_NAME,
+          queue: AI_CONTENT_QUEUE_NAME,
           error: error instanceof Error ? error.message : String(error),
         }),
       );
@@ -106,7 +115,7 @@ export class AiProcessor implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(
         JSON.stringify({
           event: 'queue.ai.connection.quit.failed',
-          queue: QUEUE_NAME,
+          queue: AI_CONTENT_QUEUE_NAME,
           error: error instanceof Error ? error.message : String(error),
         }),
       );
@@ -124,7 +133,7 @@ export class AiProcessor implements OnModuleInit, OnModuleDestroy {
       this.logger.log(
         JSON.stringify({
           event: 'queue.ai.hint.skipped_already_exists',
-          queue: QUEUE_NAME,
+          queue: AI_CONTENT_QUEUE_NAME,
           jobId: job.id,
           caseId,
         }),
@@ -132,12 +141,12 @@ export class AiProcessor implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    await this.hintService.getHint(caseId);
+    await this.hintService.materializeHint(caseId);
 
     this.logger.log(
       JSON.stringify({
         event: 'queue.ai.hint.generated',
-        queue: QUEUE_NAME,
+        queue: AI_CONTENT_QUEUE_NAME,
         jobId: job.id,
         caseId,
       }),
@@ -147,17 +156,40 @@ export class AiProcessor implements OnModuleInit, OnModuleDestroy {
   private async processExplanationJob(
     job: Job<ExplanationGenerateJobPayload>,
   ): Promise<void> {
-    const caseId = job.data.caseId;
+    const { caseId, userId } = job.data;
     const existing = await this.prisma.explanationContent.findUnique({
       where: { caseId },
       select: { id: true },
     });
 
     if (existing) {
+      const content = await this.explanationService.getExplanation(caseId);
+
+      if (!content) {
+        throw new Error(
+          `Explanation content missing for existing case ${caseId}`,
+        );
+      }
+
+      this.logger.log({
+        event: 'ws.publish',
+        type: 'game.v1.explanation.ready',
+        userId,
+      });
+
+      await this.redisPubSub.publish('ws:events', {
+        type: 'game.v1.explanation.ready',
+        userId,
+        payload: {
+          caseId,
+          content,
+        },
+      });
+
       this.logger.log(
         JSON.stringify({
           event: 'queue.ai.explanation.skipped_already_exists',
-          queue: QUEUE_NAME,
+          queue: AI_CONTENT_QUEUE_NAME,
           jobId: job.id,
           caseId,
         }),
@@ -165,12 +197,27 @@ export class AiProcessor implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    await this.explanationService.getExplanation(caseId);
+    const content = await this.explanationService.materializeExplanation(caseId);
+
+    this.logger.log({
+      event: 'ws.publish',
+      type: 'game.v1.explanation.ready',
+      userId,
+    });
+
+    await this.redisPubSub.publish('ws:events', {
+      type: 'game.v1.explanation.ready',
+      userId,
+      payload: {
+        caseId,
+        content,
+      },
+    });
 
     this.logger.log(
       JSON.stringify({
         event: 'queue.ai.explanation.generated',
-        queue: QUEUE_NAME,
+        queue: AI_CONTENT_QUEUE_NAME,
         jobId: job.id,
         caseId,
       }),

@@ -1,166 +1,196 @@
 # Cases Module Audit
 
-Date: 2026-04-06
-Scope: `doctordle-backend/src/modules/cases/*` plus direct integration points (`app.module`, seed bootstrap, gameplay daily-case consumption, queue AI enqueueing).
+Date: 2026-04-12
 
-## Executive Summary
+## 1. System Map
 
-The `CasesModule` is now a central lifecycle module with strong foundations:
-- `DailyCase` reads/writes are centralized in `CasesService`.
-- `getTodayCase()` is self-healing and race-aware.
-- Dev reset/rebuild tooling is in place and guarded for non-production.
-- AI generation includes queue-level dedupe and worker-level idempotency.
+Case lives in Prisma, is surfaced through two backend read paths, and only reaches the live game through the gameplay API, not the /cases API.
 
-Overall status: **Good, with a few medium-priority consistency and boundary issues**.
+DB -> API -> AI -> Queue -> Worker -> WS -> Frontend
 
----
+- DB: schema.prisma (line 1)
+   - Case stores history and symptoms[] as the current clue source of truth.
+   - ExplanationContent stores one explanation per caseId.
+   - DailyCase maps one date to one case.
+- Case creation: cases.service.ts (line 1)
+   - CreateCaseDto -> Prisma case.create/upsert -> optional assignDailyCase() -> scheduleCaseContent(caseId, { source: 'case_created' })
+- Gameplay read path: session.service.ts (line 1)
+   - startGame() gets today's case, derives clueIndex, then builds a visible case payload by slicing symptoms.
+   - submitGuess() records attempts, computes next clue index, returns updated visible case, and asks AI for explanation only when gameOver.
+- AI orchestration: ai-content.service.ts (line 1)
+   - Hints are prewarmed on case creation.
+   - Explanations are only enqueued/read when a specific user requests them.
+- Queue/worker: queue.service.ts (line 1) -> ai.processor.ts (line 1)
+   - queue: ai-content
+   - job: explanation:generate
+   - dedup key is now (caseId, userId)
+- Realtime: game.gateway.ts (line 1)
+   - Worker publishes Redis envelope.
+   - Gateway subscribes and emits game.v1.explanation.ready to room user.id.
+- Frontend: ws-client.ts (line 1) -> useGameSession.ts (line 1)
+   - WS event becomes EXPLANATION_READY.
+   - Hook updates result.explanation only if the case matches and gameOver is already true.
 
-## Audited Surface
+## 2. Current Data Contract
 
-### Module Files
-- `src/modules/cases/cases.module.ts`
-- `src/modules/cases/cases.service.ts`
-- `src/modules/cases/cases.controller.ts`
-- `src/modules/cases/dev.controller.ts`
-- `src/modules/cases/guards/dev-only.guard.ts`
-- `src/modules/cases/dto/create-case.dto.ts`
-- `src/modules/cases/dto/assign-daily-case.dto.ts`
+The system has more than one live case contract.
 
-### Key Integrations
-- `src/app.module.ts`
-- `src/core/db/seed.service.ts`
-- `src/modules/gameplay/game-session.service.ts`
-- `src/modules/gameplay/leaderboard.service.ts`
-- `src/modules/queue/queue.service.ts`
-- `src/modules/queue/processors/ai.processor.ts`
-- `prisma/schema.prisma`
-- `prisma/migrations/20260406120000_add_case_title/migration.sql`
+### DB Case
 
----
+- id: String
+- title: String
+- date: DateTime
+- difficulty: String
+- history: String
+- symptoms: String[]
+- labs: Json?
+- diagnosisId: String
+- relations: diagnosis, dailyCases, hints, explanations, attempts, sessions
 
-## What Is Working Well
+### Explanation Storage
 
-1. **DailyCase source of truth is centralized**
-   - `CasesService` owns `DailyCase` create/read/update behavior.
-   - `GameSessionService` and `LeaderboardService` consume `getTodayCase()` context, not direct `prisma.dailyCase` queries.
+- table: ExplanationContent
+- fields: id, caseId @unique, content: String, version: String = "ai:v1", timestamps
+- no per-user explanation row, no real versioned lookup, no history table
 
-2. **Self-healing daily-case resolution**
-   - `getTodayCase()` attempts fetch, creates if missing, and handles unique collision recovery (`P2002`) by re-fetching.
+### Real Backend Response Shapes Today
 
-3. **Schema-level uniqueness supports deterministic day selection**
-   - `DailyCase.date` has `@unique` and is stored as `@db.Date`.
-   - Date normalization to UTC day start exists in service methods.
+```ts
+// /cases/today and internal case reads
+{
+   id: string
+   title: string
+   date: string
+   difficulty: 'easy' | 'medium' | 'hard'
+   history: string
+   symptoms: string[]
+   diagnosis: string
+}
 
-4. **Dev tooling is properly environment constrained**
-   - `POST /api/dev/reset-today` and `POST /api/dev/rebuild-today` are behind `InternalApiGuard` + `DevOnlyGuard`.
+// POST /game/start
+{
+   sessionId: string
+   dailyCaseId: string
+   clueIndex: number
+   attemptsCount: number
+   case: {
+      id: string
+      difficulty: string
+      date: string
+      history: string
+      symptoms: string[] // sliced to visible clues only
+   }
+}
 
-5. **AI safety layers are present**
-   - Queue job IDs are deterministic (`hint-<caseId>`, `explanation-<caseId>`).
-   - Worker checks DB existence before generating content (defense in depth).
+// POST /game/guess normal path
+{
+   result: 'correct' | 'close' | 'wrong'
+   score: number
+   attemptsCount: number
+   semanticScore?: number
+   clueIndex: number
+   isTerminalCorrect: boolean
+   case?: {
+      id: string
+      difficulty: string
+      date: string
+      history: string
+      symptoms: string[] // sliced to visible clues only
+   }
+   gameOver?: boolean
+   gameOverReason?: 'correct' | 'clues_exhausted' | null
+   explanation?: null | { status: 'processing' } | { status: 'ready'; content: string }
+   rewardStatus?: 'processing'
+   feedback?: {
+      signals?: Record<string, unknown>
+      evaluatorVersion: string
+      retrievalMode: string
+   }
+}
+```
 
----
+### Important Reality
 
-## Findings & Risks
+- explanation is not embedded in /cases/today.
+- gameplay case payload does not include title, diagnosis, or labs.
+- frontend types allow structured explanations, but backend only returns a string today.
 
-## 1) AI enqueue single-source policy is still violated (Medium)
+## 3. Explanation Flow
 
-**Observation**
-- `CasesService` now enqueues AI on case creation only (good).
-- But `GameSessionService.startDailyGame()` still calls `enqueueAiJobsForCase(... source: 'daily_case_selected')`.
+Where mock vs real originates:
 
-**Risk**
-- Duplicate enqueue attempts still occur from gameplay flow.
-- Queue dedupe prevents many duplicates, but trigger ownership remains split.
+- Explanation request starts in gameplay, not case creation.
+- submitGuess() calls aiContentService.getExplanation(caseId, userId) only when gameOver.
+- AIContentService.getExplanation()
+   - If cached/DB explanation exists: returns { status: 'ready', content } immediately.
+   - Else: enqueues explanation:generate and returns { status: 'processing' }.
+- QueueService.enqueueExplanation()
+   - queue: ai-content
+   - payload: { caseId, userId }
+   - job id: explanation_${caseId}_${userId}
+- AiProcessor.processExplanationJob()
+   - If DB row already exists: fetches with explanationService.getExplanation(caseId) and still publishes WS to that user.
+   - Else: calls materializeExplanation(caseId), then publishes WS.
+- ExplanationService.materializeExplanation()
+   - checks Redis cache ai:explanation:${caseId}
+   - checks ExplanationContent
+   - if absent, calls generateExplanation(caseId)
+   - current generateExplanation() returns Mock explanation for case ${caseId}
+   - fallback text using history + symptoms + diagnosis only runs if generateExplanation() throws, which it currently does not
+   - stores the final string in ExplanationContent and Redis cache
+- WS delivery
+   - Redis envelope: { type: 'game.v1.explanation.ready', userId, payload: { caseId, content } }
+   - socket payload to browser: event game.v1.explanation.ready, data { caseId, content }
+- Frontend consumption
+   - RESULT_RECEIVED comes from API.
+   - EXPLANATION_READY comes only from WS.
+   - WS overwrites result.explanation only for the active case and only after gameOver.
 
-**Recommendation**
-- Remove gameplay-side AI prewarm enqueue in `GameSessionService`.
-- Keep AI enqueue ownership strictly in `CasesService.createCase()`.
+## 4. Root Problems
 
----
+1. There is no single canonical case contract.
+    - CRUD case reads, gameplay case payloads, session state, and frontend types all differ.
 
-## 2) Queue dedupe check is non-atomic (Low/Medium)
+2. Clues are implicit, not modeled.
+    - The real clue system is history always visible plus symptoms.slice(0, clueIndex). There is no typed clues[] source of truth.
 
-**Observation**
-- `QueueService` uses `queue.getJob(jobId)` before `queue.add(...)`.
+3. Explanation shape is inconsistent across layers.
+    - Backend stores/emits a plain string, but the frontend explanation page is written for structured content like diagnosis, summary, and reasoning.
 
-**Risk**
-- Under high concurrency, two producers can both miss `getJob` and race to `add`.
-- BullMQ jobId uniqueness still helps, but this pattern can produce inconsistent logging and extra queue calls.
+4. The AI explanation path is effectively mock-backed.
+    - The primary generator returns a mock string, so the richer fallback path is mostly dormant and real model output is not part of the current explanation lifecycle.
 
-**Recommendation**
-- Prefer relying on `add` with deterministic `jobId` as the primary dedupe primitive, then log based on add outcome.
-- Keep `getJob` only if there is a specific operational reason.
+5. Caching and delivery semantics are split.
+    - Explanation content is cached per case, delivery is queued per (caseId, userId), and the table has a version field that is not used in reads or cache keys. That is workable, but it is easy to reuse stale content without noticing.
 
----
+## 5. Migration Readiness Score
 
-## 3) `CasesController.getTodayCase()` does an extra query (Low)
+LOW
 
-**Observation**
-- Controller calls `getTodayCase()` and then `getCaseById(today.caseId)`.
+Why:
 
-**Risk**
-- Adds an avoidable DB round trip.
+- adding clues: Json to Prisma is easy.
+- making it the real source of truth is not.
+- current gameplay, scoring, attempt auditing, explanation generation, and frontend rendering all still assume history + symptoms[].
+- the explanation contract is already drifting, which raises refactor risk.
 
-**Recommendation**
-- Add a mapper from `TodayCaseContext.case` to API response shape, return directly from first call.
+## 6. Blockers Before Refactor
 
----
+1. Decide the canonical runtime case shape.
+    - Today the app has at least three: admin case, gameplay case, and explanation page expectations.
 
-## 4) `createCase()` idempotency strategy is date-coupled (Medium)
+2. Decide whether history and symptoms[] remain first-class fields or become derived compatibility fields from clues.
 
-**Observation**
-- If `dto.date` is provided, `createCase()` uses `upsert` on `Case.date`.
+3. Define the explanation contract.
+    - It needs to be either plain text everywhere or structured everywhere; it is currently both.
 
-**Risk**
-- Repeated calls with same date overwrite case data for that date rather than representing separate case versions.
-- This may be desired now, but it limits future content workflows.
+4. Replace implicit clue progression logic.
+    - EvaluationService, attempt auditing, and XP logic all currently key off symptoms.length and clue index math.
 
-**Recommendation**
-- If long-term content growth is required, introduce explicit external identifiers/versioning strategy and avoid date-only upsert semantics.
+5. Clarify explanation caching/versioning policy.
+    - ExplanationContent.version exists, but the live pipeline ignores it and caches only by caseId.
 
----
+6. Clarify pre-generation behavior.
+    - Case creation currently schedules hints, but not explanations, because scheduleCaseContent() only enqueues explanations when userId is present.
 
-## 5) Dev reset behavior can cascade data deletion (Expected but high-impact) (Info)
-
-**Observation**
-- `resetTodayCase()` deletes `DailyCase` then deletes `Case` by `caseId` in one transaction.
-
-**Risk**
-- Because `Case` is a parent relation for sessions/attempts (cascade paths), reset may remove related gameplay artifacts for that case.
-
-**Recommendation**
-- Keep as-is for dev utility, but document this clearly in runbook/README to prevent surprise data loss in shared dev databases.
-
----
-
-## Diagnostics Snapshot
-
-Current diagnostics for audited integration files:
-- `GameSessionService`: no errors
-- `LeaderboardService`: no errors
-- `QueueService`: no errors
-
-Note: historical/intermittent type diagnostics around `Case.title` have appeared previously in editor state; ensure Prisma client regeneration stays part of workflow after schema edits.
-
----
-
-## Architecture Boundary Check
-
-- `DailyCase` direct Prisma access outside `CasesService`: **not found** in gameplay services.
-- Dev endpoints production protection: **present** (`NODE_ENV === 'production'` blocked).
-- Seed bootstrap reuses cases lifecycle: **yes** (`SeedService.seedCases(casesService)`).
-
----
-
-## Recommended Next Actions (Priority)
-
-1. **P1**: Remove gameplay-side `enqueueAiJobsForCase` call to complete single-source AI trigger ownership.
-2. **P2**: Simplify/strengthen queue dedupe path to reduce race window and noisy duplicate logs.
-3. **P3**: Optimize `GET /cases/today` to avoid second query.
-4. **P4**: Document dev reset cascade effects in backend README/runbook.
-
----
-
-## Conclusion
-
-The module is close to production-grade for dynamic daily-case lifecycle management. Core invariants (single daily case per date, self-healing creation, guarded dev reset/rebuild, AI idempotency) are mostly in place. The main remaining gap is strict trigger ownership for AI enqueueing: one gameplay hook still bypasses the intended single-source model.
+The biggest takeaway is that the system already behaves like a clue engine, but the clues are encoded indirectly in history, symptoms[], and clueIndex math rather than a structured clues[] model.

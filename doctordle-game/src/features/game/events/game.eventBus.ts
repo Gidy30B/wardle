@@ -3,11 +3,11 @@ import type { GameEvent } from './game.events'
 type GameEventListener = (event: GameEvent) => void
 
 const listeners = new Set<GameEventListener>()
-const DEBUG = false
+const DEBUG = import.meta.env.DEV
 
 export function emit(event: GameEvent) {
   if (DEBUG) {
-    console.log(`[GameEvent:${event.type}]`, event)
+    console.log('[EVENT BUS EMIT]', event)
   }
 
   const snapshot = Array.from(listeners)
@@ -18,9 +18,17 @@ export function emit(event: GameEvent) {
 }
 
 export function subscribe(listener: GameEventListener) {
-  listeners.add(listener)
+  const wrappedListener: GameEventListener = (event) => {
+    if (DEBUG) {
+      console.log('[EVENT BUS RECEIVE]', event)
+    }
+
+    listener(event)
+  }
+
+  listeners.add(wrappedListener)
 
   return () => {
-    listeners.delete(listener)
+    listeners.delete(wrappedListener)
   }
 }

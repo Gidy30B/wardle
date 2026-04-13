@@ -3,12 +3,17 @@ export type GuessPayload = {
   guess: string
 }
 
+export type ClinicalClue = {
+  id: string
+  type: 'history' | 'symptom' | 'exam' | 'lab' | 'vital' | 'imaging'
+  value: string
+  order: number
+}
+
 export type GameCase = {
   id: string
-  symptoms: string[]
-  history: string
-  difficulty?: string
-  date?: string
+  clues: ClinicalClue[]
+  clueIndex: number
 }
 
 export type RewardEvent = {
@@ -19,17 +24,20 @@ export type RewardEvent = {
 }
 
 export type CaseExplanation = {
-  diagnosis: string
-  difficulty: string
   summary: string
-  reasoning: string[]
-  deepDive?: string
-  pitfalls?: string[]
+  keyPoints: string[]
+  reasoning: Array<{
+    clueId: string
+    explanation: string
+  }>
+  differentials: Array<{
+    diagnosis: string
+    whyNot: string
+  }>
 }
 
 export type StartGameResponse = {
   sessionId: string
-  clueIndex?: number
   case: GameCase
 }
 
@@ -38,7 +46,7 @@ export type GuessApiResponse = {
   score: number
   isTerminalCorrect: boolean
   attemptsCount?: number
-  clueIndex?: number
+  clueIndex: number
   case?: GameCase
   gameOver?: boolean
   gameOverReason?: 'correct' | 'clues_exhausted' | null
@@ -66,6 +74,7 @@ export type GameResult = {
   attemptsCount?: number
   label: 'correct' | 'close' | 'wrong'
   isTerminalCorrect: boolean
+  clueIndex: number
   gameOver: boolean
   gameOverReason?: 'correct' | 'clues_exhausted' | null
   xpAwarded?: number

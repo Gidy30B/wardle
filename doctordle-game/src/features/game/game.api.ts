@@ -1,5 +1,6 @@
 import type { RequestJson } from '../../lib/api'
 import type {
+  ClinicalClue,
   LeaderboardEntry,
   LeaderboardMode,
   UserLeaderboardPosition,
@@ -9,6 +10,16 @@ import type {
   StartGameResponse,
   UserProgress,
 } from './game.types'
+
+function attachClueIndex<T extends { clues: ClinicalClue[] }>(
+  gameCase: T,
+  clueIndex: number,
+): T & { clueIndex: number } {
+  return {
+    ...gameCase,
+    clueIndex,
+  }
+}
 
 export async function submitGuessApi(
   request: RequestJson,
@@ -24,19 +35,29 @@ export async function submitGuessApi(
     attemptsCount: response.attemptsCount,
     label: response.result,
     isTerminalCorrect: response.isTerminalCorrect,
+    clueIndex: response.clueIndex,
     gameOver: response.gameOver ?? response.result === 'correct',
     gameOverReason: response.gameOverReason ?? null,
     xpAwarded: response.xpAwarded,
     streakAfter: response.streakAfter,
     explanation: response.explanation ?? null,
-    case: response.case,
+    case: response.case ? attachClueIndex(response.case, response.clueIndex) : undefined,
   }
 }
 
 export async function startGameApi(request: RequestJson): Promise<StartGameResponse> {
-  return request<StartGameResponse>('/game/start', {
+  const response = await request<{
+    sessionId: string
+    clueIndex?: number
+    case: Omit<StartGameResponse['case'], 'clueIndex'>
+  }>('/game/start', {
     method: 'POST',
   })
+
+  return {
+    sessionId: response.sessionId,
+    case: attachClueIndex(response.case, response.clueIndex ?? 0),
+  }
 }
 
 export async function getLeaderboardApi(

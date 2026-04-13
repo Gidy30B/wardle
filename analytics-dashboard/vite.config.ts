@@ -16,7 +16,17 @@ export default defineConfig(({ mode }) => {
     server: {
       host: true,
       proxy: {
-        '/analytics': {
+        '/api/dashboard': {
+          target: backendUrl,
+          changeOrigin: true,
+          rewrite: () => '/api/analytics/dashboard',
+        },
+        '/api/attempts-over-time': {
+          target: backendUrl,
+          changeOrigin: true,
+          rewrite: () => '/api/analytics/attempts-over-time',
+        },
+        '/api': {
           target: backendUrl,
           changeOrigin: true,
         },

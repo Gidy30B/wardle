@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import CaseCard from '../../components/CaseCard'
-import FeedbackPanel from '../../components/FeedbackPanel'
+import type { GameCase, GameResult } from './game.types'
 import type { GameFlowState } from './useGameFlow'
-import type { GameResult } from './game.types'
+import FeedbackPanel from '../../components/FeedbackPanel'
 import GameKeyboard from './GameKeyboard'
+import ClueTimeline from './components/ClueTimeline'
 
 type GamePlaySectionProps = {
   state: GameFlowState
-  caseData: Parameters<typeof CaseCard>[0]['caseData']
+  caseData: GameCase | null
+  clueIndex: number
   caseLoading: boolean
   error: string | null
   guess: string
@@ -15,11 +16,10 @@ type GamePlaySectionProps = {
   onSubmit: () => void
   submitDisabled: boolean
   result?: GameResult | null
-  attemptLabels?: Array<{ guess: string; label: 'correct' | 'close' | 'wrong' }>
+  guesses?: Array<{ guess: string; label: 'correct' | 'close' | 'wrong' }>
   finalResult?: GameResult | null
   blockReason?: string | null
   xpEarned?: number
-  streak?: number
   onContinue?: () => void
   onWhy?: () => void
   canOpenExplanation: boolean
@@ -29,18 +29,18 @@ type GamePlaySectionProps = {
 export default function GamePlaySection({
   state,
   caseData,
+  clueIndex,
   caseLoading,
   error,
   guess,
   onGuessChange,
   onSubmit,
   submitDisabled,
-  result,
-  attemptLabels = [],
-  finalResult,
+  result: _result,
+  guesses = [],
+  finalResult: _finalResult,
   blockReason,
-  xpEarned = 0,
-  streak = 0,
+  xpEarned: _xpEarned = 0,
   onContinue,
   onWhy,
   canOpenExplanation,
@@ -49,34 +49,25 @@ export default function GamePlaySection({
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
-    if (state.type !== 'WAITING') {
-      return
-    }
+    if (state.type !== 'WAITING') return
 
     const tick = () => {
       const current = Date.now()
       setNow(current)
       const remaining = state.nextCaseAt.getTime() - current
-      if (remaining <= 0) {
-        return undefined
-      }
-
+      if (remaining <= 0) return undefined
       return window.setTimeout(tick, Math.min(1000, remaining))
     }
 
     const timeout = tick()
 
     return () => {
-      if (timeout !== undefined) {
-        window.clearTimeout(timeout)
-      }
+      if (timeout !== undefined) window.clearTimeout(timeout)
     }
   }, [state])
 
   const waitingCountdownText = useMemo(() => {
-    if (state.type !== 'WAITING') {
-      return null
-    }
+    if (state.type !== 'WAITING') return null
 
     const msLeft = Math.max(0, state.nextCaseAt.getTime() - now)
     const totalSeconds = Math.floor(msLeft / 1000)
@@ -91,15 +82,15 @@ export default function GamePlaySection({
   }, [now, state])
 
   const shouldShowKeyboard = state.type === 'PLAYING' || state.type === 'SUBMITTING'
-  const shouldShowCaseCard = state.type !== 'WAITING'
-  const activeResult = state.type === 'WAITING' ? null : finalResult ?? result ?? null
+  const latestAttempt = guesses.at(-1)
 
   return (
-    <section className="flex h-full min-h-0 flex-col">
-      <div className="flex-1 min-h-0 overflow-y-auto space-y-3 px-2 pb-2">
-        {shouldShowCaseCard ? (
-          <CaseCard
-            caseData={caseData}
+    <section className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 space-y-3 overflow-y-auto overscroll-y-contain px-2 pb-3">
+        {state.type !== 'WAITING' ? (
+          <ClueTimeline
+            clues={caseData?.clues ?? []}
+            clueIndex={clueIndex}
             isLoading={caseLoading}
             error={error}
             onOpenExplanation={onOpenExplanation}
@@ -111,7 +102,9 @@ export default function GamePlaySection({
           <section className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center">
             <p className="text-sm text-white/60">Case completed</p>
             <p className="text-sm text-white/70">Next case available in</p>
-            <p className="mt-1 text-2xl font-semibold text-white">{waitingCountdownText ?? '00:00:00'}</p>
+            <p className="mt-1 text-2xl font-semibold text-white">
+              {waitingCountdownText ?? '00:00:00'}
+            </p>
           </section>
         ) : null}
 
@@ -122,24 +115,33 @@ export default function GamePlaySection({
         ) : null}
       </div>
 
-      <div className="shrink-0 border-t border-white/10 bg-black px-2 py-2">
-        <div className="space-y-3">
+      <div className="shrink-0 border-t border-white/10 bg-black/95 px-2 py-2 backdrop-blur-sm">
+        <div className="space-y-1.5">
+          {latestAttempt ? <FeedbackPanel latestAttempt={latestAttempt} /> : null}
+
           {shouldShowKeyboard ? (
             <section>
-              <div className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-center text-sm text-white">
-                {guess || <span className="text-white/30">Type diagnosis...</span>}
+              <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                <div className="flex-1 text-sm text-white">
+                  {guess ? (
+                    <>
+                      {guess}
+                      <span className="ml-0.5 animate-pulse">|</span>
+                    </>
+                  ) : (
+                    <span className="text-white/30">Enter diagnosis...</span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={onSubmit}
+                  disabled={!guess || submitDisabled}
+                  className="rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  Submit
+                </button>
               </div>
             </section>
-          ) : null}
-
-          {activeResult ? (
-            <FeedbackPanel
-              result={activeResult}
-              hasActiveSession={state.type !== 'WAITING'}
-              currentStreak={streak}
-              xpEarned={xpEarned}
-              attemptLabels={attemptLabels}
-            />
           ) : null}
 
           {state.type === 'FINAL_FEEDBACK' ? (
@@ -161,22 +163,21 @@ export default function GamePlaySection({
               </button>
             </section>
           ) : null}
-
-          {shouldShowKeyboard ? (
-            <div
-              style={{
-                paddingBottom: 'env(safe-area-inset-bottom)',
-              }}
-            >
-              <GameKeyboard
-                value={guess}
-                onChange={onGuessChange}
-                onSubmit={onSubmit}
-                disabled={submitDisabled}
-              />
-            </div>
-          ) : null}
         </div>
+
+        {shouldShowKeyboard ? (
+          <div
+            className="px-2 pt-1"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            <GameKeyboard
+              value={guess}
+              onChange={onGuessChange}
+              onSubmit={onSubmit}
+              disabled={submitDisabled}
+            />
+          </div>
+        ) : null}
       </div>
     </section>
   )

@@ -35,12 +35,13 @@ export class ClerkAuthGuard implements CanActivate {
     }
 
     const principal = await this.clerkJwtService.verifyBearerToken(token);
-    const user = await this.userSyncService.findByClerkId(principal.clerkId);
+    const user = await this.userSyncService.syncUser(principal);
 
     request.user = {
-      id: user?.id ?? principal.clerkId,
+      id: user.id,
       clerkId: principal.clerkId,
       email: principal.email ?? undefined,
+      role: user.role,
     };
 
     return true;

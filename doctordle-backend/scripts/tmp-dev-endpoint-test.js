@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('node:path').resolve(__dirname, '../.env') });
 
 const port = process.env.PORT || 3000;
 const key = process.env.INTERNAL_API_KEY;

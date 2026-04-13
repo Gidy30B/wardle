@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { startGameApi, submitGuessApi } from './game.api'
 import type { GameCase, GameResult, RequestState } from './game.types'
 import { useApi } from '../../lib/api'
-import { emit } from './events/game.eventBus'
+import { emit, subscribe } from './events/game.eventBus'
 
 type UseGameSessionOptions = {
   currentStreak?: number
@@ -14,16 +14,17 @@ export function useGameSession(_options: UseGameSessionOptions = {}) {
   const { isLoaded, isSignedIn } = useAuth()
   const { request } = useApi()
   const queryClient = useQueryClient()
+  const debug = import.meta.env.DEV
   const hasStartedRef = useRef(false)
   const submittingRef = useRef(false)
-  const rewardedSessionRef = useRef<string | null>(null)
   const [guess, setGuess] = useState('')
   const [result, setResult] = useState<GameResult | null>(null)
-  const [attemptLabels, setAttemptLabels] = useState<
+  const [guesses, setGuesses] = useState<
     Array<{ guess: string; label: 'correct' | 'close' | 'wrong' }>
   >([])
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [caseData, setCaseData] = useState<GameCase | null>(null)
+  const [clueIndex, setClueIndex] = useState(0)
   const [caseLoading, setCaseLoading] = useState(true)
   const [requestState, setRequestState] = useState<RequestState>('loading')
   const [error, setError] = useState<string | null>(null)
@@ -54,10 +55,10 @@ export function useGameSession(_options: UseGameSessionOptions = {}) {
 
           hasActiveSession = true
           setSessionId(session.sessionId)
-          rewardedSessionRef.current = null
           setCaseData(session.case)
+          setClueIndex(session.case.clueIndex)
           setResult(null)
-          setAttemptLabels([])
+          setGuesses([])
           setXpEarned(0)
           setError(null)
         } catch (exception) {
@@ -88,6 +89,24 @@ export function useGameSession(_options: UseGameSessionOptions = {}) {
     }
   }, [isLoaded, isSignedIn, request])
 
+  useEffect(() => {
+    return subscribe((event) => {
+      if (debug) {
+        console.log('[UI RECEIVED EVENT]', event.type)
+      }
+
+      if (event.type === 'REWARD_TRIGGERED') {
+        if (debug) {
+          console.log('[UI STATE UPDATE] REWARD_TRIGGERED', event)
+        }
+
+        setXpEarned(event.xp)
+        void queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
+        void queryClient.invalidateQueries({ queryKey: ['progress'] })
+      }
+    })
+  }, [debug, queryClient])
+
   const submitGuess = useCallback(async (): Promise<GameResult> => {
     const trimmed = guess.trim()
     if (!trimmed || !sessionId || submittingRef.current || requestState !== 'idle' || result?.gameOver) {
@@ -101,30 +120,13 @@ export function useGameSession(_options: UseGameSessionOptions = {}) {
       emit({ type: 'SUBMIT_GUESS' })
       const response = await submitGuessApi(request, { guess: trimmed, sessionId })
       setResult(response)
-      setAttemptLabels((previous) => [...previous, { guess: trimmed, label: response.label }])
+      setClueIndex(response.clueIndex)
       if (response.case) {
         setCaseData(response.case)
       }
+      setGuesses((previous) => [...previous, { guess: trimmed, label: response.label }])
       emit({ type: 'RESULT_RECEIVED', result: response })
-
-      if (
-        response.isTerminalCorrect &&
-        response.xpAwarded !== undefined &&
-        rewardedSessionRef.current !== sessionId
-      ) {
-        rewardedSessionRef.current = sessionId
-        setXpEarned(response.xpAwarded)
-        emit({
-          type: 'REWARD_TRIGGERED',
-          xp: response.xpAwarded,
-          streak: response.streakAfter,
-        })
-      } else {
-        setXpEarned(0)
-      }
-
-      await queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
-      await queryClient.invalidateQueries({ queryKey: ['progress'] })
+      setXpEarned(0)
       setError(null)
       setGuess('')
       return response
@@ -148,13 +150,14 @@ export function useGameSession(_options: UseGameSessionOptions = {}) {
     setGuess,
     result,
     caseData,
+    clueIndex,
     caseLoading,
     loading,
     error,
     xpEarned,
     submitGuess,
     isGameOver,
-    attemptLabels,
+    guesses,
     explanation: result?.explanation ?? null,
     hasActiveSession,
     canSubmit,

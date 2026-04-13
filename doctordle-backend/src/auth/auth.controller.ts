@@ -19,6 +19,7 @@ export class AuthController {
     return {
       clerkId: req.user.clerkId,
       email: req.user.email,
+      role: req.user.role,
       userId: req.user.id,
       progress,
     };
@@ -37,6 +38,7 @@ export class AuthController {
     return {
       clerkId: user.clerkId,
       email: user.email ?? undefined,
+      role: user.role,
       userId: user.id,
       progress,
     };

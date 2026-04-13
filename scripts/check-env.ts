@@ -3,10 +3,17 @@ import { resolve } from 'node:path';
 
 type EnvMap = Record<string, string>;
 
-const REQUIRED_ENV_KEYS = [
+const ROOT_REQUIRED_ENV_KEYS = [
   'POSTGRES_USER',
   'POSTGRES_PASSWORD',
   'POSTGRES_DB',
+  'VITE_CLERK_PUBLISHABLE_KEY',
+  'VITE_API_BASE_URL',
+  'VITE_CLERK_JWT_AUDIENCE',
+  'VITE_BACKEND_URL',
+] as const;
+
+const BACKEND_REQUIRED_ENV_KEYS = [
   'DATABASE_URL',
   'REDIS_URL',
   'CLERK_JWT_ISSUER',
@@ -22,10 +29,8 @@ const REQUIRED_ENV_KEYS = [
   'SCORE_WEIGHT_FUZZY',
   'SCORE_WEIGHT_EMBEDDING',
   'SCORE_WEIGHT_ONTOLOGY',
-  'VITE_CLERK_PUBLISHABLE_KEY',
-  'VITE_API_BASE_URL',
-  'VITE_CLERK_JWT_AUDIENCE',
-  'VITE_BACKEND_URL',
+  'OPENAI_API_KEY',
+  'INTERNAL_API_KEY',
 ] as const;
 
 const FORBIDDEN_FRONTEND_LEAK_PATTERNS = [
@@ -73,55 +78,98 @@ function main(): void {
   const root = process.cwd();
   const envPath = resolve(root, '.env');
   const envExamplePath = resolve(root, '.env.example');
+  const backendDir = resolve(root, 'doctordle-backend');
+  const backendEnvPath = resolve(backendDir, '.env');
+  const backendEnvExamplePath = resolve(backendDir, '.env.example');
 
   assertFileExists(envPath);
   assertFileExists(envExamplePath);
+  assertFileExists(backendEnvPath);
+  assertFileExists(backendEnvExamplePath);
 
-  const { env, duplicates: envDuplicates } = parseEnvFile(envPath);
-  const { env: envExample, duplicates: envExampleDuplicates } = parseEnvFile(envExamplePath);
+  const { env: rootEnv, duplicates: rootEnvDuplicates } = parseEnvFile(envPath);
+  const { env: rootEnvExample, duplicates: rootEnvExampleDuplicates } =
+    parseEnvFile(envExamplePath);
+  const { env: backendEnv, duplicates: backendEnvDuplicates } =
+    parseEnvFile(backendEnvPath);
+  const { env: backendEnvExample, duplicates: backendEnvExampleDuplicates } =
+    parseEnvFile(backendEnvExamplePath);
 
   const errors: string[] = [];
 
-  for (const key of REQUIRED_ENV_KEYS) {
-    const value = env[key];
+  for (const key of ROOT_REQUIRED_ENV_KEYS) {
+    const value = rootEnv[key];
     if (value === undefined) {
-      errors.push(`Missing ${key} in .env`);
+      errors.push(`Missing ${key} in root .env`);
       continue;
     }
     if (value.trim() === '') {
-      errors.push(`Empty ${key} in .env`);
+      errors.push(`Empty ${key} in root .env`);
     }
 
-    if (!(key in envExample)) {
-      errors.push(`Missing ${key} in .env.example`);
+    if (!(key in rootEnvExample)) {
+      errors.push(`Missing ${key} in root .env.example`);
     }
   }
 
-  if (env.CLERK_JWT_AUDIENCE !== env.VITE_CLERK_JWT_AUDIENCE) {
+  for (const key of BACKEND_REQUIRED_ENV_KEYS) {
+    const value = backendEnv[key];
+    if (value === undefined) {
+      errors.push(`Missing ${key} in doctordle-backend/.env`);
+      continue;
+    }
+    if (value.trim() === '') {
+      errors.push(`Empty ${key} in doctordle-backend/.env`);
+    }
+
+    if (!(key in backendEnvExample)) {
+      errors.push(`Missing ${key} in doctordle-backend/.env.example`);
+    }
+  }
+
+  if (backendEnv.CLERK_JWT_AUDIENCE !== rootEnv.VITE_CLERK_JWT_AUDIENCE) {
     errors.push(
-      'Clerk audience mismatch: CLERK_JWT_AUDIENCE must exactly match VITE_CLERK_JWT_AUDIENCE',
+      'Clerk audience mismatch: doctordle-backend/.env CLERK_JWT_AUDIENCE must exactly match root .env VITE_CLERK_JWT_AUDIENCE',
     );
   }
 
-  const nextPublicKeys = Object.keys(env).filter((key) => key.startsWith('NEXT_PUBLIC_'));
+  const nextPublicKeys = Object.keys(rootEnv).filter((key) => key.startsWith('NEXT_PUBLIC_'));
   if (nextPublicKeys.length > 0) {
-    errors.push(`Unsupported NEXT_PUBLIC_ variables in .env: ${nextPublicKeys.join(', ')}`);
+    errors.push(
+      `Unsupported NEXT_PUBLIC_ variables in root .env: ${nextPublicKeys.join(', ')}`,
+    );
   }
 
-  const leakedFrontendKeys = Object.keys(env).filter((key) =>
+  const leakedFrontendKeys = Object.keys(rootEnv).filter((key) =>
     FORBIDDEN_FRONTEND_LEAK_PATTERNS.some((pattern) => pattern.test(key)),
   );
   if (leakedFrontendKeys.length > 0) {
-    errors.push(`Potential secret leakage via VITE_ keys: ${leakedFrontendKeys.join(', ')}`);
-  }
-
-  if (envDuplicates.length > 0) {
-    errors.push(`Duplicate keys in .env: ${Array.from(new Set(envDuplicates)).join(', ')}`);
-  }
-
-  if (envExampleDuplicates.length > 0) {
     errors.push(
-      `Duplicate keys in .env.example: ${Array.from(new Set(envExampleDuplicates)).join(', ')}`,
+      `Potential secret leakage via root VITE_ keys: ${leakedFrontendKeys.join(', ')}`,
+    );
+  }
+
+  if (rootEnvDuplicates.length > 0) {
+    errors.push(
+      `Duplicate keys in root .env: ${Array.from(new Set(rootEnvDuplicates)).join(', ')}`,
+    );
+  }
+
+  if (rootEnvExampleDuplicates.length > 0) {
+    errors.push(
+      `Duplicate keys in root .env.example: ${Array.from(new Set(rootEnvExampleDuplicates)).join(', ')}`,
+    );
+  }
+
+  if (backendEnvDuplicates.length > 0) {
+    errors.push(
+      `Duplicate keys in doctordle-backend/.env: ${Array.from(new Set(backendEnvDuplicates)).join(', ')}`,
+    );
+  }
+
+  if (backendEnvExampleDuplicates.length > 0) {
+    errors.push(
+      `Duplicate keys in doctordle-backend/.env.example: ${Array.from(new Set(backendEnvExampleDuplicates)).join(', ')}`,
     );
   }
 

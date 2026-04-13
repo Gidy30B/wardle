@@ -1,13 +1,23 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Job, Worker } from 'bullmq';
 import Redis from 'ioredis';
 import { PrismaService } from '../../core/db/prisma.service';
 import { getEnv } from '../../core/config/env.validation';
 import { LeaderboardService } from '../gameplay/leaderboard.service';
+import { RewardOrchestrator } from '../gameplay/reward-orchestrator.service';
 import { StreakService } from '../gameplay/streak.service';
 import { XpService } from '../gameplay/xp.service';
+import { RedisPubSubService } from '../../core/redis/redis-pubsub.service';
 import { GameCompletedJobPayload } from './queue.service';
-import { GAME_COMPLETED_JOB_NAME, QUEUE_NAME } from './queue.constants';
+import {
+  GAME_COMPLETED_JOB_NAME,
+  GAME_COMPLETION_QUEUE_NAME,
+} from './queue.constants';
 
 @Injectable()
 export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
@@ -23,6 +33,8 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
     private readonly streakService: StreakService,
     private readonly xpService: XpService,
     private readonly leaderboardService: LeaderboardService,
+    private readonly rewardOrchestrator: RewardOrchestrator,
+    private readonly redisPubSub: RedisPubSubService,
   ) {
     const redisUrl = getEnv().REDIS_URL;
     this.connection = new Redis(redisUrl, {
@@ -33,7 +45,7 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(
         JSON.stringify({
           event: 'queue.processor.connection.connect.failed',
-          queue: QUEUE_NAME,
+          queue: GAME_COMPLETION_QUEUE_NAME,
           error: error instanceof Error ? error.message : String(error),
         }),
       );
@@ -41,11 +53,15 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit(): void {
+    console.log('WORKER STARTED');
+
     this.worker = new Worker<GameCompletedJobPayload>(
-      QUEUE_NAME,
+      GAME_COMPLETION_QUEUE_NAME,
       async (job) => {
+        console.log('PROCESSING JOB', job.name, job.data);
+
         if (job.name !== GAME_COMPLETED_JOB_NAME) {
-          return;
+          throw new Error(`Unexpected job name received: ${job.name}`);
         }
 
         const start = Date.now();
@@ -56,7 +72,7 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
         this.logger.log(
           JSON.stringify({
             event: 'queue.job.started',
-            queue: QUEUE_NAME,
+            queue: GAME_COMPLETION_QUEUE_NAME,
             jobId: job.id,
             jobName: job.name,
             sessionId: job.data.sessionId,
@@ -68,7 +84,8 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
           await this.processGameCompleted(job);
         } catch (error) {
           status = 'failed';
-          failureMessage = error instanceof Error ? error.message : String(error);
+          failureMessage =
+            error instanceof Error ? error.message : String(error);
           throw error;
         } finally {
           const durationMs = Date.now() - start;
@@ -77,7 +94,7 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
           this.logger.log(
             JSON.stringify({
               event: 'queue.job.finished',
-              queue: QUEUE_NAME,
+              queue: GAME_COMPLETION_QUEUE_NAME,
               jobId: job.id,
               jobName: job.name,
               sessionId: job.data.sessionId,
@@ -104,7 +121,7 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
       this.logger.error(
         JSON.stringify({
           event: 'queue.job.failed',
-          queue: QUEUE_NAME,
+          queue: GAME_COMPLETION_QUEUE_NAME,
           jobId: job?.id ?? null,
           jobName: job?.name ?? null,
           sessionId: job?.data?.sessionId ?? null,
@@ -120,7 +137,7 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
         this.logger.error(
           JSON.stringify({
             event: 'queue.job.max-retries-exhausted',
-            queue: QUEUE_NAME,
+            queue: GAME_COMPLETION_QUEUE_NAME,
             jobId: job?.id ?? null,
             jobName: job?.name ?? null,
             sessionId: job?.data?.sessionId ?? null,
@@ -135,7 +152,7 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
       this.logger.error(
         JSON.stringify({
           event: 'queue.worker.error',
-          queue: QUEUE_NAME,
+          queue: GAME_COMPLETION_QUEUE_NAME,
           error: error instanceof Error ? error.message : String(error),
         }),
         error instanceof Error ? error.stack : undefined,
@@ -148,7 +165,7 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(
         JSON.stringify({
           event: 'queue.processor.worker.close.failed',
-          queue: QUEUE_NAME,
+          queue: GAME_COMPLETION_QUEUE_NAME,
           error: error instanceof Error ? error.message : String(error),
         }),
       );
@@ -157,14 +174,16 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(
         JSON.stringify({
           event: 'queue.processor.connection.quit.failed',
-          queue: QUEUE_NAME,
+          queue: GAME_COMPLETION_QUEUE_NAME,
           error: error instanceof Error ? error.message : String(error),
         }),
       );
     });
   }
 
-  private async processGameCompleted(job: Job<GameCompletedJobPayload>): Promise<void> {
+  private async processGameCompleted(
+    job: Job<GameCompletedJobPayload>,
+  ): Promise<void> {
     const payload = job.data;
     const claimAt = new Date();
     const staleBefore = new Date(claimAt.getTime() - this.lockTimeoutMs);
@@ -202,7 +221,9 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
       });
 
       if (!existing) {
-        throw new Error(`Game session not found for completed job ${payload.sessionId}`);
+        throw new Error(
+          `Game session not found for completed job ${payload.sessionId}`,
+        );
       }
 
       if (existing.userId !== payload.userId) {
@@ -217,7 +238,7 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
         this.logger.log(
           JSON.stringify({
             event: 'queue.job.skipped_already_processed',
-            queue: QUEUE_NAME,
+            queue: GAME_COMPLETION_QUEUE_NAME,
             jobId: job.id,
             sessionId: payload.sessionId,
             processedAt: existing.processedAt.toISOString(),
@@ -227,123 +248,139 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
       }
 
       if (existing.processingAt && existing.processingAt >= staleBefore) {
-        throw new Error(`Session ${payload.sessionId} is already locked for processing`);
+        throw new Error(
+          `Session ${payload.sessionId} is already locked for processing`,
+        );
       }
 
-      throw new Error(`Unable to claim session ${payload.sessionId} for processing`);
+      throw new Error(
+        `Unable to claim session ${payload.sessionId} for processing`,
+      );
     }
 
     try {
-    const session = await this.prisma.gameSession.findUnique({
-      where: { id: payload.sessionId },
-      select: {
-        id: true,
-        userId: true,
-        dailyCaseId: true,
-        startedAt: true,
-        completedAt: true,
-        processingAt: true,
-        processedAt: true,
-        status: true,
-        xpAwardedAt: true,
-        attempts: {
-          select: {
-            score: true,
-            result: true,
-            createdAt: true,
+      const session = await this.prisma.gameSession.findUnique({
+        where: { id: payload.sessionId },
+        select: {
+          id: true,
+          userId: true,
+          dailyCaseId: true,
+          startedAt: true,
+          completedAt: true,
+          processingAt: true,
+          processedAt: true,
+          status: true,
+          xpAwardedAt: true,
+          attempts: {
+            select: {
+              score: true,
+              result: true,
+              createdAt: true,
+            },
+            orderBy: {
+              createdAt: 'desc',
+            },
+            take: 1,
           },
-          orderBy: {
-            createdAt: 'desc',
+          _count: {
+            select: {
+              attempts: true,
+            },
           },
-          take: 1,
         },
-        _count: {
-          select: {
-            attempts: true,
-          },
-        },
-      },
-    });
-
-    if (!session) {
-      throw new Error(`Game session not found for completed job ${payload.sessionId}`);
-    }
-
-    if (session.userId !== payload.userId) {
-      throw new Error(`User mismatch for completed job ${payload.sessionId}`);
-    }
-
-    if (session.status !== 'completed') {
-      throw new Error(`Session ${payload.sessionId} is not completed yet`);
-    }
-
-    const completedAt = session.completedAt;
-    if (!completedAt) {
-      throw new Error(`Completed session ${payload.sessionId} is missing completedAt`);
-    }
-
-    const latestAttempt = session.attempts[0];
-    if (!latestAttempt || latestAttempt.result !== 'correct') {
-      throw new Error(`Completed session ${payload.sessionId} is missing a correct attempt`);
-    }
-
-    const streak = await this.streakService.updateOnCompletion({
-      userId: payload.userId,
-      completedAt,
-    });
-
-    const awardResult = await this.xpService.awardXpForSession({
-      sessionId: payload.sessionId,
-      userId: payload.userId,
-      streak,
-      attemptsCount: session._count.attempts,
-    });
-
-    if (!awardResult.applied && awardResult.reason === 'session_not_found') {
-      throw new Error(`Unable to award XP for session ${payload.sessionId}`);
-    }
-
-    if (
-      awardResult.applied &&
-      ((payload.previewXpAwarded !== undefined &&
-        payload.previewXpAwarded !== awardResult.xpGained) ||
-        (payload.previewStreakAfter !== undefined &&
-          payload.previewStreakAfter !== streak))
-    ) {
-      this.logger.warn({
-        event: 'reward.preview_persisted.mismatch',
-        userId: payload.userId,
-        sessionId: payload.sessionId,
-        previewXp: payload.previewXpAwarded,
-        actualXp: awardResult.xpGained,
-        previewStreak: payload.previewStreakAfter,
-        actualStreak: streak,
       });
-    }
 
-    await this.leaderboardService.upsertCompletion({
-      userId: payload.userId,
-      dailyCaseId: session.dailyCaseId,
-      score: latestAttempt.score,
-      attemptsCount: session._count.attempts,
-      completedAt,
-      timeToComplete: Math.max(
-        0,
-        Math.round((completedAt.getTime() - session.startedAt.getTime()) / 1000),
-      ),
-    });
+      if (!session) {
+        throw new Error(
+          `Game session not found for completed job ${payload.sessionId}`,
+        );
+      }
 
-    await this.prisma.gameSession.updateMany({
-      where: {
-        id: payload.sessionId,
+      if (session.userId !== payload.userId) {
+        throw new Error(`User mismatch for completed job ${payload.sessionId}`);
+      }
+
+      if (session.status !== 'completed') {
+        throw new Error(`Session ${payload.sessionId} is not completed yet`);
+      }
+
+      const completedAt = session.completedAt;
+      if (!completedAt) {
+        throw new Error(
+          `Completed session ${payload.sessionId} is missing completedAt`,
+        );
+      }
+
+      const latestAttempt = session.attempts[0];
+      if (!latestAttempt || latestAttempt.result !== 'correct') {
+        throw new Error(
+          `Completed session ${payload.sessionId} is missing a correct attempt`,
+        );
+      }
+
+      const streak = await this.streakService.updateOnCompletion({
         userId: payload.userId,
-        processedAt: null,
-      },
-      data: {
-        processedAt: new Date(),
-        processingAt: null,
-      },
-    });
+        completedAt,
+      });
+
+      const awardResult = await this.xpService.awardXpForSession({
+        sessionId: payload.sessionId,
+        userId: payload.userId,
+        streak,
+        attemptsCount: session._count.attempts,
+      });
+
+      if (!awardResult.applied && awardResult.reason === 'session_not_found') {
+        throw new Error(`Unable to award XP for session ${payload.sessionId}`);
+      }
+
+      if (awardResult.applied) {
+        this.logger.log({
+          event: 'ws.publish',
+          type: 'game.v1.reward.applied',
+          userId: payload.userId,
+        });
+
+        await this.redisPubSub.publish('ws:events', {
+          type: 'game.v1.reward.applied',
+          userId: payload.userId,
+          payload: {
+            xp: awardResult.xpGained,
+            streak,
+          },
+        });
+      }
+
+      await this.leaderboardService.upsertCompletion({
+        userId: payload.userId,
+        dailyCaseId: session.dailyCaseId,
+        score: latestAttempt.score,
+        attemptsCount: session._count.attempts,
+        completedAt,
+        timeToComplete: Math.max(
+          0,
+          Math.round(
+            (completedAt.getTime() - session.startedAt.getTime()) / 1000,
+          ),
+        ),
+      });
+
+      await this.prisma.gameSession.updateMany({
+        where: {
+          id: payload.sessionId,
+          userId: payload.userId,
+          processedAt: null,
+        },
+        data: {
+          processedAt: new Date(),
+          processingAt: null,
+        },
+      });
+
+      await this.rewardOrchestrator.emitRewardApplied({
+        sessionId: payload.sessionId,
+        userId: payload.userId,
+      });
     } catch (error) {
       await this.prisma.gameSession
         .updateMany({
@@ -361,7 +398,7 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
           this.logger.error(
             JSON.stringify({
               event: 'queue.job.claim.rollback.failed',
-              queue: QUEUE_NAME,
+              queue: GAME_COMPLETION_QUEUE_NAME,
               jobId: job.id,
               sessionId: payload.sessionId,
               error:
@@ -383,7 +420,9 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
       this.durationSamples.shift();
     }
 
-    const sorted = [...this.durationSamples].sort((left, right) => left - right);
+    const sorted = [...this.durationSamples].sort(
+      (left, right) => left - right,
+    );
     const p95Index = Math.min(
       sorted.length - 1,
       Math.max(0, Math.ceil(sorted.length * 0.95) - 1),
