@@ -197,9 +197,7 @@ export class CaseValidationOrchestrator {
   ): Promise<void> {
     const lockKey = `case_validation:generated:${caseId}`;
 
-    await tx.$queryRaw<
-      Array<{ pg_advisory_xact_lock: string | null }>
-    >`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
   }
 
   private async withSerializableRetry<T>(
