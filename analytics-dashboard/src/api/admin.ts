@@ -45,11 +45,11 @@ export function fetchAdminViewer(client: ApiClient) {
 }
 
 export function fetchDashboard(client: ApiClient) {
-  return client.get<DashboardPayload>('/dashboard');
+  return client.get<DashboardPayload>('/analytics/dashboard');
 }
 
 export function fetchAttemptsOverTime(client: ApiClient) {
-  return client.get<AttemptsOverTimePayload>('/attempts-over-time');
+  return client.get<AttemptsOverTimePayload>('/analytics/attempts-over-time');
 }
 
 export function generateCases(client: ApiClient, payload: GenerateCasesPayload) {

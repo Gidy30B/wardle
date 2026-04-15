@@ -5,14 +5,24 @@ export type ApiClient = {
   post<T>(path: string, body?: unknown): Promise<T>;
 };
 
-const API_PREFIX = '/api';
+const apiBaseUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, '');
 
-function toApiPath(path: string): string {
-  if (path.startsWith(API_PREFIX)) {
-    return path;
+if (!apiBaseUrl) {
+  throw new Error('Missing VITE_API_URL');
+}
+
+function toApiUrl(path: string): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+  if (normalizedPath === '/api') {
+    return apiBaseUrl;
   }
 
-  return `${API_PREFIX}${path.startsWith('/') ? path : `/${path}`}`;
+  if (normalizedPath.startsWith('/api/')) {
+    return `${apiBaseUrl}${normalizedPath.slice('/api'.length)}`;
+  }
+
+  return `${apiBaseUrl}${normalizedPath}`;
 }
 
 async function readError(response: Response): Promise<string> {
@@ -52,7 +62,7 @@ export function createApiClient(getToken: TokenGetter): ApiClient {
       payload = JSON.stringify(body);
     }
 
-    const response = await fetch(toApiPath(path), {
+    const response = await fetch(toApiUrl(path), {
       ...init,
       headers,
       body: payload,
