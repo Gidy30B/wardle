@@ -72,7 +72,7 @@ services:
     build:
       context: ./analytics-dashboard
       args:
-        VITE_BACKEND_URL: ${VITE_BACKEND_URL}
+        VITE_API_URL: ${VITE_API_URL}
         VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY}
         VITE_CLERK_JWT_AUDIENCE: ${VITE_CLERK_JWT_AUDIENCE}
     container_name: doctordle-frontend
@@ -87,7 +87,7 @@ services:
       context: ./doctordle-game
       args:
         VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY}
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_API_URL: ${VITE_API_URL}
         VITE_CLERK_JWT_AUDIENCE: ${VITE_CLERK_JWT_AUDIENCE}
     container_name: doctordle-game
     restart: always
