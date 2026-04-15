@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom';
 
 const navigationItems = [
-  { to: '/', label: 'Dashboard', icon: 'D', end: true },
+  { to: '/', label: 'Overview', icon: 'O', end: true },
   { to: '/cases', label: 'Cases', icon: 'C' },
-  { to: '/generate', label: 'Generate', icon: 'G' },
+  { to: '/generate', label: 'Generate Cases', icon: 'G' },
+  { to: '/publish', label: 'Publish', icon: 'P' },
   { to: '/analytics', label: 'Analytics', icon: 'A' },
 ];
 
@@ -22,13 +23,13 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <div className={`border-b border-slate-200 ${collapsed ? 'px-3 py-4' : 'px-5 py-4'}`}>
         <div className="flex items-center justify-between gap-2">
           {collapsed ? (
-            <h1 className="text-sm font-semibold text-slate-900">WA</h1>
+            <h1 className="text-sm font-semibold text-slate-900">DX</h1>
           ) : (
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-                Control Panel
+                Admin Console
               </p>
-              <h1 className="mt-2 text-lg font-semibold text-slate-900">Wardle Admin</h1>
+              <h1 className="mt-2 text-lg font-semibold text-slate-900">DxLab Admin</h1>
             </div>
           )}
 

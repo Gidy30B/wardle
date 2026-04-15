@@ -4,33 +4,42 @@ import AnalyticsPage from '../features/analytics/AnalyticsPage';
 import CasesPage from '../features/cases/CasesPage';
 import DashboardPage from '../features/dashboard/DashboardPage';
 import GeneratePage from '../features/generation/GeneratePage';
+import PublishPage from '../features/publish/PublishPage';
 import { useAdmin } from '../hooks/useAdmin';
 import AdminLayout from '../layout/AdminLayout';
 
 const routeContext: Record<string, { title: string; subtitle: string }> = {
   '/': {
-    title: 'Dashboard',
-    subtitle: 'System overview and performance',
+    title: 'Overview',
+    subtitle: 'Operational overview for case review and publishing',
   },
   '/dashboard': {
-    title: 'Dashboard',
-    subtitle: 'System overview and performance',
+    title: 'Overview',
+    subtitle: 'Operational overview for case review and publishing',
   },
   '/cases': {
     title: 'Cases',
-    subtitle: 'Review and manage clinical cases',
+    subtitle: 'Editorial review and clinical case management',
   },
   '/generate': {
     title: 'Generate Cases',
-    subtitle: 'Create new AI-generated cases',
+    subtitle: 'Create AI-assisted clinical cases',
   },
   '/analytics': {
     title: 'Analytics',
-    subtitle: 'Track quality and gameplay trends',
+    subtitle: 'Gameplay and case-quality insights',
+  },
+  '/publish': {
+    title: 'Publish',
+    subtitle: 'Publish readiness and distribution health',
   },
 };
 
-function SignInScreen({ path }: { path: '/' | '/cases' | '/generate' | '/analytics' }) {
+function SignInScreen({
+  path,
+}: {
+  path: '/' | '/cases' | '/generate' | '/analytics' | '/publish';
+}) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
@@ -43,13 +52,21 @@ function SignInScreen({ path }: { path: '/' | '/cases' | '/generate' | '/analyti
 function AdminShell() {
   const location = useLocation();
   const admin = useAdmin();
-  const context = routeContext[location.pathname] ?? routeContext['/'];
-  const signInPath =
-    location.pathname === '/cases' ||
-    location.pathname === '/generate' ||
-    location.pathname === '/analytics'
-      ? (location.pathname as '/' | '/cases' | '/generate' | '/analytics')
-      : '/';
+  const isCasesPath =
+    location.pathname === '/cases' || location.pathname.startsWith('/cases/');
+  const context = isCasesPath
+    ? routeContext['/cases']
+    : routeContext[location.pathname] ?? routeContext['/'];
+  const signInPath: '/' | '/cases' | '/generate' | '/analytics' | '/publish' =
+    isCasesPath
+      ? '/cases'
+      : location.pathname === '/generate'
+        ? '/generate'
+        : location.pathname === '/analytics'
+          ? '/analytics'
+          : location.pathname === '/publish'
+            ? '/publish'
+            : '/';
 
   if (admin.status === 'loading') {
     return <p className="p-6 text-sm text-slate-600">Loading admin console...</p>;
@@ -107,9 +124,11 @@ export default function AppRoutes() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/dashboard" element={<Navigate to="/" replace />} />
         <Route path="/cases" element={<CasesPage />} />
+        <Route path="/cases/:caseId" element={<CasesPage />} />
         <Route path="/generate" element={<GeneratePage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
-        <Route path="/admin" element={<Navigate to="/generate" replace />} />
+        <Route path="/publish" element={<PublishPage />} />
+        <Route path="/admin" element={<Navigate to="/" replace />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

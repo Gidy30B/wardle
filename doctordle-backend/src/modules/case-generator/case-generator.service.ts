@@ -5,11 +5,13 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import OpenAI from 'openai';
 import { zodResponseFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 import { getEnv } from '../../core/config/env.validation.js';
 import { PrismaService } from '../../core/db/prisma.service.js';
+import { CaseValidationOrchestrator } from '../case-validation/case-validation.orchestrator.js';
 import type {
   GenerateBatchOptions,
   GenerateBatchResult,
@@ -60,7 +62,10 @@ export class CaseGeneratorService {
     'gpt-4o-mini';
   private caseDateCursor = 0;
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly caseValidationOrchestrator: CaseValidationOrchestrator,
+  ) {
     if (this.env.OPENAI_API_KEY) {
       this.openaiClient = new OpenAI({
         apiKey: this.env.OPENAI_API_KEY,
@@ -192,49 +197,13 @@ export class CaseGeneratorService {
 
     try {
       if (!options.skipExistingAnswerCheck) {
-        const existing = await this.prisma.case.findFirst({
-          where: {
-            OR: [
-              {
-                title: {
-                  equals: normalizedCase.answer,
-                  mode: 'insensitive',
-                },
-              },
-              {
-                diagnosis: {
-                  name: {
-                    equals: normalizedCase.answer,
-                    mode: 'insensitive',
-                  },
-                },
-              },
-            ],
-          },
-          select: {
-            id: true,
-          },
-        });
-
-        if (existing) {
+        const duplicateCheck = await this.findExistingCaseIdByAnswer(
+          normalizedCase.answer,
+        );
+        if (duplicateCheck) {
           return null;
         }
       }
-
-      const normalizedTrack = this.normalizeOptionalString(options.track);
-      const diagnosis = await this.prisma.diagnosis.upsert({
-        where: {
-          name: normalizedCase.answer,
-        },
-        update: {},
-        create: {
-          name: normalizedCase.answer,
-          ...(normalizedTrack ? { system: normalizedTrack.toLowerCase() } : {}),
-        },
-        select: {
-          id: true,
-        },
-      });
 
       const history =
         normalizedCase.clues.find((clue) => clue.type === 'history')?.value ??
@@ -244,50 +213,107 @@ export class CaseGeneratorService {
       const symptoms = normalizedCase.clues
         .filter((clue) => clue.type === 'symptom')
         .map((clue) => clue.value);
+      const createdCase = await this.withSerializableRetry(() =>
+        this.prisma.$transaction(
+          async (tx) => {
+            if (!options.skipExistingAnswerCheck) {
+              const existing = await this.findExistingCaseIdByAnswer(
+                normalizedCase.answer,
+                tx,
+              );
+              if (existing) {
+                return null;
+              }
+            }
 
-      const createdRows = await this.prisma.$queryRawUnsafe<SavedGeneratedCase[]>(
-        `
-          INSERT INTO "Case" (
-            "id",
-            "title",
-            "date",
-            "difficulty",
-            "history",
-            "symptoms",
-            "clues",
-            "explanation",
-            "differentials",
-            "diagnosisId"
-          )
-          VALUES (
-            gen_random_uuid(),
-            $1,
-            $2,
-            $3,
-            $4,
-            $5::text[],
-            $6::jsonb,
-            $7::jsonb,
-            $8::text[],
-            $9
-          )
-          RETURNING "id", "title", "difficulty", "date"
-        `,
-        normalizedCase.answer,
-        this.nextCaseDate(),
-        this.normalizeDifficulty(options.difficulty),
-        history,
-        symptoms,
-        JSON.stringify(normalizedCase.clues),
-        JSON.stringify(this.toPersistedExplanation(normalizedCase)),
-        normalizedCase.differentials,
-        diagnosis.id,
+            const normalizedTrack = this.normalizeOptionalString(options.track);
+            const diagnosis = await tx.diagnosis.upsert({
+              where: {
+                name: normalizedCase.answer,
+              },
+              update: {},
+              create: {
+                name: normalizedCase.answer,
+                ...(normalizedTrack
+                  ? { system: normalizedTrack.toLowerCase() }
+                  : {}),
+              },
+              select: {
+                id: true,
+              },
+            });
+
+            const createdRows = await tx.$queryRawUnsafe<SavedGeneratedCase[]>(
+              `
+                INSERT INTO "Case" (
+                  "id",
+                  "title",
+                  "date",
+                  "difficulty",
+                  "history",
+                  "symptoms",
+                  "clues",
+                  "explanation",
+                  "differentials",
+                  "diagnosisId"
+                )
+                VALUES (
+                  gen_random_uuid(),
+                  $1,
+                  $2,
+                  $3,
+                  $4,
+                  $5::text[],
+                  $6::jsonb,
+                  $7::jsonb,
+                  $8::text[],
+                  $9
+                )
+                RETURNING "id", "title", "difficulty", "date"
+              `,
+              normalizedCase.answer,
+              this.nextCaseDate(),
+              this.normalizeDifficulty(options.difficulty),
+              history,
+              symptoms,
+              JSON.stringify(normalizedCase.clues),
+              JSON.stringify(this.toPersistedExplanation(normalizedCase)),
+              normalizedCase.differentials,
+              diagnosis.id,
+            );
+
+            const persistedCase = createdRows[0];
+            if (!persistedCase) {
+              throw new Error('Case insert completed without returning a row');
+            }
+
+            await this.caseValidationOrchestrator.runShadowForGeneratedCaseInTransaction(
+              tx,
+              {
+                caseId: persistedCase.id,
+                startedAt: new Date(),
+              },
+            );
+
+            return persistedCase;
+          },
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          },
+        ),
       );
 
-      const createdCase = createdRows[0];
       if (!createdCase) {
-        throw new Error('Case insert completed without returning a row');
+        return null;
       }
+
+      this.logger.log(
+        JSON.stringify({
+          event: 'case.generate.persisted_and_validated',
+          caseId: createdCase.id,
+          answer: normalizedCase.answer,
+        }),
+      );
 
       return createdCase;
     } catch (error) {
@@ -537,5 +563,55 @@ export class CaseGeneratorService {
       'code' in error &&
       error.code === 'P2002'
     );
+  }
+
+  private async findExistingCaseIdByAnswer(
+    answer: string,
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
+  ): Promise<string | null> {
+    const existing = await client.case.findFirst({
+      where: {
+        OR: [
+          {
+            title: {
+              equals: answer,
+              mode: 'insensitive',
+            },
+          },
+          {
+            diagnosis: {
+              name: {
+                equals: answer,
+                mode: 'insensitive',
+              },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return existing?.id ?? null;
+  }
+
+  private async withSerializableRetry<T>(
+    operation: () => Promise<T>,
+    maxAttempts = 3,
+  ): Promise<T> {
+    let attempt = 0;
+
+    while (true) {
+      try {
+        return await operation();
+      } catch (error) {
+        attempt += 1;
+        const maybePrismaError = error as { code?: string };
+        if (maybePrismaError.code !== 'P2034' || attempt >= maxAttempts) {
+          throw error;
+        }
+      }
+    }
   }
 }

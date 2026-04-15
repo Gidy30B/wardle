@@ -1,6 +1,21 @@
-import { BadRequestException, Body, Controller, Post, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import type { AuthenticatedRequest } from '../../auth/authenticated-request.interface';
 import { CaseGeneratorService } from '../case-generator/case-generator.service';
 import { AdminGuard } from './admin.guard';
+import { CaseReviewService } from './case-review.service';
+import { ListEditorialCasesDto } from './dto/list-editorial-cases.dto';
+import { SubmitCaseReviewDto } from './dto/submit-case-review.dto';
 
 type GenerateCasesBody = {
   count?: number;
@@ -11,7 +26,93 @@ type GenerateCasesBody = {
 @Controller('admin')
 @UseGuards(AdminGuard)
 export class AdminController {
-  constructor(private readonly caseGenerator: CaseGeneratorService) {}
+  constructor(
+    private readonly caseGenerator: CaseGeneratorService,
+    private readonly caseReviewService: CaseReviewService,
+  ) {}
+
+  @Get('cases')
+  async listEditorialCases(@Query() query: ListEditorialCasesDto) {
+    return this.caseReviewService.listEditorialCases(query);
+  }
+
+  @Get('summary/editorial-statuses')
+  async getEditorialStatusSummary() {
+    return this.caseReviewService.getEditorialStatusSummary();
+  }
+
+  @Get('summary/validation-outcomes')
+  async getValidationOutcomeSummary() {
+    return this.caseReviewService.getValidationOutcomeSummary();
+  }
+
+  @Get('summary/publish-results')
+  async getPublishAssignmentSummary() {
+    return this.caseReviewService.getPublishAssignmentSummary();
+  }
+
+  @Get('cases/:caseId')
+  async getEditorialCaseDetail(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+  ) {
+    return this.caseReviewService.getCaseDetail(caseId);
+  }
+
+  @Post('cases/:caseId/rerun-validation')
+  async rerunValidation(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.caseReviewService.rerunValidation(caseId, request.user.id);
+  }
+
+  @Post('cases/:caseId/start-review')
+  async startReview(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.caseReviewService.startReview(caseId, request.user.id);
+  }
+
+  @Post('cases/:caseId/review')
+  async submitReview(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: SubmitCaseReviewDto,
+  ) {
+    return this.caseReviewService.submitReview(
+      caseId,
+      request.user.id,
+      body,
+    );
+  }
+
+  @Get('cases/:caseId/revisions')
+  async listRevisions(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+  ) {
+    return this.caseReviewService.listRevisions(caseId);
+  }
+
+  @Post('cases/:caseId/revisions/:revisionId/restore')
+  async restoreRevision(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+    @Param('revisionId', new ParseUUIDPipe()) revisionId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.caseReviewService.restoreRevision(
+      caseId,
+      revisionId,
+      request.user.id,
+    );
+  }
+
+  @Post('cases/:caseId/ready-to-publish')
+  async markReadyToPublish(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+  ) {
+    return this.caseReviewService.markReadyToPublish(caseId);
+  }
 
   @Post('generate-cases')
   async generateCases(@Body() body: GenerateCasesBody = {}) {

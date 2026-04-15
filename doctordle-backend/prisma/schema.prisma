@@ -12,6 +12,43 @@ datasource db {
   provider = "postgresql"
 }
 
+enum CaseEditorialStatus {
+  DRAFT
+  VALIDATING
+  VALIDATED
+  REVIEW
+  NEEDS_EDIT
+  APPROVED
+  READY_TO_PUBLISH
+  PUBLISHED
+  REJECTED
+}
+
+enum ValidationOutcome {
+  PASSED
+  FAILED
+  ERROR
+}
+
+enum ReviewDecision {
+  APPROVED
+  REJECTED
+  NEEDS_EDIT
+}
+
+enum CaseSource {
+  GENERATED
+  MANUAL
+  ADMIN_EDIT
+  RESTORED
+}
+
+enum PublishTrack {
+  DAILY
+  PREMIUM
+  PRACTICE
+}
+
 model Diagnosis {
   id          String               @id @default(uuid())
   name        String               @unique
@@ -19,6 +56,7 @@ model Diagnosis {
   embeddings  DiagnosisEmbedding[]
   synonyms    Synonym[]
   cases       Case[]
+  caseRevisions CaseRevision[]
 }
 
 model DiagnosisEmbedding {
@@ -43,25 +81,110 @@ model Synonym {
 }
 
 model Case {
-  id          String    @id @default(uuid())
-  title       String
-  date        DateTime  @unique
-  difficulty  String
-  history     String
-  symptoms    String[]
-  labs        Json?
-  clues       Json?
-  explanation Json?
-  differentials String[] @default([])
-  diagnosisId String
-  diagnosis   Diagnosis @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
-  attempts    Attempt[]
-  sessions    GameSession[]
-  dailyCases  DailyCase[]
-  hints       HintContent[]
-  explanations ExplanationContent[]
+  id               String               @id @default(uuid())
+  title            String
+  date             DateTime             @unique
+  difficulty       String
+  history          String
+  symptoms         String[]
+  labs             Json?
+  clues            Json?
+  explanation      Json?
+  differentials    String[]             @default([])
+  editorialStatus  CaseEditorialStatus?
+  approvedAt       DateTime?
+  approvedByUserId String?
+  currentRevisionId String?             @unique
+  diagnosisId      String
+  diagnosis        Diagnosis            @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
+  approvedBy       User?                @relation("CaseApprovedByUser", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  currentRevision  CaseRevision?        @relation("CaseCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
+  attempts         Attempt[]
+  sessions         GameSession[]
+  dailyCases       DailyCase[]
+  hints            HintContent[]
+  explanations     ExplanationContent[]
+  validationRuns   CaseValidationRun[]
+  reviews          CaseReview[]
+  revisions        CaseRevision[]       @relation("CaseRevisions")
 
   @@index([diagnosisId])
+}
+
+model CaseRevision {
+  id               String               @id @default(uuid())
+  caseId           String
+  revisionNumber   Int                  @default(1)
+  source           CaseSource?
+  publishTrack     PublishTrack?
+  title            String
+  date             DateTime
+  difficulty       String
+  history          String
+  symptoms         String[]
+  labs             Json?
+  clues            Json?
+  explanation      Json?
+  differentials    String[]             @default([])
+  diagnosisId      String
+  createdByUserId  String?
+  createdAt        DateTime             @default(now())
+  case             Case                 @relation("CaseRevisions", fields: [caseId], references: [id], onDelete: Cascade)
+  diagnosis        Diagnosis            @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
+  createdBy        User?                @relation("CaseRevisionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  currentForCase   Case?                @relation("CaseCurrentRevision")
+  validationRuns   CaseValidationRun[]
+  reviews          CaseReview[]
+
+  @@unique([caseId, revisionNumber])
+  @@index([caseId])
+  @@index([diagnosisId])
+  @@index([createdByUserId])
+  @@index([createdAt])
+}
+
+model CaseValidationRun {
+  id                String             @id @default(uuid())
+  caseId            String
+  revisionId        String?
+  source            CaseSource?
+  publishTrack      PublishTrack?
+  outcome           ValidationOutcome?
+  validatorVersion  String?
+  summary           Json?
+  findings          Json?
+  triggeredByUserId String?
+  startedAt         DateTime           @default(now())
+  completedAt       DateTime?
+  case              Case               @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  revision          CaseRevision?      @relation(fields: [revisionId], references: [id], onDelete: SetNull)
+  triggeredBy       User?              @relation("CaseValidationRunTriggeredByUser", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
+
+  @@index([caseId])
+  @@index([revisionId])
+  @@index([triggeredByUserId])
+  @@index([startedAt])
+}
+
+model CaseReview {
+  id             String          @id @default(uuid())
+  caseId         String
+  revisionId     String?
+  reviewerUserId String?
+  decision       ReviewDecision?
+  notes          String?
+  source         CaseSource?
+  publishTrack   PublishTrack?
+  createdAt      DateTime        @default(now())
+  decidedAt      DateTime?
+  case           Case            @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  revision       CaseRevision?   @relation(fields: [revisionId], references: [id], onDelete: SetNull)
+  reviewer       User?           @relation("CaseReviewReviewerUser", fields: [reviewerUserId], references: [id], onDelete: SetNull)
+
+  @@index([caseId])
+  @@index([revisionId])
+  @@index([reviewerUserId])
+  @@index([createdAt])
 }
 
 model HintContent {
@@ -142,17 +265,21 @@ model Attempt {
 }
 
 model User {
-  id               String             @id
-  clerkId          String?            @unique
-  email            String?
-  role             String             @default("user")
-  subscriptionTier String             @default("free")
-  lastPlayedAt     DateTime?
-  sessions         GameSession[]
-  attempts         Attempt[]
-  stats            UserStats?
-  progress         UserProgress?
-  leaderboard      LeaderboardEntry[]
+  id                        String                  @id
+  clerkId                   String?                 @unique
+  email                     String?
+  role                      String                  @default("user")
+  subscriptionTier          String                  @default("free")
+  lastPlayedAt              DateTime?
+  sessions                  GameSession[]
+  attempts                  Attempt[]
+  stats                     UserStats?
+  progress                  UserProgress?
+  leaderboard               LeaderboardEntry[]
+  approvedCases             Case[]                  @relation("CaseApprovedByUser")
+  createdCaseRevisions      CaseRevision[]          @relation("CaseRevisionCreatedByUser")
+  triggeredCaseValidations  CaseValidationRun[]     @relation("CaseValidationRunTriggeredByUser")
+  caseReviews               CaseReview[]            @relation("CaseReviewReviewerUser")
 
   @@index([role])
   @@index([subscriptionTier])

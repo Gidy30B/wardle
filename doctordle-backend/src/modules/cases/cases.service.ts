@@ -1,6 +1,11 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Case as CaseModel } from '@prisma/client';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Case as CaseModel, CaseEditorialStatus } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
+import { EditorialMetricsService } from '../editorial/editorial-metrics.service.js';
+import {
+  ASSIGNABLE_EDITORIAL_STATUSES,
+  isPublishEligibleEditorialStatus,
+} from '../editorial/policies/publish-policy.js';
 import { AIContentService } from '../ai/ai-content.service';
 import { CreateCaseDto } from './dto/create-case.dto';
 
@@ -51,6 +56,7 @@ export class CasesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiContentService: AIContentService,
+    private readonly editorialMetrics: EditorialMetricsService,
   ) {}
 
   async createCase(dto: CreateCaseDto): Promise<CreatedCaseRecord> {
@@ -133,6 +139,8 @@ export class CasesService {
       throw new NotFoundException(`Case not found: ${caseId}`);
     }
 
+    this.assertCaseEligibleForAssignment(foundCase, 'explicit');
+
     const dailyCase = await this.prisma.dailyCase.upsert({
       where: { date: normalizedDate },
       update: {
@@ -154,10 +162,14 @@ export class CasesService {
     this.logger.log(
       JSON.stringify({
         event: 'cases.daily_case.assigned',
+        assignmentMode: 'explicit',
         date: normalizedDate.toISOString(),
         caseId,
+        editorialStatus: foundCase.editorialStatus,
       }),
     );
+
+    this.editorialMetrics.recordAssignmentAccepted('explicit');
 
     return {
       dailyCaseId: dailyCase.id,
@@ -214,6 +226,17 @@ export class CasesService {
     const selectedCaseId = await this.findLatestPlayableCaseId();
 
     if (!selectedCaseId) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'cases.today.no_eligible_case',
+          assignmentMode: 'lazy',
+          date: today.toISOString(),
+          eligibleEditorialStatuses: ASSIGNABLE_EDITORIAL_STATUSES,
+        }),
+      );
+      this.editorialMetrics.recordAssignmentRejected('lazy', null);
+      this.editorialMetrics.recordLazyNoEligibleCaseMiss();
+
       throw new NotFoundException(
         'No playable clue-based cases available to assign for today',
       );
@@ -243,11 +266,15 @@ export class CasesService {
       this.logger.log(
         JSON.stringify({
           event: 'cases.today.created',
+          assignmentMode: 'lazy',
           dailyCaseId: created.id,
           caseId: created.caseId,
           date: created.date.toISOString(),
+          editorialStatus: selectedCase.editorialStatus,
         }),
       );
+
+      this.editorialMetrics.recordAssignmentAccepted('lazy');
 
       return this.mapTodayCaseContext(created);
     } catch (error) {
@@ -270,6 +297,7 @@ export class CasesService {
       this.logger.warn(
         JSON.stringify({
           event: 'cases.today.race_recovered',
+          assignmentMode: 'lazy',
           dailyCaseId: recovered.id,
           caseId: recovered.caseId,
           date: recovered.date.toISOString(),
@@ -288,7 +316,8 @@ export class CasesService {
     const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
       SELECT "id"
       FROM "Case"
-      WHERE "clues" IS NOT NULL
+      WHERE "editorialStatus" IN (${CaseEditorialStatus.APPROVED}, ${CaseEditorialStatus.READY_TO_PUBLISH})
+        AND "clues" IS NOT NULL
         AND jsonb_typeof("clues") = 'array'
         AND jsonb_array_length("clues") > 0
       ORDER BY "date" DESC
@@ -512,6 +541,34 @@ export class CasesService {
       date: found.date,
       case: found.case,
     };
+  }
+
+  private assertCaseEligibleForAssignment(foundCase: {
+    id: string;
+    editorialStatus: CaseEditorialStatus | null;
+  }, mode: 'explicit' | 'lazy'): void {
+    if (isPublishEligibleEditorialStatus(foundCase.editorialStatus)) {
+      return;
+    }
+
+    this.logger.warn(
+      JSON.stringify({
+        event: 'cases.daily_case.assignment_ineligible',
+        assignmentMode: mode,
+        caseId: foundCase.id,
+        editorialStatus: foundCase.editorialStatus,
+        allowedEditorialStatuses: ASSIGNABLE_EDITORIAL_STATUSES,
+      }),
+    );
+
+    this.editorialMetrics.recordAssignmentRejected(
+      mode,
+      foundCase.editorialStatus,
+    );
+
+    throw new BadRequestException(
+      'Case is not eligible for new assignment until it is APPROVED or READY_TO_PUBLISH',
+    );
   }
 
   private parseDailyDate(value: string): Date {

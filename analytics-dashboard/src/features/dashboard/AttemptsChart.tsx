@@ -14,9 +14,18 @@ type AttemptsChartProps = {
 
 export default function AttemptsChart({ data }: AttemptsChartProps) {
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
-      <h3 className="mb-3 text-base font-semibold text-slate-900">Attempts Over Time</h3>
-      <div className="h-[280px] w-full">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
+          Attempts over time
+        </h3>
+        <p className="mt-1 text-sm text-slate-500">
+          Trend context for overall activity. Use this after reviewing the editorial and
+          validation queues.
+        </p>
+      </div>
+
+      <div className="h-[240px] w-full rounded-xl border border-white bg-white p-2">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
             <XAxis dataKey="time" tick={{ fontSize: 12 }} />
