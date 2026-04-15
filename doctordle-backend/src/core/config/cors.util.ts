@@ -51,7 +51,7 @@ export function createCorsOptions(): CorsOptions {
   const env = getEnv();
   const configuredAllowedOrigins = [
     'https://wardle-nu.vercel.app',
-    'https://wardle-1kz2.vercel.app',
+    'https://wardle-7xey.vercel.app',
     'http://localhost:5173',
     ...parseAllowedOrigins(env.ALLOWED_ORIGINS),
   ];
