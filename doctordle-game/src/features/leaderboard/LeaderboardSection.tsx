@@ -18,7 +18,7 @@ type LeaderboardSectionProps = {
 function formatCompletionTime(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
-    return '—'
+    return '-'
   }
 
   return date.toLocaleString([], {
@@ -54,20 +54,20 @@ function LeaderboardSection({
   )
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-sm transition-opacity duration-200">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-sm transition-opacity duration-200 md:p-5 lg:p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Leaderboard</p>
-          <h2 className="mt-1 text-lg font-semibold text-white">Top players</h2>
+          <h2 className="mt-1 text-lg font-semibold text-white md:text-xl">Top players</h2>
         </div>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={handleModeChange('daily')}
-            className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
               mode === 'daily'
                 ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300'
-                : 'border-white/10 bg-white/5 text-white/70'
+                : 'border-white/10 bg-white/5 text-white/70 hover:border-white/20 hover:bg-white/10'
             }`}
           >
             Daily
@@ -75,10 +75,10 @@ function LeaderboardSection({
           <button
             type="button"
             onClick={handleModeChange('weekly')}
-            className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
               mode === 'weekly'
                 ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300'
-                : 'border-white/10 bg-white/5 text-white/70'
+                : 'border-white/10 bg-white/5 text-white/70 hover:border-white/20 hover:bg-white/10'
             }`}
           >
             Weekly
@@ -106,7 +106,7 @@ function LeaderboardSection({
                 </tr>
               </thead>
               <tbody>
-                {(safeLeaderboard || []).map((entry) => {
+                {safeLeaderboard.map((entry) => {
                   const isCurrentUser = entry.userId === currentUserId
 
                   return (
@@ -116,13 +116,13 @@ function LeaderboardSection({
                         isCurrentUser ? 'border-l-4 border-l-emerald-400 bg-emerald-500/10 font-semibold' : ''
                       }`}
                     >
-                      <td className="py-2">{entry.rank}</td>
-                      <td className="py-2">
+                      <td className="py-2.5">{entry.rank}</td>
+                      <td className="py-2.5">
                         {isCurrentUser ? 'You' : `Player ${entry.userId.slice(0, 4)}`}
                       </td>
-                      <td className="py-2">{entry.score}</td>
-                      <td className="py-2">{entry.attemptsCount}</td>
-                      <td className="py-2">{formatCompletionTime(entry.completedAt)}</td>
+                      <td className="py-2.5">{entry.score}</td>
+                      <td className="py-2.5">{entry.attemptsCount}</td>
+                      <td className="py-2.5">{formatCompletionTime(entry.completedAt)}</td>
                     </tr>
                   )
                 })}
@@ -132,12 +132,12 @@ function LeaderboardSection({
         )}
 
         {!loading && currentUserId && !isCurrentUserInTopList && (
-          <div className="mt-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-white/80">
+          <div className="mt-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-white/80 md:p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-300">Your position</p>
             {currentUserPosition ? (
-              <div className="mt-2 grid grid-cols-5 gap-2">
+              <div className="mt-3 grid gap-2 sm:grid-cols-5">
                 <p>#{currentUserPosition.rank}</p>
-                <p className="col-span-1">You</p>
+                <p>You</p>
                 <p>{currentUserPosition.score}</p>
                 <p>{currentUserPosition.attemptsCount}</p>
                 <p>{formatCompletionTime(currentUserPosition.completedAt)}</p>

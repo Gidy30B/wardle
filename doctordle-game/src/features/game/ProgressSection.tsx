@@ -13,14 +13,14 @@ type ProgressSectionProps = {
 export default function ProgressSection({ progress, loading, onOpenLeaderboard }: ProgressSectionProps) {
   if (loading && !progress) {
     return (
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-3 shadow-sm">
+      <section className="rounded-2xl border border-white/10 bg-white/5 p-3 shadow-sm md:p-4">
         <p className="text-sm text-white/70">Loading progress...</p>
         <button
           type="button"
           onClick={onOpenLeaderboard}
           className="mt-2 text-xs font-medium text-emerald-400 transition hover:text-emerald-300"
         >
-          View leaderboard →
+          View leaderboard {'>'}
         </button>
       </section>
     )
@@ -28,13 +28,13 @@ export default function ProgressSection({ progress, loading, onOpenLeaderboard }
 
   if (!progress) {
     return (
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-3 shadow-sm">
+      <section className="rounded-2xl border border-white/10 bg-white/5 p-3 shadow-sm md:p-4">
         <button
           type="button"
           onClick={onOpenLeaderboard}
           className="text-xs font-medium text-emerald-400 transition hover:text-emerald-300"
         >
-          View leaderboard →
+          View leaderboard {'>'}
         </button>
       </section>
     )
@@ -59,26 +59,28 @@ export default function ProgressSection({ progress, loading, onOpenLeaderboard }
   const progressGlow = isNearRankUp ? 'shadow-[0_0_14px_rgba(52,211,153,0.5)]' : ''
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/5 p-3 shadow-sm">
-      <div className="mb-3 flex items-start justify-between gap-3">
+    <section className="rounded-2xl border border-white/10 bg-white/5 p-3 shadow-sm md:p-4 lg:p-5">
+      <div className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/60">Rank Progress</p>
           <div className="mt-1 flex items-center gap-2">
             <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-xs font-semibold text-emerald-300">
               {currentRank}
             </span>
-            <span className="text-xs text-white/50">→</span>
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/70">{nextRank}</span>
+            <span className="text-xs text-white/50">{'->'}</span>
+            <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/70">
+              {nextRank}
+            </span>
           </div>
         </div>
 
         <div className="text-right">
-          <p className="text-sm font-semibold text-orange-400">🔥 {streak}</p>
+          <p className="text-sm font-semibold text-orange-400">Streak {streak}</p>
           <p className="text-xs text-white/60">Current streak</p>
         </div>
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+      <div className="rounded-xl border border-white/10 bg-black/20 p-3 md:p-4">
         <div className="mb-2 flex items-center justify-between text-xs">
           <p className="text-white/70">XP to next rank</p>
           <p className="font-semibold text-white/80">
@@ -111,9 +113,9 @@ export default function ProgressSection({ progress, loading, onOpenLeaderboard }
       <button
         type="button"
         onClick={onOpenLeaderboard}
-        className="mt-3 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-emerald-300 transition hover:bg-white/10"
+        className="mt-4 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-emerald-300 transition hover:border-white/20 hover:bg-white/10 md:px-4 md:py-2.5"
       >
-        View leaderboard →
+        View leaderboard {'>'}
       </button>
     </section>
   )

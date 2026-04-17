@@ -1,18 +1,8 @@
-import type { GameResult } from '../features/game/game.types'
-
 type FeedbackPanelProps = {
-  result?: GameResult | null
-  hasActiveSession?: boolean
-  currentStreak?: number
-  xpEarned?: number
   latestAttempt?: { guess: string; label: 'correct' | 'close' | 'wrong' }
-  showAttemptLabels?: boolean
-  showProgressSummary?: boolean
 }
 
-export default function FeedbackPanel({
-  latestAttempt,
-}: FeedbackPanelProps) {
+export default function FeedbackPanel({ latestAttempt }: FeedbackPanelProps) {
   if (!latestAttempt) return null
 
   const label =

@@ -31,7 +31,7 @@ export default function AuthLoadingScreen() {
       className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-black"
       variants={containerVariants}
     >
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center px-5 pb-[max(env(safe-area-inset-bottom),2rem)]">
+      <div className="mx-auto flex min-h-screen w-full max-w-xl flex-col items-center justify-center px-5 pb-[max(env(safe-area-inset-bottom),2rem)] md:px-8">
         <motion.div variants={itemVariants} className="relative">
           <motion.div
             className="h-14 w-14 rounded-full border-4 border-sky-200/20 border-t-sky-400"
@@ -53,7 +53,7 @@ export default function AuthLoadingScreen() {
           Syncing profile and loading today&apos;s diagnosis.
         </motion.p>
 
-        <motion.div variants={itemVariants} className="mt-6 w-full rounded-2xl border border-white/10 bg-white/5 p-4">
+        <motion.div variants={itemVariants} className="mt-6 w-full rounded-2xl border border-white/10 bg-white/5 p-4 md:p-5">
           <motion.div
             className="h-4 w-2/5 rounded bg-slate-300/25"
             animate={{ opacity: [0.35, 0.75, 0.35] }}

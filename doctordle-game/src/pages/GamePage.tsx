@@ -1,17 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useGameSession } from '../features/game/useGameSession'
+import { useEffect, useRef, useState } from 'react'
 import GamePlaySection from '../features/game/GamePlaySection'
-import { FloatingReward } from '../features/game/FloatingReward'
-import ProgressSection from '../features/game/ProgressSection'
-import { useGameFlow } from '../features/game/useGameFlow'
-import { useGameEvents } from '../features/game/events/useGameEvents'
-import type { GameEvent } from '../features/game/events/game.events'
+import { useGameEngine } from '../features/game/useGameEngine'
 import { useLeaderboard } from '../features/leaderboard/leaderboard.hook'
 import LeaderboardSection from '../features/leaderboard/LeaderboardSection'
-import { useUserProgress } from '../features/user-progress/useUserProgress'
 import ExplanationPage from './ExplanationPage'
 import type { LeaderboardMode } from '../features/game/game.types'
-import AppHeader from '../layout/AppHeader'
 import BottomSheet from '../components/ui/BottomSheet'
 
 type SheetType = 'leaderboard' | 'explanation' | 'menu' | 'howto' | null
@@ -20,18 +13,8 @@ export default function GamePage() {
   const [activeSheet, setActiveSheet] = useState<SheetType>(null)
   const [mode, setMode] = useState<LeaderboardMode>('daily')
   const transitionTimeoutRef = useRef<number | null>(null)
-  const progress = useUserProgress()
-  const game = useGameSession()
+  const game = useGameEngine()
   const leaderboard = useLeaderboard(mode)
-  const flow = useGameFlow(game)
-
-  const handleGameEvent = useCallback((event: GameEvent) => {
-    if (event.type !== 'RESULT_RECEIVED') return
-
-    console.log('[GameEvent:RESULT_RECEIVED]', event.result)
-  }, [])
-
-  useGameEvents(handleGameEvent)
 
   const openSheet = (sheet: Exclude<SheetType, null>) => {
     if (transitionTimeoutRef.current !== null) {
@@ -69,50 +52,33 @@ export default function GamePage() {
 
   return (
     <>
-      <div className="flex h-[100dvh] flex-col overflow-hidden bg-black">
-        <div className="mx-auto flex h-full min-h-0 w-full max-w-md flex-col">
-          <header className="shrink-0 border-b border-white/10 bg-black">
-            <AppHeader onOpenMenu={() => openSheet('menu')} />
-          </header>
-
-          <main className="flex-1 min-h-0 overflow-hidden px-2 pb-2 pt-2">
-            <div className="flex h-full min-h-0 flex-col gap-3">
-              {flow.state.type === 'WAITING' ? (
-                <ProgressSection
-                  progress={progress.progress}
-                  loading={progress.loading}
-                  onOpenLeaderboard={() => openSheet('leaderboard')}
-                />
-              ) : null}
-
-              <div className="flex-1 min-h-0">
-                <GamePlaySection
-                  state={flow.state}
-                  caseData={game.caseData}
-                  clueIndex={game.clueIndex}
-                  caseLoading={game.caseLoading}
-                  error={game.error}
-                  guess={game.guess}
-                  onGuessChange={game.setGuess}
-                  onSubmit={flow.submitGuess}
-                  submitDisabled={flow.isSubmitting || game.loading || !game.canSubmit}
-                  result={game.result}
-                  guesses={game.guesses}
-                  finalResult={flow.state.type === 'FINAL_FEEDBACK' ? flow.state.result : null}
-                  blockReason={game.blockReason}
-                  xpEarned={game.xpEarned}
-                  onContinue={flow.continueGame}
-                  onWhy={() => openSheet('explanation')}
-                  onOpenExplanation={() => openSheet('explanation')}
-                  canOpenExplanation={Boolean(game.explanation)}
-                />
-              </div>
-            </div>
-          </main>
-        </div>
+      <div className="h-[100dvh] overflow-hidden bg-black text-white">
+        <main className="h-full min-h-0 w-full overflow-hidden pb-[env(safe-area-inset-bottom)]">
+          <GamePlaySection
+            mode={game.mode}
+            caseData={game.caseData}
+            clueIndex={game.clueIndex}
+            caseLoading={game.isLoadingCase}
+            error={game.error}
+            guess={game.guess}
+            onGuessChange={game.changeGuess}
+            onClearGuess={game.clearGuess}
+            onBackspace={game.backspaceGuess}
+            onSubmit={game.submitGuess}
+            submitDisabled={game.submitDisabled}
+            guesses={game.attempts}
+            blockReason={game.unavailableReason}
+            waitingCountdownText={game.waitingCountdownText}
+            onContinue={game.continueGame}
+            onWhy={() => openSheet('explanation')}
+            onOpenExplanation={() => openSheet('explanation')}
+            onOpenMenu={() => openSheet('menu')}
+            onReload={game.reloadSession}
+            reward={game.reward}
+            canOpenExplanation={game.canOpenExplanation}
+          />
+        </main>
       </div>
-
-      <FloatingReward />
 
       <BottomSheet isOpen={activeSheet === 'leaderboard'} onClose={() => setActiveSheet(null)}>
         <LeaderboardSection
@@ -145,7 +111,7 @@ export default function GamePage() {
             <p className="mb-1 text-xs text-white/60">Play</p>
             <button
               type="button"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white/80"
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white/80 transition hover:border-white/20 hover:bg-white/10 md:px-4 md:py-2.5"
               onClick={() => openSheet('leaderboard')}
             >
               Leaderboard
@@ -156,7 +122,7 @@ export default function GamePage() {
             <p className="mb-1 text-xs text-white/60">Learn</p>
             <button
               type="button"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white/80"
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white/80 transition hover:border-white/20 hover:bg-white/10 md:px-4 md:py-2.5"
               onClick={() => openSheet('howto')}
             >
               How to play
@@ -167,7 +133,7 @@ export default function GamePage() {
             <p className="mb-1 text-xs text-white/60">Account</p>
             <button
               type="button"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white/80"
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white/80 transition hover:border-white/20 hover:bg-white/10 md:px-4 md:py-2.5"
               onClick={() => setActiveSheet(null)}
             >
               Progress
@@ -178,7 +144,7 @@ export default function GamePage() {
             <p className="text-sm text-white/70">Unlock unlimited cases</p>
             <button
               type="button"
-              className="mt-2 w-full rounded-xl bg-emerald-500 px-3 py-2 text-sm font-semibold text-white"
+              className="mt-2 w-full rounded-xl bg-emerald-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-400 md:px-4 md:py-2.5"
             >
               Go Premium
             </button>

@@ -16,13 +16,6 @@ export type GameCase = {
   clueIndex: number
 }
 
-export type RewardEvent = {
-  id: number
-  xp: number
-  streak?: number
-  type: 'correct' | 'close'
-}
-
 export type CaseExplanation = {
   summary: string
   keyPoints: string[]
@@ -83,8 +76,6 @@ export type GameResult = {
   case?: GameCase
 }
 
-export type RequestState = 'idle' | 'loading' | 'submitting' | 'blocked'
-
 export type LeaderboardMode = 'daily' | 'weekly'
 
 export type LeaderboardEntry = {
@@ -105,9 +96,4 @@ export type UserProgress = {
   xpTotal: number
   xpCurrentLevel: number
   xpToNextLevel: number
-}
-
-export type GameSessionState = {
-  sessionId: string | null
-  caseData: StartGameResponse['case'] | null
 }

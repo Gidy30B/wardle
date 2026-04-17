@@ -1,5 +1,3 @@
-import { useEffect } from 'react'
-
 interface GameKeyboardProps {
   className?: string
   value: string
@@ -12,7 +10,7 @@ export default function GameKeyboard({ className, value, onChange, onSubmit, dis
   const row1 = ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P']
   const row2 = ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L']
   const row3 = ['Z', 'X', 'C', 'V', 'B', 'N', 'M']
-  
+
   const handleSpace = () => {
     if (disabled) return
     onChange(value + ' ')
@@ -32,35 +30,6 @@ export default function GameKeyboard({ className, value, onChange, onSubmit, dis
     if (disabled) return
     onSubmit()
   }
-
-  // Physical keyboard support
-  useEffect(() => {
-    const handleKeyboardEvent = (event: KeyboardEvent) => {
-      if (disabled) return
-
-      const key = event.key.toUpperCase()
-
-      if (key === 'ENTER') {
-        event.preventDefault()
-        handleSubmit()
-        return
-      }
-
-      if (key === 'BACKSPACE') {
-        event.preventDefault()
-        handleBackspace()
-        return
-      }
-
-      if (/^[A-Z]$/.test(key)) {
-        event.preventDefault()
-        handleKeyPress(key)
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyboardEvent)
-    return () => window.removeEventListener('keydown', handleKeyboardEvent)
-  }, [value, disabled, onChange, onSubmit])
 
   return (
     <div className={`grid h-auto grid-rows-4 gap-1 border-t border-white/10 bg-black/80 px-2 pb-2 ${className ?? ''}`}>
