@@ -55,27 +55,16 @@ export default function GamePage() {
       <div className="h-[100dvh] overflow-hidden bg-black text-white">
         <main className="h-full min-h-0 w-full overflow-hidden pb-[env(safe-area-inset-bottom)]">
           <GamePlaySection
-            mode={game.mode}
-            caseData={game.caseData}
-            clueIndex={game.clueIndex}
-            caseLoading={game.isLoadingCase}
-            error={game.error}
-            guess={game.guess}
+            roundViewModel={game.roundViewModel}
             onGuessChange={game.changeGuess}
             onClearGuess={game.clearGuess}
             onBackspace={game.backspaceGuess}
             onSubmit={game.submitGuess}
-            submitDisabled={game.submitDisabled}
-            guesses={game.attempts}
-            blockReason={game.unavailableReason}
-            waitingCountdownText={game.waitingCountdownText}
             onContinue={game.continueGame}
             onWhy={() => openSheet('explanation')}
             onOpenExplanation={() => openSheet('explanation')}
             onOpenMenu={() => openSheet('menu')}
             onReload={game.reloadSession}
-            reward={game.reward}
-            canOpenExplanation={game.canOpenExplanation}
           />
         </main>
       </div>

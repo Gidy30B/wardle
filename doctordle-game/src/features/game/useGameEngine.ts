@@ -1,6 +1,7 @@
 import { useAuth } from '@clerk/clerk-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { buildRoundViewModel } from './buildRoundViewModel'
 import { startGameApi, submitGuessApi } from './game.api'
 import type { GameCase, GameResult } from './game.types'
 import { useApi } from '../../lib/api'
@@ -326,9 +327,50 @@ export function useGameEngine() {
   const finalResult = mode.type === 'FINAL_FEEDBACK' ? mode.result : null
   const canOpenExplanation = Boolean(latestResult?.explanation)
   const canSubmit = isPlaying && Boolean(sessionId) && guess.trim().length > 0
+  const unavailableReason = mode.type === 'BLOCKED' ? mode.reason : null
+
+  const roundViewModel = useMemo(
+    () =>
+      buildRoundViewModel({
+        mode,
+        sessionId,
+        caseData,
+        clueIndex,
+        guess,
+        attempts,
+        latestResult,
+        reward,
+        isLoadingCase,
+        error,
+        waitingCountdownText,
+        unavailableReason,
+        canRetry: Boolean(error),
+        canOpenExplanation,
+        canSubmit,
+        submitDisabled: !canSubmit || isSubmitting,
+      }),
+    [
+      attempts,
+      canOpenExplanation,
+      canSubmit,
+      caseData,
+      clueIndex,
+      error,
+      guess,
+      isLoadingCase,
+      isSubmitting,
+      latestResult,
+      mode,
+      reward,
+      sessionId,
+      unavailableReason,
+      waitingCountdownText,
+    ],
+  )
 
   return {
     mode,
+    sessionId,
     caseData,
     clueIndex,
     guess,
@@ -344,13 +386,14 @@ export function useGameEngine() {
     canSubmit,
     submitDisabled: !canSubmit || isSubmitting,
     canOpenExplanation,
+    roundViewModel,
     isLoadingCase,
     isSubmitting,
     isWaiting,
     isBlocked,
     isFinalFeedback,
     isPlaying,
-    unavailableReason: mode.type === 'BLOCKED' ? mode.reason : null,
+    unavailableReason,
     changeGuess: setGuess,
     clearGuess,
     backspaceGuess,

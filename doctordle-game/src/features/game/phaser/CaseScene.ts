@@ -1,5 +1,17 @@
 import Phaser from 'phaser'
 import type { PhaserGameSessionIntents, PhaserGameSessionSnapshot, PhaserVisibleClue } from './gameSessionBridge'
+import {
+  ActionRowLayer,
+  CluePanelLayer,
+  DiagnosisBarLayer,
+  FeedbackLayerModule,
+  HudLayer,
+  KeyboardPanelLayer,
+  OverlayLayer,
+  RewardLayer,
+  type RoundLayer,
+  type RoundLayerHost,
+} from './roundLayers'
 
 const SCENE_KEY = 'case-scene'
 const LOGICAL_WIDTH = 390
@@ -10,6 +22,10 @@ const DEBUG_RENDER_OVERLAY = false
 const FRACTIONAL_EPSILON = 0.001
 const LAB_MOTE_TEXTURE = 'diagnosis-lab-mote'
 const LAB_DNA_TEXTURE = 'diagnosis-lab-dna'
+const ONBOARDING_SEEN_STORAGE_KEY = 'wardle:onboarding-demo-seen'
+const ONBOARDING_FORCE_STORAGE_KEY = 'wardle:force-onboarding-demo'
+const ONBOARDING_DEMO_CLUE = 'Shortness of breath and wheezing'
+const ONBOARDING_GHOST_GUESS = 'ASTHMA'
 
 const DEPTH = {
   BACKDROP: 0,
@@ -477,6 +493,20 @@ type LabVisualBudget = {
   overlayDna: number
 }
 
+type OnboardingState = 'inactive' | 'pending' | 'playing' | 'awaiting_tap' | 'skipped' | 'complete'
+
+type RoundVisualState =
+  | 'boot'
+  | 'loading_case'
+  | 'round_intro'
+  | 'playing'
+  | 'submitting'
+  | 'guess_result'
+  | 'reveal_next_clue'
+  | 'round_complete'
+  | 'waiting_next_case'
+  | 'blocked'
+
 function cloneSnapshot(snapshot: PhaserGameSessionSnapshot): PhaserGameSessionSnapshot {
   return {
     ...snapshot,
@@ -550,14 +580,14 @@ function isFractionalValue(value: number | null | undefined) {
 
 function getLabVisualBudget(board: LayoutRect): LabVisualBudget {
   if (board.width <= 300) {
-    return { ambientMotes: 8, feedbackBursts: 8, overlayDna: 6 }
+    return { ambientMotes: 3, feedbackBursts: 8, overlayDna: 4 }
   }
 
   if (board.width <= 360) {
-    return { ambientMotes: 11, feedbackBursts: 10, overlayDna: 8 }
+    return { ambientMotes: 4, feedbackBursts: 10, overlayDna: 5 }
   }
 
-  return { ambientMotes: 14, feedbackBursts: 12, overlayDna: 10 }
+  return { ambientMotes: 5, feedbackBursts: 12, overlayDna: 6 }
 }
 
 export function getCaseSceneRenderResolution() {
@@ -578,7 +608,7 @@ export function getCaseSceneCanvasSize() {
   }
 }
 
-export class DiagnosisLabScene extends Phaser.Scene {
+export class RoundScene extends Phaser.Scene implements RoundLayerHost {
   private readonly getSnapshot: () => PhaserGameSessionSnapshot
   private readonly getIntents: () => PhaserGameSessionIntents
   private layoutMetrics: LayoutMetrics = getLayoutMetrics(LOGICAL_WIDTH, LOGICAL_HEIGHT)
@@ -644,10 +674,37 @@ export class DiagnosisLabScene extends Phaser.Scene {
   private feedbackHideEvent?: Phaser.Time.TimerEvent
   private overlayBeamTween?: Phaser.Tweens.Tween
   private overlayDnaLoopEvent?: Phaser.Time.TimerEvent
+  private onboardingState: OnboardingState = 'inactive'
+  private onboardingLayer?: Phaser.GameObjects.Container
+  private onboardingClueFocus?: Phaser.GameObjects.Rectangle
+  private onboardingSubmitFocus?: Phaser.GameObjects.Rectangle
+  private onboardingDemoClueContainer?: Phaser.GameObjects.Container
+  private onboardingDemoClueWash?: Phaser.GameObjects.Rectangle
+  private onboardingDemoClueShadow?: Phaser.GameObjects.Rectangle
+  private onboardingDemoClueBackground?: Phaser.GameObjects.Rectangle
+  private onboardingDemoClueAccent?: Phaser.GameObjects.Rectangle
+  private onboardingDemoClueFrame?: Phaser.GameObjects.Rectangle
+  private onboardingDemoClueText?: Phaser.GameObjects.Text
+  private onboardingDemoLabel?: Phaser.GameObjects.Text
+  private onboardingGhostGuess?: Phaser.GameObjects.Text
+  private onboardingHelperLabel?: Phaser.GameObjects.Text
+  private onboardingBeginHint?: Phaser.GameObjects.Text
+  private onboardingSkipHint?: Phaser.GameObjects.Text
+  private onboardingEvents: Phaser.Time.TimerEvent[] = []
+  private onboardingSkipCooldownUntil = 0
   private previousSnapshot?: PhaserGameSessionSnapshot
+  private visualState: RoundVisualState = 'boot'
   private debugAuditText?: Phaser.GameObjects.Text
   private feedbackBurstPool: Phaser.GameObjects.Image[] = []
   private overlayDnaPool: Phaser.GameObjects.Image[] = []
+  private readonly hudLayerModule: RoundLayer
+  private readonly cluePanelLayerModule: RoundLayer
+  private readonly diagnosisBarLayerModule: RoundLayer
+  private readonly actionRowLayerModule: RoundLayer
+  private readonly keyboardPanelLayerModule: RoundLayer
+  private readonly feedbackLayerModule: RoundLayer
+  private readonly rewardLayerModule: RoundLayer
+  private readonly overlayLayerModule: RoundLayer
 
   constructor(
     getSnapshot: () => PhaserGameSessionSnapshot,
@@ -656,6 +713,14 @@ export class DiagnosisLabScene extends Phaser.Scene {
     super({ key: SCENE_KEY })
     this.getSnapshot = getSnapshot
     this.getIntents = getIntents
+    this.hudLayerModule = new HudLayer(this)
+    this.cluePanelLayerModule = new CluePanelLayer(this)
+    this.diagnosisBarLayerModule = new DiagnosisBarLayer(this)
+    this.actionRowLayerModule = new ActionRowLayer(this)
+    this.keyboardPanelLayerModule = new KeyboardPanelLayer(this)
+    this.feedbackLayerModule = new FeedbackLayerModule(this)
+    this.rewardLayerModule = new RewardLayer(this)
+    this.overlayLayerModule = new OverlayLayer(this)
   }
 
   create() {
@@ -673,17 +738,18 @@ export class DiagnosisLabScene extends Phaser.Scene {
 
     this.createBackdrop()
 
-    this.createHeader()
-    this.createClueStack()
-    this.createFeedbackLayer()
-    this.createRewardToast()
-    this.createGuessBar()
+    this.hudLayerModule.create()
+    this.cluePanelLayerModule.create()
+    this.feedbackLayerModule.create()
+    this.rewardLayerModule.create()
+    this.diagnosisBarLayerModule.create()
     this.startGuessCaretBlink()
-    this.createKeyboard()
-    this.createActionRow()
-    this.createEndOverlay()
-    this.createStatePanel()
+    this.keyboardPanelLayerModule.create()
+    this.actionRowLayerModule.create()
+    this.overlayLayerModule.create()
+    this.createOnboardingArtifacts()
     this.registerHardwareKeyboard()
+    this.input.on('pointerdown', this.handleScenePointerDown, this)
     this.applyLayoutMetrics()
     if (DEBUG_RENDER_AUDIT && DEBUG_RENDER_OVERLAY) {
       this.createDebugAuditOverlay()
@@ -698,6 +764,7 @@ export class DiagnosisLabScene extends Phaser.Scene {
 
   shutdown() {
     this.scale.off('resize', this.handleResize, this)
+    this.input.off('pointerdown', this.handleScenePointerDown, this)
     this.input.keyboard?.off('keydown', this.handleHardwareKeyDown, this)
     this.guessBarGlowTween?.stop()
     this.guessBarScanTween?.stop()
@@ -706,6 +773,7 @@ export class DiagnosisLabScene extends Phaser.Scene {
     this.guessBarResetEvent?.remove(false)
     this.feedbackHideEvent?.remove(false)
     this.overlayDnaLoopEvent?.remove(false)
+    this.cleanupOnboardingDemoArtifacts()
     this.clueMaskGraphics?.destroy()
     this.ambientMotes.forEach((mote) => mote.destroy())
     this.feedbackBurstPool.forEach((particle) => particle.destroy())
@@ -766,6 +834,17 @@ export class DiagnosisLabScene extends Phaser.Scene {
     const activeTag = activeElement instanceof HTMLElement ? activeElement.tagName : ''
 
     if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
+      return
+    }
+
+    if (this.onboardingState === 'awaiting_tap') {
+      event.preventDefault()
+      return
+    }
+
+    if (this.isOnboardingBlockingInput()) {
+      this.skipOnboardingDemo()
+      event.preventDefault()
       return
     }
 
@@ -833,15 +912,875 @@ export class DiagnosisLabScene extends Phaser.Scene {
 
   private applyLayoutMetrics() {
     this.layoutBackdrop()
+    this.hudLayerModule.relayout()
+    this.cluePanelLayerModule.relayout()
+    this.diagnosisBarLayerModule.relayout()
+    this.keyboardPanelLayerModule.relayout()
+    this.actionRowLayerModule.relayout()
+    this.feedbackLayerModule.relayout()
+    this.rewardLayerModule.relayout()
+    this.overlayLayerModule.relayout()
+    this.layoutOnboardingArtifacts()
+  }
+
+  private createOnboardingArtifacts() {
+    if (!this.feedbackRoot) {
+      return
+    }
+
+    const layer = this.add.container(0, 0)
+    const clueFocus = this.add
+      .rectangle(0, 0, 10, 10, COLORS.cyan, 0)
+      .setOrigin(0)
+      .setStrokeStyle(2, COLORS.cyan, 0.7)
+    const submitFocus = this.add
+      .rectangle(0, 0, 10, 10, COLORS.emeraldGlow, 0)
+      .setOrigin(0)
+      .setStrokeStyle(2, COLORS.emeraldGlow, 0.8)
+    const ghostGuess = this.createText(0, 0, '', {
+      fontFamily: 'Arial',
+      fontSize: this.toFontPx(this.layoutMetrics.typography.guessValue),
+      color: '#d8fff1',
+      fontStyle: 'bold',
+      align: 'center',
+    })
+    ghostGuess.setOrigin(0.5, 0)
+    ghostGuess.setAlpha(0)
+    const helperLabel = this.createText(0, 0, '', {
+      fontFamily: 'Arial',
+      fontSize: this.toFontPx(Math.max(11, this.layoutMetrics.typography.headerStatus)),
+      color: '#d8fff1',
+      fontStyle: '600',
+      align: 'center',
+    })
+    helperLabel.setOrigin(0.5, 1)
+    helperLabel.setAlpha(0)
+    const beginHint = this.createText(0, 0, 'Tap to begin', {
+      fontFamily: 'Arial',
+      fontSize: this.toFontPx(Math.max(11, this.layoutMetrics.typography.headerStatus)),
+      color: COLORS.textMuted,
+      align: 'center',
+    })
+    beginHint.setOrigin(0.5, 1)
+    beginHint.setAlpha(0)
+    const skipHint = this.createText(0, 0, 'Tap to skip', {
+      fontFamily: 'Arial',
+      fontSize: this.toFontPx(Math.max(10, this.layoutMetrics.typography.headerStatus - 1)),
+      color: COLORS.textMuted,
+    })
+    skipHint.setOrigin(1, 0)
+    skipHint.setAlpha(0)
+
+    layer.add([clueFocus, submitFocus, ghostGuess, helperLabel, beginHint, skipHint])
+    layer.setVisible(false)
+    this.feedbackRoot.add(layer)
+    this.onboardingLayer = layer
+    this.onboardingClueFocus = clueFocus
+    this.onboardingSubmitFocus = submitFocus
+    this.onboardingGhostGuess = ghostGuess
+    this.onboardingHelperLabel = helperLabel
+    this.onboardingBeginHint = beginHint
+    this.onboardingSkipHint = skipHint
+    this.layoutOnboardingArtifacts()
+  }
+
+  private layoutOnboardingArtifacts() {
+    if (!this.onboardingLayer) {
+      return
+    }
+
+    const { board, clues, guessBar } = this.layoutMetrics
+    this.onboardingSkipHint?.setPosition(board.x + board.width - 10, board.y + 10)
+    this.onboardingGhostGuess?.setPosition(
+      guessBar.x + Math.round(guessBar.width / 2),
+      guessBar.y + guessBar.valueY,
+    )
+    this.onboardingHelperLabel?.setPosition(
+      guessBar.x + Math.round(guessBar.width / 2),
+      guessBar.y - 8,
+    )
+    this.onboardingBeginHint?.setPosition(
+      guessBar.x + Math.round(guessBar.width / 2),
+      guessBar.y + guessBar.height + 22,
+    )
+    if (this.onboardingClueFocus) {
+      this.onboardingClueFocus.setPosition(clues.x + 6, clues.y + 32)
+      this.setRectangleDimensions(
+        this.onboardingClueFocus,
+        Math.max(40, clues.width - 12),
+        Math.max(40, Math.min(84, clues.height - 44)),
+      )
+    }
+
+    if (this.onboardingSubmitFocus && this.actionButtons?.submit && this.actionRowRegion && this.keyboardRegion) {
+      const submitX =
+        this.layoutMetrics.keyboard.x +
+        this.actionRowRegion.x +
+        this.actionButtons.submit.container.x
+      const submitY =
+        this.layoutMetrics.keyboard.y +
+        this.actionRowRegion.y +
+        this.actionButtons.submit.container.y
+      this.onboardingSubmitFocus.setPosition(submitX - 4, submitY - 4)
+      this.setRectangleDimensions(
+        this.onboardingSubmitFocus,
+        Math.round(this.actionButtons.submit.background.width) + 8,
+        Math.round(this.actionButtons.submit.background.height) + 8,
+      )
+    }
+
+    this.layoutOnboardingDemoClue()
+  }
+
+  public bootHudLayer() {
+    this.createHeader()
+  }
+
+  public relayoutHudLayer() {
     this.layoutHeader()
+  }
+
+  public renderHudLayer(viewModel: PhaserGameSessionSnapshot) {
+    this.syncHeader(viewModel)
+  }
+
+  public bootCluePanelLayer() {
+    this.createClueStack()
+  }
+
+  public relayoutCluePanelLayer() {
     this.layoutClueStack()
+  }
+
+  public renderCluePanelLayer(viewModel: PhaserGameSessionSnapshot, previous?: PhaserGameSessionSnapshot) {
+    this.syncClues(viewModel, previous)
+  }
+
+  public bootDiagnosisBarLayer() {
+    this.createGuessBar()
+  }
+
+  public relayoutDiagnosisBarLayer() {
     this.layoutGuessBar()
-    this.layoutKeyboard()
+  }
+
+  public renderDiagnosisBarLayer(viewModel: PhaserGameSessionSnapshot) {
+    this.syncGuessBar(viewModel)
+  }
+
+  public bootActionRowLayer() {
+    this.createActionRow()
+  }
+
+  public relayoutActionRowLayer() {
     this.layoutActionRow()
+  }
+
+  public renderActionRowLayer(viewModel: PhaserGameSessionSnapshot) {
+    this.syncActionRow(viewModel)
+  }
+
+  public bootKeyboardPanelLayer() {
+    this.createKeyboard()
+  }
+
+  public relayoutKeyboardPanelLayer() {
+    this.layoutKeyboard()
+  }
+
+  public renderKeyboardPanelLayer(viewModel: PhaserGameSessionSnapshot) {
+    this.syncKeyboard(viewModel)
+  }
+
+  public bootFeedbackLayer() {
+    this.createFeedbackLayer()
+  }
+
+  public relayoutFeedbackLayer() {
     this.layoutFeedbackLayer()
+  }
+
+  public renderFeedbackLayer(viewModel: PhaserGameSessionSnapshot, previous?: PhaserGameSessionSnapshot) {
+    this.syncFeedback(viewModel, previous)
+  }
+
+  public bootRewardLayer() {
+    this.createRewardToast()
+  }
+
+  public relayoutRewardLayer() {
     this.layoutRewardToast()
+  }
+
+  public renderRewardLayer(_viewModel: PhaserGameSessionSnapshot) {
+    // Reward presentation is transition-driven off snapshot diffs in applySnapshot.
+  }
+
+  public bootOverlayLayer() {
+    this.createEndOverlay()
+    this.createStatePanel()
+  }
+
+  public relayoutOverlayLayer() {
     this.layoutEndOverlay()
     this.layoutStatePanel()
+  }
+
+  public renderOverlayLayer(viewModel: PhaserGameSessionSnapshot, previous?: PhaserGameSessionSnapshot) {
+    this.syncEndOverlay(viewModel, previous)
+  }
+
+  private syncVisualState(
+    snapshot: PhaserGameSessionSnapshot,
+    previousSnapshot: PhaserGameSessionSnapshot | undefined,
+  ) {
+    if (snapshot.loopState === 'loading_case') {
+      this.visualState = 'loading_case'
+      return
+    }
+
+    if (snapshot.loopState === 'waiting_next_case') {
+      this.visualState = 'waiting_next_case'
+      return
+    }
+
+    if (snapshot.loopState === 'blocked') {
+      this.visualState = 'blocked'
+      return
+    }
+
+    if (snapshot.mode === 'SUBMITTING') {
+      this.visualState = 'submitting'
+      return
+    }
+
+    if (snapshot.mode === 'FINAL_FEEDBACK') {
+      this.visualState = 'round_complete'
+      return
+    }
+
+    const clueRevealAdvanced = snapshot.revealedClueCount > (previousSnapshot?.revealedClueCount ?? 0)
+    if (clueRevealAdvanced) {
+      this.visualState = 'reveal_next_clue'
+      return
+    }
+
+    if (
+      snapshot.latestAttempt &&
+      snapshot.latestAttempt.label !== previousSnapshot?.latestAttempt?.label
+    ) {
+      this.visualState = 'guess_result'
+      return
+    }
+
+    if (!previousSnapshot || previousSnapshot.loopState === 'loading_case') {
+      this.visualState = 'round_intro'
+      return
+    }
+
+    this.visualState = 'playing'
+  }
+
+  private shouldRunOnboardingDemo(snapshot: PhaserGameSessionSnapshot) {
+    if (snapshot.mode !== 'PLAYING' || !snapshot.canEditGuess || this.onboardingState !== 'inactive') {
+      return false
+    }
+
+    try {
+      const force =
+        import.meta.env.DEV &&
+        window.localStorage.getItem(ONBOARDING_FORCE_STORAGE_KEY) === '1'
+      if (force) {
+        return true
+      }
+
+      return window.localStorage.getItem(ONBOARDING_SEEN_STORAGE_KEY) !== '1'
+    } catch {
+      return false
+    }
+  }
+
+  private queueOnboardingStep(delay: number, callback: () => void) {
+    const event = this.time.delayedCall(delay, callback)
+    this.onboardingEvents.push(event)
+  }
+
+  private isOnboardingBlockingInput() {
+    return this.onboardingState === 'pending' || this.onboardingState === 'playing' || this.onboardingState === 'awaiting_tap'
+  }
+
+  private isOnboardingSkipCooldownActive() {
+    return this.time.now < this.onboardingSkipCooldownUntil
+  }
+
+  private maybeStartOnboardingDemo(snapshot: PhaserGameSessionSnapshot) {
+    if (!this.shouldRunOnboardingDemo(snapshot)) {
+      return
+    }
+
+    this.onboardingState = 'pending'
+    this.queueOnboardingStep(180, () => {
+      if (this.onboardingState === 'pending') {
+        this.startOnboardingDemo()
+      }
+    })
+  }
+
+  private startOnboardingDemo() {
+    if (!this.onboardingLayer || !this.guessBar || !this.actionButtons?.submit) {
+      this.finishOnboardingDemo(false)
+      return
+    }
+
+    this.ensureOnboardingDemoClue()
+
+    this.onboardingState = 'playing'
+    this.layoutOnboardingArtifacts()
+    this.onboardingLayer.setVisible(true)
+    this.setLiveClueStackOnboardingPresentation(true)
+    this.onboardingGhostGuess?.setText('')
+    this.onboardingGhostGuess?.setAlpha(0)
+    this.onboardingHelperLabel?.setAlpha(0)
+    this.onboardingHelperLabel?.setText('')
+    this.onboardingBeginHint?.setAlpha(0)
+    this.onboardingSkipHint?.setAlpha(0.6)
+    this.onboardingClueFocus?.setAlpha(0)
+    this.onboardingSubmitFocus?.setAlpha(0)
+    this.onboardingDemoClueContainer?.setAlpha(0)
+    this.onboardingDemoClueContainer?.setScale(0.992)
+    this.onboardingDemoLabel?.setAlpha(0)
+
+    const guessCenterX = this.layoutMetrics.guessBar.x + Math.round(this.layoutMetrics.guessBar.width / 2)
+    const clueHelperY = this.layoutMetrics.clues.y + 26
+    const guessHelperY = this.layoutMetrics.guessBar.y - 8
+    const submitHelperX =
+      this.onboardingSubmitFocus?.x !== undefined && this.onboardingSubmitFocus.width > 0
+        ? this.onboardingSubmitFocus.x + Math.round(this.onboardingSubmitFocus.width / 2)
+        : guessCenterX
+    const submitHelperY =
+      this.onboardingSubmitFocus?.y !== undefined
+        ? this.onboardingSubmitFocus.y - 8
+        : this.layoutMetrics.actions.y - 8
+
+    this.showOnboardingHelper('Read the clues', guessCenterX, clueHelperY)
+    if (this.onboardingDemoClueContainer) {
+      this.tweens.add({
+        targets: this.onboardingDemoClueContainer,
+        alpha: 1,
+        scaleX: 1,
+        scaleY: 1,
+        duration: 180,
+        ease: 'Sine.Out',
+      })
+    }
+    if (this.onboardingDemoLabel) {
+      this.tweens.add({
+        targets: this.onboardingDemoLabel,
+        alpha: 0.74,
+        duration: 150,
+        ease: 'Sine.Out',
+      })
+    }
+    this.pulseOnboardingFocus(this.onboardingClueFocus, 240)
+
+    const clueIntroDuration = 300
+    const clueHoldDuration = 1350
+    const typingLeadDuration = 180
+    const typingBaseInterval = 190
+    const typingJitter = 28
+    const typingHoldDuration = 700
+    const submitFocusLeadDuration = 220
+    const submitPressDuration = 180
+    const submitHoldDuration = 700
+    const handoffSettleDuration = 260
+    const finishSettleDuration = 340
+
+    const characters = Array.from(ONBOARDING_GHOST_GUESS)
+    let typed = ''
+    let timeline = 0
+    const queueAfter = (delay: number, callback: () => void) => {
+      timeline += delay
+      this.queueOnboardingStep(timeline, callback)
+    }
+
+    queueAfter(clueIntroDuration + clueHoldDuration, () => {
+      if (this.onboardingState !== 'playing') {
+        return
+      }
+
+      this.showOnboardingHelper('Type a diagnosis', guessCenterX, guessHelperY)
+      this.pulseHalo(COLORS.cyan, 0.12)
+    })
+    timeline += typingLeadDuration
+    characters.forEach((character, index) => {
+      if (index > 0) {
+        timeline += typingBaseInterval + Phaser.Math.Between(-typingJitter, typingJitter)
+      }
+
+      this.queueOnboardingStep(timeline, () => {
+        if (this.onboardingState !== 'playing') {
+          return
+        }
+
+        typed += character
+        if (this.onboardingGhostGuess) {
+          this.onboardingGhostGuess.setText(`${typed}${index === characters.length - 1 ? '' : '|'}`)
+          this.onboardingGhostGuess.setAlpha(1)
+        }
+      })
+    })
+
+    queueAfter(typingHoldDuration, () => {
+      if (this.onboardingState !== 'playing') {
+        return
+      }
+
+      this.onboardingGhostGuess?.setText(ONBOARDING_GHOST_GUESS)
+      this.showOnboardingHelper('Submit your guess', submitHelperX, submitHelperY)
+      this.pulseOnboardingFocus(this.onboardingSubmitFocus, 220)
+    })
+
+    queueAfter(submitFocusLeadDuration, () => {
+      if (this.onboardingState !== 'playing' || !this.actionButtons?.submit) {
+        return
+      }
+
+      this.setPressableVisualState(this.actionButtons.submit, 'pressed')
+      this.tweens.add({
+        targets: this.actionButtons.submit.glow,
+        alpha: { from: this.actionButtons.submit.glow.alpha, to: 0.34 },
+        duration: 90,
+        yoyo: true,
+        ease: 'Quad.Out',
+      })
+    })
+
+    queueAfter(submitPressDuration, () => {
+      if (this.actionButtons?.submit) {
+        this.setPressableVisualState(this.actionButtons.submit, 'rest')
+      }
+      this.pulseHalo(COLORS.emeraldGlow, 0.16)
+    })
+
+    queueAfter(submitHoldDuration, () => {
+      if (this.onboardingState !== 'playing') {
+        return
+      }
+
+      this.setLiveClueStackOnboardingPresentation(false)
+      this.hideOnboardingHelper(100)
+      if (this.onboardingDemoClueContainer) {
+        this.tweens.add({
+          targets: this.onboardingDemoClueContainer,
+          alpha: 0,
+          duration: 180,
+          ease: 'Sine.In',
+        })
+      }
+      if (this.onboardingDemoLabel) {
+        this.tweens.add({
+          targets: this.onboardingDemoLabel,
+          alpha: 0,
+          duration: 120,
+          ease: 'Sine.In',
+        })
+      }
+    })
+
+    queueAfter(handoffSettleDuration, () => {
+      if (this.onboardingState !== 'playing') {
+        return
+      }
+
+      this.onboardingGhostGuess?.setAlpha(0)
+      this.pulseOnboardingInputCue()
+    })
+
+    queueAfter(finishSettleDuration, () => {
+      this.beginOnboardingTapToBegin()
+    })
+  }
+
+  private showOnboardingHelper(text: string, x: number, y: number) {
+    if (!this.onboardingHelperLabel) {
+      return
+    }
+
+    this.tweens.killTweensOf(this.onboardingHelperLabel)
+    const applyLabel = () => {
+      if (!this.onboardingHelperLabel) {
+        return
+      }
+
+      this.onboardingHelperLabel
+        .setText(text)
+        .setPosition(Math.round(x), Math.round(y))
+        .setAlpha(0)
+        .setScale(0.99)
+      this.tweens.add({
+        targets: this.onboardingHelperLabel,
+        alpha: 0.88,
+        scaleX: 1,
+        scaleY: 1,
+        duration: 140,
+        ease: 'Sine.Out',
+      })
+    }
+
+    if (this.onboardingHelperLabel.alpha > 0.02) {
+      this.tweens.add({
+        targets: this.onboardingHelperLabel,
+        alpha: 0,
+        duration: 80,
+        ease: 'Sine.In',
+        onComplete: applyLabel,
+      })
+      return
+    }
+
+    applyLabel()
+  }
+
+  private hideOnboardingHelper(duration = 100) {
+    if (!this.onboardingHelperLabel) {
+      return
+    }
+
+    this.tweens.killTweensOf(this.onboardingHelperLabel)
+    this.tweens.add({
+      targets: this.onboardingHelperLabel,
+      alpha: 0,
+      duration,
+      ease: 'Sine.In',
+      onComplete: () => {
+        this.onboardingHelperLabel?.setText('')
+      },
+    })
+  }
+
+  private showOnboardingBeginHint() {
+    if (!this.onboardingBeginHint) {
+      return
+    }
+
+    this.tweens.killTweensOf(this.onboardingBeginHint)
+    this.onboardingBeginHint.setAlpha(0)
+    this.tweens.add({
+      targets: this.onboardingBeginHint,
+      alpha: 0.72,
+      duration: 140,
+      ease: 'Sine.Out',
+    })
+  }
+
+  private hideOnboardingBeginHint(duration = 100) {
+    if (!this.onboardingBeginHint) {
+      return
+    }
+
+    this.tweens.killTweensOf(this.onboardingBeginHint)
+    if (duration <= 0) {
+      this.onboardingBeginHint.setAlpha(0)
+      return
+    }
+
+    this.tweens.add({
+      targets: this.onboardingBeginHint,
+      alpha: 0,
+      duration,
+      ease: 'Sine.In',
+    })
+  }
+
+  private ensureOnboardingDemoClue() {
+    if (!this.onboardingLayer || this.onboardingDemoClueContainer) {
+      this.layoutOnboardingDemoClue()
+      return
+    }
+
+    const container = this.add.container(0, 0)
+    const wash = this.add.rectangle(0, 0, 10, 10, COLORS.bgAccentSoft, 0.34).setOrigin(0)
+    const shadow = this.add.rectangle(0, 0, 10, 10, COLORS.shadow, 0.22).setOrigin(0)
+    const background = this.add
+      .rectangle(0, 0, 10, 10, COLORS.skySoft, 0.96)
+      .setOrigin(0)
+      .setStrokeStyle(1, COLORS.cyan, 0.82)
+    const accent = this.add.rectangle(0, 0, 10, 10, COLORS.cyan, 0.88).setOrigin(0)
+    const frame = this.add
+      .rectangle(0, 0, 10, 10, 0xffffff, 0)
+      .setOrigin(0)
+      .setStrokeStyle(1, COLORS.cyan, 0.2)
+    const text = this.createText(0, 0, ONBOARDING_DEMO_CLUE, {
+      fontFamily: 'Arial',
+      fontSize: this.toFontPx(this.layoutMetrics.typography.clueValue),
+      color: COLORS.text,
+      wordWrap: { width: 10, useAdvancedWrap: true },
+      lineSpacing: Math.max(2, Math.round(this.layoutMetrics.typography.clueValue * 0.22)),
+    })
+    const label = this.createText(0, 0, 'EXAMPLE', {
+      fontFamily: 'Arial',
+      fontSize: this.toFontPx(Math.max(10, this.layoutMetrics.typography.clueCaption - 1)),
+      color: '#a5f3fc',
+      fontStyle: 'bold',
+    })
+
+    container.add([wash, shadow, background, accent, frame, text])
+    this.onboardingLayer.add([container, label])
+
+    this.onboardingDemoClueContainer = container
+    this.onboardingDemoClueWash = wash
+    this.onboardingDemoClueShadow = shadow
+    this.onboardingDemoClueBackground = background
+    this.onboardingDemoClueAccent = accent
+    this.onboardingDemoClueFrame = frame
+    this.onboardingDemoClueText = text
+    this.onboardingDemoLabel = label
+    this.layoutOnboardingDemoClue()
+  }
+
+  private layoutOnboardingDemoClue() {
+    if (
+      !this.onboardingDemoClueContainer ||
+      !this.onboardingDemoClueWash ||
+      !this.onboardingDemoClueShadow ||
+      !this.onboardingDemoClueBackground ||
+      !this.onboardingDemoClueAccent ||
+      !this.onboardingDemoClueFrame ||
+      !this.onboardingDemoClueText ||
+      !this.onboardingDemoLabel
+    ) {
+      return
+    }
+
+    const { clues, typography } = this.layoutMetrics
+    const width = Math.max(120, clues.width - clues.cardInset * 2)
+    const textInsetX = Math.max(12, Math.round(width * 0.045))
+    const textTop = Math.max(18, Math.round(clues.height * (32 / 340)))
+    const minHeight = Math.max(72, Math.round(clues.height * (96 / 340)))
+    const shadowOffset = Math.max(4, Math.round(clues.height * (8 / 340)))
+    const accentWidth = Math.max(4, Math.round(width * 0.017))
+    const cardX = Math.round(clues.cardInset)
+    const cardY = Math.round(clues.minTopInset)
+
+    this.onboardingDemoClueContainer.setPosition(clues.x, clues.y)
+    this.setRectangleDimensions(this.onboardingDemoClueWash, clues.width, clues.height)
+    this.onboardingDemoClueWash.setPosition(0, 0)
+
+    this.onboardingDemoClueText.setFontSize(this.toFontPx(typography.clueValue))
+    this.onboardingDemoClueText.setLineSpacing(Math.max(2, Math.round(typography.clueValue * 0.22)))
+    this.onboardingDemoClueText.setWordWrapWidth(width - textInsetX * 2)
+    this.onboardingDemoClueText.setPosition(cardX + textInsetX, cardY + textTop)
+
+    const cardHeight = Math.max(
+      minHeight,
+      Math.round(textTop + this.onboardingDemoClueText.height + Math.max(18, clues.height * (22 / 340))),
+    )
+
+    this.onboardingDemoClueShadow.setPosition(cardX, cardY + shadowOffset)
+    this.setRectangleDimensions(this.onboardingDemoClueShadow, width, cardHeight)
+    this.onboardingDemoClueBackground.setPosition(cardX, cardY)
+    this.setRectangleDimensions(this.onboardingDemoClueBackground, width, cardHeight)
+    this.onboardingDemoClueAccent.setPosition(cardX, cardY)
+    this.setRectangleDimensions(this.onboardingDemoClueAccent, accentWidth, cardHeight)
+    this.onboardingDemoClueFrame.setPosition(cardX + 3, cardY + 3)
+    this.setRectangleDimensions(this.onboardingDemoClueFrame, Math.max(1, width - 6), Math.max(1, cardHeight - 6))
+
+    this.onboardingDemoLabel
+      .setPosition(clues.x + clues.captionX, clues.y + Math.max(34, clues.minTopInset - 14))
+      .setFontSize(this.toFontPx(Math.max(10, typography.clueCaption - 1)))
+  }
+
+  private pulseOnboardingFocus(target: Phaser.GameObjects.Rectangle | undefined, duration: number) {
+    if (!target) {
+      return
+    }
+
+    this.tweens.killTweensOf(target)
+    target.setAlpha(0.72)
+    target.setScale(0.992)
+    this.tweens.add({
+      targets: target,
+      alpha: 0,
+      scaleX: 1.02,
+      scaleY: 1.02,
+      duration,
+      ease: 'Cubic.Out',
+      onComplete: () => {
+        target.setScale(1)
+      },
+    })
+  }
+
+  private pulseOnboardingInputCue() {
+    if (!this.guessBar) {
+      return
+    }
+
+    this.tweens.killTweensOf(this.guessBar.container)
+    this.tweens.add({
+      targets: this.guessBar.container,
+      scaleX: 1.012,
+      scaleY: 1.012,
+      duration: 110,
+      yoyo: true,
+      ease: 'Quad.Out',
+      onComplete: () => {
+        this.guessBar?.container.setScale(1)
+      },
+    })
+    this.pulseHalo(COLORS.emeraldGlow, 0.14)
+  }
+
+  private beginOnboardingTapToBegin() {
+    if (this.onboardingState !== 'playing') {
+      return
+    }
+
+    this.markOnboardingDemoSeen()
+    this.cleanupOnboardingDemoArtifacts()
+    this.onboardingState = 'awaiting_tap'
+    this.onboardingLayer?.setVisible(true)
+    this.queueOnboardingStep(520, () => {
+      if (this.onboardingState !== 'awaiting_tap') {
+        return
+      }
+
+      this.showOnboardingBeginHint()
+    })
+  }
+
+  private completeOnboardingTapToBegin() {
+    if (this.onboardingState !== 'awaiting_tap') {
+      return
+    }
+
+    this.onboardingSkipCooldownUntil = this.time.now + 180
+    this.hideOnboardingBeginHint(90)
+    this.onboardingState = 'complete'
+    this.pulseOnboardingInputCue()
+    this.queueOnboardingStep(110, () => {
+      if (this.onboardingState === 'complete') {
+        this.onboardingLayer?.setVisible(false)
+      }
+    })
+    this.applySnapshot()
+  }
+
+  private setLiveClueStackOnboardingPresentation(active: boolean, immediate = false) {
+    if (!this.clueStackRegion) {
+      return
+    }
+
+    const targetAlpha = active ? 0 : 1
+    this.tweens.killTweensOf(this.clueStackRegion)
+
+    if (active || immediate) {
+      this.clueStackRegion.setAlpha(targetAlpha)
+      return
+    }
+
+    this.tweens.add({
+      targets: this.clueStackRegion,
+      alpha: targetAlpha,
+      duration: active ? 180 : 220,
+      ease: active ? 'Sine.Out' : 'Sine.InOut',
+    })
+  }
+
+  private skipOnboardingDemo() {
+    if (!this.isOnboardingBlockingInput()) {
+      return
+    }
+
+    this.onboardingSkipCooldownUntil = this.time.now + 180
+    this.onboardingState = 'skipped'
+    this.setLiveClueStackOnboardingPresentation(false, true)
+    this.finishOnboardingDemo(true)
+  }
+
+  private finishOnboardingDemo(markSeen: boolean) {
+    if (markSeen) {
+      this.markOnboardingDemoSeen()
+    }
+
+    this.cleanupOnboardingDemoArtifacts()
+    this.onboardingState = markSeen ? 'complete' : 'inactive'
+    this.applySnapshot()
+  }
+
+  private cleanupOnboardingDemoArtifacts() {
+    this.onboardingEvents.forEach((event) => event.remove(false))
+    this.onboardingEvents = []
+    this.setLiveClueStackOnboardingPresentation(false, true)
+
+    if (this.onboardingGhostGuess) {
+      this.tweens.killTweensOf(this.onboardingGhostGuess)
+      this.onboardingGhostGuess.setAlpha(0)
+      this.onboardingGhostGuess.setText('')
+    }
+    if (this.onboardingHelperLabel) {
+      this.tweens.killTweensOf(this.onboardingHelperLabel)
+      this.onboardingHelperLabel.setAlpha(0)
+      this.onboardingHelperLabel.setScale(1)
+      this.onboardingHelperLabel.setText('')
+    }
+    if (this.onboardingBeginHint) {
+      this.tweens.killTweensOf(this.onboardingBeginHint)
+      this.onboardingBeginHint.setAlpha(0)
+    }
+    if (this.onboardingClueFocus) {
+      this.tweens.killTweensOf(this.onboardingClueFocus)
+      this.onboardingClueFocus.setAlpha(0)
+      this.onboardingClueFocus.setScale(1)
+    }
+    if (this.onboardingSubmitFocus) {
+      this.tweens.killTweensOf(this.onboardingSubmitFocus)
+      this.onboardingSubmitFocus.setAlpha(0)
+      this.onboardingSubmitFocus.setScale(1)
+    }
+    if (this.onboardingDemoLabel) {
+      this.tweens.killTweensOf(this.onboardingDemoLabel)
+      this.onboardingDemoLabel.destroy()
+      this.onboardingDemoLabel = undefined
+    }
+    if (this.onboardingDemoClueContainer) {
+      this.tweens.killTweensOf(this.onboardingDemoClueContainer)
+      this.onboardingDemoClueContainer.destroy(true)
+      this.onboardingDemoClueContainer = undefined
+    }
+    this.onboardingDemoClueWash = undefined
+    this.onboardingDemoClueShadow = undefined
+    this.onboardingDemoClueBackground = undefined
+    this.onboardingDemoClueAccent = undefined
+    this.onboardingDemoClueFrame = undefined
+    this.onboardingDemoClueText = undefined
+    if (this.onboardingSkipHint) {
+      this.tweens.killTweensOf(this.onboardingSkipHint)
+      this.onboardingSkipHint.setAlpha(0)
+    }
+    if (this.actionButtons?.submit) {
+      this.setPressableVisualState(this.actionButtons.submit, 'rest')
+    }
+    this.onboardingLayer?.setVisible(false)
+  }
+
+  private markOnboardingDemoSeen() {
+    try {
+      window.localStorage.setItem(ONBOARDING_SEEN_STORAGE_KEY, '1')
+    } catch {
+      // Ignore persistence failures and continue with normal play.
+    }
+  }
+
+  private handleScenePointerDown() {
+    if (this.onboardingState === 'awaiting_tap') {
+      this.completeOnboardingTapToBegin()
+      return
+    }
+
+    if (this.isOnboardingBlockingInput()) {
+      this.skipOnboardingDemo()
+    }
   }
 
   private toFontPx(value: number) {
@@ -871,7 +1810,7 @@ export class DiagnosisLabScene extends Phaser.Scene {
       return
     }
 
-    const shouldScan = state === 'typing' || state === 'submitting' || state === 'correct'
+    const shouldScan = state === 'submitting' || state === 'correct'
     this.guessBar.scan.setFillStyle(color, shouldScan ? 0.16 : 0)
 
     if (!shouldScan) {
@@ -892,10 +1831,10 @@ export class DiagnosisLabScene extends Phaser.Scene {
     this.guessBarScanTween = this.tweens.add({
       targets: this.guessBar.scan,
       x: this.layoutMetrics.guessBar.width + Math.round(this.layoutMetrics.guessBar.width * 0.18),
-      duration: state === 'submitting' ? 540 : 900,
-      ease: 'Sine.InOut',
+      duration: state === 'submitting' ? 520 : 780,
+      ease: 'Sine.Out',
       repeat: -1,
-      repeatDelay: state === 'submitting' ? 70 : 190,
+      repeatDelay: state === 'submitting' ? 120 : 260,
       onRepeat: () => {
         this.guessBar?.scan.setX(-Math.round(this.layoutMetrics.guessBar.width * 0.22))
       },
@@ -918,27 +1857,18 @@ export class DiagnosisLabScene extends Phaser.Scene {
     }
 
     this.endOverlay.beam.setFillStyle(color, 0.16)
-    this.endOverlay.beam.setAlpha(0.16)
+    this.endOverlay.beam.setAlpha(0.1)
     this.endOverlay.beam.setX(-Math.round(this.layoutMetrics.overlay.width * 0.22))
     this.overlayBeamTween = this.tweens.add({
       targets: this.endOverlay.beam,
       x: this.layoutMetrics.overlay.width + Math.round(this.layoutMetrics.overlay.width * 0.16),
-      duration: 1100,
-      ease: 'Sine.InOut',
-      repeat: -1,
-      repeatDelay: 260,
-      onRepeat: () => {
-        this.endOverlay?.beam.setX(-Math.round(this.layoutMetrics.overlay.width * 0.22))
+      duration: 980,
+      ease: 'Sine.Out',
+      onComplete: () => {
+        this.endOverlay?.beam.setAlpha(0)
       },
     })
     this.emitOverlayDnaWave(color)
-    this.overlayDnaLoopEvent = this.time.addEvent({
-      delay: 1400,
-      loop: true,
-      callback: () => {
-        this.emitOverlayDnaWave(color)
-      },
-    })
   }
 
   private getKeyboardRowLayout(rowLength: number) {
@@ -1030,29 +1960,8 @@ export class DiagnosisLabScene extends Phaser.Scene {
     this.ambientMotes.forEach((mote, index) => {
       mote.setBlendMode(Phaser.BlendModes.ADD)
       this.layoutAmbientMote(mote, index)
-      if (this.tweens.isTweening(mote)) {
-        return
-      }
-
-      this.tweens.add({
-        targets: mote,
-        alpha: { from: 0.08 + (index % 3) * 0.02, to: 0.24 + (index % 3) * 0.03 },
-        scaleX: { from: 0.55 + (index % 4) * 0.04, to: 0.85 + (index % 4) * 0.05 },
-        scaleY: { from: 0.55 + (index % 4) * 0.04, to: 0.85 + (index % 4) * 0.05 },
-        duration: 1800 + index * 110,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.InOut',
-      })
-      this.tweens.add({
-        targets: mote,
-        y: mote.y - (18 + (index % 5) * 6),
-        x: mote.x + ((index % 2 === 0 ? 1 : -1) * (10 + (index % 4) * 4)),
-        duration: 4200 + index * 180,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.InOut',
-      })
+      this.tweens.killTweensOf(mote)
+      mote.setAlpha(0.08 + (index % 3) * 0.02)
     })
   }
 
@@ -1065,7 +1974,7 @@ export class DiagnosisLabScene extends Phaser.Scene {
 
     mote.setPosition(x, y)
     mote.setVisible(true)
-    mote.setScale(0.55 + (index % 4) * 0.04)
+    mote.setScale(0.46 + (index % 4) * 0.03)
     mote.setTint(index % 2 === 0 ? 0x67e8f9 : 0x99f6e4)
   }
 
@@ -1128,10 +2037,10 @@ export class DiagnosisLabScene extends Phaser.Scene {
       const targetY = startY - (42 + index * 10)
 
       helix.setVisible(true)
-      helix.setAlpha(0.82)
+      helix.setAlpha(0.56)
       helix.setTint(color)
       helix.setBlendMode(Phaser.BlendModes.ADD)
-      helix.setScale(0.42 + (index % 3) * 0.08)
+      helix.setScale(0.34 + (index % 3) * 0.07)
       helix.setPosition(startX, startY)
       helix.setAngle(index % 2 === 0 ? -8 : 8)
       this.tweens.killTweensOf(helix)
@@ -1141,7 +2050,7 @@ export class DiagnosisLabScene extends Phaser.Scene {
         x: startX + ((index % 2 === 0) ? -12 : 12),
         alpha: 0,
         angle: helix.angle + ((index % 2 === 0) ? -28 : 28),
-        duration: 760 + index * 55,
+        duration: 620 + index * 45,
         ease: 'Sine.Out',
         onComplete: () => {
           helix.setVisible(false)
@@ -1454,6 +2363,7 @@ export class DiagnosisLabScene extends Phaser.Scene {
         worldViewHeight: camera.worldView.height,
       },
       board: this.layoutMetrics.board,
+      visualState: this.visualState,
       layoutSize: {
         width: layoutWidth,
         height: layoutHeight,
@@ -2362,6 +3272,11 @@ export class DiagnosisLabScene extends Phaser.Scene {
     const previousSnapshot = this.previousSnapshot
     const showStatePanel =
       snapshot.mode === 'LOADING' || snapshot.mode === 'WAITING' || snapshot.mode === 'BLOCKED'
+    this.syncVisualState(snapshot, previousSnapshot)
+
+    if (snapshot.mode !== 'PLAYING' && this.isOnboardingBlockingInput()) {
+      this.finishOnboardingDemo(false)
+    }
 
     this.gameplayLayer?.setVisible(!showStatePanel)
     this.feedbackRoot?.setVisible(!showStatePanel)
@@ -2430,13 +3345,16 @@ export class DiagnosisLabScene extends Phaser.Scene {
       this.guessBarState = snapshot.feedbackLabel
     }
 
-    this.syncHeader(snapshot)
-    this.syncClues(snapshot, previousSnapshot)
-    this.syncActionRow(snapshot)
-    this.syncKeyboard(snapshot)
-    this.syncFeedback(snapshot, previousSnapshot)
-    this.syncGuessBar(snapshot)
-    this.syncEndOverlay(snapshot, previousSnapshot)
+    this.hudLayerModule.render(snapshot, previousSnapshot)
+    this.cluePanelLayerModule.render(snapshot, previousSnapshot)
+    this.actionRowLayerModule.render(snapshot, previousSnapshot)
+    this.keyboardPanelLayerModule.render(snapshot, previousSnapshot)
+    this.feedbackLayerModule.render(snapshot, previousSnapshot)
+    this.diagnosisBarLayerModule.render(snapshot, previousSnapshot)
+    this.overlayLayerModule.render(snapshot, previousSnapshot)
+    this.rewardLayerModule.render(snapshot, previousSnapshot)
+
+    this.maybeStartOnboardingDemo(snapshot)
 
     if (becameReadyToCommit && snapshot.mode === 'PLAYING') {
       this.animateReadyToCommit()
@@ -2589,6 +3507,8 @@ export class DiagnosisLabScene extends Phaser.Scene {
       state === 'empty'
         ? 'YOUR DIAGNOSIS'
         : snapshot.guess || snapshot.finalDiagnosis || snapshot.latestAttempt?.guess || 'YOUR DIAGNOSIS'
+    const onboardingGuessOverlayActive =
+      this.isOnboardingBlockingInput() && (this.onboardingGhostGuess?.alpha ?? 0) > 0.02
 
     const slotStroke = readyToCommit ? COLORS.emeraldGlow : style.stroke
     const slotHaloColor = readyToCommit ? COLORS.emeraldGlow : style.haloColor
@@ -2608,7 +3528,15 @@ export class DiagnosisLabScene extends Phaser.Scene {
     this.guessBar.label.setColor(slotLabelColor)
     this.guessBar.label.setAlpha(readyToCommit ? 0.86 : state === 'empty' ? 0.62 : 0.78)
     this.guessBar.value.setColor(style.valueColor)
-    this.guessBar.value.setAlpha(snapshot.mode === 'FINAL_FEEDBACK' ? 0.9 : state === 'empty' ? 0.78 : 1)
+    this.guessBar.value.setAlpha(
+      onboardingGuessOverlayActive
+        ? 0
+        : snapshot.mode === 'FINAL_FEEDBACK'
+        ? 0.9
+        : state === 'empty'
+        ? 0.78
+        : 1,
+    )
     const baseFontSize = this.layoutMetrics.typography.guessValue
     const adjustedFontSize =
       baseValue.length > 24
@@ -2622,7 +3550,7 @@ export class DiagnosisLabScene extends Phaser.Scene {
     )
     const clippedValue =
       baseValue.length > maxChars ? `${baseValue.slice(0, Math.max(6, maxChars - 1)).trimEnd()}...` : baseValue
-    const renderedValue = showCaret ? `${clippedValue}|` : clippedValue
+    const renderedValue = onboardingGuessOverlayActive ? '' : showCaret ? `${clippedValue}|` : clippedValue
 
     this.guessBar.value.setText(renderedValue)
     this.guessBar.value.setFontSize(this.toFontPx(adjustedFontSize))
@@ -2762,7 +3690,9 @@ export class DiagnosisLabScene extends Phaser.Scene {
     const { overlay } = this.layoutMetrics
 
     if (snapshot.mode !== 'FINAL_FEEDBACK') {
-      this.clueStackRegion?.setAlpha(1)
+      if (!this.isOnboardingBlockingInput()) {
+        this.clueStackRegion?.setAlpha(1)
+      }
       this.refreshOverlayEffects(false, COLORS.cyan)
       if (previousSnapshot?.mode === 'FINAL_FEEDBACK') {
         this.tweens.add({
@@ -2852,10 +3782,10 @@ export class DiagnosisLabScene extends Phaser.Scene {
     scale: number,
     alpha: number,
   ) {
-    const dropInOffset = Math.max(5, Math.round(this.layoutMetrics.clues.height * (8 / 340)))
+    const dropInOffset = Math.max(2, Math.round(this.layoutMetrics.clues.height * (4 / 340)))
     view.container.setPosition(targetX, targetY + dropInOffset)
     view.container.setScale(scale)
-    view.container.setAlpha(Math.min(0.4, alpha))
+    view.container.setAlpha(Math.min(0.56, alpha))
     this.tweens.killTweensOf(view.container)
     this.tweens.add({
       targets: view.container,
@@ -2864,8 +3794,8 @@ export class DiagnosisLabScene extends Phaser.Scene {
       alpha,
       scaleX: scale,
       scaleY: scale,
-      duration: 180,
-      ease: 'Cubic.Out',
+      duration: 150,
+      ease: 'Sine.Out',
     })
   }
 
@@ -2926,9 +3856,9 @@ export class DiagnosisLabScene extends Phaser.Scene {
     this.tweens.add({
       targets: this.guessBar.halo,
       alpha: { from: Math.max(this.guessBar.halo.alpha, 0.18), to: 0.18 },
-      scaleX: { from: 1.008, to: 1.04 },
-      scaleY: { from: 1.008, to: 1.04 },
-      duration: 170,
+      scaleX: { from: 1.004, to: 1.02 },
+      scaleY: { from: 1.004, to: 1.02 },
+      duration: 130,
       ease: 'Cubic.Out',
       onComplete: () => {
         this.guessBar?.halo.setScale(1)
@@ -2941,9 +3871,9 @@ export class DiagnosisLabScene extends Phaser.Scene {
       this.tweens.killTweensOf(this.actionButtons.submit.glow)
       this.tweens.add({
         targets: this.actionButtons.submit.container,
-        scaleX: 1.012,
-        scaleY: 1.012,
-        duration: 120,
+        scaleX: 1.008,
+        scaleY: 1.008,
+        duration: 100,
         yoyo: true,
         ease: 'Quad.Out',
         onComplete: () => {
@@ -2952,8 +3882,8 @@ export class DiagnosisLabScene extends Phaser.Scene {
       })
       this.tweens.add({
         targets: this.actionButtons.submit.glow,
-        alpha: { from: this.actionButtons.submit.glow.alpha, to: Math.max(0.24, this.actionButtons.submit.glow.alpha) },
-        duration: 140,
+        alpha: { from: this.actionButtons.submit.glow.alpha, to: Math.max(0.18, this.actionButtons.submit.glow.alpha) },
+        duration: 110,
         yoyo: true,
         ease: 'Quad.Out',
       })
@@ -3045,11 +3975,11 @@ export class DiagnosisLabScene extends Phaser.Scene {
     )
     this.tweens.add({
       targets: this.guessBar?.container,
-      scaleX: 1.02,
-      scaleY: 1.02,
-      duration: 130,
+      scaleX: 1.012,
+      scaleY: 1.012,
+      duration: 110,
       yoyo: true,
-      ease: 'Back.Out',
+      ease: 'Quad.Out',
       onComplete: () => {
         this.guessBar?.container.setScale(1)
       },
@@ -3173,24 +4103,9 @@ export class DiagnosisLabScene extends Phaser.Scene {
       return
     }
 
-    if (state === 'typing') {
-      if (!this.guessBarGlowTween || !this.guessBarGlowTween.isPlaying()) {
-        this.guessBarGlowTween?.stop()
-        this.guessBarGlowTween = this.tweens.add({
-          targets: this.guessBar.halo,
-          alpha: { from: 0.14, to: 0.28 },
-          duration: 760,
-          ease: 'Sine.InOut',
-          yoyo: true,
-          repeat: -1,
-        })
-      }
-      return
-    }
-
     this.guessBarGlowTween?.stop()
     this.guessBarGlowTween = undefined
-    this.guessBar.halo.setAlpha(style.haloAlpha)
+    this.guessBar.halo.setAlpha(state === 'typing' ? Math.min(0.16, style.haloAlpha + 0.04) : style.haloAlpha)
   }
 
   private pulseHalo(color: number, alpha: number) {
@@ -3203,9 +4118,9 @@ export class DiagnosisLabScene extends Phaser.Scene {
     this.tweens.add({
       targets: this.guessBar.halo,
       alpha: { from: alpha, to: 0.05 },
-      scaleX: { from: 1.02, to: 1.08 },
-      scaleY: { from: 1.02, to: 1.08 },
-      duration: 260,
+      scaleX: { from: 1.01, to: 1.04 },
+      scaleY: { from: 1.01, to: 1.04 },
+      duration: 190,
       ease: 'Cubic.Out',
       onComplete: () => {
         this.guessBar?.halo.setScale(1)
@@ -3534,7 +4449,7 @@ export class DiagnosisLabScene extends Phaser.Scene {
     }
 
     if (state === 'pressed') {
-      view.container.setScale(0.972)
+      view.container.setScale(0.982)
       view.background.setY(1)
       view.label.setY(Math.round(height / 2) + 1)
       view.shine.setPosition(Math.round(width * 0.12), Math.round(height * 0.18) + 1)
@@ -3545,7 +4460,7 @@ export class DiagnosisLabScene extends Phaser.Scene {
       return
     }
 
-    view.container.setScale(state === 'hover' ? 1.01 : 1)
+    view.container.setScale(state === 'hover' ? 1.006 : 1)
     view.background.setY(0)
     view.label.setY(Math.round(height / 2))
     view.shine.setPosition(Math.round(width * 0.12), Math.round(height * 0.18))
@@ -3585,6 +4500,10 @@ export class DiagnosisLabScene extends Phaser.Scene {
   }
 
   private handleKeyPressIntent(value: string) {
+    if (this.isOnboardingBlockingInput() || this.isOnboardingSkipCooldownActive()) {
+      return
+    }
+
     const snapshot = this.getSnapshot()
     if (!snapshot.canEditGuess) {
       return
@@ -3594,10 +4513,18 @@ export class DiagnosisLabScene extends Phaser.Scene {
   }
 
   private handleOpenMenuIntent() {
+    if (this.isOnboardingBlockingInput() || this.isOnboardingSkipCooldownActive()) {
+      return
+    }
+
     this.getIntents().onOpenMenu()
   }
 
   private handleClearIntent() {
+    if (this.isOnboardingBlockingInput() || this.isOnboardingSkipCooldownActive()) {
+      return
+    }
+
     const snapshot = this.getSnapshot()
     if (!snapshot.canEditGuess || snapshot.guess.length === 0) {
       return
@@ -3607,6 +4534,10 @@ export class DiagnosisLabScene extends Phaser.Scene {
   }
 
   private handleBackspaceIntent() {
+    if (this.isOnboardingBlockingInput() || this.isOnboardingSkipCooldownActive()) {
+      return
+    }
+
     const snapshot = this.getSnapshot()
     if (!snapshot.canEditGuess || snapshot.guess.length === 0) {
       return
@@ -3616,6 +4547,10 @@ export class DiagnosisLabScene extends Phaser.Scene {
   }
 
   private handleSubmitIntent() {
+    if (this.isOnboardingBlockingInput() || this.isOnboardingSkipCooldownActive()) {
+      return
+    }
+
     const snapshot = this.getSnapshot()
     if (snapshot.submitDisabled) {
       this.animateInvalidSubmit()
@@ -3643,10 +4578,10 @@ export function createCaseScene(
   getSnapshot: () => PhaserGameSessionSnapshot,
   getIntents: () => PhaserGameSessionIntents,
 ) {
-  return new DiagnosisLabScene(getSnapshot, getIntents)
+  return new RoundScene(getSnapshot, getIntents)
 }
 
-export { DiagnosisLabScene as CaseScene }
+export { RoundScene as CaseScene }
 
 export const caseSceneConfig = {
   key: SCENE_KEY,
