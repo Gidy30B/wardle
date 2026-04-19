@@ -29,10 +29,17 @@ export type CaseExplanation = {
   }>
 }
 
-export type StartGameResponse = {
-  sessionId: string
-  case: GameCase
-}
+export type StartGameResponse =
+  | {
+      state: 'ready'
+      sessionId: string
+      dailyCaseId: string
+      case: GameCase
+    }
+  | {
+      state: 'waiting'
+      nextCaseAt: string
+    }
 
 export type GuessApiResponse = {
   result: 'correct' | 'close' | 'wrong'

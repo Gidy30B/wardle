@@ -1,19 +1,23 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, Case as CaseModel } from '@prisma/client';
+import { Prisma, PublishTrack, Case as CaseModel } from '@prisma/client';
 import { AIContentService } from '../ai/ai-content.service';
 import { RedisCacheService } from '../../core/cache/redis-cache.service';
+import { getEnv } from '../../core/config/env.validation';
 import { PrismaService } from '../../core/db/prisma.service';
 import { AppLoggerService } from '../../core/logger/app-logger.service';
 import { MetricsService } from '../../core/logger/metrics.service';
-import { CasesService } from '../cases/cases.service';
 import { normalize } from '../diagnostics/pipeline/normalize';
 import { EvaluatorApiService } from '../diagnostics/services/evaluator-api.service';
 import { AttemptService } from './attempt.service';
-import { DailyLimitService } from './daily-limit.service';
+import {
+  DailyCasesService,
+  hasPremiumTrackAccess,
+} from './daily-cases.service';
 import type {
   GameplayClinicalClue,
   SubmitGameGuessResponseDto,
@@ -50,6 +54,20 @@ type GameplayCaseView = {
   clues: GameplayClinicalClue[];
 };
 
+type StartDailyGameResponse =
+  | {
+      state: 'ready';
+      sessionId: string;
+      dailyCaseId: string;
+      clueIndex: number;
+      attemptsCount: number;
+      case: ReturnType<SessionService['buildCasePayload']>;
+    }
+  | {
+      state: 'waiting';
+      nextCaseAt: string;
+    };
+
 @Injectable()
 export class SessionService {
   private readonly cacheTtlSeconds = 300;
@@ -62,16 +80,27 @@ export class SessionService {
     private readonly aiContentService: AIContentService,
     private readonly evaluatorApiService: EvaluatorApiService,
     private readonly attemptService: AttemptService,
-    private readonly dailyLimitService: DailyLimitService,
     private readonly evaluationService: EvaluationService,
     private readonly rewardOrchestrator: RewardOrchestrator,
-    private readonly casesService: CasesService,
+    private readonly dailyCasesService: DailyCasesService,
     private readonly logger: AppLoggerService,
     private readonly metrics: MetricsService,
   ) {}
 
-  async startGame(input: { userId: string }) {
-    return this.startDailyGame({ userId: input.userId });
+  async startGame(input: {
+    userId: string;
+    dailyCaseId?: string;
+    devReplay?: boolean;
+    track?: PublishTrack;
+    sequenceIndex?: number;
+  }) {
+    return this.startDailyGame({
+      userId: input.userId,
+      dailyCaseId: input.dailyCaseId,
+      devReplay: input.devReplay,
+      track: input.track,
+      sequenceIndex: input.sequenceIndex,
+    });
   }
 
   async submitGuess(input: {
@@ -106,97 +135,111 @@ export class SessionService {
   async startDailyGame(input: {
     userId: string;
     subscriptionTier?: 'free' | 'premium';
-  }) {
-    const {
-      start: startOfDayUtc,
-      end: endOfDayUtc,
-      dateKey,
-    } = this.getUtcDayRange();
-    const todayCase = await this.casesService.getTodayCase();
-    const selectedCase: Pick<
-      CaseModel,
-      'id' | 'difficulty' | 'date'
-    > = {
-      id: todayCase.case.id,
-      date: todayCase.case.date,
-      difficulty: todayCase.case.difficulty,
-    };
+    dailyCaseId?: string;
+    devReplay?: boolean;
+    track?: PublishTrack;
+    sequenceIndex?: number;
+  }): Promise<StartDailyGameResponse> {
+    if (input.subscriptionTier) {
+      await this.prisma.user.upsert({
+        where: { id: input.userId },
+        update: {
+          subscriptionTier: input.subscriptionTier,
+        },
+        create: {
+          id: input.userId,
+          subscriptionTier: input.subscriptionTier,
+        },
+      });
+    }
 
-    const result = await this.prisma.$transaction(
-      async (tx) => {
-        const user = await tx.user.upsert({
-          where: { id: input.userId },
-          update: {
-            subscriptionTier: input.subscriptionTier ?? undefined,
-          },
-          create: {
-            id: input.userId,
-            subscriptionTier: input.subscriptionTier ?? 'free',
-          },
-        });
-
-        await this.dailyLimitService.assertCanStartInTransaction(tx, {
-          userId: user.id,
-          subscriptionTier: user.subscriptionTier,
-          startOfDayUtc,
-          endOfDayUtc,
-        });
-
-        const existingSession = await tx.gameSession.findFirst({
-          where: {
-            userId: user.id,
-            dailyCaseId: todayCase.dailyCaseId,
-            status: 'active',
-          },
-          include: {
-            case: true,
-            attempts: {
-              select: {
-                result: true,
-              },
-              orderBy: {
-                createdAt: 'asc',
-              },
-            },
-          },
-        });
-
-        if (existingSession) {
-          return {
-            session: existingSession,
-            dailyCase: {
-              id: todayCase.dailyCaseId,
-              caseId: todayCase.caseId,
-              case: selectedCase,
-            },
-            user,
-          };
-        }
-
-        const session = await tx.gameSession.create({
-          data: {
-            caseId: todayCase.caseId,
-            dailyCaseId: todayCase.dailyCaseId,
-            userId: user.id,
-            userTierAtStart: user.subscriptionTier,
-            status: 'active',
-          },
-        });
-
-        return {
-          session,
-          dailyCase: {
-            id: todayCase.dailyCaseId,
-            caseId: todayCase.caseId,
-            case: selectedCase,
-          },
-          user,
-        };
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      },
+    const todayCases = await this.dailyCasesService.getTodayCasesForUser(
+      input.userId,
     );
+    const devReplayRequested = this.isDevReplayRequested(input.devReplay);
+    let replayMode: 'explicit' | 'auto' | null = devReplayRequested
+      ? 'explicit'
+      : null;
+    let selectedDailyCaseId = devReplayRequested
+      ? await this.resolveDevReplayDailyCaseId(input.userId, todayCases.cases, {
+          dailyCaseId: input.dailyCaseId,
+          track: input.track,
+          sequenceIndex: input.sequenceIndex,
+        })
+      : input.dailyCaseId
+        ? input.dailyCaseId
+        : await this.resolveStartableDailyCaseId(input.userId, todayCases.cases);
+
+    if (!selectedDailyCaseId && !replayMode) {
+      this.logEvent('daily.start.dev_replay.auto_lookup', {
+        userId: input.userId,
+        todayCaseIds: todayCases.cases.map((entry) => entry.dailyCaseId),
+        todayCaseCount: todayCases.cases.length,
+      });
+
+      selectedDailyCaseId = await this.resolveAutoDevReplayDailyCaseId(
+        input.userId,
+        todayCases.cases,
+      );
+
+      if (selectedDailyCaseId) {
+        replayMode = 'auto';
+      }
+    }
+
+    if (!selectedDailyCaseId) {
+      if (devReplayRequested) {
+        this.logWarnEvent('daily.start.dev_replay.no_target', {
+          userId: input.userId,
+          requestedDailyCaseId: input.dailyCaseId ?? null,
+          requestedTrack: input.track ?? null,
+          requestedSequenceIndex: input.sequenceIndex ?? null,
+        })
+      }
+
+      this.logWarnEvent('daily.start.waiting.no_selected_case', {
+        userId: input.userId,
+        replayMode,
+        devReplayRequested,
+        requestedDailyCaseId: input.dailyCaseId ?? null,
+        requestedTrack: input.track ?? null,
+        requestedSequenceIndex: input.sequenceIndex ?? null,
+        todayCaseIds: todayCases.cases.map((entry) => entry.dailyCaseId),
+        todayCaseCount: todayCases.cases.length,
+      });
+
+      return {
+        state: 'waiting',
+        nextCaseAt: this.getDefaultNextCaseAt().toISOString(),
+      };
+    }
+
+    if (replayMode) {
+      this.logEvent('daily.start.dev_replay.requested', {
+        userId: input.userId,
+        dailyCaseId: selectedDailyCaseId,
+        mode: replayMode,
+        requestedDailyCaseId: input.dailyCaseId ?? null,
+        requestedTrack: input.track ?? null,
+        requestedSequenceIndex: input.sequenceIndex ?? null,
+      })
+
+      await this.dailyCasesService.resetUserSessionForDailyCaseReplay(
+        input.userId,
+        selectedDailyCaseId,
+      );
+    }
+
+    const result = await this.dailyCasesService.getOrCreateGameSessionForDailyCase(
+      input.userId,
+      selectedDailyCaseId,
+    );
+    const selectedCase: Pick<CaseModel, 'id' | 'difficulty' | 'date'> = {
+      id: result.dailyCase.case.id,
+      date: result.dailyCase.case.date,
+      difficulty: result.dailyCase.case.difficulty,
+    };
+    const { dateKey } = this.getUtcDayRange(result.dailyCase.date);
 
     await this.cacheService.set(
       this.getSessionCacheKey(result.session.id),
@@ -207,6 +250,21 @@ export class SessionService {
       }),
       this.cacheTtlSeconds,
     );
+
+    if (result.session.status !== 'active') {
+      this.logWarnEvent('daily.start.waiting.non_active_session', {
+        userId: input.userId,
+        sessionId: result.session.id,
+        dailyCaseId: result.dailyCase.id,
+        sessionStatus: result.session.status,
+        replayMode,
+      });
+
+      return {
+        state: 'waiting',
+        nextCaseAt: this.getDefaultNextCaseAt().toISOString(),
+      };
+    }
 
     const gameplayCase = await this.hydrateGameplayCase(result.dailyCase.case);
     const resumedAttempts =
@@ -236,6 +294,7 @@ export class SessionService {
     });
 
     return {
+      state: 'ready',
       sessionId: result.session.id,
       dailyCaseId: result.dailyCase.id,
       clueIndex,
@@ -263,6 +322,16 @@ export class SessionService {
       const session = await this.prisma.gameSession.findUnique({
         where: { id: input.sessionId },
         include: {
+          user: {
+            select: {
+              subscriptionTier: true,
+            },
+          },
+          dailyCase: {
+            select: {
+              track: true,
+            },
+          },
           case: {
             include: {
               diagnosis: true,
@@ -287,6 +356,12 @@ export class SessionService {
       if (session.status !== 'active') {
         throw new BadRequestException('Session is already completed');
       }
+
+      this.assertSessionSubmitAccess({
+        track: session.dailyCase.track,
+        userTierAtStart: session.userTierAtStart,
+        currentUserTier: session.user.subscriptionTier,
+      });
 
       const normalizedGuess = normalize(input.guess);
       const gameplayCase = await this.hydrateGameplayCase(session.case);
@@ -318,6 +393,16 @@ export class SessionService {
                 userTierAtStart: true,
                 status: true,
                 processingAt: true,
+                user: {
+                  select: {
+                    subscriptionTier: true,
+                  },
+                },
+                dailyCase: {
+                  select: {
+                    track: true,
+                  },
+                },
                 attempts: {
                   select: {
                     id: true,
@@ -344,6 +429,12 @@ export class SessionService {
             if (freshSession.status !== 'active') {
               throw new BadRequestException('Session is already completed');
             }
+
+            this.assertSessionSubmitAccess({
+              track: freshSession.dailyCase.track,
+              userTierAtStart: freshSession.userTierAtStart,
+              currentUserTier: freshSession.user.subscriptionTier,
+            });
 
             if (
               !freshSession.processingAt ||
@@ -695,6 +786,157 @@ export class SessionService {
     };
   }
 
+  private isDevReplayRequested(requested: boolean | undefined): boolean {
+    if (!requested) {
+      return false;
+    }
+
+    const env = getEnv();
+    return env.NODE_ENV !== 'production' && env.ENABLE_DEV_REPLAY;
+  }
+
+  private async resolveDevReplayDailyCaseId(
+    userId: string,
+    cases: Array<{
+      dailyCaseId: string;
+      track: PublishTrack;
+      sequenceIndex: number;
+    }>,
+    input: {
+      dailyCaseId?: string;
+      track?: PublishTrack;
+      sequenceIndex?: number;
+    },
+  ): Promise<string | null> {
+    if (cases.length === 0) {
+      return null;
+    }
+
+    if (input.dailyCaseId) {
+      const exactMatch = cases.find((entry) => entry.dailyCaseId === input.dailyCaseId);
+      if (!exactMatch) {
+        throw new BadRequestException(
+          'Requested dev replay dailyCaseId is not available in today\'s feed',
+        );
+      }
+
+      return exactMatch.dailyCaseId;
+    }
+
+    if (input.track && input.sequenceIndex) {
+      const exactTrackMatch = cases.find(
+        (entry) =>
+          entry.track === input.track && entry.sequenceIndex === input.sequenceIndex,
+      );
+
+      if (!exactTrackMatch) {
+        throw new BadRequestException(
+          'Requested dev replay track/sequenceIndex is not available in today\'s feed',
+        );
+      }
+
+      return exactTrackMatch.dailyCaseId;
+    }
+
+    if (input.track) {
+      const trackCases = cases.filter((entry) => entry.track === input.track);
+
+      if (trackCases.length === 0) {
+        throw new BadRequestException(
+          'Requested dev replay track is not available in today\'s feed',
+        );
+      }
+
+      if (trackCases.length === 1) {
+        return trackCases[0].dailyCaseId;
+      }
+
+      const recentTrackSession = await this.findMostRecentTodaySessionDailyCaseId(
+        userId,
+        trackCases.map((entry) => entry.dailyCaseId),
+      );
+
+      if (recentTrackSession) {
+        return recentTrackSession;
+      }
+
+      throw new BadRequestException(
+        'Dev replay target is ambiguous for this track; provide sequenceIndex or dailyCaseId',
+      );
+    }
+
+    const recentTodaySession = await this.findMostRecentTodaySessionDailyCaseId(
+      userId,
+      cases.map((entry) => entry.dailyCaseId),
+    );
+
+    if (recentTodaySession) {
+      return recentTodaySession;
+    }
+
+    if (cases.length === 1) {
+      return cases[0].dailyCaseId;
+    }
+
+    throw new BadRequestException(
+      'Dev replay target is ambiguous; provide dailyCaseId or track + sequenceIndex',
+    );
+  }
+
+  private async resolveAutoDevReplayDailyCaseId(
+    userId: string,
+    cases: Array<{ dailyCaseId: string }>,
+  ): Promise<string | null> {
+    const env = getEnv();
+    this.logEvent('daily.start.dev_replay.auto_lookup.evaluate', {
+      userId,
+      nodeEnv: env.NODE_ENV,
+      enableDevReplay: env.ENABLE_DEV_REPLAY,
+      todayCaseIds: cases.map((entry) => entry.dailyCaseId),
+      todayCaseCount: cases.length,
+    });
+
+    if (env.NODE_ENV === 'production' || !env.ENABLE_DEV_REPLAY) {
+      return null;
+    }
+
+    const replayDailyCaseId = await this.findMostRecentTodaySessionDailyCaseId(
+      userId,
+      cases.map((entry) => entry.dailyCaseId),
+    );
+
+    this.logEvent('daily.start.dev_replay.auto_lookup.result', {
+      userId,
+      replayDailyCaseId,
+    });
+
+    return replayDailyCaseId;
+  }
+
+  private async findMostRecentTodaySessionDailyCaseId(
+    userId: string,
+    dailyCaseIds: string[],
+  ): Promise<string | null> {
+    if (dailyCaseIds.length === 0) {
+      return null;
+    }
+
+    const session = await this.prisma.gameSession.findFirst({
+      where: {
+        userId,
+        dailyCaseId: {
+          in: dailyCaseIds,
+        },
+      },
+      orderBy: [{ startedAt: 'desc' }],
+      select: {
+        dailyCaseId: true,
+      },
+    });
+
+    return session?.dailyCaseId ?? null;
+  }
+
   private async claimActiveSession(
     sessionId: string,
     userId: string,
@@ -951,5 +1193,67 @@ export class SessionService {
 
   private getSessionCacheKey(sessionId: string): string {
     return `game-session:${sessionId}`;
+  }
+
+  private getDefaultNextCaseAt(now = new Date()): Date {
+    const next = new Date(now);
+    next.setUTCHours(24, 0, 0, 0);
+    return next;
+  }
+
+  private async resolveStartableDailyCaseId(
+    userId: string,
+    cases: Array<{ dailyCaseId: string }>,
+  ): Promise<string | null> {
+    if (cases.length === 0) {
+      return null;
+    }
+
+    const sessions = await this.prisma.gameSession.findMany({
+      where: {
+        userId,
+        dailyCaseId: {
+          in: cases.map((entry) => entry.dailyCaseId),
+        },
+      },
+      select: {
+        dailyCaseId: true,
+        status: true,
+      },
+    });
+
+    const sessionByDailyCaseId = new Map(
+      sessions.map((session) => [session.dailyCaseId, session.status]),
+    );
+
+    for (const dailyCase of cases) {
+      const status = sessionByDailyCaseId.get(dailyCase.dailyCaseId);
+      if (!status || status === 'active') {
+        return dailyCase.dailyCaseId;
+      }
+    }
+
+    return null;
+  }
+
+  private assertSessionSubmitAccess(input: {
+    track: 'DAILY' | 'PREMIUM' | 'PRACTICE';
+    userTierAtStart: string | null;
+    currentUserTier: string | null;
+  }): void {
+    if (input.track !== 'PREMIUM') {
+      return;
+    }
+
+    if (
+      input.userTierAtStart === 'premium' ||
+      hasPremiumTrackAccess(input.currentUserTier, input.track)
+    ) {
+      return;
+    }
+
+    throw new ForbiddenException(
+      'Premium access is required to continue this daily case',
+    );
   }
 }

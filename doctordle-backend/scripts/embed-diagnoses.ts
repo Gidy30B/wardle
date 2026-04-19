@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { RedisCacheService } from '../src/core/cache/redis-cache.service.js';
+import { AppLoggerService } from '../src/core/logger/app-logger.service.js';
 import { MetricsService } from '../src/core/logger/metrics.service.js';
 import { EmbeddingService } from '../src/infra/embedding/embedding.service.js';
 import { normalize } from '../src/modules/diagnostics/pipeline/normalize.js';
@@ -13,7 +14,12 @@ type EmbeddingRow = {
 const prisma = new PrismaClient();
 const metricsService = new MetricsService();
 const cacheService = new RedisCacheService();
-const embeddingService = new EmbeddingService(cacheService, metricsService);
+const logger = new AppLoggerService();
+const embeddingService = new EmbeddingService(
+  cacheService,
+  logger,
+  metricsService,
+);
 
 async function main(): Promise<void> {
   const diagnoses = await prisma.diagnosis.findMany({

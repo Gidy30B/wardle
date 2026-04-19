@@ -237,6 +237,7 @@ model GameSession {
   @@index([processedAt, processingAt])
   @@index([startedAt])
   @@index([userId, status, completedAt])
+  @@unique([userId, dailyCaseId])
 }
 
 model Attempt {
@@ -310,13 +311,17 @@ model UserStats {
 model DailyCase {
   id        String   @id @default(uuid())
   caseId    String
-  date      DateTime @unique @db.Date
+  date      DateTime @db.Date
+  track     PublishTrack
+  sequenceIndex Int
   createdAt DateTime @default(now())
   case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
   sessions  GameSession[]
   leaderboardEntries LeaderboardEntry[]
 
+  @@unique([date, track, sequenceIndex])
   @@index([caseId])
+  @@index([date, track])
 }
 
 model LeaderboardEntry {

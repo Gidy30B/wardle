@@ -24,6 +24,10 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === 'true'),
+  ENABLE_DEV_REPLAY: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
   LOG_LEVEL: z.string().min(1),
   ALLOWED_ORIGINS: z.preprocess(emptyToUndefined, z.string().optional()),
   NETWORK_HOST: z.preprocess(emptyToUndefined, z.string().optional()),
@@ -55,6 +59,10 @@ export function validateEnv(): AppEnv {
     throw new Error('DEV_BYPASS_DAILY_LIMIT must not be enabled in production');
   }
 
+  if (parsed.data.NODE_ENV === 'production' && parsed.data.ENABLE_DEV_REPLAY) {
+    throw new Error('ENABLE_DEV_REPLAY must not be enabled in production');
+  }
+
   cachedEnv = parsed.data;
   return cachedEnv;
 }
@@ -65,4 +73,8 @@ export function getEnv(): AppEnv {
   }
 
   return cachedEnv;
+}
+
+export function resetEnvCacheForTests(): void {
+  cachedEnv = null;
 }

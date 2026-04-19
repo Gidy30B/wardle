@@ -9,6 +9,7 @@ import { CasesModule } from '../cases/cases.module';
 import { DiagnosticsModule } from '../diagnostics/diagnostics.module';
 import { QueueModule } from '../queue/queue.module';
 import { AttemptService } from './attempt.service';
+import { DailyCasesService } from './daily-cases.service';
 import { DailyLimitService } from './daily-limit.service';
 import { EvaluationService } from './evaluation.service';
 import { GameController } from './game.controller';
@@ -37,6 +38,7 @@ import { XpService } from './xp.service';
   controllers: [GameController, UserProgressController],
   providers: [
     GameSessionService,
+    DailyCasesService,
     SessionService,
     AttemptService,
     DailyLimitService,

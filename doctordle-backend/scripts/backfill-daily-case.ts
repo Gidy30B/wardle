@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, PublishTrack } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -64,7 +64,11 @@ async function main() {
 
         let dailyCase = await prisma.dailyCase.findUnique({
           where: {
-            date: startedDayUtc,
+            date_track_sequenceIndex: {
+              date: startedDayUtc,
+              track: PublishTrack.DAILY,
+              sequenceIndex: 1,
+            },
           },
           select: {
             id: true,
@@ -77,6 +81,8 @@ async function main() {
             data: {
               caseId: session.caseId,
               date: startedDayUtc,
+              track: PublishTrack.DAILY,
+              sequenceIndex: 1,
             },
             select: {
               id: true,

@@ -3,7 +3,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildRoundViewModel } from './buildRoundViewModel'
 import { startGameApi, submitGuessApi } from './game.api'
-import type { GameCase, GameResult } from './game.types'
+import type { GameCase, GameResult, StartGameResponse } from './game.types'
+import { useUserProgress } from '../user-progress/useUserProgress'
 import { useApi } from '../../lib/api'
 import { subscribe } from './events/game.eventBus'
 
@@ -28,12 +29,6 @@ export type GameEngineMode =
   | { type: 'FINAL_FEEDBACK'; result: GameResult }
   | { type: 'WAITING'; nextCaseAt: Date }
   | { type: 'BLOCKED'; reason: string | null }
-
-function getDefaultNextCaseAt(now = new Date()): Date {
-  const next = new Date(now)
-  next.setUTCHours(24, 0, 0, 0)
-  return next
-}
 
 function isFinalResult(result: GameResult): boolean {
   return (
@@ -72,6 +67,7 @@ export function useGameEngine() {
   const { isLoaded, isSignedIn } = useAuth()
   const { request } = useApi()
   const queryClient = useQueryClient()
+  const { progress } = useUserProgress()
   const didInitRef = useRef(false)
   const isMountedRef = useRef(true)
   const sessionRequestRef = useRef<Promise<void> | null>(null)
@@ -107,9 +103,16 @@ export function useGameEngine() {
       setError(null)
 
       try {
-        const session = await startGameApi(request)
+        const session: StartGameResponse = await startGameApi(request)
 
         if (!isMountedRef.current) {
+          return
+        }
+
+        if (session.state === 'waiting') {
+          clearGameplayState()
+          setError(null)
+          setMode({ type: 'WAITING', nextCaseAt: new Date(session.nextCaseAt) })
           return
         }
 
@@ -283,11 +286,8 @@ export function useGameEngine() {
 
     clearGameplayState()
     setError(null)
-    // The backend does not currently return the next playable timestamp, so
-    // the waiting lifecycle falls back to the next UTC midnight and then
-    // re-checks session availability before returning to play.
-    setMode({ type: 'WAITING', nextCaseAt: getDefaultNextCaseAt() })
-  }, [clearGameplayState, mode])
+    void startSession()
+  }, [clearGameplayState, mode, startSession])
 
   const reloadSession = useCallback(async () => {
     await startSession()
@@ -344,6 +344,7 @@ export function useGameEngine() {
         error,
         waitingCountdownText,
         unavailableReason,
+        progress,
         canRetry: Boolean(error),
         canOpenExplanation,
         canSubmit,
@@ -361,6 +362,7 @@ export function useGameEngine() {
       isSubmitting,
       latestResult,
       mode,
+      progress,
       reward,
       sessionId,
       unavailableReason,

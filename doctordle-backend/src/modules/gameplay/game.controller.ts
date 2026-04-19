@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { RateLimitGuard } from './guards/rate-limit.guard';
 import { GameSessionService } from './game-session.service';
+import { StartGameDto } from './dto/start-game.dto';
 import {
   SubmitGameGuessDto,
   type SubmitGameGuessResponseDto,
@@ -31,14 +32,58 @@ export class GameController {
   ) {}
 
   @Post('start')
-  async startGame(@Req() req: AuthenticatedRequest) {
+  async startGame(
+    @Req() req: AuthenticatedRequest,
+    @Body() body?: StartGameDto,
+  ) {
     try {
-      return await this.gameSessionService.startGame({ userId: req.user.id });
+      this.logger.log(
+        JSON.stringify({
+          event: 'game.start.requested',
+          userId: req.user.id,
+          devReplay: body?.devReplay ?? false,
+          dailyCaseId: body?.dailyCaseId ?? null,
+          track: body?.track ?? null,
+          sequenceIndex: body?.sequenceIndex ?? null,
+        }),
+      )
+
+      return await this.gameSessionService.startGame({
+        userId: req.user.id,
+        dailyCaseId: body?.dailyCaseId,
+        devReplay: body?.devReplay,
+        track: body?.track,
+        sequenceIndex: body?.sequenceIndex,
+      });
     } catch (error) {
       this.logger.error(
         JSON.stringify({
           event: 'game.start.failed',
           userId: req.user.id,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
+  }
+
+  @Get('today')
+  async getTodayCases(
+    @Req() req: AuthenticatedRequest,
+    @Query('date') date?: string,
+  ) {
+    try {
+      return await this.gameSessionService.getTodayCasesForUser({
+        userId: req.user.id,
+        date,
+      });
+    } catch (error) {
+      this.logger.error(
+        JSON.stringify({
+          event: 'game.today.failed',
+          userId: req.user.id,
+          date: date ?? null,
           error: error instanceof Error ? error.message : String(error),
         }),
         error instanceof Error ? error.stack : undefined,

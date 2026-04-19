@@ -13,9 +13,18 @@ export type RoundVisibleClue = Pick<ClinicalClue, 'id' | 'type' | 'value'> & {
   isNewest: boolean
 }
 
+export type RoundOutcomeTone =
+  | 'early_save'
+  | 'steady_save'
+  | 'last_chance_save'
+  | 'patient_lost'
+
 export type RoundHudViewModel = {
-  clueProgressLabel: string
   statusLabel: string | null
+  xpTotal: number | null
+  level: number | null
+  viabilityRemaining: number
+  viabilityTotal: number
 }
 
 export type RoundViewModel = {
@@ -26,6 +35,7 @@ export type RoundViewModel = {
   isLoading: boolean
   totalClues: number
   revealedClueCount: number
+  cluesRemaining: number
   visibleClues: RoundVisibleClue[]
   guess: string
   canEditGuess: boolean
@@ -36,6 +46,7 @@ export type RoundViewModel = {
   latestResult: GameResult | null
   feedbackLabel: GameAttempt['label'] | null
   finalDiagnosis: string | null
+  outcomeTone: RoundOutcomeTone | null
   reward: GameRewardState
   waitingCountdownText: string | null
   unavailableReason: string | null

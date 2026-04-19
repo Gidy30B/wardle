@@ -1,5 +1,9 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Case as CaseModel, CaseEditorialStatus } from '@prisma/client';
+import {
+  Case as CaseModel,
+  CaseEditorialStatus,
+  PublishTrack,
+} from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { EditorialMetricsService } from '../editorial/editorial-metrics.service.js';
 import {
@@ -31,6 +35,8 @@ export type CreatedCaseRecord = CaseRecord;
 export type DailyCaseAssignmentRecord = {
   dailyCaseId: string;
   date: string;
+  track: PublishTrack;
+  sequenceIndex: number;
   case: CaseRecord;
 };
 
@@ -142,13 +148,21 @@ export class CasesService {
     this.assertCaseEligibleForAssignment(foundCase, 'explicit');
 
     const dailyCase = await this.prisma.dailyCase.upsert({
-      where: { date: normalizedDate },
+      where: {
+        date_track_sequenceIndex: {
+          date: normalizedDate,
+          track: PublishTrack.DAILY,
+          sequenceIndex: 1,
+        },
+      },
       update: {
         caseId,
       },
       create: {
         date: normalizedDate,
         caseId,
+        track: PublishTrack.DAILY,
+        sequenceIndex: 1,
       },
       include: {
         case: {
@@ -174,6 +188,8 @@ export class CasesService {
     return {
       dailyCaseId: dailyCase.id,
       date: dailyCase.date.toISOString().slice(0, 10),
+      track: dailyCase.track,
+      sequenceIndex: dailyCase.sequenceIndex,
       case: this.mapCaseRecord(dailyCase.case),
     };
   }
@@ -182,7 +198,13 @@ export class CasesService {
     const today = this.getUtcDateOnly(new Date());
 
     const existing = await this.prisma.dailyCase.findUnique({
-      where: { date: today },
+      where: {
+        date_track_sequenceIndex: {
+          date: today,
+          track: PublishTrack.DAILY,
+          sequenceIndex: 1,
+        },
+      },
       include: {
         case: true,
       },
@@ -257,6 +279,8 @@ export class CasesService {
         data: {
           date: today,
           caseId: selectedCase.id,
+          track: PublishTrack.DAILY,
+          sequenceIndex: 1,
         },
         include: {
           case: true,
@@ -284,7 +308,13 @@ export class CasesService {
       }
 
       const recovered = await this.prisma.dailyCase.findUnique({
-        where: { date: today },
+        where: {
+          date_track_sequenceIndex: {
+            date: today,
+            track: PublishTrack.DAILY,
+            sequenceIndex: 1,
+          },
+        },
         include: {
           case: true,
         },
@@ -341,7 +371,13 @@ export class CasesService {
 
     const result = await this.prisma.$transaction(async (tx) => {
       const dailyCase = await tx.dailyCase.findUnique({
-        where: { date: today },
+        where: {
+          date_track_sequenceIndex: {
+            date: today,
+            track: PublishTrack.DAILY,
+            sequenceIndex: 1,
+          },
+        },
         select: {
           id: true,
           caseId: true,
@@ -421,7 +457,13 @@ export class CasesService {
 
   async getCaseByDate(date: string): Promise<CaseRecord> {
     const dailyCase = await this.prisma.dailyCase.findUnique({
-      where: { date: this.parseDailyDate(date) },
+      where: {
+        date_track_sequenceIndex: {
+          date: this.parseDailyDate(date),
+          track: PublishTrack.DAILY,
+          sequenceIndex: 1,
+        },
+      },
       include: {
         case: {
           include: {
