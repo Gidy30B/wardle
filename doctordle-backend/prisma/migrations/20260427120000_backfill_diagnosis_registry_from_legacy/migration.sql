@@ -1,18 +1,9 @@
 -- Backfill DiagnosisRegistry and DiagnosisAlias from legacy Diagnosis and Synonym tables.
 -- Also links Case and CaseRevision records to their corresponding DiagnosisRegistry entries.
---
--- Normalization mirrors the TypeScript normalizeDiagnosisTerm() function:
---   1. Unaccent (strip combining diacritics via unaccent extension or manual NFKD-like approach)
---   2. Lowercase
---   3. Replace connectors (-, _, /) with space
---   4. Remove periods
---   5. Replace remaining non-alphanumeric/non-space chars with space
---   6. Collapse whitespace and trim
 
--- Ensure the unaccent extension is available (used in the helper function below).
 CREATE EXTENSION IF NOT EXISTS unaccent;
 
--- Helper function: normalize a diagnosis term the same way as the TS normalizeDiagnosisTerm()
+-- Helper function
 CREATE OR REPLACE FUNCTION normalize_diagnosis_term(input TEXT)
 RETURNS TEXT
 LANGUAGE SQL
@@ -26,30 +17,23 @@ AS $$
           regexp_replace(
             regexp_replace(
               regexp_replace(
-                lower(
-                  -- Strip combining diacritical marks (U+0300–U+036F) after NFKD decomposition.
-                  -- PostgreSQL does not expose NFKD natively, but unaccent handles the common cases.
-                  -- We use translate for the connector/period steps below, so we apply unaccent first.
-                  unaccent(input)
-                ),
-                '[-_/]+', ' ', 'g'   -- connectors → space
+                lower(unaccent(input)),
+                '[-_/]+', ' ', 'g'
               ),
-              '[.]+', '', 'g'         -- periods → removed
+              '[.]+', '', 'g'
             ),
-            '[^a-z0-9\s]', ' ', 'g'  -- remaining non-alphanumeric/non-space → space
+            '[^a-z0-9\s]', ' ', 'g'
           ),
-          '\s+', ' ', 'g'            -- collapse whitespace
+          '\s+', ' ', 'g'
         ),
-        '^\s+|\s+$', '', 'g'         -- trim
+        '^\s+|\s+$', '', 'g'
       )
     );
 $$;
 
--- ─────────────────────────────────────────────────────────────────────────────
--- Step 1: Insert DiagnosisRegistry rows for every Diagnosis that doesn't
---         already have one.  We use gen_random_uuid() for the id and
---         CURRENT_TIMESTAMP for updatedAt (Prisma @updatedAt convention).
--- ─────────────────────────────────────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────────
+-- Step 1: DiagnosisRegistry
+-- ─────────────────────────────────────────────────────────
 INSERT INTO "DiagnosisRegistry" (
   "id",
   "legacyDiagnosisId",
@@ -83,14 +67,8 @@ WHERE NOT EXISTS (
   FROM "DiagnosisRegistry" dr
   WHERE dr."legacyDiagnosisId" = d."id"
 )
--- Skip if the normalized canonical name already exists in the registry
--- (prevents unique constraint violation on canonicalNormalized).
 ON CONFLICT ("canonicalNormalized") DO NOTHING;
 
--- For any Diagnosis whose normalized name collided above (ON CONFLICT DO NOTHING),
--- we still want a registry entry linked to the legacy id.  Those are rare edge
--- cases (two diagnoses that normalize to the same string); we link them to the
--- existing registry row so the FK is satisfied.
 UPDATE "DiagnosisRegistry" dr
 SET "legacyDiagnosisId" = d."id"
 FROM "Diagnosis" d
@@ -102,10 +80,9 @@ WHERE dr."legacyDiagnosisId" IS NULL
     WHERE dr2."legacyDiagnosisId" = d."id"
   );
 
--- ─────────────────────────────────────────────────────────────────────────────
--- Step 2: Insert CANONICAL DiagnosisAlias for every DiagnosisRegistry entry
---         that was just created (or already existed without a canonical alias).
--- ─────────────────────────────────────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────────
+-- Step 2: Canonical aliases
+-- ─────────────────────────────────────────────────────────
 INSERT INTO "DiagnosisAlias" (
   "id",
   "diagnosisRegistryId",
@@ -134,60 +111,53 @@ SELECT
 FROM "DiagnosisRegistry" dr
 WHERE dr."legacyDiagnosisId" IS NOT NULL
 ON CONFLICT ("diagnosisRegistryId", "normalizedTerm") DO UPDATE
-  SET
-    "term"            = EXCLUDED."term",
-    "kind"            = 'CANONICAL'::"DiagnosisAliasKind",
-    "acceptedForMatch" = true,
-    "rank"            = 0,
-    "source"          = 'legacy_canonical',
-    "active"          = true,
-    "updatedAt"       = CURRENT_TIMESTAMP;
+SET
+  "term" = EXCLUDED."term",
+  "kind" = 'CANONICAL',
+  "acceptedForMatch" = true,
+  "rank" = 0,
+  "source" = 'legacy_canonical',
+  "active" = true,
+  "updatedAt" = CURRENT_TIMESTAMP;
 
--- ─────────────────────────────────────────────────────────────────────────────
--- Step 3: Insert SYNONYM DiagnosisAlias entries from the Synonym table.
---
--- Ambiguity check: a synonym term is "ambiguous" when its normalized form
--- matches more than one Diagnosis (either as a synonym of multiple diagnoses,
--- or as the canonical name of a different diagnosis).
---
--- Ambiguous  → kind = SEARCH_ONLY,  acceptedForMatch = false,  source = legacy_synonym_ambiguous
--- Short token (2-5 non-space chars, no whitespace) → kind = ABBREVIATION, acceptedForMatch = true, source = legacy_synonym_abbreviation
--- Otherwise  → kind = SEARCH_ONLY,  acceptedForMatch = false,  source = legacy_synonym_search_only
--- ─────────────────────────────────────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────────
+-- Step 3: Synonyms (FIXED SECTION)
+-- ─────────────────────────────────────────────────────────
 
--- Build a temporary view of synonym ambiguity counts.
--- A normalized synonym term is ambiguous when it appears as a synonym for
--- more than one distinct Diagnosis, OR when it matches the canonical
--- normalized name of a *different* Diagnosis.
 WITH synonym_normalized AS (
   SELECT
     s."id"          AS synonym_id,
     s."term"        AS synonym_term,
     s."diagnosisId" AS diagnosis_id,
     normalize_diagnosis_term(s."term") AS normalized_term,
-    dr."id"         AS registry_id,
-    dr."canonicalNormalized" AS canonical_normalized
+    dr."id"         AS registry_id
   FROM "Synonym" s
   JOIN "DiagnosisRegistry" dr ON dr."legacyDiagnosisId" = s."diagnosisId"
-  -- Skip synonyms whose normalized form is empty or equals the canonical
   WHERE normalize_diagnosis_term(s."term") <> ''
     AND normalize_diagnosis_term(s."term") <> dr."canonicalNormalized"
 ),
--- Count how many distinct diagnoses "own" each normalized synonym term
--- (either as a synonym or as a canonical name of another diagnosis).
+
+-- ✅ FIXED: proper aggregation (no illegal references)
 term_owner_counts AS (
   SELECT
-    sn.normalized_term,
-    COUNT(DISTINCT sn.diagnosis_id) +
-      -- Add 1 if another registry entry has this as its canonical normalized name
-      (SELECT COUNT(*)
-       FROM "DiagnosisRegistry" dr2
-       WHERE dr2."canonicalNormalized" = sn.normalized_term
-         AND dr2."legacyDiagnosisId" <> sn.diagnosis_id
-      ) AS owner_count
-  FROM synonym_normalized sn
-  GROUP BY sn.normalized_term
+    normalized_term,
+    COUNT(DISTINCT owner_id) AS owner_count
+  FROM (
+    SELECT
+      sn.normalized_term,
+      sn.diagnosis_id AS owner_id
+    FROM synonym_normalized sn
+
+    UNION
+
+    SELECT
+      dr."canonicalNormalized",
+      dr."legacyDiagnosisId"
+    FROM "DiagnosisRegistry" dr
+  ) owners
+  GROUP BY normalized_term
 ),
+
 synonym_decisions AS (
   SELECT
     sn.synonym_id,
@@ -197,17 +167,12 @@ synonym_decisions AS (
     sn.registry_id,
     toc.owner_count,
     CASE
-      WHEN toc.owner_count > 1 THEN
-        'SEARCH_ONLY'::"DiagnosisAliasKind"
+      WHEN toc.owner_count > 1 THEN 'SEARCH_ONLY'
       WHEN
-        -- Short abbreviation: compact form (strip non-alphanumeric) is 2-5 chars
-        -- and the original term has no whitespace.
         length(regexp_replace(sn.synonym_term, '[^A-Za-z0-9]', '', 'g')) BETWEEN 2 AND 5
         AND sn.synonym_term NOT SIMILAR TO '%[[:space:]]%'
-      THEN
-        'ABBREVIATION'::"DiagnosisAliasKind"
-      ELSE
-        'SEARCH_ONLY'::"DiagnosisAliasKind"
+      THEN 'ABBREVIATION'
+      ELSE 'SEARCH_ONLY'
     END AS alias_kind,
     CASE
       WHEN toc.owner_count > 1 THEN false
@@ -228,6 +193,7 @@ synonym_decisions AS (
   FROM synonym_normalized sn
   JOIN term_owner_counts toc ON toc.normalized_term = sn.normalized_term
 )
+
 INSERT INTO "DiagnosisAlias" (
   "id",
   "diagnosisRegistryId",
@@ -255,48 +221,38 @@ SELECT
   CURRENT_TIMESTAMP
 FROM synonym_decisions sd
 ON CONFLICT ("diagnosisRegistryId", "normalizedTerm") DO UPDATE
-  SET
-    "term"            = EXCLUDED."term",
-    "kind"            = EXCLUDED."kind",
-    "acceptedForMatch" = EXCLUDED."acceptedForMatch",
-    "rank"            = 10,
-    "source"          = EXCLUDED."source",
-    "active"          = true,
-    "updatedAt"       = CURRENT_TIMESTAMP;
+SET
+  "term" = EXCLUDED."term",
+  "kind" = EXCLUDED."kind",
+  "acceptedForMatch" = EXCLUDED."acceptedForMatch",
+  "rank" = 10,
+  "source" = EXCLUDED."source",
+  "active" = true,
+  "updatedAt" = CURRENT_TIMESTAMP;
 
--- ─────────────────────────────────────────────────────────────────────────────
--- Step 4: Link Case records to their DiagnosisRegistry entry.
--- ─────────────────────────────────────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────────
+-- Step 4: Link Case
+-- ─────────────────────────────────────────────────────────
 UPDATE "Case" c
 SET
-  "diagnosisRegistryId"    = dr."id",
-  "diagnosisMappingStatus" = 'MATCHED'::"DiagnosisMappingStatus",
-  "diagnosisMappingMethod" = 'LEGACY_BACKFILL'::"DiagnosisMappingMethod",
+  "diagnosisRegistryId" = dr."id",
+  "diagnosisMappingStatus" = 'MATCHED',
+  "diagnosisMappingMethod" = 'LEGACY_BACKFILL',
   "diagnosisMappingConfidence" = COALESCE(c."diagnosisMappingConfidence", 1.0)
 FROM "DiagnosisRegistry" dr
-WHERE dr."legacyDiagnosisId" = c."diagnosisId"
-  AND (
-    c."diagnosisRegistryId" IS NULL
-    OR c."diagnosisRegistryId" <> dr."id"
-  );
+WHERE dr."legacyDiagnosisId" = c."diagnosisId";
 
--- ─────────────────────────────────────────────────────────────────────────────
--- Step 5: Link CaseRevision records to their DiagnosisRegistry entry.
--- ─────────────────────────────────────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────────
+-- Step 5: Link CaseRevision
+-- ─────────────────────────────────────────────────────────
 UPDATE "CaseRevision" cr
 SET
-  "diagnosisRegistryId"    = dr."id",
-  "diagnosisMappingStatus" = 'MATCHED'::"DiagnosisMappingStatus",
-  "diagnosisMappingMethod" = 'LEGACY_BACKFILL'::"DiagnosisMappingMethod",
+  "diagnosisRegistryId" = dr."id",
+  "diagnosisMappingStatus" = 'MATCHED',
+  "diagnosisMappingMethod" = 'LEGACY_BACKFILL',
   "diagnosisMappingConfidence" = COALESCE(cr."diagnosisMappingConfidence", 1.0)
 FROM "DiagnosisRegistry" dr
-WHERE dr."legacyDiagnosisId" = cr."diagnosisId"
-  AND (
-    cr."diagnosisRegistryId" IS NULL
-    OR cr."diagnosisRegistryId" <> dr."id"
-  );
+WHERE dr."legacyDiagnosisId" = cr."diagnosisId";
 
--- ─────────────────────────────────────────────────────────────────────────────
--- Cleanup: drop the helper function (it was only needed for this migration).
--- ─────────────────────────────────────────────────────────────────────────────
+-- Cleanup
 DROP FUNCTION IF EXISTS normalize_diagnosis_term(TEXT);
