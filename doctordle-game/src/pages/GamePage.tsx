@@ -61,6 +61,22 @@ export default function GamePage() {
     }
   }, [activeTab, isResultModalOpen])
 
+  useEffect(() => {
+    console.debug('[leaderboard-runtime]', {
+      mode: leaderboardMode,
+      leaderboard: leaderboard.leaderboard,
+      currentUserPosition: leaderboard.currentUserPosition,
+      loading: leaderboard.loading,
+      error: leaderboard.error,
+    })
+  }, [
+    leaderboard.error,
+    leaderboard.leaderboard,
+    leaderboard.loading,
+    leaderboard.currentUserPosition,
+    leaderboardMode,
+  ])
+
   return (
     <AppGameShell
       activeTab={activeTab}

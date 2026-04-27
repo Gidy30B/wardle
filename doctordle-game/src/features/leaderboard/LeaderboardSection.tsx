@@ -110,7 +110,8 @@ function LeaderboardSection({
   )
 
   return (
-    <section className="overflow-hidden rounded-[26px] border border-white/[0.06] bg-[var(--wardle-color-charcoal)] shadow-[0_22px_54px_rgba(0,0,0,0.22)] transition-opacity duration-200">
+    <section className="w-full">
+      <div className="overflow-hidden rounded-[26px] border border-white/[0.06] bg-[var(--wardle-color-charcoal)] shadow-[0_22px_54px_rgba(0,0,0,0.22)] transition-opacity duration-200">
       <div className="relative overflow-hidden bg-[linear-gradient(145deg,rgba(26,60,94,0.94),rgba(30,30,44,0.96)_68%)] px-5 py-5">
         <div className="pointer-events-none absolute -right-16 -top-16 size-44 rounded-full bg-[rgba(0,180,166,0.18)] blur-3xl" />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-white/[0.06]" />
@@ -171,7 +172,7 @@ function LeaderboardSection({
             <div className="flex items-end justify-center gap-2 sm:gap-3">
               {podiumEntries.map((entry, index) => (
                 <PodiumPlayer
-                  key={`podium-${entry.userId}`}
+                  key={`${mode}-podium-${entry.rank}-${entry.userId}`}
                   entry={entry}
                   index={index}
                   displayName={getDisplayName(entry, currentUserId)}
@@ -270,6 +271,7 @@ function LeaderboardSection({
           </div>
         </div>
       </div>
+      </div>
     </section>
   )
 }
@@ -309,37 +311,36 @@ function PodiumPlayer({
   displayName: string
   school: string
 }) {
-  const colors = ['var(--wardle-color-gray)', 'var(--wardle-color-amber)', '#CD7F32']
-  const heights = ['h-[92px]', 'h-[116px]', 'h-[78px]']
-  const medal = entry.rank === 1 ? '1' : entry.rank === 2 ? '2' : '3'
+  const colors = ['#8A9BB0', '#F4A261', '#CD7F32']
+  const heights = ['h-[90px]', 'h-[110px]', 'h-[75px]']
+  const badge = entry.rank === 1 ? '\u{1F3C6}' : entry.rank === 2 ? '\u{1F948}' : '\u{1F949}'
 
   return (
     <div className="min-w-0 flex-1 text-center">
-      <div className="mb-2">
+      <div className="mb-1.5">
         <div
-          className="mx-auto mb-1 flex size-11 items-center justify-center rounded-full text-base font-black text-white shadow-[0_4px_16px_rgba(244,162,97,0.22)]"
+          className="mx-auto mb-1 flex size-[42px] items-center justify-center rounded-full text-[18px] font-black text-white"
           style={{
-            background: `linear-gradient(135deg, ${colors[index]}, rgba(255,255,255,0.12))`,
+            background: `linear-gradient(135deg, ${colors[index]}, ${colors[index]}88)`,
+            boxShadow: `0 4px 16px ${colors[index]}44`,
           }}
         >
           {getInitials(displayName)}
         </div>
-        <div className="truncate text-xs font-bold text-[var(--wardle-color-mint)]">
+        <div className="truncate text-[11px] font-bold text-[var(--wardle-color-mint)]">
           {displayName}
         </div>
         <div className="truncate text-[10px] text-white/42">{school}</div>
       </div>
       <div
-        className={`${heights[index]} rounded-t-[8px] border px-2 pt-2`}
+        className={`${heights[index]} flex flex-col items-center justify-start rounded-t-[8px] border px-2 pt-2`}
         style={{
-          borderColor: colors[index],
-          background: `linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))`,
+          borderColor: `${colors[index]}44`,
+          background: `linear-gradient(180deg, ${colors[index]}33, ${colors[index]}11)`,
         }}
       >
-        <div className="mx-auto flex size-6 items-center justify-center rounded-full bg-white/10 text-xs font-black text-white">
-          {medal}
-        </div>
-        <div className="mt-2 text-xs font-black" style={{ color: colors[index] }}>
+        <div className="text-[20px]">{badge}</div>
+        <div className="mt-1 text-xs font-black" style={{ color: colors[index] }}>
           {formatScore(entry.score)}
         </div>
       </div>

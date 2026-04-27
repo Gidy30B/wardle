@@ -39,7 +39,7 @@ export default function RankTabPage({
   const accuracy = null
 
   return (
-    <main className="flex h-full min-h-0 w-full flex-1 flex-col overflow-y-auto px-1 pb-4 pt-1 sm:px-2">
+    <main className="flex h-full min-h-0 w-full flex-1 flex-col overflow-y-auto px-1 pb-24 pt-1 sm:px-2">
       <LeaderboardSection
         iconSet={iconSet}
         mode={mode}

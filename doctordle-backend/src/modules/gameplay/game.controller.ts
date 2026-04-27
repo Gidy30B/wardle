@@ -2,12 +2,14 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   InternalServerErrorException,
   Logger,
   Param,
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { RateLimitGuard } from './guards/rate-limit.guard';
@@ -20,6 +22,8 @@ import {
 import { RequestHintDto } from './dto/request-hint.dto';
 import { LeaderboardService } from './leaderboard.service';
 import type { AuthenticatedRequest } from '../../auth/authenticated-request.interface';
+import type { Response } from 'express';
+import type { LeaderboardCacheDiagnostic } from './leaderboard.service';
 
 @Controller('game')
 @UseGuards(RateLimitGuard)
@@ -156,13 +160,26 @@ export class GameController {
   }
 
   @Get('leaderboard/today')
-  async getTodayLeaderboard(@Query('limit') limit?: string) {
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
+  async getTodayLeaderboard(
+    @Query('limit') limit?: string,
+    @Res({ passthrough: true }) res?: Response,
+  ) {
     const parsedLimit = Number(limit ?? 50);
     const safeLimit = Number.isFinite(parsedLimit)
       ? Math.max(1, Math.min(100, Math.floor(parsedLimit)))
       : 50;
 
     try {
+      this.setLeaderboardCacheHeaders(
+        res,
+        await this.leaderboardService.getCacheDiagnostic({
+          mode: 'daily',
+          limit: safeLimit,
+        }),
+      );
       return await this.leaderboardService.getToday(safeLimit);
     } catch (error) {
       this.logger.error(
@@ -178,13 +195,26 @@ export class GameController {
   }
 
   @Get('leaderboard/weekly')
-  async getWeeklyLeaderboard(@Query('limit') limit?: string) {
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
+  async getWeeklyLeaderboard(
+    @Query('limit') limit?: string,
+    @Res({ passthrough: true }) res?: Response,
+  ) {
     const parsedLimit = Number(limit ?? 50);
     const safeLimit = Number.isFinite(parsedLimit)
       ? Math.max(1, Math.min(100, Math.floor(parsedLimit)))
       : 50;
 
     try {
+      this.setLeaderboardCacheHeaders(
+        res,
+        await this.leaderboardService.getCacheDiagnostic({
+          mode: 'weekly',
+          limit: safeLimit,
+        }),
+      );
       return await this.leaderboardService.getWeekly(safeLimit);
     } catch (error) {
       this.logger.error(
@@ -200,23 +230,23 @@ export class GameController {
   }
 
   @Get('leaderboard/me')
+  @Header('Cache-Control', 'no-store')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
   async getMyLeaderboardPosition(
     @Req() req: AuthenticatedRequest,
     @Query('mode') mode?: string,
+    @Res({ passthrough: true }) res?: Response,
   ) {
     const normalizedMode = mode === 'weekly' ? 'weekly' : 'daily';
 
     try {
+      this.setLeaderboardCacheHeaders(res, null);
       const result = await this.leaderboardService.getUserPosition({
         userId: req.user.id,
         mode: normalizedMode,
       });
-      return result || {
-        userId: req.user.id,
-        rank: 0,
-        score: 0,
-        mode: normalizedMode,
-      };
+      return result;
     } catch (error) {
       this.logger.error(
         JSON.stringify({
@@ -245,6 +275,25 @@ export class GameController {
         error instanceof Error ? error.stack : undefined,
       );
       throw error;
+    }
+  }
+
+  private setLeaderboardCacheHeaders(
+    res: Response | undefined,
+    diagnostic: LeaderboardCacheDiagnostic | null,
+  ) {
+    if (!res) {
+      return;
+    }
+
+    res.setHeader(
+      'X-Leaderboard-Cache',
+      diagnostic ? (diagnostic.hit ? 'hit' : 'miss') : 'bypass',
+    );
+    res.setHeader('X-Cache-Hit', diagnostic?.hit ? 'true' : 'false');
+
+    if (diagnostic?.key) {
+      res.setHeader('X-Cache-Key', diagnostic.key);
     }
   }
 }
