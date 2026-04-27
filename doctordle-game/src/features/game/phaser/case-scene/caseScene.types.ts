@@ -63,6 +63,16 @@ export type GuessBarView = {
   helper: Phaser.GameObjects.Text
 }
 
+export type SuggestionRowView = {
+  button: PressableButtonView
+}
+
+export type SuggestionPanelView = {
+  container: Phaser.GameObjects.Container
+  background: Phaser.GameObjects.Rectangle
+  rows: SuggestionRowView[]
+}
+
 export type FeedbackView = {
   container: Phaser.GameObjects.Container
   glow: Phaser.GameObjects.Rectangle
@@ -79,20 +89,35 @@ export type EndOverlayView = {
   background: Phaser.GameObjects.Rectangle
   accent: Phaser.GameObjects.Rectangle
   beam: Phaser.GameObjects.Rectangle
+  iconGlow: Phaser.GameObjects.Arc
+  iconBadge: Phaser.GameObjects.Arc
+  icon: Phaser.GameObjects.Text
   eyebrow: Phaser.GameObjects.Text
   title: Phaser.GameObjects.Text
-  diagnosis: Phaser.GameObjects.Text
-  helper: Phaser.GameObjects.Text
+  subtitle: Phaser.GameObjects.Text
+  diagnosisLabel: Phaser.GameObjects.Text
+  diagnosisValue: Phaser.GameObjects.Text
+  statCards: Array<{
+    background: Phaser.GameObjects.Rectangle
+    label: Phaser.GameObjects.Text
+    value: Phaser.GameObjects.Text
+  }>
+  performanceLabel: Phaser.GameObjects.Text
+  performanceStars: Phaser.GameObjects.Text
+  ctaHint: Phaser.GameObjects.Text
   continueButton: PressableButtonView
   explanationButton: PressableButtonView
 }
 
 export type StatePanelView = {
   container: Phaser.GameObjects.Container
+  statusGlow?: Phaser.GameObjects.Rectangle
   background: Phaser.GameObjects.Rectangle
+  pulseBar?: Phaser.GameObjects.Rectangle
   eyebrow: Phaser.GameObjects.Text
   title: Phaser.GameObjects.Text
   body: Phaser.GameObjects.Text
+  activityDots?: Phaser.GameObjects.Text
   menuButton: PressableButtonView
   actionButton: PressableButtonView
 }

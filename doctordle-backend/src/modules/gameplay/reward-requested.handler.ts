@@ -1,10 +1,10 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { EventBusService } from '../../core/events/event-bus.service';
 import { QueueService } from '../queue/queue.service';
-import { GameplayEventName, RewardRequestedEvent } from './gameplay.events';
+import { GameplayEventName, SessionCompletedEvent } from './gameplay.events';
 
 @Injectable()
-export class RewardRequestedHandler implements OnModuleInit, OnModuleDestroy {
+export class SessionCompletedHandler implements OnModuleInit, OnModuleDestroy {
   private unsubscribe?: () => void;
 
   constructor(
@@ -13,8 +13,8 @@ export class RewardRequestedHandler implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
-    this.unsubscribe = this.eventBus.subscribe<RewardRequestedEvent>(
-      GameplayEventName.RewardRequested,
+    this.unsubscribe = this.eventBus.subscribe<SessionCompletedEvent>(
+      GameplayEventName.SessionCompleted,
       async (event) => {
         const payload = event.payload;
 

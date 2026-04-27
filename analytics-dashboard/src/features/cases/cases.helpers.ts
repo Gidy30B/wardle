@@ -2,6 +2,7 @@ import type { EditorialQueueFilter } from '../../api/admin';
 import type {
   CaseEditorialStatus,
   CaseSource,
+  DiagnosisPublishReadinessReason,
   EditorialCaseDetail,
   EditorialCaseListItem,
   EditorialCaseReview,
@@ -166,6 +167,54 @@ export function getPublishReadinessSummary(status: CaseEditorialStatus | null) {
     description:
       'Keep using the editorial workflow to move this case toward publish readiness.',
     tone: 'neutral' as const,
+  };
+}
+
+function formatDiagnosisReason(
+  reason: DiagnosisPublishReadinessReason | undefined,
+) {
+  switch (reason) {
+    case 'missing_registry_link':
+      return 'No registry diagnosis linked yet.';
+    case 'mapping_not_publish_ready':
+      return 'Diagnosis link exists, but mapping still needs editorial confirmation.';
+    case 'registry_not_publishable':
+      return 'Linked registry diagnosis is not currently publishable.';
+    default:
+      return 'Diagnosis standardization still needs editorial work.';
+  }
+}
+
+export function getDiagnosisWorkflowSummary(
+  caseItem: Pick<
+    EditorialCaseListItem | EditorialCaseDetail,
+    | 'diagnosisRegistryId'
+    | 'diagnosisMappingStatus'
+    | 'diagnosisMappingMethod'
+    | 'diagnosisPublishReadiness'
+    | 'diagnosisRegistrySummary'
+  >,
+) {
+  if (caseItem.diagnosisPublishReadiness.ready) {
+    return {
+      label: 'Diagnosis ready',
+      description: 'Linked and publish-ready.',
+      tone: 'success' as const,
+    };
+  }
+
+  if (caseItem.diagnosisRegistryId) {
+    return {
+      label: 'Linked, needs review',
+      description: formatDiagnosisReason(caseItem.diagnosisPublishReadiness.reason),
+      tone: 'warning' as const,
+    };
+  }
+
+  return {
+    label: 'Diagnosis unresolved',
+    description: formatDiagnosisReason(caseItem.diagnosisPublishReadiness.reason),
+    tone: 'danger' as const,
   };
 }
 

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CaseSource, Prisma, type PrismaClient } from '@prisma/client';
+import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
 import { EditorialMetricsService } from '../editorial/editorial-metrics.service.js';
 import type {
   CaseRevisionSnapshot,
@@ -15,6 +16,7 @@ export class CaseRevisionService {
 
   constructor(
     private readonly editorialMetrics: EditorialMetricsService,
+    private readonly diagnosisRegistryLinkService: DiagnosisRegistryLinkService,
   ) {}
 
   async createRevisionForGeneratedCaseInTransaction(
@@ -47,6 +49,12 @@ export class CaseRevisionService {
         explanation: true,
         differentials: true,
         diagnosisId: true,
+        diagnosisRegistryId: true,
+        proposedDiagnosisText: true,
+        diagnosisMappingStatus: true,
+        diagnosisMappingMethod: true,
+        diagnosisMappingConfidence: true,
+        diagnosisEditorialNote: true,
       },
     });
 
@@ -54,7 +62,28 @@ export class CaseRevisionService {
       throw new NotFoundException(`Generated case not found: ${caseId}`);
     }
 
-    return this.toSnapshot(caseRecord);
+    const resolvedDiagnosisLink =
+      await this.diagnosisRegistryLinkService.resolveForWrite(
+        {
+          diagnosisId: caseRecord.diagnosisId,
+          diagnosisRegistryId: caseRecord.diagnosisRegistryId,
+        },
+        tx,
+      );
+
+    if (caseRecord.diagnosisRegistryId !== resolvedDiagnosisLink.diagnosisRegistryId) {
+      await tx.case.update({
+        where: { id: caseId },
+        data: {
+          diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+        },
+      });
+    }
+
+    return this.toSnapshot({
+      ...caseRecord,
+      diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+    });
   }
 
   async createRevisionFromSnapshotInTransaction(
@@ -95,6 +124,12 @@ export class CaseRevisionService {
         explanation: this.toNullableJsonValue(input.snapshot.explanation),
         differentials: input.snapshot.differentials,
         diagnosisId: input.snapshot.diagnosisId,
+        diagnosisRegistryId: input.snapshot.diagnosisRegistryId,
+        proposedDiagnosisText: input.snapshot.proposedDiagnosisText,
+        diagnosisMappingStatus: input.snapshot.diagnosisMappingStatus,
+        diagnosisMappingMethod: input.snapshot.diagnosisMappingMethod,
+        diagnosisMappingConfidence: input.snapshot.diagnosisMappingConfidence,
+        diagnosisEditorialNote: input.snapshot.diagnosisEditorialNote,
         createdByUserId: input.createdByUserId,
       },
     });
@@ -140,6 +175,12 @@ export class CaseRevisionService {
     explanation: Prisma.JsonValue | null;
     differentials: string[];
     diagnosisId: string;
+    diagnosisRegistryId: string;
+    proposedDiagnosisText: string;
+    diagnosisMappingStatus: CaseRevisionSnapshot['diagnosisMappingStatus'];
+    diagnosisMappingMethod: CaseRevisionSnapshot['diagnosisMappingMethod'];
+    diagnosisMappingConfidence: number | null;
+    diagnosisEditorialNote: string | null;
   }): CaseRevisionSnapshot {
     return {
       caseId: caseRecord.id,
@@ -153,6 +194,12 @@ export class CaseRevisionService {
       explanation: caseRecord.explanation,
       differentials: [...caseRecord.differentials],
       diagnosisId: caseRecord.diagnosisId,
+      diagnosisRegistryId: caseRecord.diagnosisRegistryId,
+      proposedDiagnosisText: caseRecord.proposedDiagnosisText,
+      diagnosisMappingStatus: caseRecord.diagnosisMappingStatus,
+      diagnosisMappingMethod: caseRecord.diagnosisMappingMethod,
+      diagnosisMappingConfidence: caseRecord.diagnosisMappingConfidence,
+      diagnosisEditorialNote: caseRecord.diagnosisEditorialNote,
     };
   }
 

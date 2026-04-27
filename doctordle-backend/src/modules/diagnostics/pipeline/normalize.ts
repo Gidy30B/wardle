@@ -1,3 +1,5 @@
+import { normalizeDiagnosisTerm } from '../../diagnosis-registry/diagnosis-term-normalizer.js';
+
 export function normalize(text: string): string {
-  return text.toLowerCase().trim().replace(/[^\w\s]/g, '');
+  return normalizeDiagnosisTerm(text);
 }

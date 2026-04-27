@@ -11,6 +11,11 @@ import {
   isPublishEligibleEditorialStatus,
 } from '../editorial/policies/publish-policy.js';
 import { AIContentService } from '../ai/ai-content.service';
+import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
+import {
+  buildMatchedDiagnosisMappingFields,
+  determineDiagnosisWriteMappingMethod,
+} from '../diagnosis-registry/diagnosis-mapping-fields.js';
 import { CreateCaseDto } from './dto/create-case.dto';
 
 export type DiagnosisCatalogItem = {
@@ -63,19 +68,25 @@ export class CasesService {
     private readonly prisma: PrismaService,
     private readonly aiContentService: AIContentService,
     private readonly editorialMetrics: EditorialMetricsService,
+    private readonly diagnosisRegistryLinkService: DiagnosisRegistryLinkService,
   ) {}
 
   async createCase(dto: CreateCaseDto): Promise<CreatedCaseRecord> {
     const now = new Date();
     const date = dto.date ? this.parseDailyDate(dto.date) : now;
 
-    const diagnosis = await this.prisma.diagnosis.findUnique({
-      where: { id: dto.diagnosisId },
+    const resolvedDiagnosisLink =
+      await this.diagnosisRegistryLinkService.resolveForWrite({
+        diagnosisId: dto.diagnosisId,
+        diagnosisRegistryId: dto.diagnosisRegistryId,
+      });
+    const diagnosisMappingFields = buildMatchedDiagnosisMappingFields({
+      diagnosisName: resolvedDiagnosisLink.diagnosisName,
+      proposedDiagnosisText: dto.proposedDiagnosisText,
+      method: determineDiagnosisWriteMappingMethod({
+        diagnosisRegistryId: dto.diagnosisRegistryId,
+      }),
     });
-
-    if (!diagnosis) {
-      throw new NotFoundException(`Diagnosis not found: ${dto.diagnosisId}`);
-    }
 
     const created = dto.date
       ? await this.prisma.case.upsert({
@@ -84,7 +95,9 @@ export class CasesService {
             title: dto.title,
             history: dto.history,
             symptoms: dto.symptoms,
-            diagnosisId: dto.diagnosisId,
+            diagnosisId: resolvedDiagnosisLink.diagnosisId,
+            diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+            ...diagnosisMappingFields,
           },
           create: {
             title: dto.title,
@@ -92,7 +105,9 @@ export class CasesService {
             difficulty: 'medium',
             history: dto.history,
             symptoms: dto.symptoms,
-            diagnosisId: dto.diagnosisId,
+            diagnosisId: resolvedDiagnosisLink.diagnosisId,
+            diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+            ...diagnosisMappingFields,
           },
           include: {
             diagnosis: true,
@@ -105,7 +120,9 @@ export class CasesService {
             difficulty: 'medium',
             history: dto.history,
             symptoms: dto.symptoms,
-            diagnosisId: dto.diagnosisId,
+            diagnosisId: resolvedDiagnosisLink.diagnosisId,
+            diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+            ...diagnosisMappingFields,
           },
           include: {
             diagnosis: true,
@@ -119,6 +136,7 @@ export class CasesService {
         title: created.title,
         date: created.date.toISOString(),
         diagnosisId: created.diagnosisId,
+        diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
       }),
     );
 

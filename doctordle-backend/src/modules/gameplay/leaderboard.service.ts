@@ -6,6 +6,34 @@ import { MetricsService } from '../../core/logger/metrics.service';
 import { CasesService } from '../cases/cases.service';
 
 type LeaderboardMode = 'daily' | 'weekly';
+type LeaderboardRow = {
+  userId: string;
+  score: number;
+  attemptsCount: number;
+  completedAt: Date;
+  user: {
+    displayName: string | null;
+    stats: {
+      currentStreak: number;
+    } | null;
+    organizations: Array<{
+      organization: {
+        name: string;
+      };
+    }>;
+  };
+};
+
+type LeaderboardEntryDto = {
+  rank: number;
+  userId: string;
+  displayName?: string;
+  organizationName?: string;
+  streak?: number;
+  score: number;
+  attemptsCount: number;
+  completedAt: string;
+};
 
 @Injectable()
 export class LeaderboardService {
@@ -21,19 +49,13 @@ export class LeaderboardService {
 
   async getToday(limit = 50) {
     const { date } = this.getUtcDayRange();
-    const key = `leaderboard:daily:${date}:${limit}`;
+    const key = `leaderboard:daily:v2:${date}:${limit}`;
 
     const cached = await this.cache.get(key);
     if (cached) {
       this.metrics.increment('leaderboard.cache.hit');
       this.logger.info({ key }, 'leaderboard.cache_hit');
-      return JSON.parse(cached) as Array<{
-        rank: number;
-        userId: string;
-        score: number;
-        attemptsCount: number;
-        completedAt: string;
-      }>;
+      return JSON.parse(cached) as LeaderboardEntryDto[];
     }
 
     this.metrics.increment('leaderboard.cache.miss');
@@ -59,16 +81,13 @@ export class LeaderboardService {
         score: true,
         attemptsCount: true,
         completedAt: true,
+        user: this.getPublicUserSelect(),
       },
     });
 
-    const ranked = rows.map((row, index) => ({
-      rank: index + 1,
-      userId: row.userId,
-      score: row.score,
-      attemptsCount: row.attemptsCount,
-      completedAt: row.completedAt.toISOString(),
-    }));
+    const ranked = rows.map((row, index) =>
+      this.toLeaderboardEntry(row, index + 1),
+    );
 
     await this.cache.set(key, JSON.stringify(ranked), this.leaderboardTtlSeconds);
 
@@ -77,19 +96,13 @@ export class LeaderboardService {
 
   async getWeekly(limit = 50) {
     const { start, end, keyDate } = this.getUtcRollingWeekRange();
-    const key = `leaderboard:weekly:${keyDate}:${limit}`;
+    const key = `leaderboard:weekly:v2:${keyDate}:${limit}`;
 
     const cached = await this.cache.get(key);
     if (cached) {
       this.metrics.increment('leaderboard.weekly.cache.hit');
       this.logger.info({ key }, 'leaderboard.weekly.cache_hit');
-      return JSON.parse(cached) as Array<{
-        rank: number;
-        userId: string;
-        score: number;
-        attemptsCount: number;
-        completedAt: string;
-      }>;
+      return JSON.parse(cached) as LeaderboardEntryDto[];
     }
 
     this.metrics.increment('leaderboard.weekly.cache.miss');
@@ -113,16 +126,13 @@ export class LeaderboardService {
         score: true,
         attemptsCount: true,
         completedAt: true,
+        user: this.getPublicUserSelect(),
       },
     });
 
-    const ranked = rows.map((row, index) => ({
-      rank: index + 1,
-      userId: row.userId,
-      score: row.score,
-      attemptsCount: row.attemptsCount,
-      completedAt: row.completedAt.toISOString(),
-    }));
+    const ranked = rows.map((row, index) =>
+      this.toLeaderboardEntry(row, index + 1),
+    );
 
     await this.cache.set(key, JSON.stringify(ranked), this.leaderboardTtlSeconds);
 
@@ -149,6 +159,7 @@ export class LeaderboardService {
           score: true,
           attemptsCount: true,
           completedAt: true,
+          user: this.getPublicUserSelect(),
         },
       });
 
@@ -171,13 +182,7 @@ export class LeaderboardService {
         },
       });
 
-      return {
-        rank: betterCount + 1,
-        userId: entry.userId,
-        score: entry.score,
-        attemptsCount: entry.attemptsCount,
-        completedAt: entry.completedAt.toISOString(),
-      };
+      return this.toLeaderboardEntry(entry, betterCount + 1);
     }
 
     const { start, end } = this.getUtcRollingWeekRange();
@@ -199,6 +204,7 @@ export class LeaderboardService {
         score: true,
         attemptsCount: true,
         completedAt: true,
+        user: this.getPublicUserSelect(),
       },
     });
 
@@ -224,13 +230,7 @@ export class LeaderboardService {
       },
     });
 
-    return {
-      rank: betterCount + 1,
-      userId: entry.userId,
-      score: entry.score,
-      attemptsCount: entry.attemptsCount,
-      completedAt: entry.completedAt.toISOString(),
-    };
+    return this.toLeaderboardEntry(entry, betterCount + 1);
   }
 
   async upsertCompletion(input: {
@@ -283,7 +283,7 @@ export class LeaderboardService {
     }
 
     const { date } = this.getUtcDayRange(input.completedAt);
-    const deleted = await this.cache.deleteByPrefix(`leaderboard:daily:${date}:`);
+    const deleted = await this.cache.deleteByPrefix(`leaderboard:daily:`);
     const weeklyDeleted = await this.cache.deleteByPrefix('leaderboard:weekly:');
     this.logger.info({ date, deleted }, 'leaderboard.cache_invalidated');
     this.logger.info({ deleted: weeklyDeleted }, 'leaderboard.weekly.cache_invalidated');
@@ -300,6 +300,53 @@ export class LeaderboardService {
       date: start.toISOString().slice(0, 10),
       start,
       end,
+    };
+  }
+
+  private getPublicUserSelect() {
+    return {
+      select: {
+        displayName: true,
+        stats: {
+          select: {
+            currentStreak: true,
+          },
+        },
+        organizations: {
+          where: {
+            status: 'ACTIVE' as const,
+          },
+          orderBy: {
+            createdAt: 'asc' as const,
+          },
+          take: 1,
+          select: {
+            organization: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    };
+  }
+
+  private toLeaderboardEntry(row: LeaderboardRow, rank: number): LeaderboardEntryDto {
+    const displayName = row.user.displayName?.trim() || undefined;
+    const organizationName =
+      row.user.organizations[0]?.organization.name.trim() || undefined;
+    const streak = row.user.stats?.currentStreak;
+
+    return {
+      rank,
+      userId: row.userId,
+      ...(displayName ? { displayName } : {}),
+      ...(organizationName ? { organizationName } : {}),
+      ...(typeof streak === 'number' ? { streak } : {}),
+      score: row.score,
+      attemptsCount: row.attemptsCount,
+      completedAt: row.completedAt.toISOString(),
     };
   }
 

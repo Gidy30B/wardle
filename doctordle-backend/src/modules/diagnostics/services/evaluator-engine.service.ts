@@ -11,7 +11,10 @@ export class EvaluatorEngineService {
     private readonly evaluatorV2Service: EvaluatorV2Service,
   ) {}
 
-  evaluate(guess: string, answer: string): Promise<EvaluationResult> {
+  evaluateAdvisoryFeedback(
+    guess: string,
+    answer: string,
+  ): Promise<EvaluationResult> {
     const version = getEnv().EVALUATOR_VERSION.toLowerCase();
 
     if (version === 'v1') {
@@ -19,5 +22,9 @@ export class EvaluatorEngineService {
     }
 
     return this.evaluatorV2Service.evaluate(guess, answer);
+  }
+
+  evaluate(guess: string, answer: string): Promise<EvaluationResult> {
+    return this.evaluateAdvisoryFeedback(guess, answer);
   }
 }

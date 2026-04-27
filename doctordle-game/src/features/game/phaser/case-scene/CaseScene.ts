@@ -20,7 +20,6 @@ import {
   DEPTH,
   FRACTIONAL_EPSILON,
   HEADER_HEART_EMPTY,
-  HEADER_HEART_FULL,
   KEYBOARD_ROWS,
   LAB_DNA_TEXTURE,
   LAB_MOTE_TEXTURE,
@@ -59,7 +58,17 @@ import type {
   RoundVisualState,
   ScaleAuditEntry,
   StatePanelView,
+  SuggestionPanelView,
 } from './caseScene.types'
+
+type ClueRenderSlot = {
+  id: string
+  type: PhaserVisibleClue['type'] | 'locked'
+  value: string
+  isNewest: boolean
+  isLocked: boolean
+  slotNumber: number
+}
 
 export class RoundScene extends Phaser.Scene implements RoundLayerHost {
   private readonly getSnapshot: () => PhaserGameSessionSnapshot
@@ -97,6 +106,10 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
   private headerTitleGlow?: Phaser.GameObjects.Text
   private headerTitleText?: Phaser.GameObjects.Text
   private headerTitleAccent?: Phaser.GameObjects.Rectangle
+  private headerCaseCodeText?: Phaser.GameObjects.Text
+  private headerPromptText?: Phaser.GameObjects.Text
+  private headerAttemptsLabel?: Phaser.GameObjects.Text
+  private headerAttemptsValue?: Phaser.GameObjects.Text
   private headerDnaIcon?: Phaser.GameObjects.Image
   private headerDnaRotationTween?: Phaser.Tweens.Tween
   private headerFlashSweep?: Phaser.GameObjects.Rectangle
@@ -110,7 +123,6 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
   private headerHeartPulseTween?: Phaser.Tweens.Tween
   private headerHeartPulseState: HeaderTensionState | null = null
   private lastHeaderViabilityRemaining = -1
-  private lastHeaderViabilityTotal = -1
   private lastXp?: number
   private lastLevel?: number
   private isInDangerState?: boolean
@@ -123,13 +135,20 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
   private clueStackShadow?: Phaser.GameObjects.Rectangle
   private clueStackTray?: Phaser.GameObjects.Rectangle
   private clueStackCaption?: Phaser.GameObjects.Text
+  private clueProgressDots: Phaser.GameObjects.Rectangle[] = []
 
   private clueCardLayer?: Phaser.GameObjects.Container
   private clueMaskGraphics?: Phaser.GameObjects.Graphics
   private clueEmptyText?: Phaser.GameObjects.Text
   private readonly clueCards = new Map<string, ClueCardView>()
+  private clueScrollOffset = 0
+  private clueScrollMaxOffset = 0
+  private clueScrollPointerId: number | null = null
+  private clueScrollDragStartY = 0
+  private clueScrollStartOffset = 0
 
   private guessBar?: GuessBarView
+  private suggestionPanel?: SuggestionPanelView
   private feedbackLayer?: FeedbackView
   private rewardToast?: RewardToastView
   private endOverlay?: EndOverlayView
@@ -152,6 +171,8 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
   private feedbackHideEvent?: Phaser.Time.TimerEvent
   private overlayBeamTween?: Phaser.Tweens.Tween
   private overlayDnaLoopEvent?: Phaser.Time.TimerEvent
+  private statePanelPulseTween?: Phaser.Tweens.Tween
+  private statePanelDotsEvent?: Phaser.Time.TimerEvent
   private onboardingState: OnboardingState = 'inactive'
   private onboardingLayer?: Phaser.GameObjects.Container
   private onboardingClueFocus?: Phaser.GameObjects.Rectangle
@@ -229,6 +250,9 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     this.createOnboardingArtifacts()
     this.registerHardwareKeyboard()
     this.input.on('pointerdown', this.handleScenePointerDown, this)
+    this.input.on('pointermove', this.handleScenePointerMove, this)
+    this.input.on('pointerup', this.handleScenePointerUp, this)
+    this.input.on('wheel', this.handleSceneWheel, this)
     this.applyLayoutMetrics()
     if (DEBUG_RENDER_AUDIT && DEBUG_RENDER_OVERLAY) {
       this.createDebugAuditOverlay()
@@ -244,6 +268,9 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
   shutdown() {
     this.scale.off('resize', this.handleResize, this)
     this.input.off('pointerdown', this.handleScenePointerDown, this)
+    this.input.off('pointermove', this.handleScenePointerMove, this)
+    this.input.off('pointerup', this.handleScenePointerUp, this)
+    this.input.off('wheel', this.handleSceneWheel, this)
     this.input.keyboard?.off('keydown', this.handleHardwareKeyDown, this)
     this.guessBarGlowTween?.stop()
     this.guessBarScanTween?.stop()
@@ -252,7 +279,10 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     this.guessBarResetEvent?.remove(false)
     this.feedbackHideEvent?.remove(false)
     this.overlayDnaLoopEvent?.remove(false)
+    this.statePanelPulseTween?.stop()
+    this.statePanelDotsEvent?.remove(false)
     this.outerFramePulseTween?.stop()
+    this.stopEndOverlayTransitions()
     this.cleanupOnboardingDemoArtifacts()
     this.clueMaskGraphics?.destroy()
     this.ambientMotes.forEach((mote) => mote.destroy())
@@ -264,6 +294,8 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     this.ambientMotes = []
     this.feedbackBurstPool = []
     this.overlayDnaPool = []
+    this.statePanelPulseTween = undefined
+    this.statePanelDotsEvent = undefined
     this.headerDnaIcon = undefined
     this.headerDnaRotationTween = undefined
     this.headerFlashSweep = undefined
@@ -278,6 +310,8 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     this.outerFrameVignette = undefined
     this.outerFrameCornerMotifs = []
     this.outerFramePulseTween = undefined
+    this.statePanelPulseTween = undefined
+    this.statePanelDotsEvent = undefined
   }
 
   applyBridge() {
@@ -322,11 +356,22 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     return getLayoutMetrics(width, height)
   }
 
+  private isGameplayInputLocked(snapshot: PhaserGameSessionSnapshot = this.getSnapshot()) {
+    return (
+      snapshot.mode === 'SUBMITTING' ||
+      snapshot.mode === 'FINAL_FEEDBACK' ||
+      snapshot.mode === 'LOADING' ||
+      snapshot.mode === 'WAITING' ||
+      snapshot.mode === 'BLOCKED'
+    )
+  }
+
   private registerHardwareKeyboard() {
     this.input.keyboard?.on('keydown', this.handleHardwareKeyDown, this)
   }
 
   private handleHardwareKeyDown(event: KeyboardEvent) {
+    const snapshot = this.getSnapshot()
     const activeElement = document.activeElement
     const activeTag = activeElement instanceof HTMLElement ? activeElement.tagName : ''
 
@@ -356,6 +401,11 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       return
     }
 
+    if (this.isGameplayInputLocked(snapshot)) {
+      event.preventDefault()
+      return
+    }
+
     const key = event.key
     const upper = key.toUpperCase()
 
@@ -367,13 +417,36 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       return
     }
 
+    if ((key === ' ' || key === 'Spacebar') && !event.repeat) {
+      this.handleKeyPressIntent(' ')
+      event.preventDefault()
+      return
+    }
+
     if (key === 'Backspace' || key === 'Delete') {
       this.handleBackspaceIntent()
       event.preventDefault()
       return
     }
 
+    if (key === 'ArrowDown' && !event.repeat) {
+      this.getIntents().onMoveSuggestionHighlight(1)
+      event.preventDefault()
+      return
+    }
+
+    if (key === 'ArrowUp' && !event.repeat) {
+      this.getIntents().onMoveSuggestionHighlight(-1)
+      event.preventDefault()
+      return
+    }
+
     if (key === 'Enter' && !event.repeat) {
+      if (this.getIntents().onSelectHighlightedSuggestion()) {
+        event.preventDefault()
+        return
+      }
+
       this.handleSubmitIntent()
       event.preventDefault()
       return
@@ -564,6 +637,7 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
 
   public renderDiagnosisBarLayer(viewModel: PhaserGameSessionSnapshot) {
     this.syncGuessBar(viewModel)
+    this.syncSuggestionPanel(viewModel)
   }
 
   public bootActionRowLayer() {
@@ -1270,7 +1344,7 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     }
   }
 
-  private handleScenePointerDown() {
+  private handleScenePointerDown(pointer: Phaser.Input.Pointer) {
     if (this.onboardingState === 'awaiting_tap') {
       this.completeOnboardingTapToBegin()
       return
@@ -1278,7 +1352,64 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
 
     if (this.isOnboardingBlockingInput()) {
       this.skipOnboardingDemo()
+      return
     }
+
+    if (this.shouldEnableClueReviewScroll(this.getSnapshot()) && this.isPointerInsideClueStack(pointer)) {
+      this.clueScrollPointerId = pointer.id
+      this.clueScrollDragStartY = pointer.worldY
+      this.clueScrollStartOffset = this.clueScrollOffset
+    }
+  }
+
+  private handleScenePointerMove(pointer: Phaser.Input.Pointer) {
+    if (this.clueScrollPointerId !== pointer.id) {
+      return
+    }
+
+    const delta = pointer.worldY - this.clueScrollDragStartY
+    this.setClueScrollOffset(this.clueScrollStartOffset - delta)
+  }
+
+  private handleScenePointerUp(pointer: Phaser.Input.Pointer) {
+    if (this.clueScrollPointerId === pointer.id) {
+      this.clueScrollPointerId = null
+    }
+  }
+
+  private handleSceneWheel(
+    pointer: Phaser.Input.Pointer,
+    _gameObjects: Phaser.GameObjects.GameObject[],
+    _deltaX: number,
+    deltaY: number,
+  ) {
+    if (!this.shouldEnableClueReviewScroll(this.getSnapshot()) || !this.isPointerInsideClueStack(pointer)) {
+      return
+    }
+
+    this.setClueScrollOffset(this.clueScrollOffset + deltaY * 0.45)
+  }
+
+  private shouldEnableClueReviewScroll(_snapshot: PhaserGameSessionSnapshot) {
+    return this.clueScrollMaxOffset > 0
+  }
+
+  private isPointerInsideClueStack(pointer: Phaser.Input.Pointer) {
+    const { clues } = this.layoutMetrics
+    const x = pointer.worldX
+    const y = pointer.worldY
+
+    return x >= clues.x && x <= clues.x + clues.width && y >= clues.y && y <= clues.y + clues.height
+  }
+
+  private setClueScrollOffset(nextOffset: number) {
+    const clamped = Phaser.Math.Clamp(Math.round(nextOffset), 0, Math.max(0, this.clueScrollMaxOffset))
+    if (clamped === this.clueScrollOffset) {
+      return
+    }
+
+    this.clueScrollOffset = clamped
+    this.syncClues(this.getSnapshot(), this.previousSnapshot)
   }
 
   private toFontPx(value: number) {
@@ -1896,19 +2027,19 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     const frame = this.add
       .rectangle(0, 0, this.layoutMetrics.board.width, this.layoutMetrics.board.height, 0xffffff, 0)
       .setOrigin(0)
-      .setStrokeStyle(1, COLORS.border, 0.64)
+      .setStrokeStyle(1, COLORS.border, 0.34)
     const grid = this.add.graphics()
     const well = this.add
-      .ellipse(0, 0, Math.round(this.layoutMetrics.board.width * 0.56), Math.round(this.layoutMetrics.board.height * 0.2), COLORS.cyanSoft, 0.12)
+      .ellipse(0, 0, Math.round(this.layoutMetrics.board.width * 0.72), Math.round(this.layoutMetrics.board.height * 0.24), COLORS.bgAccent, 0.22)
       .setBlendMode(Phaser.BlendModes.SCREEN)
     const upperGlow = this.add
-      .circle(0, 0, 128, COLORS.bgAccent, 0.54)
+      .circle(0, 0, 128, COLORS.cyan, 0.12)
       .setBlendMode(Phaser.BlendModes.SCREEN)
     const lowerGlow = this.add
-      .circle(0, 0, 136, COLORS.bgAccentSoft, 0.62)
+      .circle(0, 0, 136, COLORS.bgAccentSoft, 0.32)
       .setBlendMode(Phaser.BlendModes.SCREEN)
     const boardWash = this.add
-      .rectangle(0, 0, this.layoutMetrics.board.width, this.layoutMetrics.board.height, 0x08111d, 0.26)
+      .rectangle(0, 0, this.layoutMetrics.board.width, this.layoutMetrics.board.height, COLORS.bg, 0.18)
       .setOrigin(0)
 
     this.backdropLayer.add([base, frame, grid, well, upperGlow, lowerGlow, boardWash])
@@ -1945,7 +2076,7 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
         .image(0, 0, LAB_DNA_TEXTURE)
         .setOrigin(0.5)
         .setTint(COLORS.borderSoft)
-        .setAlpha(0.07)
+        .setAlpha(0)
     })
 
     container.add([vignette, bezel, innerGlow, ...cornerMotifs])
@@ -1982,40 +2113,30 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     }
 
     if (this.backdropGrid) {
-      const gridSpacing = Math.max(18, Math.round(board.width * (28 / LOGICAL_WIDTH)))
       this.backdropGrid.clear()
-      this.backdropGrid.lineStyle(1, COLORS.border, 0.12)
-
-      for (let x = board.x + gridSpacing; x < board.x + board.width; x += gridSpacing) {
-        this.backdropGrid.lineBetween(x, board.y + Math.round(board.height * 0.06), x, board.y + board.height - Math.round(board.height * 0.05))
-      }
-
-      for (let y = board.y + Math.round(gridSpacing * 0.8); y < board.y + board.height; y += gridSpacing) {
-        this.backdropGrid.lineBetween(board.x + Math.round(board.width * 0.06), y, board.x + board.width - Math.round(board.width * 0.06), y)
-      }
     }
 
     if (this.backdropWell) {
-      this.backdropWell.setPosition(board.x + Math.round(board.width * 0.52), board.y + Math.round(board.height * 0.18))
-      this.backdropWell.setSize(Math.round(board.width * 0.54), Math.round(board.height * 0.18))
+      this.backdropWell.setPosition(board.x + Math.round(board.width * 0.5), board.y + Math.round(board.height * 0.14))
+      this.backdropWell.setSize(Math.round(board.width * 0.76), Math.round(board.height * 0.28))
     }
 
     if (this.backdropUpperGlow) {
-      this.backdropUpperGlow.setPosition(board.x + board.width - board.width * (28 / LOGICAL_WIDTH), board.y + board.height * (60 / LOGICAL_HEIGHT))
-      this.backdropUpperGlow.setRadius(Math.round(board.width * (128 / LOGICAL_WIDTH)))
+      this.backdropUpperGlow.setPosition(board.x + Math.round(board.width * 0.74), board.y + Math.round(board.height * 0.11))
+      this.backdropUpperGlow.setRadius(Math.round(board.width * 0.26))
     }
 
     if (this.backdropLowerGlow) {
-      this.backdropLowerGlow.setPosition(board.x + board.width * (78 / LOGICAL_WIDTH), board.y + board.height - board.height * (92 / LOGICAL_HEIGHT))
-      this.backdropLowerGlow.setRadius(Math.round(board.width * (136 / LOGICAL_WIDTH)))
+      this.backdropLowerGlow.setPosition(board.x + Math.round(board.width * 0.22), board.y + Math.round(board.height * 0.88))
+      this.backdropLowerGlow.setRadius(Math.round(board.width * 0.3))
     }
 
     if (this.backdropWash) {
-      this.backdropWash.setPosition(board.x + insets.left - 6, board.y + insets.top + 30)
+      this.backdropWash.setPosition(board.x + insets.left - 4, board.y + insets.top + 18)
       this.setRectangleDimensions(
         this.backdropWash,
-        Math.max(1, board.width - insets.left - insets.right + 12),
-        Math.max(1, board.height - insets.top - insets.bottom - 20),
+        Math.max(1, board.width - insets.left - insets.right + 8),
+        Math.max(1, board.height - insets.top - insets.bottom - 8),
       )
     }
 
@@ -2043,22 +2164,13 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
 
     this.outerFrameVignette.setPosition(board.x + 1, board.y + 1)
     this.setRectangleDimensions(this.outerFrameVignette, Math.max(1, board.width - 2), Math.max(1, board.height - 2))
-    this.outerFrameVignette.setStrokeStyle(Phaser.Math.Clamp(Math.round(board.width * 0.02), 6, 9), COLORS.shadow, 0.12)
+    this.outerFrameVignette.setStrokeStyle(Phaser.Math.Clamp(Math.round(board.width * 0.018), 4, 6), COLORS.shadow, 0.08)
 
     this.outerFrameBezel.clear()
-    this.outerFrameBezel.lineStyle(1, COLORS.border, 0.78)
+    this.outerFrameBezel.lineStyle(1, COLORS.border, 0.34)
     this.outerFrameBezel.strokeRect(x, y, width, height)
-    this.outerFrameBezel.lineStyle(1, COLORS.inkLift, 0.56)
+    this.outerFrameBezel.lineStyle(1, COLORS.inkLift, 0.24)
     this.outerFrameBezel.strokeRect(x + 1, y + 1, Math.max(1, width - 2), Math.max(1, height - 2))
-    this.outerFrameBezel.lineStyle(1, COLORS.borderSoft, 0.2)
-    this.outerFrameBezel.lineBetween(x + 2, y + motifInset, x + motifInset + 4, y + motifInset)
-    this.outerFrameBezel.lineBetween(x + 2, y + motifInset, x + 2, y + motifInset + 9)
-    this.outerFrameBezel.lineBetween(x + width - motifInset - 4, y + motifInset, x + width - 2, y + motifInset)
-    this.outerFrameBezel.lineBetween(x + width - 2, y + motifInset, x + width - 2, y + motifInset + 9)
-    this.outerFrameBezel.lineBetween(x + 2, y + height - motifInset, x + motifInset + 4, y + height - motifInset)
-    this.outerFrameBezel.lineBetween(x + 2, y + height - motifInset, x + 2, y + height - motifInset - 9)
-    this.outerFrameBezel.lineBetween(x + width - motifInset - 4, y + height - motifInset, x + width - 2, y + height - motifInset)
-    this.outerFrameBezel.lineBetween(x + width - 2, y + height - motifInset, x + width - 2, y + height - motifInset - 9)
 
     this.outerFrameInnerGlow.setPosition(board.x + frameInset, board.y + frameInset)
     this.setRectangleDimensions(
@@ -2083,7 +2195,7 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       motif.setPosition(corner.x, corner.y)
       motif.setScale(motifScale)
       motif.setAngle(corner.angle)
-      motif.setAlpha(0.07)
+      motif.setAlpha(0)
       motif.setTint(index % 2 === 0 ? COLORS.borderSoft : COLORS.cyanSoft)
     })
   }
@@ -2095,50 +2207,80 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
 
     const region = this.add.container(this.layoutMetrics.header.x, this.layoutMetrics.header.y)
     const shadow = this.add
-      .rectangle(0, Math.round(this.layoutMetrics.header.height * 0.12), this.layoutMetrics.header.width, this.layoutMetrics.header.height, COLORS.shadow, 0.18)
+      .rectangle(0, Math.round(this.layoutMetrics.header.height * 0.12), this.layoutMetrics.header.width, this.layoutMetrics.header.height, COLORS.shadow, 0.16)
       .setOrigin(0)
     const background = this.add
-      .rectangle(0, 0, this.layoutMetrics.header.width, this.layoutMetrics.header.height, COLORS.inkLift, 0.96)
+      .rectangle(0, 0, this.layoutMetrics.header.width, this.layoutMetrics.header.height, COLORS.bgAccentSoft, 0.96)
       .setOrigin(0)
-      .setStrokeStyle(1, COLORS.border, 0.92)
+      .setStrokeStyle(1, COLORS.border, 0.54)
     const innerPlate = this.add
-      .rectangle(1, 1, this.layoutMetrics.header.width - 2, this.layoutMetrics.header.height - 3, COLORS.bgAccentSoft, 0.3)
+      .rectangle(1, 1, this.layoutMetrics.header.width - 2, this.layoutMetrics.header.height - 3, COLORS.bgAccent, 0.18)
       .setOrigin(0)
-      .setStrokeStyle(1, COLORS.borderSoft, 0.46)
+      .setStrokeStyle(1, COLORS.borderSoft, 0.24)
     const topAccent = this.add
-      .rectangle(12, 1, Math.max(24, this.layoutMetrics.header.width - 24), 1, COLORS.cyan, 0.22)
+      .rectangle(12, 1, Math.max(24, this.layoutMetrics.header.width - 24), 2, COLORS.cyan, 0.28)
       .setOrigin(0)
     const divider = this.add
-      .rectangle(0, this.layoutMetrics.header.height - 1, this.layoutMetrics.header.width, 1, COLORS.cyan, 0.16)
+      .rectangle(0, this.layoutMetrics.header.height - 1, this.layoutMetrics.header.width, 1, COLORS.borderSoft, 0.2)
       .setOrigin(0)
     const menuButton = this.createPressableButton(0, 0, 40, 24, '\u2630', () => {
       this.handleOpenMenuIntent()
     })
-    const titleGlow = this.createText(Math.round(this.layoutMetrics.header.width / 2), Math.round(this.layoutMetrics.header.height / 2), 'Wardle', {
-      fontFamily: 'Arial',
+    const titleGlow = this.createText(0, 0, 'WARDLE', {
+      fontFamily: "'DM Sans', Arial, sans-serif",
       fontSize: this.toFontPx(this.layoutMetrics.typography.headerProgress),
-      color: '#67e8f9',
+      color: '#5ce0d1',
       fontStyle: 'bold',
     })
-    titleGlow.setOrigin(0.5)
-    titleGlow.setAlpha(0.14)
-    const title = this.createText(Math.round(this.layoutMetrics.header.width / 2), Math.round(this.layoutMetrics.header.height / 2), 'Wardle', {
-      fontFamily: 'Arial',
+    titleGlow.setOrigin(0, 0)
+    titleGlow.setAlpha(0.16)
+    const title = this.createText(0, 0, 'WARDLE', {
+      fontFamily: "'DM Sans', Arial, sans-serif",
       fontSize: this.toFontPx(this.layoutMetrics.typography.headerProgress),
-      color: '#e6f6ff',
+      color: COLORS.text,
       fontStyle: 'bold',
     })
-    title.setOrigin(0.5)
+    title.setOrigin(0, 0)
     title.setAlpha(0.96)
-    title.setShadow(0, 1, '#020617', 5, false, true)
-    title.setStroke('#102338', 2)
+    title.setShadow(0, 1, '#0d1117', 4, false, true)
+    title.setStroke('#17314b', 1)
     const titleAccent = this.add
-      .rectangle(Math.round(this.layoutMetrics.header.width / 2), Math.round(this.layoutMetrics.header.height * 0.68), 52, 1, COLORS.cyan, 0.22)
-      .setOrigin(0.5)
+      .rectangle(0, 0, 42, 2, COLORS.cyan, 0.3)
+      .setOrigin(0, 0.5)
+    const caseCodeText = this.createText(0, 0, 'CASE ----', {
+      fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
+      fontSize: this.toFontPx(Math.max(9, this.layoutMetrics.typography.headerStatus - 1)),
+      color: '#7adfd4',
+      fontStyle: 'bold',
+    })
+    caseCodeText.setOrigin(0, 0)
+    const promptText = this.createText(0, 0, "What's the diagnosis?", {
+      fontFamily: "'DM Sans', Arial, sans-serif",
+      fontSize: this.toFontPx(Math.max(16, this.layoutMetrics.typography.headerProgress + 1)),
+      color: COLORS.text,
+      fontStyle: 'bold',
+    })
+    promptText.setOrigin(0, 0)
+    const attemptsLabel = this.createText(0, 0, 'ATTEMPTS', {
+      fontFamily: "'DM Sans', Arial, sans-serif",
+      fontSize: this.toFontPx(Math.max(9, this.layoutMetrics.typography.headerStatus - 2)),
+      color: COLORS.textMuted,
+      fontStyle: 'bold',
+      align: 'right',
+    })
+    attemptsLabel.setOrigin(1, 0)
+    const attemptsValue = this.createText(0, 0, '0/6', {
+      fontFamily: "'DM Sans', Arial, sans-serif",
+      fontSize: this.toFontPx(Math.max(18, this.layoutMetrics.typography.headerProgress + 2)),
+      color: COLORS.text,
+      fontStyle: 'bold',
+      align: 'right',
+    })
+    attemptsValue.setOrigin(1, 0)
     const dnaIcon = this.add
       .image(0, 0, LAB_DNA_TEXTURE)
       .setOrigin(0.5)
-      .setAlpha(0.56)
+      .setAlpha(0)
       .setTint(COLORS.cyan)
     const dnaRotationTween = this.tweens.add({
       targets: dnaIcon,
@@ -2185,9 +2327,12 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       divider,
       menuButton.container,
       titleGlow,
-      dnaIcon,
       title,
       titleAccent,
+      caseCodeText,
+      promptText,
+      attemptsLabel,
+      attemptsValue,
       statsRegion,
       flashSweep,
     ])
@@ -2201,6 +2346,10 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     this.headerTitleGlow = titleGlow
     this.headerTitleText = title
     this.headerTitleAccent = titleAccent
+    this.headerCaseCodeText = caseCodeText
+    this.headerPromptText = promptText
+    this.headerAttemptsLabel = attemptsLabel
+    this.headerAttemptsValue = attemptsValue
     this.headerDnaIcon = dnaIcon
     this.headerDnaRotationTween = dnaRotationTween
     this.headerFlashSweep = flashSweep
@@ -2220,12 +2369,14 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     }
 
     const { header, typography } = this.layoutMetrics
-    const horizontalPadding = Phaser.Math.Clamp(Math.round(header.width * 0.034), 10, 14)
-    const verticalPadding = Phaser.Math.Clamp(Math.round(header.height * 0.2), 7, 10)
-    const menuHeight = Math.max(22, header.height - verticalPadding * 2)
-    const titleY = Math.round(header.height * 0.42)
-    const titleAccentY = Math.round(header.height * 0.7)
-    const titleFontSize = Math.max(typography.headerProgress + 1, Math.round(header.height * 0.36))
+    const horizontalPadding = Phaser.Math.Clamp(Math.round(header.width * 0.038), 12, 18)
+    const verticalPadding = Phaser.Math.Clamp(Math.round(header.height * 0.12), 8, 12)
+    const menuHeight = Math.max(22, Math.round(header.height * 0.27))
+    const titleFontSize = Math.max(typography.headerProgress + 1, Math.round(header.height * 0.22))
+    const titleX = horizontalPadding + 44
+    const titleY = verticalPadding
+    const metaY = titleY + Math.max(24, Math.round(header.height * 0.25))
+    const promptY = metaY + Math.max(16, Math.round(header.height * 0.18))
 
     this.headerRegion.setPosition(header.x, header.y)
     if (this.headerShadow) {
@@ -2241,52 +2392,48 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     }
     if (this.headerTopAccent) {
       this.headerTopAccent.setPosition(12, 1)
-      this.setRectangleDimensions(this.headerTopAccent, Math.max(24, header.width - 24), 1)
+      this.setRectangleDimensions(this.headerTopAccent, Math.max(24, header.width - 24), 2)
     }
     if (this.headerDivider) {
       this.headerDivider.setPosition(0, Math.max(0, header.height - 1))
       this.setRectangleDimensions(this.headerDivider, header.width, 1)
     }
     if (this.headerMenuButton) {
-      this.headerMenuButton.container.setPosition(horizontalPadding, Math.round((header.height - menuHeight) / 2))
-      this.setButtonFrame(this.headerMenuButton, 42, menuHeight, Math.max(10, typography.headerStatus))
+      this.headerMenuButton.container.setPosition(horizontalPadding - 2, titleY + 2)
+      this.setButtonFrame(this.headerMenuButton, 34, menuHeight, Math.max(10, typography.headerStatus))
       this.applyButtonPalette(this.headerMenuButton, {
         fill: COLORS.inkLift,
-        stroke: COLORS.cyan,
-        text: '#d8f3ff',
-        shadowAlpha: 0.12,
-        alpha: 0.94,
-        glowAlpha: 0.03,
-        hoverGlowAlpha: 0.07,
-        pressedGlowAlpha: 0.12,
-        shineAlpha: 0.05,
+        stroke: COLORS.borderSoft,
+        text: COLORS.textMuted,
+        shadowAlpha: 0.08,
+        alpha: 0.9,
+        glowAlpha: 0.02,
+        hoverGlowAlpha: 0.04,
+        pressedGlowAlpha: 0.08,
+        shineAlpha: 0.03,
       })
     }
-    this.headerTitleGlow?.setPosition(Math.round(header.width / 2), titleY)
+    this.headerTitleGlow?.setPosition(titleX, titleY + 1)
     this.headerTitleGlow?.setFontSize(this.toFontPx(titleFontSize))
-    this.headerTitleText?.setPosition(Math.round(header.width / 2), titleY)
+    this.headerTitleText?.setPosition(titleX, titleY)
     this.headerTitleText?.setFontSize(this.toFontPx(titleFontSize))
     if (this.headerTitleAccent) {
-      this.headerTitleAccent.setPosition(Math.round(header.width / 2), titleAccentY)
-      this.setRectangleDimensions(this.headerTitleAccent, 52, 1)
-    }
-    if (this.headerDnaIcon) {
-      const dnaHeight = Phaser.Math.Clamp(Math.round(header.height * 0.38), 18, 24)
-      const dnaScale = dnaHeight / 24
-      const titleWidth = this.headerTitleText?.width ?? 0
-      const titleLeft = Math.round(header.width / 2 - titleWidth / 2)
-      const dnaGap = Math.max(5, Math.round(header.height * 0.07))
-      this.headerDnaIcon.setScale(dnaScale)
-      this.headerDnaIcon.setPosition(
-        titleLeft - Math.round((20 * dnaScale) / 2) - dnaGap,
-        titleY,
-      )
+      this.headerTitleAccent.setPosition(titleX, titleY + Math.max(18, Math.round(titleFontSize * 1.12)))
+      this.setRectangleDimensions(this.headerTitleAccent, Math.max(34, Math.round((this.headerTitleText?.width ?? 60) * 0.38)), 2)
     }
     if (this.headerFlashSweep) {
       const sweepWidth = Math.max(36, Math.round(header.width * 0.38))
       this.headerFlashSweep.setPosition(-sweepWidth, Math.round(header.height / 2))
       this.setRectangleDimensions(this.headerFlashSweep, sweepWidth, Math.max(1, header.height + 6))
     }
+    this.headerCaseCodeText?.setPosition(titleX, metaY)
+    this.headerCaseCodeText?.setFontSize(this.toFontPx(Math.max(9, typography.headerStatus - 1)))
+    this.headerPromptText?.setPosition(titleX, promptY)
+    this.headerPromptText?.setFontSize(this.toFontPx(Math.max(16, typography.headerProgress + 1)))
+    this.headerAttemptsLabel?.setPosition(header.width - horizontalPadding, metaY)
+    this.headerAttemptsLabel?.setFontSize(this.toFontPx(Math.max(9, typography.headerStatus - 2)))
+    this.headerAttemptsValue?.setPosition(header.width - horizontalPadding, promptY - 4)
+    this.headerAttemptsValue?.setFontSize(this.toFontPx(Math.max(18, typography.headerProgress + 3)))
     this.syncHeader(this.getSnapshot())
   }
 
@@ -2297,21 +2444,24 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
 
     const region = this.add.container(this.layoutMetrics.clues.x, this.layoutMetrics.clues.y)
     const shadow = this.add
-      .rectangle(0, 10, this.layoutMetrics.clues.width, this.layoutMetrics.clues.height, COLORS.shadow, 0.22)
+      .rectangle(0, 10, this.layoutMetrics.clues.width, this.layoutMetrics.clues.height, COLORS.shadow, 0.16)
       .setOrigin(0)
     const tray = this.add
-      .rectangle(0, 0, this.layoutMetrics.clues.width, this.layoutMetrics.clues.height, 0x091522, 0.34)
+      .rectangle(0, 0, this.layoutMetrics.clues.width, this.layoutMetrics.clues.height, COLORS.bgAccentSoft, 0.3)
       .setOrigin(0)
-      .setStrokeStyle(1, COLORS.cyan, 0.3)
-    const caption = this.createText(this.layoutMetrics.clues.captionX, this.layoutMetrics.clues.captionY, 'REVEALED CLUES', {
-      fontFamily: 'Arial',
+      .setStrokeStyle(1, COLORS.borderSoft, 0.28)
+    const caption = this.createText(this.layoutMetrics.clues.captionX, this.layoutMetrics.clues.captionY, 'CLUES', {
+      fontFamily: "'DM Sans', Arial, sans-serif",
       fontSize: this.toFontPx(this.layoutMetrics.typography.clueCaption),
-      color: COLORS.textQuiet,
+      color: COLORS.textMuted,
       fontStyle: 'bold',
     })
+    const progressDots = Array.from({ length: 6 }, () =>
+      this.add.rectangle(0, 0, 12, 4, COLORS.borderSoft, 0.22).setOrigin(0, 0.5),
+    )
     const cardLayer = this.add.container(0, 0)
-    const empty = this.createText(this.layoutMetrics.clues.width / 2, this.layoutMetrics.clues.height / 2, 'Reveal a clue to begin the board.', {
-      fontFamily: 'Arial',
+    const empty = this.createText(this.layoutMetrics.clues.width / 2, this.layoutMetrics.clues.height / 2, 'Start diagnosing to unlock the next clue.', {
+      fontFamily: "'DM Sans', Arial, sans-serif",
       fontSize: this.toFontPx(this.layoutMetrics.typography.clueEmpty),
       color: COLORS.textQuiet,
       align: 'center',
@@ -2323,12 +2473,13 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     maskGraphics.fillRect(0, 0, this.layoutMetrics.clues.width, this.layoutMetrics.clues.height)
     cardLayer.setMask(maskGraphics.createGeometryMask())
 
-    region.add([shadow, tray, cardLayer, caption, empty])
+    region.add([shadow, tray, cardLayer, caption, ...progressDots, empty])
 
     this.clueStackRegion = region
     this.clueStackShadow = shadow
     this.clueStackTray = tray
     this.clueStackCaption = caption
+    this.clueProgressDots = progressDots
     this.clueCardLayer = cardLayer
     this.clueMaskGraphics = maskGraphics
     this.clueEmptyText = empty
@@ -2348,6 +2499,24 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     this.setRectangleDimensions(this.clueStackTray, clues.width, clues.height)
     this.clueStackCaption.setPosition(clues.captionX, clues.captionY)
     this.clueStackCaption.setFontSize(this.toFontPx(typography.clueCaption))
+
+    if (this.clueProgressDots.length > 0) {
+      const dotWidth = Math.max(18, Math.round(clues.width * 0.08))
+      const dotHeight = Math.max(5, Math.round(clues.height * 0.016))
+      const dotGap = Math.max(4, Math.round(dotWidth * 0.18))
+      const totalDotsWidth =
+        this.clueProgressDots.length * dotWidth + Math.max(0, this.clueProgressDots.length - 1) * dotGap
+      const dotsStartX = Math.max(
+        clues.captionX + Math.round(this.clueStackCaption.width) + 10,
+        clues.width - clues.cardInset - totalDotsWidth,
+      )
+      const dotsY = clues.captionY + Math.max(7, Math.round(typography.clueCaption * 0.7))
+
+      this.clueProgressDots.forEach((dot, index) => {
+        this.setRectangleDimensions(dot, dotWidth, dotHeight)
+        dot.setPosition(dotsStartX + index * (dotWidth + dotGap), dotsY)
+      })
+    }
 
     if (this.clueEmptyText) {
       this.clueEmptyText.setPosition(Math.round(clues.width / 2), Math.round(clues.height / 2))
@@ -2375,31 +2544,46 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     const { guessBar, typography } = this.layoutMetrics
     const region = this.add.container(guessBar.x, guessBar.y)
     const glow = this.add
-      .rectangle(-guessBar.haloInset - 4, -guessBar.haloInset - 4, guessBar.width + guessBar.haloInset * 2 + 8, guessBar.height + guessBar.haloInset * 2 + 8, COLORS.cyan, 0.1)
+      .rectangle(-guessBar.haloInset - 4, -guessBar.haloInset - 4, guessBar.width + guessBar.haloInset * 2 + 8, guessBar.height + guessBar.haloInset * 2 + 8, COLORS.cyan, 0.08)
       .setOrigin(0)
     const halo = this.add
-      .rectangle(-guessBar.haloInset, -guessBar.haloInset, guessBar.width + guessBar.haloInset * 2, guessBar.height + guessBar.haloInset * 2, COLORS.sky, 0.1)
+      .rectangle(-guessBar.haloInset, -guessBar.haloInset, guessBar.width + guessBar.haloInset * 2, guessBar.height + guessBar.haloInset * 2, COLORS.cyan, 0.08)
       .setOrigin(0)
     const background = this.add
-      .rectangle(0, 0, guessBar.width, guessBar.height, 0x0e1b2b, 0.96)
+      .rectangle(0, 0, guessBar.width, guessBar.height, COLORS.bgAccent, 0.76)
       .setOrigin(0)
+    background.setInteractive({ useHandCursor: true })
+    background.on('pointerdown', () => {
+      const snapshot = this.getSnapshot()
+      if (
+        this.isOnboardingBlockingInput() ||
+        this.isOnboardingSkipCooldownActive() ||
+        this.isGameplayInputLocked(snapshot) ||
+        !snapshot.canEditGuess ||
+        !snapshot.selectedSuggestion
+      ) {
+        return
+      }
+
+      this.getIntents().onClearSelectedSuggestion()
+    })
     const border = this.add
       .rectangle(0, 0, guessBar.width, guessBar.height, 0xffffff, 0)
       .setOrigin(0)
-      .setStrokeStyle(2, COLORS.border, 1)
+      .setStrokeStyle(2, COLORS.borderSoft, 1)
     const scan = this.add
       .rectangle(-Math.round(guessBar.width * 0.22), 6, Math.max(26, Math.round(guessBar.width * 0.18)), Math.max(guessBar.height - 12, 16), COLORS.cyan, 0.12)
       .setOrigin(0)
     scan.setVisible(true)
     scan.setAlpha(0)
     const label = this.createText(guessBar.width / 2, guessBar.labelY, 'DIAGNOSIS', {
-      fontFamily: 'Arial',
+      fontFamily: "'DM Sans', Arial, sans-serif",
       fontSize: this.toFontPx(typography.guessLabel),
       color: COLORS.textMuted,
     })
     label.setOrigin(0.5, 0)
     const value = this.createText(guessBar.width / 2, guessBar.valueY, 'YOUR DIAGNOSIS', {
-      fontFamily: 'Arial',
+      fontFamily: "'DM Sans', Arial, sans-serif",
       fontSize: this.toFontPx(typography.guessValue),
       color: COLORS.textQuiet,
       fontStyle: 'bold',
@@ -2407,7 +2591,7 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     })
     value.setOrigin(0.5, 0)
     const helper = this.createText(guessBar.width / 2, guessBar.height - guessBar.helperBottomInset, '', {
-      fontFamily: 'Arial',
+      fontFamily: "'DM Sans', Arial, sans-serif",
       fontSize: this.toFontPx(typography.guessHelper),
       color: COLORS.textQuiet,
     })
@@ -2417,6 +2601,7 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
 
     this.guessBar = { container: region, glow, halo, background, border, scan, label, value, helper }
     this.gameplayLayer.add(region)
+    this.createSuggestionPanel()
     this.layoutGuessBar()
   }
 
@@ -2441,6 +2626,88 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     this.guessBar.value.setPosition(Math.round(guessBar.width / 2), guessBar.valueY)
     this.guessBar.helper.setPosition(Math.round(guessBar.width / 2), guessBar.height - guessBar.helperBottomInset)
     this.guessBar.helper.setFontSize(this.toFontPx(typography.guessHelper))
+    this.layoutSuggestionPanel()
+  }
+
+  private createSuggestionPanel() {
+    if (!this.gameplayLayer || this.suggestionPanel) {
+      return
+    }
+
+    const region = this.add.container(0, 0)
+    const background = this.add
+      .rectangle(0, 0, 10, 10, COLORS.bgAccent, 0.96)
+      .setOrigin(0)
+      .setStrokeStyle(1, COLORS.borderSoft, 0.34)
+
+    const rows = Array.from({ length: 5 }, (_, index) => {
+      const button = this.createPressableButton(0, 0, 10, 10, '', () => {
+        this.handleSelectSuggestionIntent(index)
+      })
+      button.label.setFontStyle('bold')
+      region.add(button.container)
+      return { button }
+    })
+
+    region.addAt(background, 0)
+    region.setVisible(false)
+    region.setDepth(DEPTH.FEEDBACK - 1)
+    this.gameplayLayer.add(region)
+    this.suggestionPanel = { container: region, background, rows }
+    this.layoutSuggestionPanel()
+  }
+
+  private layoutSuggestionPanel(visibleCount = 0) {
+    if (!this.suggestionPanel) {
+      return
+    }
+
+    const metrics = this.getSuggestionPanelMetrics(
+      Math.max(1, Math.min(this.suggestionPanel.rows.length, visibleCount)),
+    )
+
+    this.suggestionPanel.container.setPosition(metrics.x, metrics.y)
+    this.setRectangleDimensions(
+      this.suggestionPanel.background,
+      metrics.width,
+      metrics.height,
+    )
+
+    this.suggestionPanel.rows.forEach((row, index) => {
+      row.button.container.setPosition(
+        metrics.padding,
+        metrics.padding + index * (metrics.rowHeight + metrics.gap),
+      )
+      this.setButtonFrame(
+        row.button,
+        metrics.width - metrics.padding * 2,
+        metrics.rowHeight,
+        Math.max(11, this.layoutMetrics.typography.guessHelper + 2),
+      )
+    })
+  }
+
+  private getSuggestionPanelMetrics(visibleCount: number) {
+    const { guessBar } = this.layoutMetrics
+    const padding = Math.max(6, Math.round(guessBar.height * 0.12))
+    const gap = 4
+    const rowHeight = Math.max(28, Math.round(guessBar.height * 0.5))
+    const width = guessBar.width
+    const height =
+      padding * 2 +
+      visibleCount * rowHeight +
+      Math.max(0, visibleCount - 1) * gap
+    const y = guessBar.y - 8 - height
+
+    return {
+      x: guessBar.x,
+      y,
+      width,
+      height,
+      padding,
+      gap,
+      rowHeight,
+    }
   }
 
   private startGuessCaretBlink() {
@@ -2516,9 +2783,9 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
 
     const region = this.add.container(keyboard.x, keyboard.y)
     const tray = this.add
-      .rectangle(0, 0, keyboard.width, keyboard.height, 0x091522, 0.28)
+      .rectangle(0, 0, keyboard.width, keyboard.height, COLORS.bgAccentSoft, 0.18)
       .setOrigin(0)
-      .setStrokeStyle(1, COLORS.cyan, 0.38)
+      .setStrokeStyle(1, COLORS.borderSoft, 0.24)
     region.add(tray)
     this.keyboardRegion = region
     this.keyboardTray = tray
@@ -2689,61 +2956,143 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
 
     const { board, overlay, typography } = this.layoutMetrics
     const region = this.add.container(0, 0)
-    const scrim = this.add.rectangle(board.x, board.y, board.width, board.height, COLORS.shadow, 0.52).setOrigin(0)
+    const scrim = this.add.rectangle(board.x, board.y, board.width, board.height, COLORS.shadow, 0.66).setOrigin(0)
+    scrim.setInteractive()
+    scrim.on('pointerdown', () => {})
     const panel = this.add.container(overlay.x, overlay.y)
     const glow = this.add
-      .rectangle(-6, -6, overlay.width + 12, overlay.height + 12, COLORS.cyan, 0.05)
+      .rectangle(-8, -8, overlay.width + 16, overlay.height + 16, COLORS.cyan, 0.08)
       .setOrigin(0)
     const shadow = this.add
-      .rectangle(0, overlay.shadowOffset, overlay.width, overlay.height, COLORS.shadow, 0.18)
+      .rectangle(0, overlay.shadowOffset, overlay.width, overlay.height, COLORS.shadow, 0.22)
       .setOrigin(0)
     const background = this.add
-      .rectangle(0, 0, overlay.width, overlay.height, COLORS.panelSoft, 0.95)
+      .rectangle(0, 0, overlay.width, overlay.height, COLORS.bgAccentSoft, 0.98)
       .setOrigin(0)
-      .setStrokeStyle(1, COLORS.border, 1)
+      .setStrokeStyle(1, COLORS.border, 0.72)
     const accent = this.add.rectangle(0, 0, overlay.width, overlay.accentHeight, COLORS.emerald, 0.95).setOrigin(0)
     const beam = this.add
-      .rectangle(-Math.round(overlay.width * 0.22), overlay.accentHeight + 8, Math.max(32, Math.round(overlay.width * 0.16)), Math.max(overlay.height - overlay.accentHeight - 22, 20), COLORS.cyan, 0.14)
+      .rectangle(-Math.round(overlay.width * 0.2), overlay.accentHeight + 8, Math.max(40, Math.round(overlay.width * 0.2)), Math.max(overlay.height - overlay.accentHeight - 22, 20), COLORS.cyan, 0.1)
       .setOrigin(0)
     beam.setAlpha(0)
-    const eyebrow = this.createText(overlay.padding, overlay.padding, 'ROUND COMPLETE', {
-      fontFamily: 'Arial',
+    const iconGlow = this.add.circle(Math.round(overlay.width / 2), overlay.padding + 36, 34, COLORS.cyan, 0.16)
+    iconGlow.setStrokeStyle(1, COLORS.cyan, 0.22)
+    const iconBadge = this.add.circle(Math.round(overlay.width / 2), overlay.padding + 36, 26, COLORS.inkLift, 0.98)
+    iconBadge.setStrokeStyle(1, COLORS.border, 0.96)
+    const icon = this.createText(Math.round(overlay.width / 2), overlay.padding + 16, 'DX', {
+      fontFamily: "'DM Sans', Arial, sans-serif",
+      fontSize: this.toFontPx(Math.max(22, typography.overlayTitle + 1)),
+      color: COLORS.text,
+      align: 'center',
+    })
+    icon.setOrigin(0.5, 0)
+    const eyebrow = this.createText(Math.round(overlay.width / 2), overlay.padding, 'CASE RESULT', {
+      fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
       fontSize: this.toFontPx(typography.overlayEyebrow),
       color: COLORS.textMuted,
       fontStyle: 'bold',
+      align: 'center',
     })
-    const title = this.createText(overlay.padding, overlay.padding + Math.round(22 * (overlay.height / 204)), 'Diagnosis locked in', {
-      fontFamily: 'Arial',
+    eyebrow.setOrigin(0.5, 0)
+    const title = this.createText(Math.round(overlay.width / 2), overlay.padding + 72, 'Nailed it, Doctor!', {
+      fontFamily: "'DM Sans', Arial, sans-serif",
       fontSize: this.toFontPx(typography.overlayTitle),
       color: COLORS.text,
       fontStyle: 'bold',
       wordWrap: { width: overlay.width - overlay.padding * 2, useAdvancedWrap: true },
+      align: 'center',
     })
-    const diagnosis = this.createText(overlay.padding, overlay.padding + Math.round(64 * (overlay.height / 204)), '', {
-      fontFamily: 'Arial',
+    title.setOrigin(0.5, 0)
+    const subtitle = this.createText(Math.round(overlay.width / 2), overlay.padding + 106, '', {
+      fontFamily: "'DM Sans', Arial, sans-serif",
+      fontSize: this.toFontPx(typography.overlayHelper),
+      color: COLORS.textMuted,
+      wordWrap: { width: overlay.width - overlay.padding * 2, useAdvancedWrap: true },
+      align: 'center',
+    })
+    subtitle.setOrigin(0.5, 0)
+    const diagnosisLabel = this.createText(Math.round(overlay.width / 2), overlay.padding + 146, 'CORRECT DIAGNOSIS', {
+      fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
+      fontSize: this.toFontPx(Math.max(10, typography.overlayHelper - 1)),
+      color: COLORS.textMuted,
+      fontStyle: 'bold',
+      align: 'center',
+    })
+    diagnosisLabel.setOrigin(0.5, 0)
+    const diagnosisValue = this.createText(Math.round(overlay.width / 2), overlay.padding + 164, '', {
+      fontFamily: "'DM Sans', Arial, sans-serif",
       fontSize: this.toFontPx(typography.overlayDiagnosis),
       color: COLORS.text,
       fontStyle: 'bold',
       wordWrap: { width: overlay.width - overlay.padding * 2, useAdvancedWrap: true },
+      align: 'center',
     })
-    const helper = this.createText(overlay.padding, overlay.padding + Math.round(102 * (overlay.height / 204)), 'Open the explanation or continue to the next case.', {
-      fontFamily: 'Arial',
+    diagnosisValue.setOrigin(0.5, 0)
+    const statCards = Array.from({ length: 2 }, () => {
+      const background = this.add
+        .rectangle(0, 0, Math.max(90, Math.round((overlay.width - overlay.padding * 2 - 10) / 2)), Math.max(40, Math.round(overlay.height * 0.14)), COLORS.ink, 0.48)
+        .setOrigin(0)
+        .setStrokeStyle(1, COLORS.border, 0.76)
+      const label = this.createText(0, 0, '', {
+        fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
+        fontSize: this.toFontPx(Math.max(10, typography.overlayHelper - 2)),
+        color: COLORS.textMuted,
+        fontStyle: 'bold',
+        align: 'center',
+      })
+      label.setOrigin(0.5, 0)
+      const value = this.createText(0, 0, '', {
+        fontFamily: "'DM Sans', Arial, sans-serif",
+        fontSize: this.toFontPx(Math.max(14, typography.overlayHelper + 1)),
+        color: COLORS.text,
+        fontStyle: 'bold',
+        align: 'center',
+      })
+      value.setOrigin(0.5, 0)
+
+      return {
+        background,
+        label,
+        value,
+      }
+    })
+    const performanceLabel = this.createText(Math.round(overlay.width / 2), overlay.padding + 218, 'CLINICAL PERFORMANCE', {
+      fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
+      fontSize: this.toFontPx(Math.max(10, typography.overlayHelper - 2)),
+      color: COLORS.textMuted,
+      fontStyle: 'bold',
+      align: 'center',
+    })
+    performanceLabel.setOrigin(0.5, 0)
+    const performanceStars = this.createText(Math.round(overlay.width / 2), overlay.padding + 236, '---', {
+      fontFamily: "'DM Sans', Arial, sans-serif",
+      fontSize: this.toFontPx(Math.max(18, typography.overlayDiagnosis - 1)),
+      color: COLORS.text,
+      fontStyle: 'bold',
+      align: 'center',
+    })
+    performanceStars.setOrigin(0.5, 0)
+    const ctaHint = this.createText(Math.round(overlay.width / 2), overlay.padding + 264, 'Open Learning Notes for the full breakdown.', {
+      fontFamily: "'DM Sans', Arial, sans-serif",
       fontSize: this.toFontPx(typography.overlayHelper),
       color: COLORS.textMuted,
       wordWrap: { width: overlay.width - overlay.padding * 2, useAdvancedWrap: true },
+      align: 'center',
     })
+    ctaHint.setOrigin(0.5, 0)
     const explanationButton = this.createPressableButton(
       overlay.padding,
       overlay.height - overlay.buttonBottomInset - overlay.buttonHeight,
       overlay.buttonWidth,
       overlay.buttonHeight,
-      'Why?',
+      'Learning Notes',
       () => {
-      if (!this.getSnapshot().canOpenExplanation) {
-        return
-      }
+        const snapshot = this.getSnapshot()
+        if (snapshot.mode !== 'FINAL_FEEDBACK' || !snapshot.canOpenExplanation) {
+          return
+        }
 
-      this.getIntents().onOpenExplanation()
+        this.getIntents().onOpenExplanation()
       },
     )
     const continueButton = this.createPressableButton(
@@ -2753,6 +3102,10 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       overlay.buttonHeight,
       'Continue',
       () => {
+        if (this.getSnapshot().mode !== 'FINAL_FEEDBACK') {
+          return
+        }
+
         this.getIntents().onContinue()
       },
     )
@@ -2763,10 +3116,18 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       background,
       accent,
       beam,
+      iconGlow,
+      iconBadge,
+      icon,
       eyebrow,
       title,
-      diagnosis,
-      helper,
+      subtitle,
+      diagnosisLabel,
+      diagnosisValue,
+      ...statCards.flatMap((card) => [card.background, card.label, card.value]),
+      performanceLabel,
+      performanceStars,
+      ctaHint,
       explanationButton.container,
       continueButton.container,
     ])
@@ -2783,10 +3144,18 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       background,
       accent,
       beam,
+      iconGlow,
+      iconBadge,
+      icon,
       eyebrow,
       title,
-      diagnosis,
-      helper,
+      subtitle,
+      diagnosisLabel,
+      diagnosisValue,
+      statCards,
+      performanceLabel,
+      performanceStars,
+      ctaHint,
       continueButton,
       explanationButton,
     }
@@ -2800,10 +3169,13 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     }
 
     const { board, overlay, typography } = this.layoutMetrics
+    const centeredX = board.x + Math.round((board.width - overlay.width) / 2)
+    const centeredY = board.y + Math.round((board.height - overlay.height) / 2)
     this.endOverlay.scrim.setPosition(board.x, board.y)
     this.setRectangleDimensions(this.endOverlay.scrim, board.width, board.height)
+    this.endOverlay.scrim.setFillStyle(COLORS.shadow, 0.76)
 
-    this.endOverlay.panel.setX(overlay.x)
+    this.endOverlay.panel.setX(centeredX)
     this.endOverlay.glow.setPosition(-6, -6)
     this.setRectangleDimensions(this.endOverlay.glow, overlay.width + 12, overlay.height + 12)
     this.endOverlay.shadow.setY(overlay.shadowOffset)
@@ -2813,17 +3185,23 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     this.endOverlay.beam.setPosition(-Math.round(overlay.width * 0.22), overlay.accentHeight + 8)
     this.setRectangleDimensions(this.endOverlay.beam, Math.max(32, Math.round(overlay.width * 0.16)), Math.max(overlay.height - overlay.accentHeight - 22, 20))
 
-    this.endOverlay.eyebrow.setPosition(overlay.padding, overlay.padding)
+    this.endOverlay.iconGlow.setPosition(Math.round(overlay.width / 2), overlay.padding + Math.max(30, Math.round(overlay.height * 0.1)))
+    this.endOverlay.iconBadge.setPosition(Math.round(overlay.width / 2), overlay.padding + Math.max(30, Math.round(overlay.height * 0.1)))
+    this.endOverlay.icon.setPosition(Math.round(overlay.width / 2), overlay.padding + Math.max(10, Math.round(overlay.height * 0.04)))
+    this.endOverlay.icon.setFontSize(this.toFontPx(Math.max(24, typography.overlayTitle + 2)))
+    this.endOverlay.eyebrow.setPosition(Math.round(overlay.width / 2), overlay.padding)
     this.endOverlay.eyebrow.setFontSize(this.toFontPx(typography.overlayEyebrow))
-    this.endOverlay.title.setPosition(overlay.padding, overlay.padding + Math.round(22 * (overlay.height / 204)))
+    this.endOverlay.title.setPosition(Math.round(overlay.width / 2), overlay.padding + Math.max(62, Math.round(overlay.height * 0.2)))
     this.endOverlay.title.setFontSize(this.toFontPx(typography.overlayTitle))
     this.endOverlay.title.setWordWrapWidth(overlay.width - overlay.padding * 2)
-    this.endOverlay.diagnosis.setPosition(overlay.padding, overlay.padding + Math.round(64 * (overlay.height / 204)))
-    this.endOverlay.diagnosis.setFontSize(this.toFontPx(typography.overlayDiagnosis))
-    this.endOverlay.diagnosis.setWordWrapWidth(overlay.width - overlay.padding * 2)
-    this.endOverlay.helper.setPosition(overlay.padding, overlay.padding + Math.round(102 * (overlay.height / 204)))
-    this.endOverlay.helper.setFontSize(this.toFontPx(typography.overlayHelper))
-    this.endOverlay.helper.setWordWrapWidth(overlay.width - overlay.padding * 2)
+    this.endOverlay.subtitle.setPosition(Math.round(overlay.width / 2), this.endOverlay.title.y + Math.max(28, Math.round(overlay.height * 0.095)))
+    this.endOverlay.subtitle.setFontSize(this.toFontPx(typography.overlayHelper))
+    this.endOverlay.subtitle.setWordWrapWidth(overlay.width - overlay.padding * 2)
+    this.endOverlay.diagnosisLabel.setPosition(Math.round(overlay.width / 2), this.endOverlay.subtitle.y + Math.max(44, Math.round(overlay.height * 0.14)))
+    this.endOverlay.diagnosisLabel.setFontSize(this.toFontPx(Math.max(10, typography.overlayHelper - 1)))
+    this.endOverlay.diagnosisValue.setPosition(Math.round(overlay.width / 2), this.endOverlay.diagnosisLabel.y + 16)
+    this.endOverlay.diagnosisValue.setFontSize(this.toFontPx(typography.overlayDiagnosis))
+    this.endOverlay.diagnosisValue.setWordWrapWidth(overlay.width - overlay.padding * 2)
 
     this.endOverlay.explanationButton.container.setPosition(
       overlay.padding,
@@ -2835,10 +3213,219 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     )
     this.setButtonFrame(this.endOverlay.explanationButton, overlay.buttonWidth, overlay.buttonHeight, this.layoutMetrics.typography.actionLabel)
     this.setButtonFrame(this.endOverlay.continueButton, overlay.buttonWidth, overlay.buttonHeight, this.layoutMetrics.typography.actionLabel)
+    this.layoutEndOverlayContent()
 
     if (this.endOverlay.container.visible && this.endOverlay.container.alpha > 0) {
-      this.endOverlay.panel.setY(overlay.y)
+      this.endOverlay.panel.setY(centeredY)
     }
+  }
+
+  private stopEndOverlayTransitions() {
+    if (!this.endOverlay) {
+      return
+    }
+
+    this.tweens.killTweensOf([
+      this.endOverlay.container,
+      this.endOverlay.panel,
+      this.endOverlay.iconGlow,
+    ])
+    this.overlayDnaPool.forEach((particle) => {
+      this.tweens.killTweensOf(particle)
+      particle.setVisible(false)
+      particle.setAlpha(0)
+    })
+  }
+
+  private fitTextWithinHeight(target: Phaser.GameObjects.Text, options: {
+    text: string
+    baseFontSize: number
+    minFontSize: number
+    wrapWidth: number
+    maxHeight: number
+    baseLineSpacing?: number
+    minLineSpacing?: number
+  }) {
+    const maxHeight = Math.max(1, Math.round(options.maxHeight))
+    const baseLineSpacing = options.baseLineSpacing ?? 0
+    const minLineSpacing = options.minLineSpacing ?? Math.min(baseLineSpacing, 1)
+
+    const apply = (text: string, fontSize: number, lineSpacing: number) => {
+      target.setFontSize(this.toFontPx(fontSize))
+      target.setWordWrapWidth(options.wrapWidth)
+      target.setLineSpacing(lineSpacing)
+      target.setText(text)
+    }
+
+    let fontSize = options.baseFontSize
+    let lineSpacing = baseLineSpacing
+    apply(options.text, fontSize, lineSpacing)
+
+    while (fontSize > options.minFontSize && target.height > maxHeight) {
+      fontSize -= 1
+      const shrinkProgress =
+        (fontSize - options.minFontSize) /
+        Math.max(1, options.baseFontSize - options.minFontSize)
+      lineSpacing = Math.round(
+        minLineSpacing + (baseLineSpacing - minLineSpacing) * Math.max(0, shrinkProgress),
+      )
+      apply(options.text, fontSize, lineSpacing)
+    }
+
+    if (target.height <= maxHeight || options.text.length === 0) {
+      return
+    }
+
+    let low = 0
+    let high = options.text.length
+    let best = ''
+
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2)
+      const candidate = `${options.text.slice(0, middle).trimEnd()}...`
+      apply(candidate, fontSize, lineSpacing)
+      if (target.height <= maxHeight) {
+        best = candidate
+        low = middle + 1
+      } else {
+        high = middle - 1
+      }
+    }
+
+    apply(best || '...', fontSize, lineSpacing)
+  }
+
+  private layoutEndOverlayContent() {
+    if (!this.endOverlay) {
+      return
+    }
+
+    const { overlay, typography } = this.layoutMetrics
+    const wrapWidth = overlay.width - overlay.padding * 2
+    const buttonTop = overlay.height - overlay.buttonBottomInset - overlay.buttonHeight
+    const titleY = overlay.padding + Math.max(60, Math.round(overlay.height * 0.19))
+    const sectionGap = Math.max(10, Math.round(overlay.height * 0.034))
+    const chipGap = Math.max(8, Math.round(overlay.width * 0.02))
+    const chipHeight = Math.max(42, Math.round(overlay.height * 0.14))
+    const chipWidth = Math.max(92, Math.floor((overlay.width - overlay.padding * 2 - chipGap) / 2))
+    const titleMaxHeight = Math.max(28, Math.round(overlay.height * 0.13))
+    const subtitleMaxHeight = Math.max(30, Math.round(overlay.height * 0.12))
+
+    this.endOverlay.title.setPosition(Math.round(overlay.width / 2), titleY)
+    this.fitTextWithinHeight(this.endOverlay.title, {
+      text: this.endOverlay.title.text,
+      baseFontSize: typography.overlayTitle,
+      minFontSize: Math.max(18, typography.overlayTitle - 5),
+      wrapWidth,
+      maxHeight: titleMaxHeight,
+      baseLineSpacing: 2,
+      minLineSpacing: 1,
+    })
+
+    const subtitleY = this.endOverlay.title.y + this.endOverlay.title.height + sectionGap
+    this.endOverlay.subtitle.setPosition(Math.round(overlay.width / 2), subtitleY)
+    this.fitTextWithinHeight(this.endOverlay.subtitle, {
+      text: this.endOverlay.subtitle.text,
+      baseFontSize: typography.overlayHelper,
+      minFontSize: Math.max(10, typography.overlayHelper - 2),
+      wrapWidth,
+      maxHeight: subtitleMaxHeight,
+      baseLineSpacing: 2,
+      minLineSpacing: 1,
+    })
+
+    const diagnosisLabelY = this.endOverlay.subtitle.y + this.endOverlay.subtitle.height + Math.max(12, sectionGap + 2)
+    this.endOverlay.diagnosisLabel.setPosition(Math.round(overlay.width / 2), diagnosisLabelY)
+    this.endOverlay.diagnosisLabel.setFontSize(this.toFontPx(Math.max(10, typography.overlayHelper - 1)))
+
+    const diagnosisValueY = diagnosisLabelY + this.endOverlay.diagnosisLabel.height + 8
+    const statsReservedHeight = chipHeight + 62
+    const diagnosisMaxHeight = Math.max(24, Math.round(buttonTop - diagnosisValueY - statsReservedHeight - 38))
+    this.endOverlay.diagnosisValue.setPosition(Math.round(overlay.width / 2), diagnosisValueY)
+    this.fitTextWithinHeight(this.endOverlay.diagnosisValue, {
+      text: this.endOverlay.diagnosisValue.text,
+      baseFontSize: typography.overlayDiagnosis,
+      minFontSize: Math.max(14, typography.overlayDiagnosis - 4),
+      wrapWidth,
+      maxHeight: diagnosisMaxHeight,
+      baseLineSpacing: 2,
+      minLineSpacing: 1,
+    })
+
+    const statsY = this.endOverlay.diagnosisValue.y + this.endOverlay.diagnosisValue.height + Math.max(14, sectionGap + 2)
+    this.endOverlay.statCards.forEach((card, index) => {
+      const x = overlay.padding + index * (chipWidth + chipGap)
+      card.background.setPosition(x, statsY)
+      this.setRectangleDimensions(card.background, chipWidth, chipHeight)
+      card.label.setPosition(x + Math.round(chipWidth / 2), statsY + 8)
+      card.value.setPosition(x + Math.round(chipWidth / 2), statsY + 22)
+    })
+
+    const performanceLabelY = statsY + chipHeight + Math.max(10, Math.round(overlay.height * 0.028))
+    this.endOverlay.performanceLabel.setPosition(Math.round(overlay.width / 2), performanceLabelY)
+    this.endOverlay.performanceLabel.setFontSize(this.toFontPx(Math.max(10, typography.overlayHelper - 2)))
+    this.endOverlay.performanceStars.setPosition(
+      Math.round(overlay.width / 2),
+      performanceLabelY + this.endOverlay.performanceLabel.height + 4,
+    )
+    this.endOverlay.performanceStars.setFontSize(this.toFontPx(Math.max(18, typography.overlayDiagnosis - 1)))
+
+    const ctaY = this.endOverlay.performanceStars.y + this.endOverlay.performanceStars.height + Math.max(8, Math.round(overlay.height * 0.02))
+    const ctaMaxHeight = Math.max(18, buttonTop - ctaY - 10)
+    this.endOverlay.ctaHint.setPosition(Math.round(overlay.width / 2), ctaY)
+    this.fitTextWithinHeight(this.endOverlay.ctaHint, {
+      text: this.endOverlay.ctaHint.text,
+      baseFontSize: typography.overlayHelper,
+      minFontSize: Math.max(10, typography.overlayHelper - 2),
+      wrapWidth,
+      maxHeight: ctaMaxHeight,
+      baseLineSpacing: 2,
+      minLineSpacing: 1,
+    })
+
+    this.endOverlay.subtitle.setAlpha(0.84)
+    this.endOverlay.diagnosisLabel.setAlpha(0.7)
+    this.endOverlay.diagnosisValue.setAlpha(0.98)
+    this.endOverlay.performanceLabel.setAlpha(0.7)
+    this.endOverlay.ctaHint.setAlpha(0.82)
+  }
+
+  private setEndOverlayStatCard(
+    card: EndOverlayView['statCards'][number],
+    label: string,
+    value: string,
+    accentColor: number,
+  ) {
+    card.label.setText(label)
+    card.value.setText(value)
+    card.background.setFillStyle(COLORS.ink, 0.58)
+    card.background.setStrokeStyle(1, accentColor, 0.34)
+    card.label.setColor(COLORS.textMuted)
+    card.value.setColor(COLORS.text)
+  }
+
+  private getEndOverlayStarCount(snapshot: PhaserGameSessionSnapshot) {
+    if (snapshot.latestAttempt?.label !== 'correct') {
+      return 0
+    }
+
+    const attempts = Math.max(
+      1,
+      snapshot.resultAttemptsUsed ??
+        snapshot.attemptsCount ??
+        snapshot.resultCluesUsed ??
+        snapshot.revealedClueCount ??
+        1,
+    )
+    if (attempts <= 2) {
+      return 3
+    }
+
+    if (attempts <= 4) {
+      return 2
+    }
+
+    return 1
   }
 
   private createStatePanel() {
@@ -2848,10 +3435,16 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
 
     const { statePanel, typography } = this.layoutMetrics
     const region = this.add.container(statePanel.x, statePanel.y)
+    const statusGlow = this.add
+      .rectangle(-7, -7, statePanel.width + 14, statePanel.height + 14, COLORS.cyan, 0.05)
+      .setOrigin(0)
     const background = this.add
       .rectangle(0, 0, statePanel.width, statePanel.height, COLORS.panelSoft, 0.98)
       .setOrigin(0)
       .setStrokeStyle(1, COLORS.border, 1)
+    const pulseBar = this.add
+      .rectangle(statePanel.padding, statePanel.padding + 20, Math.max(56, Math.round(statePanel.width * 0.28)), 3, COLORS.cyan, 0.85)
+      .setOrigin(0)
     const eyebrow = this.createText(statePanel.padding, statePanel.padding, '', {
       fontFamily: 'Arial',
       fontSize: this.toFontPx(typography.stateEyebrow),
@@ -2873,6 +3466,15 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       wordWrap: { width: statePanel.width - statePanel.padding * 2, useAdvancedWrap: true },
     })
     body.setOrigin(0.5, 0)
+    const activityDots = this.createText(statePanel.width / 2, statePanel.bodyY + 34, '', {
+      fontFamily: 'Arial',
+      fontSize: this.toFontPx(Math.max(11, typography.stateBody - 1)),
+      color: '#67e8f9',
+      fontStyle: 'bold',
+      align: 'center',
+    })
+    activityDots.setOrigin(0.5, 0)
+    activityDots.setVisible(false)
     const menuButton = this.createPressableButton(
       statePanel.width - statePanel.padding - 64,
       statePanel.padding - 4,
@@ -2895,9 +3497,20 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       },
     )
 
-    region.add([background, eyebrow, title, body, menuButton.container, actionButton.container])
+    region.add([statusGlow, background, pulseBar, eyebrow, title, body, activityDots, menuButton.container, actionButton.container])
 
-    this.statePanel = { container: region, background, eyebrow, title, body, menuButton, actionButton }
+    this.statePanel = {
+      container: region,
+      statusGlow,
+      background,
+      pulseBar,
+      eyebrow,
+      title,
+      body,
+      activityDots,
+      menuButton,
+      actionButton,
+    }
     this.stateLayer.add(region)
     this.layoutStatePanel()
   }
@@ -2909,7 +3522,19 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
 
     const { statePanel, typography } = this.layoutMetrics
     this.statePanel.container.setPosition(statePanel.x, statePanel.y)
+    if (this.statePanel.statusGlow) {
+      this.statePanel.statusGlow.setPosition(-7, -7)
+      this.setRectangleDimensions(this.statePanel.statusGlow, statePanel.width + 14, statePanel.height + 14)
+    }
     this.setRectangleDimensions(this.statePanel.background, statePanel.width, statePanel.height)
+    if (this.statePanel.pulseBar) {
+      this.statePanel.pulseBar.setPosition(statePanel.padding, statePanel.padding + 20)
+      this.setRectangleDimensions(
+        this.statePanel.pulseBar,
+        Math.max(56, Math.round(statePanel.width * 0.28)),
+        3,
+      )
+    }
 
     this.statePanel.eyebrow.setPosition(statePanel.padding, statePanel.padding)
     this.statePanel.eyebrow.setFontSize(this.toFontPx(typography.stateEyebrow))
@@ -2930,12 +3555,65 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     this.statePanel.body.setPosition(Math.round(statePanel.width / 2), statePanel.bodyY)
     this.statePanel.body.setFontSize(this.toFontPx(typography.stateBody))
     this.statePanel.body.setWordWrapWidth(statePanel.width - statePanel.padding * 2)
+    this.statePanel.activityDots?.setPosition(Math.round(statePanel.width / 2), statePanel.bodyY + 34)
+    this.statePanel.activityDots?.setFontSize(this.toFontPx(Math.max(11, typography.stateBody - 1)))
 
     this.statePanel.actionButton.container.setPosition(
       (statePanel.width - statePanel.actionWidth) / 2,
       statePanel.height - statePanel.actionBottomInset - statePanel.actionHeight,
     )
     this.setButtonFrame(this.statePanel.actionButton, statePanel.actionWidth, statePanel.actionHeight, this.layoutMetrics.typography.actionLabel)
+    this.layoutStatePanelContent(this.statePanel.actionButton.container.visible)
+  }
+
+  private layoutStatePanelContent(showAction: boolean) {
+    if (!this.statePanel) {
+      return
+    }
+
+    const { statePanel, typography } = this.layoutMetrics
+    const wrapWidth = statePanel.width - statePanel.padding * 2
+    const pulseBottom = this.statePanel.pulseBar
+      ? this.statePanel.pulseBar.y + this.statePanel.pulseBar.height
+      : statePanel.padding + 22
+    const titleY = Math.max(
+      statePanel.padding + Math.round(34 * (statePanel.height / 236)),
+      pulseBottom + 12,
+    )
+    const titleMaxHeight = Math.max(28, Math.round(statePanel.height * 0.24))
+    const actionTop = showAction
+      ? this.statePanel.actionButton.container.y
+      : statePanel.height - statePanel.padding
+    const dotsSpacing = this.statePanel.activityDots?.visible ? 22 : 0
+
+    this.statePanel.title.setPosition(statePanel.padding, titleY)
+    this.fitTextWithinHeight(this.statePanel.title, {
+      text: this.statePanel.title.text,
+      baseFontSize: typography.stateTitle,
+      minFontSize: Math.max(18, typography.stateTitle - 8),
+      wrapWidth,
+      maxHeight: titleMaxHeight,
+      baseLineSpacing: 2,
+      minLineSpacing: 1,
+    })
+
+    const bodyY = this.statePanel.title.y + this.statePanel.title.height + Math.max(14, Math.round(statePanel.height * 0.07))
+    const bodyMaxHeight = Math.max(24, actionTop - bodyY - dotsSpacing - 12)
+    this.statePanel.body.setPosition(Math.round(statePanel.width / 2), bodyY)
+    this.fitTextWithinHeight(this.statePanel.body, {
+      text: this.statePanel.body.text,
+      baseFontSize: typography.stateBody,
+      minFontSize: Math.max(12, typography.stateBody - 4),
+      wrapWidth,
+      maxHeight: bodyMaxHeight,
+      baseLineSpacing: 2,
+      minLineSpacing: 1,
+    })
+
+    this.statePanel.activityDots?.setPosition(
+      Math.round(statePanel.width / 2),
+      bodyY + this.statePanel.body.height + 10,
+    )
   }
 
   private applySnapshot = () => {
@@ -2955,6 +3633,7 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     this.stateLayer?.setVisible(showStatePanel)
 
     if (showStatePanel) {
+      this.stopEndOverlayTransitions()
       this.refreshOverlayEffects(false, COLORS.cyan)
       this.guessBarScanTween?.stop()
       this.guessBarScanTween = undefined
@@ -2980,6 +3659,8 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       }
       return
     }
+
+    this.stopStatePanelActivity()
 
     const rewardChanged = snapshot.reward?.receivedAt && snapshot.reward.receivedAt !== previousSnapshot?.reward?.receivedAt
     const attemptChanged = getAttemptKey(previousSnapshot?.latestAttempt ?? null) !== getAttemptKey(snapshot.latestAttempt)
@@ -3037,30 +3718,111 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     }
   }
 
+  private stopStatePanelActivity() {
+    this.statePanelPulseTween?.stop()
+    this.statePanelPulseTween = undefined
+    this.statePanelDotsEvent?.remove(false)
+    this.statePanelDotsEvent = undefined
+
+    if (!this.statePanel) {
+      return
+    }
+
+    this.statePanel.activityDots?.setVisible(false)
+    this.statePanel.activityDots?.setText('')
+    this.statePanel.pulseBar?.setAlpha(0.5)
+    this.statePanel.pulseBar?.setScale(1, 1)
+  }
+
+  private startStatePanelLoadingActivity() {
+    if (!this.statePanel?.pulseBar) {
+      return
+    }
+
+    this.stopStatePanelActivity()
+
+    this.statePanel.activityDots?.setVisible(true)
+    let step = 0
+    this.statePanelDotsEvent = this.time.addEvent({
+      delay: 320,
+      loop: true,
+      callback: () => {
+        step = (step + 1) % 4
+        this.statePanel?.activityDots?.setText('.'.repeat(step))
+      },
+    })
+
+    this.statePanelPulseTween = this.tweens.add({
+      targets: this.statePanel.pulseBar,
+      alpha: { from: 0.28, to: 0.92 },
+      scaleX: { from: 0.9, to: 1.08 },
+      duration: 720,
+      ease: 'Sine.InOut',
+      yoyo: true,
+      repeat: -1,
+    })
+  }
+
+  private startStatePanelWaitingActivity() {
+    if (!this.statePanel?.pulseBar) {
+      return
+    }
+
+    this.stopStatePanelActivity()
+
+    this.statePanelPulseTween = this.tweens.add({
+      targets: this.statePanel.pulseBar,
+      alpha: { from: 0.22, to: 0.56 },
+      duration: 1200,
+      ease: 'Sine.InOut',
+      yoyo: true,
+      repeat: -1,
+    })
+  }
+
   private syncStatePanel(snapshot: PhaserGameSessionSnapshot) {
     if (!this.statePanel) {
       return
     }
 
+    this.stopStatePanelActivity()
+
     let eyebrow = 'Case'
-    let title = 'Loading case'
-    let body = 'Preparing your next diagnostic challenge...'
+    let title = 'Preparing case'
+    let body = 'Calibrating the next diagnostic challenge...'
     let showAction = false
+    let glowColor: number = COLORS.cyan
+    let glowAlpha = 0.05
+    let pulseColor: number = COLORS.cyan
 
     if (snapshot.mode === 'WAITING') {
       eyebrow = 'Case completed'
       title = 'Next case available in'
       body = snapshot.waitingCountdownText ?? '00:00:00'
+      glowColor = COLORS.emeraldGlow
+      glowAlpha = 0.04
+      pulseColor = COLORS.emeraldGlow
+      this.startStatePanelWaitingActivity()
     } else if (snapshot.mode === 'BLOCKED') {
       eyebrow = 'Unavailable'
       title = 'Play is paused'
       body = snapshot.unavailableReason ?? 'No case available right now.'
       showAction = snapshot.canRetry
+      glowColor = COLORS.amber
+      glowAlpha = 0.035
+      pulseColor = COLORS.borderSoft
+    } else if (snapshot.mode === 'LOADING') {
+      this.startStatePanelLoadingActivity()
     }
 
     this.statePanel.eyebrow.setText(eyebrow)
     this.statePanel.title.setText(title)
     this.statePanel.body.setText(body)
+    this.statePanel.eyebrow.setAlpha(0.78)
+    this.statePanel.title.setAlpha(0.98)
+    this.statePanel.body.setAlpha(snapshot.mode === 'WAITING' ? 0.96 : 0.88)
+    this.statePanel.statusGlow?.setFillStyle(glowColor, glowAlpha)
+    this.statePanel.pulseBar?.setFillStyle(pulseColor, snapshot.mode === 'BLOCKED' ? 0.52 : 0.85)
     this.statePanel.actionButton.container.setVisible(showAction)
     this.setPressableEnabled(this.statePanel.actionButton, showAction)
 
@@ -3072,25 +3834,38 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
         shadowAlpha: 0.22,
       })
     }
+
+    this.layoutStatePanelContent(showAction)
   }
 
-  private getHeaderTensionState(viabilityRemaining: number, viabilityTotal: number): HeaderTensionState {
-    if (viabilityTotal <= 0) {
-      return 'safe'
-    }
-
-    const dangerThreshold = Math.max(1, Math.floor(viabilityTotal * 0.34))
-    const warningThreshold = Math.max(dangerThreshold + 1, Math.ceil(viabilityTotal * 0.6))
-
-    if (viabilityRemaining <= dangerThreshold) {
+  private getHeaderTensionState(viabilityRemaining: number): HeaderTensionState {
+    if (viabilityRemaining <= 1) {
       return 'danger'
     }
 
-    if (viabilityRemaining <= warningThreshold) {
+    if (viabilityRemaining <= 3) {
       return 'warning'
     }
 
     return 'safe'
+  }
+
+  private getHeaderLivesRemaining(snapshot: PhaserGameSessionSnapshot) {
+    const maxLives = 6
+    const snapshotLives = snapshot.hud?.viabilityRemaining
+    if (typeof snapshotLives === 'number' && Number.isFinite(snapshotLives)) {
+      return Phaser.Math.Clamp(Math.round(snapshotLives), 0, maxLives)
+    }
+
+    const revealedClueCount =
+      typeof snapshot.resultCluesUsed === 'number'
+        ? snapshot.resultCluesUsed
+        : typeof snapshot.revealedClueCount === 'number'
+          ? snapshot.revealedClueCount
+          : Array.isArray(snapshot.visibleClues)
+            ? snapshot.visibleClues.length
+            : 0
+    return Phaser.Math.Clamp(maxLives - revealedClueCount, 0, maxLives)
   }
 
   private getHeaderTensionPalette(state: HeaderTensionState) {
@@ -3186,8 +3961,13 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
   }
 
   private syncHeader(snapshot: PhaserGameSessionSnapshot) {
-    this.headerTitleText?.setText('Wardle')
-    this.headerTitleGlow?.setText('Wardle')
+    this.headerTitleText?.setText('WARDLE')
+    this.headerTitleGlow?.setText('WARDLE')
+    const caseCodeSource = snapshot.caseId ? String(snapshot.caseId).slice(-6).toUpperCase() : '----'
+    this.headerCaseCodeText?.setText(`CASE #${caseCodeSource}`)
+    this.headerPromptText?.setText("What's the diagnosis?")
+    this.headerAttemptsLabel?.setText('ATTEMPTS')
+    this.headerAttemptsValue?.setText(`${Math.min(snapshot.attemptsCount, 6)}/6`)
 
     if (
       !this.headerStatsRegion ||
@@ -3209,13 +3989,12 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     const chipGap = Math.max(5, Math.round(header.width * 0.013))
     const chipPaddingX = Math.max(7, Math.round(header.width * 0.022))
     const clusterPaddingRight = Phaser.Math.Clamp(Math.round(header.width * 0.036), 11, 14)
-    const clusterTopY = Math.max(4, Math.round(header.height * 0.16))
+    const clusterTopY = Math.max(6, Math.round(header.height * 0.14))
     const topRowY = 0
-    const rowGap = Math.max(6, Math.round(header.height * 0.13))
-    const heartFontSize = Math.max(11, typography.headerStatus + 1 + (snapshot.hud.viabilityTotal <= 5 ? 1 : 0))
-    const heartGap = Math.max(2, Math.round(header.width * 0.007))
-    const titleFontSize = Math.max(typography.headerProgress + 1, Math.round(header.height * 0.36))
-    const titleY = Math.round(header.height * 0.42)
+    const rowGap = Math.max(4, Math.round(header.height * 0.08))
+    const heartFontSize = Math.max(11, typography.headerStatus + 2)
+    const titleFontSize = Math.max(typography.headerProgress + 1, Math.round(header.height * 0.22))
+    const titleY = Math.round(header.height * 0.16)
     const levelValue = snapshot.hud.level
     const xpTotalValue = snapshot.hud.xpTotal
     const levelNumber = typeof levelValue === 'number' ? levelValue : null
@@ -3226,39 +4005,44 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
 
     const showLevel = levelNumber !== null
     const showXp = xpTotalNumber !== null
-    const viabilityTotal = Math.max(0, snapshot.hud.viabilityTotal)
-    const viabilityRemaining = Phaser.Math.Clamp(snapshot.hud.viabilityRemaining, 0, viabilityTotal)
-    const tensionState = this.getHeaderTensionState(viabilityRemaining, viabilityTotal)
+    const viabilityTotal = 6
+    const viabilityRemaining = this.getHeaderLivesRemaining(snapshot)
+    const tensionState = this.getHeaderTensionState(viabilityRemaining)
     const tensionPalette = this.getHeaderTensionPalette(tensionState)
     const dangerState = tensionState === 'danger'
     const headerAlphaMultiplier = isFinalFeedback ? 0.88 : 1
     const accentColor = tensionState === 'danger' ? COLORS.rose : tensionState === 'warning' ? COLORS.amber : COLORS.cyan
     const frameToneColor = tensionState === 'danger' ? COLORS.rose : tensionState === 'warning' ? COLORS.amber : COLORS.cyan
-    const frameToneAlpha = tensionState === 'danger' ? 0.16 : tensionState === 'warning' ? 0.13 : 0.11
+    const frameToneAlpha = tensionState === 'danger' ? 0.1 : tensionState === 'warning' ? 0.08 : 0.06
 
-    this.headerBackground?.setFillStyle(COLORS.inkLift, 0.96 * (isFinalFeedback ? 0.92 : 1))
-    this.headerBackground?.setStrokeStyle(1, COLORS.border, isFinalFeedback ? 0.82 : 0.94)
-    this.headerInnerPlate?.setFillStyle(COLORS.bgAccentSoft, 0.34 * (isFinalFeedback ? 0.84 : 1))
-    this.headerInnerPlate?.setStrokeStyle(1, accentColor, isFinalFeedback ? 0.08 : 0.13)
-    this.headerTopAccent?.setFillStyle(accentColor, isFinalFeedback ? 0.14 : 0.24)
-    this.headerDivider?.setFillStyle(accentColor, tensionPalette.dividerAlpha * (isFinalFeedback ? 0.76 : 1.08))
+    this.headerBackground?.setFillStyle(COLORS.bgAccentSoft, 0.98 * (isFinalFeedback ? 0.94 : 1))
+    this.headerBackground?.setStrokeStyle(1, COLORS.border, isFinalFeedback ? 0.46 : 0.54)
+    this.headerInnerPlate?.setFillStyle(COLORS.bgAccent, 0.16 * (isFinalFeedback ? 0.9 : 1))
+    this.headerInnerPlate?.setStrokeStyle(1, accentColor, isFinalFeedback ? 0.06 : 0.1)
+    this.headerTopAccent?.setFillStyle(accentColor, isFinalFeedback ? 0.18 : 0.28)
+    this.headerDivider?.setFillStyle(COLORS.borderSoft, 0.18)
     this.headerTitleGlow?.setFontSize(this.toFontPx(titleFontSize))
-    this.headerTitleGlow?.setColor('#67e8f9')
-    this.headerTitleGlow?.setAlpha((tensionState === 'danger' ? 0.11 : 0.16) * (isFinalFeedback ? 0.72 : 1))
+    this.headerTitleGlow?.setColor('#5ce0d1')
+    this.headerTitleGlow?.setAlpha((tensionState === 'danger' ? 0.08 : 0.14) * (isFinalFeedback ? 0.72 : 1))
     this.headerTitleText?.setFontSize(this.toFontPx(titleFontSize))
-    this.headerTitleText?.setColor('#e6f6ff')
+    this.headerTitleText?.setColor(COLORS.text)
     this.headerTitleText?.setAlpha(tensionPalette.titleAlpha * (isFinalFeedback ? 0.9 : 1))
-    this.headerTitleAccent?.setFillStyle(accentColor, isFinalFeedback ? 0.12 : 0.2)
+    this.headerTitleAccent?.setFillStyle(accentColor, isFinalFeedback ? 0.18 : 0.28)
+    this.headerCaseCodeText?.setColor('#7adfd4')
+    this.headerPromptText?.setColor(COLORS.text)
+    this.headerAttemptsLabel?.setColor(COLORS.textMuted)
+    this.headerAttemptsValue?.setColor(
+      snapshot.attemptsCount >= 4 ? '#f4a261' : COLORS.text,
+    )
     if (this.headerTitleAccent) {
       const titleAccentWidth = Phaser.Math.Clamp(Math.round((this.headerTitleText?.width ?? 60) * 0.46), 36, 64)
-      this.setRectangleDimensions(this.headerTitleAccent, titleAccentWidth, 1)
+      this.setRectangleDimensions(this.headerTitleAccent, titleAccentWidth, 2)
     }
     if (this.headerDnaIcon) {
-      const dnaHeight = Phaser.Math.Clamp(Math.round(header.height * 0.38), 18, 24)
+      const dnaHeight = Phaser.Math.Clamp(Math.round(header.height * 0.22), 10, 16)
       const dnaScale = dnaHeight / 24
-      const titleWidth = this.headerTitleText?.width ?? 0
-      const titleLeft = Math.round(header.width / 2 - titleWidth / 2)
-      const dnaGap = Math.max(5, Math.round(header.height * 0.07))
+      const titleLeft = 40
+      const dnaGap = 2
       this.headerDnaIcon.setScale(dnaScale)
       this.headerDnaIcon.setPosition(
         titleLeft - Math.round((20 * dnaScale) / 2) - dnaGap,
@@ -3267,15 +4051,15 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     }
     if (this.headerDnaIcon && this.headerDnaRotationTween) {
       if (this.isInDangerState === undefined) {
-        this.headerDnaRotationTween.timeScale = dangerState ? 1.9 : 1
+        this.headerDnaRotationTween.timeScale = 1
         this.headerDnaIcon.setTint(dangerState ? COLORS.rose : COLORS.cyan)
-        this.headerDnaIcon.setAlpha(dangerState ? 0.8 : 0.56)
+        this.headerDnaIcon.setAlpha(0)
       } else if (this.isInDangerState !== dangerState) {
-        this.headerDnaRotationTween.timeScale = dangerState ? 1.9 : 1
+        this.headerDnaRotationTween.timeScale = 1
         this.headerDnaIcon.setTint(dangerState ? COLORS.rose : COLORS.cyan)
         this.tweens.add({
           targets: this.headerDnaIcon,
-          alpha: dangerState ? 0.8 : 0.56,
+          alpha: 0,
           duration: 160,
           ease: 'Sine.Out',
         })
@@ -3286,7 +4070,7 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       this.outerFrameInnerGlow.setAlpha(tensionState === 'danger' ? 0.98 : 1)
     }
     if (this.outerFrameVignette) {
-      const vignetteAlpha = tensionState === 'danger' ? 0.14 : tensionState === 'warning' ? 0.125 : 0.115
+      const vignetteAlpha = tensionState === 'danger' ? 0.14 : tensionState === 'warning' ? 0.125 : 0.11
       const vignetteColor = tensionState === 'danger' ? COLORS.roseSoft : COLORS.shadow
       this.outerFrameVignette.setStrokeStyle(
         Phaser.Math.Clamp(Math.round(header.width * 0.02), 6, 9),
@@ -3353,13 +4137,13 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
         this.headerLevelChip,
         this.headerLevelText,
         `LV ${levelDisplayValue}`,
-        COLORS.inkLift,
-        COLORS.sky,
-        '#dbeafe',
+        COLORS.amberSoft,
+        COLORS.amber,
+        '#ffd8b8',
         levelFontSize,
         44,
         levelChipHeight,
-        0.94,
+        0.92,
       )
       this.headerLevelChip.setPosition(cursorX, topRowY)
       this.headerLevelText.setPosition(
@@ -3383,13 +4167,13 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
         this.headerXpChip,
         this.headerXpText,
         `XP ${Math.round(xpDisplayValue).toLocaleString()}`,
-        COLORS.panelMuted,
+        COLORS.bgAccent,
         COLORS.cyan,
-        '#e6f5ff',
+        COLORS.text,
         xpFontSize,
         60,
         chipHeight,
-        0.96,
+        0.88,
       )
       this.headerXpChip.setPosition(cursorX, topRowY)
       this.headerXpText.setPosition(cursorX + chipPaddingX, topRowY + Math.round((chipHeight - this.headerXpText.height) / 2) - 1)
@@ -3399,7 +4183,7 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       this.headerXpText.setVisible(false)
     }
 
-    if (viabilityTotal !== this.lastHeaderViabilityTotal) {
+    if (this.headerHeartIcons.length !== viabilityTotal) {
       this.headerHeartIcons.forEach((heart) => heart.destroy())
       this.headerHeartIcons = []
 
@@ -3417,17 +4201,14 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     }
 
     let heartsWidth = 0
-    this.headerHeartIcons.forEach((heart, index) => {
-      const isActive = index < viabilityRemaining
+    this.headerHeartIcons.forEach((heart) => {
       heart.setFontSize(this.toFontPx(heartFontSize))
-      heart.setText(isActive ? HEADER_HEART_FULL : HEADER_HEART_EMPTY)
-      heart.setColor(isActive ? tensionPalette.heartColor : tensionPalette.heartInactiveColor)
-      heart.setAlpha(isActive ? tensionPalette.heartAlpha : tensionPalette.heartInactiveAlpha)
-      heart.setScale(isActive ? 1 : 0.94)
+      heart.setText('')
+      heart.setAlpha(0)
+      heart.setScale(1)
       heart.setPosition(heartsWidth, 0)
-      heartsWidth += Math.round(heart.width) + heartGap
     })
-    heartsWidth = Math.max(0, heartsWidth - heartGap)
+    heartsWidth = 0
     const heartsY = topRowY + chipHeight + rowGap
     this.headerHeartsContainer.setPosition(0, heartsY)
 
@@ -3524,12 +4305,11 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
 
     this.refreshHeaderHeartPulse(
       tensionState,
-      tensionState === 'danger' && viabilityRemaining > 0 && !isFinalFeedback,
-      viabilityRemaining === 1,
+      viabilityRemaining <= 2 && !isFinalFeedback,
+      viabilityRemaining <= 1,
     )
 
     this.lastHeaderViabilityRemaining = viabilityRemaining
-    this.lastHeaderViabilityTotal = viabilityTotal
     this.lastXp = showXp ? xpTotalNumber ?? undefined : undefined
     this.lastLevel = showLevel ? levelNumber ?? undefined : undefined
     this.isInDangerState = dangerState
@@ -3546,8 +4326,34 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
 
     const { clues } = this.layoutMetrics
     const clueCardWidth = Math.max(120, clues.width - clues.cardInset * 2)
+    const slotCount = Math.max(6, snapshot.totalClues || snapshot.visibleClues.length || 0)
+    const slots: ClueRenderSlot[] = Array.from({ length: slotCount }, (_, index) => {
+      const clue = snapshot.visibleClues[index]
+      if (clue) {
+        return {
+          id: clue.id,
+          type: clue.type,
+          value: clue.value,
+          isNewest: clue.isNewest,
+          isLocked: false,
+          slotNumber: index + 1,
+        }
+      }
 
-    const currentIds = new Set(snapshot.visibleClues.map((clue) => clue.id))
+      return {
+        id: `locked-slot-${index + 1}`,
+        type: 'locked',
+        value:
+          snapshot.mode === 'FINAL_FEEDBACK'
+            ? 'Review continues in the learning notes.'
+            : 'Locked - submit another diagnosis.',
+        isNewest: false,
+        isLocked: true,
+        slotNumber: index + 1,
+      }
+    })
+
+    const currentIds = new Set(slots.map((slot) => slot.id))
     this.clueCards.forEach((view, id) => {
       if (!currentIds.has(id)) {
         view.container.destroy(true)
@@ -3555,57 +4361,99 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       }
     })
 
-    const hasClues = snapshot.visibleClues.length > 0
+    const hasClues = slots.length > 0
     if (this.clueEmptyText) {
       this.clueEmptyText.setVisible(!hasClues)
     }
 
-    snapshot.visibleClues.forEach((clue) => {
-      if (!this.clueCards.has(clue.id)) {
-        const view = this.createClueCard(clue, clueCardWidth)
-        this.clueCards.set(clue.id, view)
+    slots.forEach((slot) => {
+      if (!this.clueCards.has(slot.id)) {
+        const view = this.createClueCard(slot, clueCardWidth)
+        this.clueCards.set(slot.id, view)
         this.clueCardLayer?.add(view.container)
       }
     })
 
-    const total = snapshot.visibleClues.length
-    const newestIndex = total - 1
+    const total = slots.length
+    const newestIndex = Math.max(-1, snapshot.visibleClues.length - 1)
     const itemGap = Math.max(6, Math.round(clues.height * (8 / 340)))
 
-    const targets = snapshot.visibleClues.map((clue, index) => {
-      const view = this.clueCards.get(clue.id)
-      const age = newestIndex - index
-      const scale = 1
-      const alpha = age === 0 ? 1 : Phaser.Math.Clamp(0.9 - age * 0.08, 0.72, 0.9)
+    const targets = slots.map((slot, index) => {
+      const view = this.clueCards.get(slot.id)
+      const age = slot.isLocked
+        ? Math.max(1, index - newestIndex + 1)
+        : Math.max(0, newestIndex - index)
+      const scale = slot.isLocked ? 0.986 : 1
+      const alpha = slot.isLocked
+        ? Phaser.Math.Clamp(0.68 - Math.max(0, index - newestIndex - 1) * 0.03, 0.5, 0.72)
+        : age === 0
+          ? 1
+          : Phaser.Math.Clamp(0.9 - age * 0.08, 0.72, 0.9)
       const x = Math.round(clues.cardInset)
 
-      this.refreshClueCard(view!, clue, age)
+      this.refreshClueCard(view!, slot, age)
       const y = 0
 
-      return { clue, view: view!, age, x, y, scale, alpha }
+      return { slot, view: view!, x, y, scale, alpha }
     })
 
     const totalHeight = targets.reduce((sum, target) => sum + target.view.height, 0) + Math.max(0, total - 1) * itemGap
-    const contentBottom = clues.height - clues.stackBottomInset
-    const minStartY = clues.minTopInset
-    const startY = Math.min(minStartY, Math.round(contentBottom - totalHeight))
-    let cursorY = startY
+    const visibleHeight = Math.max(1, clues.height - clues.minTopInset - clues.stackBottomInset)
+    this.clueScrollMaxOffset = Math.max(0, totalHeight - visibleHeight)
+    const scrollOffset = Phaser.Math.Clamp(this.clueScrollOffset, 0, this.clueScrollMaxOffset)
+    this.clueScrollOffset = scrollOffset
+
+    let cursorY = clues.minTopInset - scrollOffset
     targets.forEach((target) => {
       target.y = cursorY
       cursorY += target.view.height + itemGap
     })
 
     const previousCount = previousSnapshot?.visibleClues.length ?? 0
+    const previousIds = new Set(previousSnapshot?.visibleClues.map((item) => item.id) ?? [])
+
+    this.clueProgressDots.forEach((dot, index) => {
+      const unlockedClueCount =
+        snapshot.mode === 'FINAL_FEEDBACK'
+          ? snapshot.resultCluesUsed ?? snapshot.revealedClueCount ?? snapshot.visibleClues.length
+          : snapshot.revealedClueCount || snapshot.visibleClues.length
+      const attemptsUsed =
+        snapshot.mode === 'FINAL_FEEDBACK'
+          ? snapshot.resultAttemptsUsed ?? snapshot.attemptsCount ?? 0
+          : snapshot.attemptsCount ?? 0
+      const isUnlocked = index < unlockedClueCount
+      const isAttemptSpent = index < attemptsUsed
+      const isWinningAttempt =
+        snapshot.mode === 'FINAL_FEEDBACK' &&
+        snapshot.resultWasCorrect === true &&
+        index === Math.max(0, attemptsUsed - 1)
+      const isFinalFailedAttempt =
+        snapshot.mode === 'FINAL_FEEDBACK' &&
+        snapshot.resultWasCorrect === false &&
+        index === Math.max(0, attemptsUsed - 1)
+
+      if (isWinningAttempt) {
+        dot.setFillStyle(COLORS.emerald, 0.96)
+      } else if (isFinalFailedAttempt) {
+        dot.setFillStyle(COLORS.rose, 0.94)
+      } else if (isAttemptSpent) {
+        dot.setFillStyle(COLORS.amber, 0.86)
+      } else if (isUnlocked) {
+        dot.setFillStyle(COLORS.cyan, 0.34)
+      } else {
+        dot.setFillStyle(COLORS.borderSoft, 0.22)
+      }
+    })
 
     targets.forEach((target, order) => {
-      const { clue, view, scale, alpha } = target
+      const { slot, view, scale, alpha } = target
       const x = target.x
       const y = target.y
 
       view.container.setDepth(order + 1)
       this.clueCardLayer?.bringToTop(view.container)
 
-      const isNewReveal = !previousSnapshot || !previousSnapshot.visibleClues.some((item) => item.id === clue.id)
+      const isNewReveal = !slot.isLocked && !previousIds.has(slot.id)
       if (isNewReveal && total >= previousCount) {
         this.animateNewClueCard(view, x, y, scale, alpha)
         return
@@ -3630,27 +4478,63 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     const state = this.guessBarState
     const style = this.getGuessBarVisual(state)
     const readyToCommit = state === 'typing' && isReadyToCommit(snapshot)
+    const diagnosisStatusTextColor = this.getDiagnosisStatusTextColor(snapshot.diagnosisStatusTone)
+    const diagnosisStatusFillColor = this.getDiagnosisStatusFillColor(snapshot.diagnosisStatusTone)
     const baseValue =
       state === 'empty'
         ? 'YOUR DIAGNOSIS'
-        : snapshot.guess || snapshot.finalDiagnosis || snapshot.latestAttempt?.guess || 'YOUR DIAGNOSIS'
+        : snapshot.selectedDiagnosisLabel || snapshot.guess || snapshot.finalDiagnosis || snapshot.latestAttempt?.guess || 'YOUR DIAGNOSIS'
     const onboardingGuessOverlayActive =
       this.isOnboardingBlockingInput() && (this.onboardingGhostGuess?.alpha ?? 0) > 0.02
 
-    const slotStroke = readyToCommit ? COLORS.emeraldGlow : style.stroke
-    const slotHaloColor = readyToCommit ? COLORS.emeraldGlow : style.haloColor
-    const slotHaloAlpha = readyToCommit ? 0.2 : style.haloAlpha
-    const slotFill = readyToCommit ? 0x103028 : style.fill
-    const slotLabelColor = readyToCommit ? '#bbf7d0' : style.labelColor
+    const slotStroke =
+      readyToCommit
+        ? COLORS.emeraldGlow
+        : snapshot.diagnosisInputMode === 'selected'
+          ? COLORS.emeraldGlow
+          : snapshot.diagnosisStatusTone === 'warning'
+            ? COLORS.amber
+            : style.stroke
+    const slotHaloColor =
+      readyToCommit
+        ? COLORS.emeraldGlow
+        : snapshot.diagnosisInputMode === 'selected'
+          ? COLORS.emeraldGlow
+          : diagnosisStatusFillColor
+    const slotHaloAlpha =
+      readyToCommit
+        ? 0.2
+        : snapshot.diagnosisInputMode === 'selected'
+          ? 0.18
+          : snapshot.diagnosisStatusTone === 'warning'
+            ? Math.max(style.haloAlpha, 0.14)
+            : style.haloAlpha
+    const slotFill =
+      readyToCommit || snapshot.diagnosisInputMode === 'selected'
+        ? 0x11383a
+        : snapshot.diagnosisStatusTone === 'warning'
+          ? 0x3d2b1f
+          : style.fill
+    const slotLabelColor =
+      readyToCommit || snapshot.diagnosisInputMode === 'selected'
+        ? '#bbf7d0'
+        : snapshot.diagnosisStatusTone === 'warning'
+          ? '#fde68a'
+          : style.labelColor
     const borderWidth = readyToCommit ? 2 : state === 'empty' || state === 'disabled' ? 1 : 2
 
     const hasTypedGuess = snapshot.guess.trim().length > 0
-    const showCaret = snapshot.canEditGuess && (state === 'typing' || (state === 'empty' && !hasTypedGuess)) && !snapshot.submitDisabled && this.guessCaretVisible
+    const showCaret =
+      !snapshot.selectedDiagnosisLabel &&
+      snapshot.canEditGuess &&
+      (state === 'typing' || (state === 'empty' && !hasTypedGuess)) &&
+      !snapshot.submitDisabled &&
+      this.guessCaretVisible
 
     this.guessBar.container.setAlpha(snapshot.mode === 'FINAL_FEEDBACK' ? 0.68 : 1)
     this.guessBar.halo.setFillStyle(slotHaloColor, slotHaloAlpha)
     this.guessBar.glow.setFillStyle(slotStroke, Phaser.Math.Clamp(slotHaloAlpha * 0.66, 0.06, 0.22))
-    this.guessBar.background.setFillStyle(slotFill, state === 'empty' ? 0.9 : readyToCommit ? 0.97 : 0.95)
+    this.guessBar.background.setFillStyle(slotFill, state === 'empty' ? 0.82 : readyToCommit ? 0.94 : 0.9)
     this.guessBar.border.setStrokeStyle(borderWidth, slotStroke, 1)
     this.guessBar.label.setColor(slotLabelColor)
     this.guessBar.label.setAlpha(readyToCommit ? 0.86 : state === 'empty' ? 0.62 : 0.78)
@@ -3681,12 +4565,62 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
 
     this.guessBar.value.setText(renderedValue)
     this.guessBar.value.setFontSize(this.toFontPx(adjustedFontSize))
-    this.guessBar.helper.setText(style.helper)
-    this.guessBar.helper.setColor(style.helperColor)
-    this.guessBar.helper.setAlpha(style.helper ? 1 : 0)
+    const helperText = snapshot.selectedDiagnosisLabel
+      ? 'Selected from registry. Tap to edit'
+      : snapshot.diagnosisStatusLabel ||
+        snapshot.submitPromptLabel ||
+        snapshot.suggestionsStatusLabel ||
+        style.helper
+    this.guessBar.helper.setText(helperText)
+    this.guessBar.helper.setColor(helperText ? diagnosisStatusTextColor : style.helperColor)
+    this.guessBar.helper.setAlpha(helperText ? 1 : 0)
 
     this.refreshGuessBarGlow(state, style)
     this.refreshGuessBarScan(state, slotStroke)
+  }
+
+  private syncSuggestionPanel(snapshot: PhaserGameSessionSnapshot) {
+    if (!this.suggestionPanel) {
+      return
+    }
+
+    const visibleSuggestions =
+      snapshot.canEditGuess && !snapshot.selectedDiagnosisLabel
+        ? snapshot.suggestions.slice(0, this.suggestionPanel.rows.length)
+        : []
+
+    if (visibleSuggestions.length === 0) {
+      this.suggestionPanel.container.setVisible(false)
+      return
+    }
+
+    this.layoutSuggestionPanel(visibleSuggestions.length)
+    this.suggestionPanel.container.setVisible(true)
+
+    visibleSuggestions.forEach((suggestion, index) => {
+      const row = this.suggestionPanel?.rows[index]
+      if (!row) {
+        return
+      }
+
+      row.button.container.setVisible(true)
+      row.button.label.setText(suggestion.displayLabel)
+      this.setPressableEnabled(row.button, true)
+      this.applyButtonPalette(
+        row.button,
+        this.getSuggestionPalette(
+          suggestion.matchKind,
+          index === snapshot.highlightedSuggestionIndex,
+        ),
+      )
+    })
+
+    this.suggestionPanel.rows
+      .slice(visibleSuggestions.length)
+      .forEach((row) => {
+        row.button.container.setVisible(false)
+        this.setPressableEnabled(row.button, false)
+      })
   }
 
   private syncActionRow(snapshot: PhaserGameSessionSnapshot) {
@@ -3695,13 +4629,24 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     }
 
     const hasGuess = snapshot.guess.trim().length > 0
-    const canEdit = snapshot.canEditGuess
+    const canInteract = snapshot.mode === 'PLAYING' && !this.isGameplayInputLocked(snapshot)
+    const canEdit = canInteract && snapshot.canEditGuess
     const canClear = canEdit && hasGuess
-    const canSubmit = !snapshot.submitDisabled
+    const canSubmit = canInteract && !snapshot.submitDisabled
     const readyToCommit = isReadyToCommit(snapshot)
     const isSubmitting = snapshot.mode === 'SUBMITTING'
+    const submitMode = snapshot.diagnosisSubmitMode
+    const isSelectionBacked = submitMode === 'selected-id'
 
-    this.actionButtons.submit.label.setText(snapshot.mode === 'SUBMITTING' ? 'Checking' : 'Submit')
+    this.actionButtons.submit.label.setText(
+      snapshot.mode === 'SUBMITTING'
+        ? 'Checking'
+        : snapshot.dictionaryAvailability === 'unavailable'
+          ? 'Unavailable'
+          : submitMode === 'blocked' && hasGuess
+            ? 'Select one'
+            : 'Submit',
+    )
     this.setPressableEnabled(this.actionButtons.clear, canClear)
     this.setPressableEnabled(this.actionButtons.backspace, canClear)
     this.setPressableEnabled(this.actionButtons.submit, canSubmit)
@@ -3710,57 +4655,67 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     this.actionButtons.submit.container.setAlpha(snapshot.mode === 'FINAL_FEEDBACK' ? 0.4 : 1)
 
     this.applyButtonPalette(this.actionButtons.clear, {
-      fill: canClear ? 0x122638 : COLORS.ink,
-      stroke: canClear ? COLORS.cyan : COLORS.borderSoft,
-      text: canClear ? '#d7f7ff' : COLORS.textQuiet,
-      shadowAlpha: canClear ? 0.16 : 0.08,
+      fill: canClear ? COLORS.bgAccent : COLORS.ink,
+      stroke: canClear ? COLORS.border : COLORS.borderSoft,
+      text: canClear ? COLORS.text : COLORS.textQuiet,
+      shadowAlpha: canClear ? 0.12 : 0.08,
       alpha: canEdit ? 1 : 0.76,
-      glowAlpha: canClear ? 0.04 : 0.02,
-      hoverGlowAlpha: canClear ? 0.08 : 0.03,
-      pressedGlowAlpha: canClear ? 0.14 : 0.04,
+      glowAlpha: canClear ? 0.03 : 0.02,
+      hoverGlowAlpha: canClear ? 0.06 : 0.03,
+      pressedGlowAlpha: canClear ? 0.1 : 0.04,
     })
 
     this.applyButtonPalette(this.actionButtons.backspace, {
-      fill: canClear ? 0x161f31 : COLORS.ink,
+      fill: canClear ? COLORS.bgAccentSoft : COLORS.ink,
       stroke: canClear ? COLORS.amber : COLORS.borderSoft,
-      text: canClear ? '#fde68a' : COLORS.textQuiet,
-      shadowAlpha: canClear ? 0.16 : 0.08,
+      text: canClear ? '#fde7cf' : COLORS.textQuiet,
+      shadowAlpha: canClear ? 0.12 : 0.08,
       alpha: canEdit ? 1 : 0.76,
-      glowAlpha: canClear ? 0.04 : 0.02,
-      hoverGlowAlpha: canClear ? 0.08 : 0.03,
-      pressedGlowAlpha: canClear ? 0.14 : 0.04,
+      glowAlpha: canClear ? 0.03 : 0.02,
+      hoverGlowAlpha: canClear ? 0.06 : 0.03,
+      pressedGlowAlpha: canClear ? 0.1 : 0.04,
     })
 
     this.applyButtonPalette(this.actionButtons.submit, {
-      fill: isSubmitting ? 0x0f3040 : readyToCommit ? 0x0f5d4f : canSubmit ? 0x0f5348 : 0x12342f,
-      stroke: isSubmitting ? COLORS.cyan : canSubmit ? COLORS.emeraldGlow : 0x245148,
-      text: COLORS.text,
-      shadowAlpha: readyToCommit ? 0.32 : canSubmit ? 0.28 : 0.12,
+      fill: isSubmitting
+        ? COLORS.panelMuted
+        : readyToCommit || isSelectionBacked
+          ? COLORS.emerald
+          : canSubmit
+              ? COLORS.panelMuted
+              : COLORS.bgAccentSoft,
+      stroke: isSubmitting
+        ? COLORS.cyan
+        : readyToCommit || isSelectionBacked
+          ? COLORS.emeraldGlow
+          : COLORS.border,
+      text: canSubmit ? '#ffffff' : COLORS.textMuted,
+      shadowAlpha: readyToCommit || isSelectionBacked ? 0.24 : canSubmit ? 0.16 : 0.1,
       alpha: canSubmit ? 1 : 0.84,
-      glowAlpha: readyToCommit ? 0.14 : canSubmit ? 0.1 : 0.03,
-      hoverGlowAlpha: readyToCommit ? 0.22 : canSubmit ? 0.18 : 0.05,
-      pressedGlowAlpha: readyToCommit ? 0.32 : canSubmit ? 0.28 : 0.08,
+      glowAlpha: readyToCommit || isSelectionBacked ? 0.1 : canSubmit ? 0.06 : 0.03,
+      hoverGlowAlpha: readyToCommit || isSelectionBacked ? 0.16 : canSubmit ? 0.1 : 0.05,
+      pressedGlowAlpha: readyToCommit || isSelectionBacked ? 0.24 : canSubmit ? 0.16 : 0.08,
       strokeWidth: canSubmit ? 2 : 1,
-      pressedStrokeWidth: readyToCommit ? 3 : canSubmit ? 2 : 1,
-      shineAlpha: readyToCommit ? 0.14 : canSubmit ? 0.11 : 0.04,
+      pressedStrokeWidth: readyToCommit || isSelectionBacked ? 3 : canSubmit ? 2 : 1,
+      shineAlpha: readyToCommit || isSelectionBacked ? 0.1 : canSubmit ? 0.06 : 0.04,
     })
   }
 
   private syncKeyboard(snapshot: PhaserGameSessionSnapshot) {
-    const canEdit = snapshot.canEditGuess
+    const canEdit = snapshot.mode === 'PLAYING' && snapshot.canEditGuess && !this.isGameplayInputLocked(snapshot)
     if (this.keyboardRegion) {
       this.keyboardRegion.setAlpha(snapshot.mode === 'FINAL_FEEDBACK' ? 0.34 : 1)
     }
     const keyPalette: ButtonPalette = canEdit
       ? {
-          fill: 0x102131,
-          stroke: COLORS.cyan,
-          text: '#e0f7ff',
-          shadowAlpha: 0.16,
-          glowAlpha: 0.05,
-          hoverGlowAlpha: 0.12,
-          pressedGlowAlpha: 0.22,
-          shineAlpha: 0.09,
+          fill: COLORS.bgAccentSoft,
+          stroke: COLORS.border,
+          text: COLORS.text,
+          shadowAlpha: 0.1,
+          glowAlpha: 0.03,
+          hoverGlowAlpha: 0.07,
+          pressedGlowAlpha: 0.12,
+          shineAlpha: 0.05,
         }
       : {
           fill: COLORS.ink,
@@ -3814,14 +4769,18 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       return
     }
 
-    const { overlay } = this.layoutMetrics
+    const { board, overlay } = this.layoutMetrics
+    const centeredY = board.y + Math.round((board.height - overlay.height) / 2)
+    const enteredFinalFeedback = previousSnapshot?.mode !== 'FINAL_FEEDBACK'
+    const stayedInFinalFeedback = previousSnapshot?.mode === 'FINAL_FEEDBACK'
 
     if (snapshot.mode !== 'FINAL_FEEDBACK') {
+      this.stopEndOverlayTransitions()
       if (!this.isOnboardingBlockingInput()) {
         this.clueStackRegion?.setAlpha(1)
       }
       this.refreshOverlayEffects(false, COLORS.cyan)
-      if (previousSnapshot?.mode === 'FINAL_FEEDBACK') {
+      if (stayedInFinalFeedback) {
         this.tweens.add({
           targets: this.endOverlay.container,
           alpha: 0,
@@ -3839,59 +4798,80 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     }
 
     const label = snapshot.latestAttempt?.label ?? 'wrong'
-    const outcomeTone = snapshot.outcomeTone ?? (label === 'correct' ? 'steady_save' : 'patient_lost')
     const diagnosisText = snapshot.finalDiagnosis ?? snapshot.latestAttempt?.guess ?? 'Diagnosis submitted'
-    let eyebrow = 'PATIENT STABILIZED'
-    let title = 'Good reasoning under pressure'
-    let helper = 'You reached the diagnosis before the patient lost viability.'
-    let accentColor: number = COLORS.emerald
-    let eyebrowColor = '#6ee7b7'
+    const cluesUsed = Math.max(
+      1,
+      snapshot.resultCluesUsed ?? snapshot.revealedClueCount ?? snapshot.attemptsCount ?? 1,
+    )
+    const attemptsCount = Math.max(1, snapshot.resultAttemptsUsed ?? snapshot.attemptsCount ?? cluesUsed)
+    const starCount = this.getEndOverlayStarCount(snapshot)
+    const statValues = [
+      { label: 'CLUES USED', value: `${cluesUsed}/${Math.max(cluesUsed, snapshot.totalClues || cluesUsed)}` },
+      { label: 'ATTEMPTS', value: `${attemptsCount}` },
+    ]
+    let eyebrow = 'CASE SOLVED'
+    let title = 'Nailed it, Doctor!'
+    let subtitle = `Diagnosed in ${cluesUsed} clue${cluesUsed === 1 ? '' : 's'} - impressive clinical reasoning.`
+    let diagnosisLabel = 'CORRECT DIAGNOSIS'
+    let ctaHint = snapshot.canOpenExplanation
+      ? 'Open Learning Notes for the full breakdown.'
+      : 'Learning Notes unlock when the explanation is ready.'
+    let accentColor: number = COLORS.cyan
+    let eyebrowColor = '#8ee4d9'
+    let iconText = 'DX'
+    let performanceStars = `${'*'.repeat(starCount)}${'-'.repeat(Math.max(0, 3 - starCount))}`
     let continuePalette: ButtonPalette = {
-      fill: COLORS.emerald,
-      stroke: COLORS.emerald,
+      fill: COLORS.cyan,
+      stroke: COLORS.cyan,
       text: COLORS.text,
       shadowAlpha: 0.24,
     }
 
-    switch (outcomeTone) {
-      case 'early_save':
-        title = 'Excellent clinical judgment'
-        helper = 'Diagnosed early, before the patient deteriorated. Open the explanation to see why it fit.'
-        break
-      case 'last_chance_save':
-        eyebrow = 'JUST IN TIME'
-        title = 'Saved just in time'
-        helper = 'The final clue gave you enough signal to act before viability collapsed.'
-        accentColor = COLORS.amber
-        eyebrowColor = '#fcd34d'
-        break
-      case 'patient_lost':
-        eyebrow = 'PATIENT LOST'
-        title = 'The diagnosis was missed'
-        helper = 'The patient deteriorated before the correct diagnosis was made. Review the explanation when you are ready.'
-        accentColor = COLORS.rose
-        eyebrowColor = '#fda4af'
-        continuePalette = {
-          fill: COLORS.panelMuted,
-          stroke: COLORS.rose,
-          text: COLORS.text,
-          shadowAlpha: 0.14,
-          alpha: 0.94,
-        }
-        break
-      default:
-        accentColor = COLORS.cyan
-        eyebrowColor = '#67e8f9'
-        break
+    if (label !== 'correct') {
+      eyebrow = 'LEARNING REVIEW'
+      title = 'Good thinking, keep going!'
+      subtitle = `The correct diagnosis was ${diagnosisText}. Review the learning notes.`
+      diagnosisLabel = 'FINAL DIAGNOSIS'
+      ctaHint = snapshot.canOpenExplanation
+        ? 'Open Learning Notes to review the reasoning and differentials.'
+        : 'Learning Notes unlock when the explanation is ready.'
+      accentColor = COLORS.amber
+      eyebrowColor = '#ffd2a8'
+      iconText = 'REVIEW'
+      performanceStars = '---'
+      continuePalette = {
+        fill: COLORS.amber,
+        stroke: COLORS.amber,
+        text: COLORS.text,
+        shadowAlpha: 0.22,
+      }
     }
 
     this.endOverlay.eyebrow.setText(eyebrow)
     this.endOverlay.title.setText(title)
-    this.endOverlay.diagnosis.setText(diagnosisText)
-    this.endOverlay.helper.setText(helper)
+    this.endOverlay.icon.setText(iconText)
+    this.endOverlay.subtitle.setText(subtitle)
+    this.endOverlay.diagnosisLabel.setText(diagnosisLabel)
+    this.endOverlay.diagnosisValue.setText(diagnosisText)
+    this.endOverlay.performanceStars.setText(performanceStars)
+    this.endOverlay.ctaHint.setText(ctaHint)
+    this.endOverlay.performanceLabel.setText(label === 'correct' ? 'CLINICAL PERFORMANCE' : 'KEEP SHARP')
+    this.endOverlay.statCards.forEach((card, index) => {
+      const nextStat = statValues[index]
+      if (!nextStat) {
+        return
+      }
+      this.setEndOverlayStatCard(card, nextStat.label, nextStat.value, accentColor)
+    })
     this.endOverlay.accent.setFillStyle(accentColor, 0.95)
     this.endOverlay.eyebrow.setColor(eyebrowColor)
     this.endOverlay.glow.setFillStyle(accentColor, 0.1)
+    this.endOverlay.iconGlow.setFillStyle(accentColor, 0.16)
+    this.endOverlay.iconGlow.setStrokeStyle(1, accentColor, 0.22)
+    this.endOverlay.iconBadge.setFillStyle(COLORS.inkLift, 0.98)
+    this.endOverlay.iconBadge.setStrokeStyle(1, accentColor, 0.3)
+    this.endOverlay.performanceStars.setColor(label === 'correct' ? '#f4d58d' : '#f7ba85')
+    this.endOverlay.scrim.setFillStyle(COLORS.shadow, 0.76)
 
     this.applyButtonPalette(this.endOverlay.continueButton, continuePalette)
     this.setPressableEnabled(this.endOverlay.continueButton, true)
@@ -3903,14 +4883,17 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       shadowAlpha: snapshot.canOpenExplanation ? 0.18 : 0.08,
       alpha: snapshot.canOpenExplanation ? 1 : 0.82,
     })
+    this.layoutEndOverlayContent()
 
-    if (previousSnapshot?.mode !== 'FINAL_FEEDBACK') {
+    if (enteredFinalFeedback) {
+      this.stopEndOverlayTransitions()
       this.animateFinalRevealSettle()
       this.endOverlay.container.setVisible(true)
       this.endOverlay.container.setAlpha(0)
-      this.endOverlay.panel.y = overlay.y + overlay.entryOffset
+      this.endOverlay.panel.y = centeredY + overlay.entryOffset
       this.endOverlay.glow.setAlpha(0.08)
       this.endOverlay.beam.setAlpha(0.14)
+      this.endOverlay.iconGlow.setScale(0.92)
       this.tweens.add({
         targets: this.endOverlay.container,
         alpha: 1,
@@ -3919,17 +4902,24 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       })
       this.tweens.add({
         targets: this.endOverlay.panel,
-        y: overlay.y,
+        y: centeredY,
         duration: 220,
         ease: 'Cubic.Out',
         onComplete: () => {
           this.refreshOverlayEffects(true, accentColor)
         },
       })
+      this.tweens.add({
+        targets: this.endOverlay.iconGlow,
+        scaleX: 1,
+        scaleY: 1,
+        duration: 220,
+        ease: 'Back.Out',
+      })
     } else {
       this.endOverlay.container.setVisible(true)
       this.endOverlay.container.setAlpha(1)
-      this.endOverlay.panel.y = overlay.y
+      this.endOverlay.panel.y = centeredY
       this.refreshOverlayEffects(true, accentColor)
     }
   }
@@ -4054,7 +5044,7 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       this.tweens.killTweensOf(this.clueStackRegion)
       this.tweens.add({
         targets: this.clueStackRegion,
-        alpha: 0.84,
+        alpha: 0.22,
         duration: 180,
         ease: 'Quad.Out',
       })
@@ -4072,6 +5062,16 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
         onComplete: () => {
           this.guessBar?.container.setScale(1)
         },
+      })
+    }
+
+    if (this.keyboardRegion) {
+      this.tweens.killTweensOf(this.keyboardRegion)
+      this.tweens.add({
+        targets: this.keyboardRegion,
+        alpha: 0.34,
+        duration: 180,
+        ease: 'Quad.Out',
       })
     }
   }
@@ -4394,29 +5394,37 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     }
   }
 
-  private createClueCard(clue: PhaserVisibleClue, width: number): ClueCardView {
+  private createClueCard(clue: ClueRenderSlot, width: number): ClueCardView {
     const { clues, typography } = this.layoutMetrics
+    const isLocked = clue.type === 'locked'
     const textInsetX = Math.max(12, Math.round(width * 0.045))
-    const typeTop = Math.max(10, Math.round(clues.height * (12 / 340)))
-    const valueTop = typeTop + Math.max(14, Math.round(typography.clueType * 1.8))
-    const minHeight = Math.max(56, Math.round(clues.height * (72 / 340)))
-    const shadowOffset = Math.max(4, Math.round(clues.height * (8 / 340)))
+    const typeTop = Math.max(12, Math.round(clues.height * (14 / 340)))
+    const valueTop = typeTop + Math.max(16, Math.round(typography.clueType * 2.1))
+    const minHeight = isLocked
+      ? Math.max(54, Math.round(clues.height * (62 / 340)))
+      : Math.max(74, Math.round(clues.height * (86 / 340)))
+    const shadowOffset = Math.max(4, Math.round(clues.height * (7 / 340)))
     const accentWidth = Math.max(4, Math.round(width * 0.017))
-
-    const palette = getClueTone(clue.type)
+    const palette = clue.type === 'locked'
+      ? {
+          fill: 0x202b3c,
+          stroke: COLORS.borderSoft,
+          tag: '#7b8aa0',
+        }
+      : getClueTone(clue.type)
     const container = this.add.container(0, 0)
-    const typeText = this.createText(textInsetX, typeTop, clue.type.toUpperCase(), {
-      fontFamily: 'Arial',
+    const typeText = this.createText(textInsetX, typeTop, isLocked ? `CLUE ${clue.slotNumber}` : clue.type.toUpperCase(), {
+      fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
       fontSize: this.toFontPx(typography.clueType),
       color: palette.tag,
       fontStyle: 'bold',
     })
     const valueText = this.createText(textInsetX, valueTop, clue.value, {
-      fontFamily: 'Arial',
+      fontFamily: "'DM Sans', Arial, sans-serif",
       fontSize: this.toFontPx(typography.clueValue),
       color: COLORS.text,
       wordWrap: { width: width - textInsetX * 2, useAdvancedWrap: true },
-      lineSpacing: Math.max(2, Math.round(typography.clueValue * 0.22)),
+      lineSpacing: Math.max(2, Math.round(typography.clueValue * 0.18)),
     })
     const height = Math.max(minHeight, Math.round(valueTop + valueText.height + Math.max(14, clues.height * (14 / 340))))
     const glow = this.add.rectangle(-4, -4, width + 8, height + 8, palette.stroke, 0.08).setOrigin(0)
@@ -4454,34 +5462,48 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     }
   }
 
-  private refreshClueCard(view: ClueCardView, clue: PhaserVisibleClue, age: number) {
+  private refreshClueCard(view: ClueCardView, clue: ClueRenderSlot, age: number) {
     const { clues, typography } = this.layoutMetrics
+    const isLocked = clue.type === 'locked'
     const width = Math.max(120, clues.width - clues.cardInset * 2)
     const textInsetX = Math.max(12, Math.round(width * 0.045))
-    const typeTop = Math.max(10, Math.round(clues.height * (12 / 340)))
-    const valueTop = typeTop + Math.max(14, Math.round(typography.clueType * 1.8))
-    const minHeight = Math.max(56, Math.round(clues.height * (72 / 340)))
-    const shadowOffset = Math.max(4, Math.round(clues.height * (8 / 340)))
+    const typeTop = Math.max(12, Math.round(clues.height * (14 / 340)))
+    const valueTop = typeTop + Math.max(16, Math.round(typography.clueType * 2.1))
+    const minHeight = isLocked
+      ? Math.max(54, Math.round(clues.height * (62 / 340)))
+      : Math.max(74, Math.round(clues.height * (86 / 340)))
+    const shadowOffset = Math.max(4, Math.round(clues.height * (7 / 340)))
     const accentWidth = Math.max(4, Math.round(width * 0.017))
     const textResolution = getCaseSceneTextResolution(Math.max(0.5, 1 - age * 0.08))
-
-    const palette = getClueTone(clue.type)
-    const isLatest = age === 0
-    const backgroundAlpha = isLatest ? 0.96 : Phaser.Math.Clamp(0.86 - age * 0.05, 0.74, 0.86)
+    const palette = clue.type === 'locked'
+      ? {
+          fill: 0x202b3c,
+          stroke: COLORS.borderSoft,
+          tag: '#7b8aa0',
+        }
+      : getClueTone(clue.type)
+    const isLatest = !isLocked && age === 0
+    const backgroundAlpha = isLocked
+      ? 0.9
+      : isLatest
+        ? 0.96
+        : Phaser.Math.Clamp(0.86 - age * 0.05, 0.74, 0.86)
 
     view.width = width
     view.typeText.setResolution(textResolution)
-    view.typeText.setText(clue.type.toUpperCase())
+    view.typeText.setText(isLocked ? `CLUE ${clue.slotNumber}` : clue.type.toUpperCase())
     view.typeText.setPosition(textInsetX, typeTop)
     view.typeText.setFontSize(this.toFontPx(typography.clueType))
-    view.typeText.setAlpha(isLatest ? 0.95 : 0.78)
+    view.typeText.setAlpha(isLocked ? 0.72 : isLatest ? 0.95 : 0.78)
+    view.typeText.setFontFamily("'IBM Plex Mono', 'Courier New', monospace")
     view.valueText.setResolution(textResolution)
     view.valueText.setText(clue.value)
     view.valueText.setPosition(textInsetX, valueTop)
     view.valueText.setFontSize(this.toFontPx(typography.clueValue))
-    view.valueText.setLineSpacing(Math.max(2, Math.round(typography.clueValue * 0.22)))
+    view.valueText.setFontFamily("'DM Sans', Arial, sans-serif")
+    view.valueText.setLineSpacing(Math.max(2, Math.round(typography.clueValue * 0.18)))
     view.valueText.setWordWrapWidth(width - textInsetX * 2)
-    view.valueText.setAlpha(isLatest ? 1 : 0.84)
+    view.valueText.setAlpha(isLocked ? 0.6 : isLatest ? 1 : 0.84)
 
     const nextHeight = Math.max(minHeight, Math.round(valueTop + view.valueText.height + Math.max(14, clues.height * (14 / 340))))
     view.height = nextHeight
@@ -4497,15 +5519,22 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     this.setRectangleDimensions(view.sheen, Math.max(24, Math.round(width * 0.14)), Math.max(24, nextHeight - 8))
     view.sheen.setY(4)
 
-    view.typeText.setColor(isLatest ? '#bbf7d0' : palette.tag)
+    view.typeText.setColor(isLocked ? '#7b8aa0' : isLatest ? '#bbf7d0' : palette.tag)
     view.typeText.setScale(1)
     view.valueText.setScale(1)
-    view.background.setFillStyle(palette.fill, backgroundAlpha)
-    view.background.setStrokeStyle(isLatest ? 2 : 1, palette.stroke, isLatest ? 0.94 : 0.34)
-    view.accent.setFillStyle(palette.stroke, isLatest ? 0.94 : 0.5)
-    view.glow.setFillStyle(palette.stroke, isLatest ? 0.06 : 0)
-    view.frame.setStrokeStyle(1, palette.stroke, isLatest ? 0.22 : 0.08)
-    view.shadow.setAlpha(isLatest ? 0.16 : 0.08)
+    view.background.setFillStyle(
+      isLocked ? palette.fill : isLatest ? COLORS.bgAccent : COLORS.bgAccentSoft,
+      backgroundAlpha,
+    )
+    view.background.setStrokeStyle(
+      isLatest ? 2 : 1,
+      isLocked ? palette.stroke : isLatest ? COLORS.cyan : COLORS.borderSoft,
+      isLocked ? 0.16 : isLatest ? 0.94 : 0.34,
+    )
+    view.accent.setFillStyle(isLocked ? palette.stroke : isLatest ? COLORS.cyan : COLORS.bgAccent, isLocked ? 0.26 : isLatest ? 0.94 : 0.72)
+    view.glow.setFillStyle(isLocked ? palette.stroke : COLORS.cyan, isLocked ? 0 : isLatest ? 0.08 : 0.02)
+    view.frame.setStrokeStyle(1, isLocked ? palette.stroke : COLORS.border, isLocked ? 0.08 : isLatest ? 0.22 : 0.12)
+    view.shadow.setAlpha(isLocked ? 0.05 : isLatest ? 0.16 : 0.08)
   }
 
   private createPressableButton(
@@ -4641,6 +5670,74 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     this.setPressableVisualState(view, 'rest')
   }
 
+  private getSuggestionPalette(
+    matchKind: PhaserGameSessionSnapshot['suggestions'][number]['matchKind'],
+    highlighted: boolean,
+  ): ButtonPalette {
+    const stroke =
+      matchKind === 'alias_contains'
+        ? COLORS.amber
+        : matchKind === 'alias_prefix'
+          ? COLORS.sky
+          : COLORS.cyan
+
+    return highlighted
+      ? {
+          fill: 0x12263a,
+          stroke,
+          text: '#f8fafc',
+          shadowAlpha: 0.12,
+          glowAlpha: 0.14,
+          hoverGlowAlpha: 0.16,
+          pressedGlowAlpha: 0.18,
+          alpha: 0.98,
+          shineAlpha: 0.09,
+          strokeWidth: 2,
+        }
+      : {
+          fill: 0x0b1625,
+          stroke,
+          text: '#dbeafe',
+          shadowAlpha: 0.08,
+          glowAlpha: 0.04,
+          hoverGlowAlpha: 0.08,
+          pressedGlowAlpha: 0.12,
+          alpha: 0.96,
+          shineAlpha: 0.05,
+          strokeWidth: 1,
+        }
+  }
+
+  private getDiagnosisStatusTextColor(
+    tone: PhaserGameSessionSnapshot['diagnosisStatusTone'],
+  ) {
+    switch (tone) {
+      case 'selected':
+        return '#86efac'
+      case 'warning':
+        return '#fcd34d'
+      case 'blocked':
+        return '#fda4af'
+      default:
+        return COLORS.textMuted
+    }
+  }
+
+  private getDiagnosisStatusFillColor(
+    tone: PhaserGameSessionSnapshot['diagnosisStatusTone'],
+  ) {
+    switch (tone) {
+      case 'selected':
+        return COLORS.emeraldGlow
+      case 'warning':
+        return COLORS.amber
+      case 'blocked':
+        return COLORS.rose
+      default:
+        return COLORS.borderSoft
+    }
+  }
+
   private setPressableEnabled(view: PressableButtonView, enabled: boolean) {
     if (view.enabled === enabled) {
       return
@@ -4659,16 +5756,32 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
   }
 
   private handleKeyPressIntent(value: string) {
-    if (this.isOnboardingBlockingInput() || this.isOnboardingSkipCooldownActive()) {
-      return
-    }
-
     const snapshot = this.getSnapshot()
-    if (!snapshot.canEditGuess) {
+    if (
+      this.isOnboardingBlockingInput() ||
+      this.isOnboardingSkipCooldownActive() ||
+      this.isGameplayInputLocked(snapshot) ||
+      !snapshot.canEditGuess
+    ) {
       return
     }
 
-    this.getIntents().onKeyPress(value)
+    this.getIntents().onInputCharacter(value)
+  }
+
+  private handleSelectSuggestionIntent(index: number) {
+    const snapshot = this.getSnapshot()
+    if (
+      this.isOnboardingBlockingInput() ||
+      this.isOnboardingSkipCooldownActive() ||
+      this.isGameplayInputLocked(snapshot) ||
+      !snapshot.canEditGuess ||
+      !snapshot.suggestions[index]
+    ) {
+      return
+    }
+
+    this.getIntents().onSelectSuggestion(index)
   }
 
   private handleOpenMenuIntent() {
@@ -4680,11 +5793,20 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
   }
 
   private handleClearIntent() {
-    if (this.isOnboardingBlockingInput() || this.isOnboardingSkipCooldownActive()) {
+    const snapshot = this.getSnapshot()
+    if (
+      this.isOnboardingBlockingInput() ||
+      this.isOnboardingSkipCooldownActive() ||
+      this.isGameplayInputLocked(snapshot)
+    ) {
       return
     }
 
-    const snapshot = this.getSnapshot()
+    if (snapshot.canEditGuess && snapshot.selectedSuggestion) {
+      this.getIntents().onClearSelectedSuggestion()
+      return
+    }
+
     if (!snapshot.canEditGuess || snapshot.guess.length === 0) {
       return
     }
@@ -4693,11 +5815,20 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
   }
 
   private handleBackspaceIntent() {
-    if (this.isOnboardingBlockingInput() || this.isOnboardingSkipCooldownActive()) {
+    const snapshot = this.getSnapshot()
+    if (
+      this.isOnboardingBlockingInput() ||
+      this.isOnboardingSkipCooldownActive() ||
+      this.isGameplayInputLocked(snapshot)
+    ) {
       return
     }
 
-    const snapshot = this.getSnapshot()
+    if (snapshot.canEditGuess && snapshot.selectedSuggestion) {
+      this.getIntents().onClearSelectedSuggestion()
+      return
+    }
+
     if (!snapshot.canEditGuess || snapshot.guess.length === 0) {
       return
     }
@@ -4706,11 +5837,15 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
   }
 
   private handleSubmitIntent() {
-    if (this.isOnboardingBlockingInput() || this.isOnboardingSkipCooldownActive()) {
+    const snapshot = this.getSnapshot()
+    if (
+      this.isOnboardingBlockingInput() ||
+      this.isOnboardingSkipCooldownActive() ||
+      this.isGameplayInputLocked(snapshot)
+    ) {
       return
     }
 
-    const snapshot = this.getSnapshot()
     if (snapshot.submitDisabled) {
       this.animateInvalidSubmit()
       return

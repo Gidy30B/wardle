@@ -11,14 +11,14 @@ import { getEnv } from '../../core/config/env.validation';
 import { PrismaService } from '../../core/db/prisma.service';
 import { AppLoggerService } from '../../core/logger/app-logger.service';
 import { MetricsService } from '../../core/logger/metrics.service';
-import { normalize } from '../diagnostics/pipeline/normalize';
-import { EvaluatorApiService } from '../diagnostics/services/evaluator-api.service';
+import { DiagnosisRegistryMatcherService } from '../diagnosis-registry/diagnosis-registry-matcher.service';
 import { AttemptService } from './attempt.service';
 import {
   DailyCasesService,
   hasPremiumTrackAccess,
 } from './daily-cases.service';
 import type {
+  GameplayCaseExplanation,
   GameplayClinicalClue,
   SubmitGameGuessResponseDto,
 } from './dto/submit-game-guess.dto';
@@ -78,7 +78,7 @@ export class SessionService {
     private readonly prisma: PrismaService,
     private readonly cacheService: RedisCacheService,
     private readonly aiContentService: AIContentService,
-    private readonly evaluatorApiService: EvaluatorApiService,
+    private readonly diagnosisRegistryMatcherService: DiagnosisRegistryMatcherService,
     private readonly attemptService: AttemptService,
     private readonly evaluationService: EvaluationService,
     private readonly rewardOrchestrator: RewardOrchestrator,
@@ -105,8 +105,9 @@ export class SessionService {
 
   async submitGuess(input: {
     sessionId: string;
-    guess: string;
+    guess?: string;
     userId: string;
+    diagnosisRegistryId: string;
   }): Promise<SubmitGameGuessResponseDto> {
     return this.submitDailyGuess(input);
   }
@@ -306,8 +307,14 @@ export class SessionService {
   async submitDailyGuess(input: {
     userId: string;
     sessionId: string;
-    guess: string;
+    guess?: string;
+    diagnosisRegistryId: string;
   }): Promise<SubmitGameGuessResponseDto> {
+    const submittedDiagnosisRegistryId = input.diagnosisRegistryId?.trim();
+    if (!submittedDiagnosisRegistryId) {
+      throw new BadRequestException('diagnosisRegistryId is required');
+    }
+
     await this.rewardOrchestrator.emitAttemptSubmitted({
       sessionId: input.sessionId,
       userId: input.userId,
@@ -363,21 +370,42 @@ export class SessionService {
         currentUserTier: session.user.subscriptionTier,
       });
 
-      const normalizedGuess = normalize(input.guess);
       const gameplayCase = await this.hydrateGameplayCase(session.case);
       const maxClues = this.getTotalClues(gameplayCase);
-      const evaluation = await this.evaluatorApiService.evaluateGuess(
-        input.guess,
-        session.case.diagnosis.name,
-      );
+      const sessionCaseWithRegistry = session.case as typeof session.case & {
+        diagnosisRegistryId?: string | null;
+      };
+      const registryGuessEvaluation =
+        await this.diagnosisRegistryMatcherService.evaluateGameplayGuess({
+          expectedDiagnosisRegistryId:
+            sessionCaseWithRegistry.diagnosisRegistryId ?? null,
+          submittedGuessText: input.guess,
+          submittedDiagnosisRegistryId,
+        });
+      const resolution = registryGuessEvaluation.resolution;
+      const evaluation = registryGuessEvaluation.evaluation;
+      const submittedGuess =
+        resolution.submittedGuessText ??
+        input.guess?.trim() ??
+        submittedDiagnosisRegistryId?.trim() ??
+        '';
+      const normalizedGuess =
+        resolution.normalizedGuess || evaluation.normalizedGuess || '';
 
       await this.rewardOrchestrator.emitAttemptEvaluated({
         sessionId: session.id,
         userId: input.userId,
         result: evaluation.label,
         semanticScore: evaluation.score,
-        evaluatorVersion: evaluation.evaluatorVersion ?? 'v2',
-        retrievalMode: evaluation.retrievalMode ?? 'fallback',
+        evaluatorVersion: evaluation.evaluatorVersion ?? 'registry:v2',
+        retrievalMode: evaluation.retrievalMode ?? 'selected-id-only',
+        submittedDiagnosisRegistryId:
+          resolution.submittedDiagnosisRegistryId ?? null,
+        submittedGuessText: resolution.submittedGuessText ?? null,
+        resolvedDiagnosisRegistryId:
+          resolution.resolvedDiagnosisRegistryId ?? null,
+        resolutionMethod: resolution.resolutionMethod,
+        resolutionReason: resolution.resolutionReason ?? null,
       });
 
       const persisted = await this.withSerializableRetry(() =>
@@ -504,17 +532,24 @@ export class SessionService {
               caseId: freshSession.caseId,
               sessionId: freshSession.id,
               userId: input.userId,
-              guess: input.guess,
-              normalizedGuess: normalize(
-                evaluation.normalizedGuess ?? input.guess,
-              ),
+              guess: submittedGuess,
+              normalizedGuess,
+              selectedDiagnosisId:
+                resolution.submittedDiagnosisRegistryId,
+              strictMatchedDiagnosisId: resolution.resolvedDiagnosisRegistryId,
+              strictMatchOutcome: resolution.resolutionMethod,
               score: outcome.computedScore,
               result: evaluation.label,
               signals: {
                 ...evaluation.signals,
-                retrievalMode: evaluation.retrievalMode ?? 'fallback',
+                strictMatchEnabled: true,
+                strictMatchMatched: registryGuessEvaluation.isCorrect,
+                strictMatchOutcome: resolution.resolutionMethod,
+                selectedDiagnosisId: resolution.submittedDiagnosisRegistryId,
+                strictMatchedDiagnosisId: resolution.resolvedDiagnosisRegistryId,
+                retrievalMode: evaluation.retrievalMode ?? 'selected-id-only',
               } as Prisma.InputJsonValue,
-              evaluatorVersion: evaluation.evaluatorVersion ?? 'v2',
+              evaluatorVersion: evaluation.evaluatorVersion ?? 'registry:v2',
               clueIndexAtAttempt: outcome.clueIndex,
             });
 
@@ -603,7 +638,10 @@ export class SessionService {
 
       const responseCase = this.buildCasePayload(gameplayCase);
       const explanation = persisted.gameOver
-        ? await this.aiContentService.getExplanation(session.caseId, input.userId)
+        ? this.buildGameplayExplanation({
+            explanation: session.case.explanation,
+            differentials: session.case.differentials,
+          })
         : null;
 
       return {
@@ -622,8 +660,8 @@ export class SessionService {
           : {}),
         feedback: {
           signals: evaluation.signals,
-          evaluatorVersion: evaluation.evaluatorVersion ?? 'v2',
-          retrievalMode: evaluation.retrievalMode ?? 'fallback',
+          evaluatorVersion: evaluation.evaluatorVersion ?? 'registry:v2',
+          retrievalMode: evaluation.retrievalMode ?? 'selected-id-only',
         },
       };
     } finally {
@@ -670,6 +708,13 @@ export class SessionService {
             diagnosis: session.case.diagnosis.name,
           }
         : responseCase;
+    const explanation =
+      session.status === 'completed'
+        ? this.buildGameplayExplanation({
+            explanation: session.case.explanation,
+            differentials: session.case.differentials,
+          })
+        : null;
 
     return {
       session: {
@@ -682,6 +727,7 @@ export class SessionService {
       clueIndex,
       attempts: session.attempts,
       case: casePayload,
+      explanation,
     };
   }
 
@@ -1162,6 +1208,41 @@ export class SessionService {
     }
   }
 
+  private buildGameplayExplanation(input: {
+    explanation: Prisma.JsonValue | null;
+    differentials?: string[] | null;
+  }): GameplayCaseExplanation | null {
+    const candidate = this.parseUnknownJson(input.explanation);
+    const explanationRecord =
+      candidate && typeof candidate === 'object' && !Array.isArray(candidate)
+        ? (candidate as Record<string, unknown>)
+        : null;
+
+    const summary = this.normalizeOptionalText(explanationRecord?.summary);
+    const keyFindings = this.normalizeStringArray(
+      explanationRecord?.keyFindings,
+    );
+    const reasoningSegments = this.normalizeStringArray(
+      explanationRecord?.reasoning,
+    );
+    const reasoning =
+      reasoningSegments.length > 0
+        ? reasoningSegments.join('\n\n')
+        : this.normalizeOptionalText(explanationRecord?.reasoning);
+    const differentials = this.normalizeStringArray(input.differentials);
+
+    if (!summary && keyFindings.length === 0 && !reasoning && differentials.length === 0) {
+      return null;
+    }
+
+    return {
+      summary: summary ?? null,
+      keyFindings: keyFindings.length > 0 ? keyFindings : null,
+      reasoning: reasoning ?? null,
+      differentials: differentials.length > 0 ? differentials : null,
+    };
+  }
+
   private buildCasePayload(selectedCase: GameplayCaseView) {
     const clues = [...selectedCase.clues]
       .sort((left, right) => left.order - right.order)
@@ -1189,6 +1270,25 @@ export class SessionService {
 
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private normalizeOptionalText(value: unknown): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private normalizeStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .map((item) => this.normalizeOptionalText(item))
+      .filter((item): item is string => item !== null);
   }
 
   private getSessionCacheKey(sessionId: string): string {
@@ -1256,4 +1356,5 @@ export class SessionService {
       'Premium access is required to continue this daily case',
     );
   }
+
 }

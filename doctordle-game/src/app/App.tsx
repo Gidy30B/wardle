@@ -1,4 +1,4 @@
-import { useAuth } from '@clerk/clerk-react'
+import { AuthenticateWithRedirectCallback, useAuth } from '@clerk/clerk-react'
 import { AnimatePresence } from 'framer-motion'
 import { useEffect } from 'react'
 import GamePage from '../pages/GamePage'
@@ -6,11 +6,15 @@ import LandingScreen from './components/LandingScreen'
 import AuthLoadingScreen from './components/AuthLoadingScreen'
 import AnimatedScreen from './components/AnimatedScreen'
 import { disconnectSocket, initSocket } from '../game/ws-client'
+import ProfileOnboardingScreen from '../features/profile/ProfileOnboardingScreen'
+import { useProfileOnboarding } from '../features/profile/useProfileOnboarding'
 
-type EntryScreen = 'loading' | 'signed-in' | 'signed-out'
+type EntryScreen = 'loading' | 'profile-onboarding' | 'signed-in' | 'signed-out'
 
 export default function App() {
   const { getToken, isLoaded, isSignedIn, userId } = useAuth()
+  const profileOnboarding = useProfileOnboarding()
+  const isOAuthCallback = window.location.pathname === '/sso-callback'
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -55,19 +59,36 @@ export default function App() {
 
   const screen: EntryScreen = !isLoaded
     ? 'loading'
-    : isSignedIn === true
-      ? 'signed-in'
-      : 'signed-out'
+    : isSignedIn !== true
+      ? 'signed-out'
+      : profileOnboarding.loading
+        ? 'loading'
+        : profileOnboarding.shouldShowOnboarding
+          ? 'profile-onboarding'
+          : 'signed-in'
 
   return (
     <AnimatePresence initial={false}>
-      {screen === 'loading' ? (
+      {isOAuthCallback ? (
+        <AnimatedScreen screenKey="oauth-callback">
+          <AuthLoadingScreen />
+          <AuthenticateWithRedirectCallback />
+        </AnimatedScreen>
+      ) : screen === 'loading' ? (
         <AnimatedScreen screenKey="loading">
           <AuthLoadingScreen />
         </AnimatedScreen>
-      ) : !isSignedIn ? (
+      ) : screen === 'signed-out' ? (
         <AnimatedScreen screenKey="signed-out">
           <LandingScreen />
+        </AnimatedScreen>
+      ) : screen === 'profile-onboarding' ? (
+        <AnimatedScreen screenKey="profile-onboarding">
+          <ProfileOnboardingScreen
+            suggestedDisplayName={profileOnboarding.suggestedDisplayName}
+            onComplete={profileOnboarding.saveProfile}
+            onSkip={profileOnboarding.skipProfile}
+          />
         </AnimatedScreen>
       ) : (
         <AnimatedScreen screenKey="signed-in">

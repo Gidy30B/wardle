@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  createAndLinkDiagnosis,
   getEditorialCaseRevisions,
+  linkCaseDiagnosis,
   markCaseReadyToPublish,
   rerunCaseValidation,
   restoreCaseRevision,
   startCaseReview,
   submitCaseReview,
+  type CreateDiagnosisAndLinkPayload,
   type EditorialCaseDetail,
   type EditorialCaseListItem,
   type EditorialCaseRevision,
+  type LinkCaseDiagnosisPayload,
   type ReviewDecision,
 } from '../../api/admin';
 import type { EditorialQueueFilter } from '../../api/admin';
@@ -21,6 +25,7 @@ import LoadingState from '../../components/ui/LoadingState';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { useActionFeedback } from '../../hooks/useActionFeedback';
 import CaseClinicalSection from './CaseClinicalSection';
+import CaseDiagnosisSection from './CaseDiagnosisSection';
 import CaseHistorySection from './CaseHistorySection';
 import CaseValidationSection from './CaseValidationSection';
 import CaseWorkflowSection from './CaseWorkflowSection';
@@ -33,6 +38,7 @@ import {
   formatDateLabel,
   formatSourceLabel,
   getCaseDisplaySummary,
+  getDiagnosisWorkflowSummary,
   getPublishReadinessSummary,
   isPublishReadyStatus,
 } from './cases.helpers';
@@ -171,6 +177,9 @@ export default function CaseDetail({
     ? getPublishReadinessSummary(detail.editorialStatus)
     : null;
   const publishReady = detail ? isPublishReadyStatus(detail.editorialStatus) : false;
+  const diagnosisWorkflowSummary = detail
+    ? getDiagnosisWorkflowSummary(detail)
+    : null;
   const clues = useMemo(() => parseCaseClues(detail?.clues), [detail]);
   const showLegacyFallback =
     clues.length === 0 && Boolean(detail?.history || detail?.symptoms.length);
@@ -357,6 +366,34 @@ export default function CaseDetail({
     });
   }
 
+  async function handleLinkDiagnosis(payload: LinkCaseDiagnosisPayload) {
+    if (!detail) {
+      return;
+    }
+
+    await runAction({
+      id: 'link-diagnosis',
+      pendingMessage: 'Linking diagnosis to case...',
+      successMessage: 'Diagnosis linked to case.',
+      run: () => linkCaseDiagnosis(client, detail.id, payload),
+    });
+  }
+
+  async function handleCreateAndLinkDiagnosis(
+    payload: CreateDiagnosisAndLinkPayload,
+  ) {
+    if (!detail) {
+      return;
+    }
+
+    await runAction({
+      id: 'create-link-diagnosis',
+      pendingMessage: 'Creating diagnosis and linking case...',
+      successMessage: 'Diagnosis created and linked to case.',
+      run: () => createAndLinkDiagnosis(client, detail.id, payload),
+    });
+  }
+
   if (!row) {
     return (
       <EmptyState
@@ -412,15 +449,36 @@ export default function CaseDetail({
                 {detail.diagnosis.name} - {detail.difficulty} - {detail.date}
               </p>
             </div>
-            <StatusBadge status={detail.editorialStatus} kind="editorial" />
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={detail.editorialStatus} kind="editorial" />
+              {diagnosisWorkflowSummary ? (
+                <StatusBadge
+                  status={diagnosisWorkflowSummary.label}
+                  tone={diagnosisWorkflowSummary.tone}
+                />
+              ) : null}
+            </div>
           </div>
 
-          <dl className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
+          <dl className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-6">
             <SummaryStat label="Diagnosis" value={detail.diagnosis.name} />
             <SummaryStat label="Difficulty" value={detail.difficulty} />
             <SummaryStat
               label="Editorial status"
               valueNode={<StatusBadge status={detail.editorialStatus} kind="editorial" />}
+            />
+            <SummaryStat
+              label="Diagnosis workflow"
+              valueNode={
+                diagnosisWorkflowSummary ? (
+                  <StatusBadge
+                    status={diagnosisWorkflowSummary.label}
+                    tone={diagnosisWorkflowSummary.tone}
+                  />
+                ) : (
+                  'Not recorded'
+                )
+              }
             />
             <SummaryStat
               label="Latest validation"
@@ -453,6 +511,14 @@ export default function CaseDetail({
           onStartReview={handleStartReview}
           onMarkReadyToPublish={handleMarkReadyToPublish}
           onRerunValidation={handleRerunValidation}
+        />
+
+        <CaseDiagnosisSection
+          detail={detail}
+          client={client}
+          anyActionPending={anyActionPending}
+          onLinkDiagnosis={handleLinkDiagnosis}
+          onCreateAndLinkDiagnosis={handleCreateAndLinkDiagnosis}
         />
 
         <CaseClinicalSection

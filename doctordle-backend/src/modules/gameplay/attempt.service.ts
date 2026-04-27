@@ -10,6 +10,11 @@ type AttemptRecordInput = {
   userId: string;
   guess: string;
   normalizedGuess: string;
+  selectedDiagnosisId?: string | null;
+  selectedAliasId?: string | null;
+  strictMatchedDiagnosisId?: string | null;
+  strictMatchedAliasId?: string | null;
+  strictMatchOutcome?: string | null;
   score: number;
   result: string;
   signals: Prisma.InputJsonValue;
@@ -32,7 +37,7 @@ export class AttemptService {
     try {
       const attempt = await this.withTimeout(
         this.prisma.attempt.create({
-          data,
+          data: data as never,
         }),
         2000,
       );
@@ -75,7 +80,7 @@ export class AttemptService {
 
     try {
       const attempt = await tx.attempt.create({
-        data,
+        data: data as never,
       });
 
       const latency = performance.now() - start;

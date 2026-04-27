@@ -1,12 +1,15 @@
-import { IsString, MinLength } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 export class SubmitGameGuessDto {
   @IsString()
   sessionId!: string;
 
   @IsString()
-  @MinLength(2)
-  guess!: string;
+  diagnosisRegistryId!: string;
+
+  @IsOptional()
+  @IsString()
+  guess?: string;
 }
 
 export type GameplayClinicalClue = {
@@ -14,6 +17,13 @@ export type GameplayClinicalClue = {
   type: 'history' | 'symptom' | 'vital' | 'lab' | 'exam' | 'imaging';
   value: string;
   order: number;
+};
+
+export type GameplayCaseExplanation = {
+  summary?: string | null;
+  keyFindings?: string[] | null;
+  reasoning?: string | null;
+  differentials?: string[] | null;
 };
 
 export type SubmitGameGuessResponseDto = {
@@ -32,12 +42,7 @@ export type SubmitGameGuessResponseDto = {
   };
   gameOver?: boolean;
   gameOverReason?: 'correct' | 'clues_exhausted' | null;
-  explanation?:
-    | {
-        status: 'ready' | 'processing';
-        content?: string;
-      }
-    | null;
+  explanation?: GameplayCaseExplanation | null;
   feedback?: {
     signals?: Record<string, unknown>;
     evaluatorVersion: string;

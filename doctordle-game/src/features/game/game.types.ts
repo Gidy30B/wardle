@@ -1,6 +1,18 @@
+import type { DiagnosisSuggestionMatchKind } from './diagnosisRegistry.types'
+
 export type GuessPayload = {
   sessionId: string
-  guess: string
+  diagnosisRegistryId: string
+  guess?: string
+}
+
+export type DiagnosisSelection = {
+  diagnosisRegistryId: string
+  displayLabel: string
+}
+
+export type DiagnosisSuggestion = DiagnosisSelection & {
+  matchKind: DiagnosisSuggestionMatchKind
 }
 
 export type ClinicalClue = {
@@ -17,17 +29,14 @@ export type GameCase = {
 }
 
 export type CaseExplanation = {
-  summary: string
-  keyPoints: string[]
-  reasoning: Array<{
-    clueId: string
-    explanation: string
-  }>
-  differentials: Array<{
-    diagnosis: string
-    whyNot: string
-  }>
+  summary?: string | null
+  keyFindings?: string[] | null
+  reasoning?: string | null
+  differentials?: string[] | null
+  clinicalPearl?: string | null
 }
+
+export type GameExplanation = CaseExplanation
 
 export type StartGameResponse =
   | {
@@ -52,13 +61,22 @@ export type GuessApiResponse = {
   gameOverReason?: 'correct' | 'clues_exhausted' | null
   xpAwarded?: number
   streakAfter?: number
-  explanation?: CaseExplanation | null
+  explanation?: GameExplanation | null
   feedback?: {
     signals?: {
       exact?: boolean
       synonym?: boolean
       fuzzy?: number
       embedding?: number
+      diagnosisResolutionMethod?: 'SELECTED_ID' | 'UNRESOLVED'
+      diagnosisResolutionReason?:
+        | 'NO_SELECTED_ID'
+        | 'INVALID_SELECTED_ID'
+        | 'UNUSABLE_SELECTED_ID'
+        | 'EXPECTED_DIAGNOSIS_MISSING'
+        | 'EXPECTED_DIAGNOSIS_UNUSABLE'
+      submittedDiagnosisRegistryId?: string
+      resolvedDiagnosisRegistryId?: string
       ontology?: {
         score?: number
         reason?: string
@@ -79,15 +97,40 @@ export type GameResult = {
   gameOverReason?: 'correct' | 'clues_exhausted' | null
   xpAwarded?: number
   streakAfter?: number
-  explanation?: CaseExplanation | null
+  explanation?: GameExplanation | null
   case?: GameCase
 }
 
 export type LeaderboardMode = 'daily' | 'weekly'
 
+export type PublishTrack = 'DAILY' | 'PREMIUM' | 'PRACTICE'
+
+export type TodayCase = {
+  dailyCaseId: string
+  track: PublishTrack
+  sequenceIndex: number
+  case: {
+    id: string
+    title: string
+    date: string
+    difficulty: string
+    diagnosisId: string
+    clues?: unknown
+    explanation?: unknown
+  }
+}
+
+export type TodayCasesResponse = {
+  date: string
+  cases: TodayCase[]
+}
+
 export type LeaderboardEntry = {
   rank: number
   userId: string
+  displayName?: string
+  organizationName?: string
+  streak?: number
   score: number
   attemptsCount: number
   completedAt: string

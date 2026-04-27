@@ -6,6 +6,8 @@ export function cloneSnapshot(snapshot: PhaserGameSessionSnapshot): PhaserGameSe
   return {
     ...snapshot,
     visibleClues: snapshot.visibleClues.map((clue) => ({ ...clue })),
+    selectedSuggestion: snapshot.selectedSuggestion ? { ...snapshot.selectedSuggestion } : null,
+    suggestions: snapshot.suggestions.map((suggestion) => ({ ...suggestion })),
     latestAttempt: snapshot.latestAttempt ? { ...snapshot.latestAttempt } : null,
     reward: snapshot.reward ? { ...snapshot.reward } : null,
   }
@@ -58,5 +60,10 @@ export function getGuessBarBaseState(snapshot: PhaserGameSessionSnapshot): Guess
 }
 
 export function isReadyToCommit(snapshot: PhaserGameSessionSnapshot | undefined) {
-  return Boolean(snapshot?.canEditGuess && snapshot.guess.trim().length > 0 && !snapshot.submitDisabled)
+  return Boolean(
+    snapshot?.canEditGuess &&
+      snapshot.guess.trim().length > 0 &&
+      !snapshot.submitDisabled &&
+      snapshot.diagnosisSubmitMode === 'selected-id',
+  )
 }

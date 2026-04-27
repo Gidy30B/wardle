@@ -6,7 +6,11 @@ import { EvaluationResult } from './types';
 export class EvaluatorApiService {
   constructor(private readonly evaluatorEngineService: EvaluatorEngineService) {}
 
+  evaluateGuessAdvisory(guess: string, answer: string): Promise<EvaluationResult> {
+    return this.evaluatorEngineService.evaluateAdvisoryFeedback(guess, answer);
+  }
+
   evaluateGuess(guess: string, answer: string): Promise<EvaluationResult> {
-    return this.evaluatorEngineService.evaluate(guess, answer);
+    return this.evaluateGuessAdvisory(guess, answer);
   }
 }

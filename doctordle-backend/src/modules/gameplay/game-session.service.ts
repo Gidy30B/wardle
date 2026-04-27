@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PublishTrack } from '@prisma/client';
+import {
+  DiagnosisAutocompleteService,
+  type DiagnosisAutocompleteSuggestion,
+} from '../diagnosis-registry/diagnosis-autocomplete.service';
 import { DailyCasesService } from './daily-cases.service';
 import { SessionService } from './session.service';
 
@@ -8,6 +12,7 @@ export class GameSessionService {
   constructor(
     private readonly sessionService: SessionService,
     private readonly dailyCasesService: DailyCasesService,
+    private readonly diagnosisAutocompleteService: DiagnosisAutocompleteService,
   ) {}
 
   async startGame(input: {
@@ -26,10 +31,18 @@ export class GameSessionService {
 
   async submitGuess(input: {
     sessionId: string;
-    guess: string;
     userId: string;
+    diagnosisRegistryId: string;
+    guess?: string;
   }) {
     return this.sessionService.submitGuess(input);
+  }
+
+  async autocompleteDiagnoses(input: {
+    query: string;
+    limit?: number;
+  }): Promise<DiagnosisAutocompleteSuggestion[]> {
+    return this.diagnosisAutocompleteService.search(input);
   }
 
   async requestHint(input: { userId: string; sessionId: string }) {

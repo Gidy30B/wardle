@@ -20,6 +20,8 @@
     "seed:cases": "ts-node src/scripts/seed-cases.ts",
     "embed:diagnoses": "ts-node ./scripts/embed-diagnoses.ts",
     "backfill:daily-case": "ts-node ./scripts/backfill-daily-case.ts",
+    "backfill:diagnosis-registry": "ts-node ./scripts/backfill-diagnosis-registry.ts",
+    "seed:diagnosis-registry": "ts-node ./scripts/seed-diagnosis-registry.ts",
     "generate:cases": "ts-node src/scripts/generate-cases.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",

@@ -12,6 +12,7 @@ import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { AuthModule } from './auth/auth.module';
 import { QueueModule } from './modules/queue/queue.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
+import { OrganizationsModule } from './modules/organizations/organizations.module';
 
 @Module({
   controllers: [HealthController],
@@ -28,6 +29,7 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
     AiModule,
     CaseGeneratorModule,
     RealtimeModule,
+    OrganizationsModule,
   ],
 })
 export class AppModule {}

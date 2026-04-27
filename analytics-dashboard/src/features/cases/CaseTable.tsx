@@ -2,6 +2,7 @@ import type { EditorialCaseListItem, EditorialQueueFilter } from '../../api/admi
 import StatusBadge from '../../components/ui/StatusBadge';
 import {
   formatDateLabel,
+  getDiagnosisWorkflowSummary,
   getCaseDisplaySummary,
   getQueueFocusedNextStep,
   isPublishReadyStatus,
@@ -27,6 +28,7 @@ export default function CaseTable({
           <tr>
             <th className="px-4 py-3">Case</th>
             <th className="px-4 py-3">Status</th>
+            <th className="px-4 py-3">Diagnosis</th>
             <th className="px-4 py-3">Validation</th>
             <th className="px-4 py-3">Next step</th>
           </tr>
@@ -37,6 +39,7 @@ export default function CaseTable({
             const { latestValidation } = getCaseDisplaySummary(row);
             const nextStep = getQueueFocusedNextStep(row.editorialStatus, queue);
             const publishReady = isPublishReadyStatus(row.editorialStatus);
+            const diagnosisSummary = getDiagnosisWorkflowSummary(row);
             const rowClassName = publishReady
               ? isActive
                 ? 'bg-emerald-100'
@@ -49,7 +52,15 @@ export default function CaseTable({
               <tr
                 key={row.id}
                 className={rowClassName}
+                role="button"
+                tabIndex={0}
                 onClick={() => onSelect(row)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onSelect(row);
+                  }
+                }}
               >
                 <td className="cursor-pointer px-4 py-3">
                   <div>
@@ -68,6 +79,14 @@ export default function CaseTable({
                 </td>
                 <td className="px-4 py-3 text-slate-700">
                   <StatusBadge status={row.editorialStatus} kind="editorial" />
+                </td>
+                <td className="px-4 py-3 text-slate-700">
+                  <div className="space-y-1">
+                    <StatusBadge status={diagnosisSummary.label} tone={diagnosisSummary.tone} />
+                    <p className="text-xs text-slate-500">
+                      {row.diagnosisRegistrySummary?.canonicalName ?? row.proposedDiagnosisText}
+                    </p>
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-slate-700">
                   {latestValidation ? (

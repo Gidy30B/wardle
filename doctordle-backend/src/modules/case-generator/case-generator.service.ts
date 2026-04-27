@@ -12,6 +12,8 @@ import { z } from 'zod';
 import { getEnv } from '../../core/config/env.validation.js';
 import { PrismaService } from '../../core/db/prisma.service.js';
 import { CaseValidationOrchestrator } from '../case-validation/case-validation.orchestrator.js';
+import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
+import { buildMatchedDiagnosisMappingFields } from '../diagnosis-registry/diagnosis-mapping-fields.js';
 import type {
   GenerateBatchOptions,
   GenerateBatchResult,
@@ -65,6 +67,7 @@ export class CaseGeneratorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly caseValidationOrchestrator: CaseValidationOrchestrator,
+    private readonly diagnosisRegistryLinkService: DiagnosisRegistryLinkService,
   ) {
     if (this.env.OPENAI_API_KEY) {
       this.openaiClient = new OpenAI({
@@ -243,49 +246,42 @@ export class CaseGeneratorService {
               },
             });
 
-            const createdRows = await tx.$queryRawUnsafe<SavedGeneratedCase[]>(
-              `
-                INSERT INTO "Case" (
-                  "id",
-                  "title",
-                  "date",
-                  "difficulty",
-                  "history",
-                  "symptoms",
-                  "clues",
-                  "explanation",
-                  "differentials",
-                  "diagnosisId"
-                )
-                VALUES (
-                  gen_random_uuid(),
-                  $1,
-                  $2,
-                  $3,
-                  $4,
-                  $5::text[],
-                  $6::jsonb,
-                  $7::jsonb,
-                  $8::text[],
-                  $9
-                )
-                RETURNING "id", "title", "difficulty", "date"
-              `,
-              normalizedCase.answer,
-              this.nextCaseDate(),
-              this.normalizeDifficulty(options.difficulty),
-              history,
-              symptoms,
-              JSON.stringify(normalizedCase.clues),
-              JSON.stringify(this.toPersistedExplanation(normalizedCase)),
-              normalizedCase.differentials,
-              diagnosis.id,
-            );
+            const resolvedDiagnosisLink =
+              await this.diagnosisRegistryLinkService.resolveForWrite(
+                {
+                  diagnosisId: diagnosis.id,
+                },
+                tx,
+              );
+            const diagnosisMappingFields = buildMatchedDiagnosisMappingFields({
+              diagnosisName: resolvedDiagnosisLink.diagnosisName,
+              proposedDiagnosisText: normalizedCase.answer,
+              method: 'LEGACY_BACKFILL',
+            });
 
-            const persistedCase = createdRows[0];
-            if (!persistedCase) {
-              throw new Error('Case insert completed without returning a row');
-            }
+            const persistedCase = await tx.case.create({
+              data: {
+                title: normalizedCase.answer,
+                date: this.nextCaseDate(),
+                difficulty: this.normalizeDifficulty(options.difficulty),
+                history,
+                symptoms,
+                clues: normalizedCase.clues as Prisma.InputJsonValue,
+                explanation: this.toPersistedExplanation(
+                  normalizedCase,
+                ) as Prisma.InputJsonValue,
+                differentials: normalizedCase.differentials,
+                diagnosisId: resolvedDiagnosisLink.diagnosisId,
+                diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+                ...diagnosisMappingFields,
+              },
+              select: {
+                id: true,
+                title: true,
+                difficulty: true,
+                date: true,
+              },
+            });
 
             await this.caseValidationOrchestrator.runShadowForGeneratedCaseInTransaction(
               tx,

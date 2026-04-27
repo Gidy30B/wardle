@@ -1,17 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import { normalizeDiagnosisTerm } from '../diagnosis-registry/diagnosis-term-normalizer.js';
 
 @Injectable()
 export class SynonymService {
-  private readonly aliasToCanonical = new Map<string, string>([
-    ['mi', 'myocardial infarction'],
-    ['heart attack', 'myocardial infarction'],
-    ['tb', 'tuberculosis'],
-    ['lung infection', 'pneumonia'],
-  ]);
-
   resolve(term: string): string {
-    const normalized = this.normalizeTerm(term);
-    return this.aliasToCanonical.get(normalized) ?? normalized;
+    return this.normalizeTerm(term);
   }
 
   isExact(guess: string, diagnosis: string): boolean {
@@ -19,6 +12,6 @@ export class SynonymService {
   }
 
   private normalizeTerm(term: string): string {
-    return term.toLowerCase().trim().replace(/[^\w\s]/g, '');
+    return normalizeDiagnosisTerm(term);
   }
 }

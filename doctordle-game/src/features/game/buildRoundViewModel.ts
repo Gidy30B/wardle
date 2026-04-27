@@ -1,5 +1,24 @@
-import type { GameCase, GameResult, UserProgress } from './game.types'
-import type { RoundLoopState, RoundOutcomeTone, RoundViewModel } from './round.types'
+import type {
+  DiagnosisDictionaryAvailability,
+  DiagnosisInputState,
+  DiagnosisSubmitMode,
+} from './diagnosisInput.state'
+import type {
+  DiagnosisSelection,
+  DiagnosisSuggestion,
+  GameCase,
+  GameResult,
+  UserProgress,
+} from './game.types'
+import { truncateExplanationDisplayText } from './gameExplanation'
+import type {
+  RoundLoopState,
+  RoundOutcomeTone,
+  RoundDiagnosisStatusTone,
+  RoundSelectedDiagnosis,
+  RoundSuggestionsStatus,
+  RoundViewModel,
+} from './round.types'
 import type { GameAttempt, GameEngineMode, GameRewardState } from './useGameEngine'
 
 type BuildRoundViewModelInput = {
@@ -8,6 +27,14 @@ type BuildRoundViewModelInput = {
   caseData: GameCase | null
   clueIndex: number
   guess: string
+  diagnosisInputState: DiagnosisInputState
+  diagnosisSubmitMode: DiagnosisSubmitMode
+  dictionaryAvailability: DiagnosisDictionaryAvailability
+  selectedDiagnosis: DiagnosisSelection | null
+  suggestions: DiagnosisSuggestion[]
+  isAutocompleteLoading: boolean
+  autocompleteError: string | null
+  highlightedSuggestionIndex: number
   attempts: GameAttempt[]
   latestResult: GameResult | null
   reward: GameRewardState
@@ -122,12 +149,92 @@ function getOutcomeTone(input: {
   return input.viabilityRemaining <= steadyThreshold ? 'steady_save' : 'early_save'
 }
 
+function toRoundSelectedDiagnosis(
+  diagnosis: DiagnosisSelection | null,
+): RoundSelectedDiagnosis | null {
+  if (!diagnosis) {
+    return null
+  }
+
+  return {
+    diagnosisRegistryId: diagnosis.diagnosisRegistryId,
+    displayLabel: diagnosis.displayLabel,
+  }
+}
+
+function getSuggestionsStatus(input: {
+  mode: GameEngineMode
+  diagnosisInputState: DiagnosisInputState
+  dictionaryAvailability: DiagnosisDictionaryAvailability
+  suggestions: DiagnosisSuggestion[]
+  isAutocompleteLoading: boolean
+  autocompleteError: string | null
+}): RoundSuggestionsStatus {
+  if (input.mode.type !== 'PLAYING') {
+    return 'idle'
+  }
+
+  if (input.dictionaryAvailability === 'unavailable') {
+    return 'error'
+  }
+
+  if (input.diagnosisInputState.mode === 'selected') {
+    return 'idle'
+  }
+
+  if (input.diagnosisInputState.mode === 'empty') {
+    return 'idle'
+  }
+
+  if (input.isAutocompleteLoading) {
+    return 'loading'
+  }
+
+  if (input.autocompleteError) {
+    return 'error'
+  }
+
+  if (input.suggestions.length > 0) {
+    return 'ready'
+  }
+
+  return 'empty'
+}
+
+function getSuggestionsStatusLabel(input: {
+  status: RoundSuggestionsStatus
+  dictionaryAvailability: DiagnosisDictionaryAvailability
+}): string | null {
+  switch (input.status) {
+    case 'loading':
+      return 'Loading diagnoses...'
+    case 'ready':
+      return 'Select a diagnosis from suggestions'
+    case 'empty':
+      return input.dictionaryAvailability === 'ready'
+        ? 'Type to find a diagnosis to select'
+        : null
+    case 'error':
+      return 'Diagnosis list unavailable - reload to continue'
+    default:
+      return null
+  }
+}
+
 export function buildRoundViewModel({
   mode,
   sessionId,
   caseData,
   clueIndex,
   guess,
+  diagnosisInputState,
+  diagnosisSubmitMode,
+  dictionaryAvailability,
+  selectedDiagnosis,
+  suggestions,
+  isAutocompleteLoading,
+  autocompleteError,
+  highlightedSuggestionIndex,
   attempts,
   latestResult,
   reward,
@@ -142,20 +249,34 @@ export function buildRoundViewModel({
   submitDisabled,
 }: BuildRoundViewModelInput): RoundViewModel {
   const latestAttempt = attempts.at(-1) ?? null
-  const visibleClues =
-    caseData?.clues
-      .filter((clue) => clue.order <= clueIndex)
-      .map((clue, _index, array) => ({
-        id: clue.id,
-        type: clue.type,
-        value: clue.value,
-        isNewest: clue.id === array[array.length - 1]?.id,
-      })) ?? []
-
-  const totalClues = caseData?.clues.length ?? 0
-  const revealedClueCount = visibleClues.length
-  const cluesRemaining = Math.max(0, totalClues - revealedClueCount)
+  const gameplayClues = caseData?.clues ?? latestResult?.case?.clues ?? []
+  const gameplayVisibleClues = gameplayClues.filter((clue) => clue.order <= clueIndex)
+  const totalClues = latestResult?.case?.clues.length ?? caseData?.clues.length ?? 0
   const attemptsCount = latestResult?.attemptsCount ?? attempts.length
+  const reviewClues =
+    mode.type === 'FINAL_FEEDBACK'
+      ? latestResult?.case?.clues ?? gameplayClues
+      : gameplayVisibleClues
+  const visibleClues = reviewClues.map((clue, _index, array) => ({
+    id: clue.id,
+    type: clue.type,
+    value: clue.value,
+    isNewest: clue.id === array[array.length - 1]?.id,
+  }))
+
+  const resultWasCorrect =
+    mode.type === 'FINAL_FEEDBACK'
+      ? latestResult?.gameOverReason === 'correct' || latestResult?.label === 'correct'
+      : null
+  const resultAttemptsUsed = mode.type === 'FINAL_FEEDBACK' ? attemptsCount : null
+  const resultCluesUsed =
+    mode.type === 'FINAL_FEEDBACK'
+      ? resultWasCorrect
+        ? Math.max(1, gameplayVisibleClues.length || attemptsCount || 1)
+        : Math.max(1, totalClues || gameplayVisibleClues.length || attemptsCount || 1)
+      : null
+  const revealedClueCount = resultCluesUsed ?? gameplayVisibleClues.length
+  const cluesRemaining = Math.max(0, totalClues - revealedClueCount)
   const viabilityRemaining = getViabilityRemaining({
     totalClues,
     clueIndex,
@@ -167,7 +288,28 @@ export function buildRoundViewModel({
     viabilityRemaining,
     viabilityTotal: totalClues,
   })
-  const explanationAvailable = Boolean(latestResult?.explanation)
+  const selectedRoundSuggestion = toRoundSelectedDiagnosis(selectedDiagnosis)
+  const roundSuggestions = suggestions.map((suggestion) => ({
+    diagnosisRegistryId: suggestion.diagnosisRegistryId,
+    displayLabel: suggestion.displayLabel,
+    matchKind: suggestion.matchKind,
+  }))
+  const suggestionsStatus = getSuggestionsStatus({
+    mode,
+    diagnosisInputState,
+    dictionaryAvailability,
+    suggestions,
+    isAutocompleteLoading,
+    autocompleteError,
+  })
+  const diagnosisStatus = getDiagnosisStatus({
+    diagnosisInputState,
+    diagnosisSubmitMode,
+    dictionaryAvailability,
+    suggestionsStatus,
+  })
+  const finalExplanation = truncateExplanationDisplayText(latestResult?.explanation ?? null)
+  const explanationAvailable = finalExplanation !== null
   const resolvedUnavailableReason =
     mode.type === 'BLOCKED' ? error ?? unavailableReason ?? 'No case available right now.' : null
 
@@ -182,14 +324,28 @@ export function buildRoundViewModel({
     cluesRemaining,
     visibleClues,
     guess,
+    selectedSuggestion: selectedRoundSuggestion,
+    selectedDiagnosisLabel: selectedRoundSuggestion?.displayLabel ?? null,
+    suggestions: roundSuggestions,
+    suggestionsStatus,
+    suggestionsStatusLabel: getSuggestionsStatusLabel({
+      status: suggestionsStatus,
+      dictionaryAvailability,
+    }),
+    highlightedSuggestionIndex,
     canEditGuess: mode.type === 'PLAYING',
     canSubmit,
     submitDisabled,
     latestAttempt,
+    attemptHistory: attempts,
     attemptsCount,
+    resultAttemptsUsed,
+    resultCluesUsed,
+    resultWasCorrect,
     latestResult,
     feedbackLabel: latestAttempt?.label ?? null,
     finalDiagnosis: mode.type === 'FINAL_FEEDBACK' ? latestAttempt?.guess ?? null : null,
+    finalExplanation,
     outcomeTone,
     reward,
     waitingCountdownText: mode.type === 'WAITING' ? waitingCountdownText ?? '00:00:00' : null,
@@ -197,6 +353,16 @@ export function buildRoundViewModel({
     canRetry: mode.type === 'BLOCKED' && canRetry,
     canOpenExplanation,
     explanationAvailable,
+    diagnosisInputMode: diagnosisInputState.mode,
+    diagnosisSubmitMode,
+    dictionaryAvailability,
+    diagnosisStatusLabel: diagnosisStatus.label,
+    diagnosisStatusTone: diagnosisStatus.tone,
+    submitPromptLabel: getSubmitPromptLabel({
+      diagnosisSubmitMode,
+      diagnosisInputState,
+      dictionaryAvailability,
+    }),
     hud: {
       statusLabel: getHudStatus(mode, latestAttempt),
       xpTotal: progress?.xpTotal ?? null,
@@ -204,5 +370,93 @@ export function buildRoundViewModel({
       viabilityRemaining,
       viabilityTotal: totalClues,
     },
+  }
+}
+
+function getDiagnosisStatus(input: {
+  diagnosisInputState: DiagnosisInputState
+  diagnosisSubmitMode: DiagnosisSubmitMode
+  dictionaryAvailability: DiagnosisDictionaryAvailability
+  suggestionsStatus: RoundSuggestionsStatus
+}): { label: string | null; tone: RoundDiagnosisStatusTone } {
+  if (input.dictionaryAvailability === 'unavailable') {
+    return {
+      label: 'Diagnosis list unavailable - reload to submit',
+      tone: 'blocked',
+    }
+  }
+
+  if (input.diagnosisSubmitMode === 'blocked') {
+    if (input.diagnosisInputState.mode === 'stale-selection') {
+      return {
+        label: 'Selection changed - choose a diagnosis again',
+        tone: 'warning',
+      }
+    }
+
+    return {
+      label:
+        input.diagnosisInputState.mode === 'empty'
+          ? 'Select a diagnosis from suggestions to submit'
+          : 'Selection required before submitting',
+      tone: 'warning',
+    }
+  }
+
+  switch (input.diagnosisInputState.mode) {
+    case 'selected':
+      return {
+        label: 'Selected diagnosis locked in',
+        tone: 'selected',
+      }
+    case 'typing':
+      return {
+        label:
+          input.suggestionsStatus === 'loading'
+            ? 'Loading diagnoses...'
+            : input.suggestionsStatus === 'ready'
+              ? 'Select a diagnosis from suggestions to submit'
+              : input.suggestionsStatus === 'error'
+                ? 'Diagnosis list unavailable - reload to submit'
+                : 'Selection required before submitting',
+        tone: 'warning',
+      }
+    default:
+      if (input.suggestionsStatus === 'loading') {
+        return {
+          label: 'Loading diagnoses...',
+          tone: 'neutral',
+        }
+      }
+
+      return {
+        label: null,
+        tone: 'neutral',
+      }
+  }
+}
+
+function getSubmitPromptLabel(
+  input: {
+    diagnosisSubmitMode: DiagnosisSubmitMode
+    diagnosisInputState: DiagnosisInputState
+    dictionaryAvailability: DiagnosisDictionaryAvailability
+  },
+): string | null {
+  switch (input.diagnosisSubmitMode) {
+    case 'selected-id':
+      return 'Registry-backed submit'
+    default:
+      if (input.dictionaryAvailability === 'unavailable') {
+        return 'Diagnosis list unavailable'
+      }
+
+      if (input.diagnosisInputState.mode === 'empty') {
+        return null
+      }
+
+      return input.diagnosisInputState.mode === 'stale-selection'
+        ? 'Reselect to submit'
+        : 'Selection required'
   }
 }

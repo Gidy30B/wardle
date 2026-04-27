@@ -312,43 +312,46 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
       }
 
       const latestAttempt = session.attempts[0];
-      if (!latestAttempt || latestAttempt.result !== 'correct') {
+      if (!latestAttempt) {
         throw new Error(
-          `Completed session ${payload.sessionId} is missing a correct attempt`,
+          `Completed session ${payload.sessionId} is missing attempts`,
         );
       }
+      const completedCorrectly = latestAttempt.result === 'correct';
 
-      const streak = await this.streakService.updateOnCompletion({
-        userId: payload.userId,
-        completedAt,
-      });
-
-      const awardResult = await this.xpService.awardXpForSession({
-        sessionId: payload.sessionId,
-        userId: payload.userId,
-        streak,
-        attemptsCount: session._count.attempts,
-      });
-
-      if (!awardResult.applied && awardResult.reason === 'session_not_found') {
-        throw new Error(`Unable to award XP for session ${payload.sessionId}`);
-      }
-
-      if (awardResult.applied) {
-        this.logger.log({
-          event: 'ws.publish',
-          type: 'game.v1.reward.applied',
+      if (completedCorrectly) {
+        const streak = await this.streakService.updateOnCompletion({
           userId: payload.userId,
+          completedAt,
         });
 
-        await this.redisPubSub.publish('ws:events', {
-          type: 'game.v1.reward.applied',
+        const awardResult = await this.xpService.awardXpForSession({
+          sessionId: payload.sessionId,
           userId: payload.userId,
-          payload: {
-            xp: awardResult.xpGained,
-            streak,
-          },
+          streak,
+          attemptsCount: session._count.attempts,
         });
+
+        if (!awardResult.applied && awardResult.reason === 'session_not_found') {
+          throw new Error(`Unable to award XP for session ${payload.sessionId}`);
+        }
+
+        if (awardResult.applied) {
+          this.logger.log({
+            event: 'ws.publish',
+            type: 'game.v1.reward.applied',
+            userId: payload.userId,
+          });
+
+          await this.redisPubSub.publish('ws:events', {
+            type: 'game.v1.reward.applied',
+            userId: payload.userId,
+            payload: {
+              xp: awardResult.xpGained,
+              streak,
+            },
+          });
+        }
       }
 
       await this.leaderboardService.upsertCompletion({
@@ -377,10 +380,12 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
         },
       });
 
-      await this.rewardOrchestrator.emitRewardApplied({
-        sessionId: payload.sessionId,
-        userId: payload.userId,
-      });
+      if (completedCorrectly) {
+        await this.rewardOrchestrator.emitRewardApplied({
+          sessionId: payload.sessionId,
+          userId: payload.userId,
+        });
+      }
     } catch (error) {
       await this.prisma.gameSession
         .updateMany({

@@ -2,7 +2,11 @@ import type { ApiClient } from './client';
 import type {
   AdminViewer,
   AttemptsOverTimePayload,
+  CreateDiagnosisAndLinkPayload,
+  CreateDiagnosisRegistryPayload,
+  CreateDiagnosisRegistryResult,
   DashboardPayload,
+  DiagnosisRegistrySearchItem,
   EditorialCaseDetail,
   EditorialCaseRevision,
   EditorialCasesQuery,
@@ -10,10 +14,12 @@ import type {
   EditorialStatusSummary,
   GenerateCasesPayload,
   GenerateCasesResult,
+  LinkCaseDiagnosisPayload,
   MarkCaseReadyToPublishResult,
   PublishResultsSummary,
   RestoreCaseRevisionResult,
   RerunCaseValidationResult,
+  SearchDiagnosisRegistryQuery,
   StartCaseReviewResult,
   SubmitCaseReviewPayload,
   SubmitCaseReviewResult,
@@ -84,6 +90,51 @@ export function getEditorialCases(
 
 export function getEditorialCaseDetail(client: ApiClient, caseId: string) {
   return client.get<EditorialCaseDetail>(`/admin/cases/${caseId}`);
+}
+
+export function searchDiagnosisRegistry(
+  client: ApiClient,
+  query: SearchDiagnosisRegistryQuery = {},
+) {
+  return client.get<DiagnosisRegistrySearchItem[]>(
+    withQuery('/admin/diagnosis-registry', {
+      q: query.q,
+      limit: query.limit,
+      status: query.status,
+    }),
+  );
+}
+
+export function createDiagnosisRegistry(
+  client: ApiClient,
+  payload: CreateDiagnosisRegistryPayload,
+) {
+  return client.post<CreateDiagnosisRegistryResult>(
+    '/admin/diagnosis-registry',
+    payload,
+  );
+}
+
+export function linkCaseDiagnosis(
+  client: ApiClient,
+  caseId: string,
+  payload: LinkCaseDiagnosisPayload,
+) {
+  return client.post<EditorialCaseDetail>(
+    `/admin/cases/${caseId}/diagnosis-link`,
+    payload,
+  );
+}
+
+export function createAndLinkDiagnosis(
+  client: ApiClient,
+  caseId: string,
+  payload: CreateDiagnosisAndLinkPayload,
+) {
+  return client.post<EditorialCaseDetail>(
+    `/admin/cases/${caseId}/create-and-link-diagnosis`,
+    payload,
+  );
 }
 
 export function getEditorialCaseRevisions(client: ApiClient, caseId: string) {

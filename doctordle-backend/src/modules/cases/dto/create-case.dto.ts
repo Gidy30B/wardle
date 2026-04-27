@@ -17,6 +17,15 @@ export class CreateCaseDto {
   diagnosisId!: string;
 
   @IsOptional()
+  @IsString()
+  diagnosisRegistryId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  proposedDiagnosisText?: string;
+
+  @IsOptional()
   @IsDateString()
   date?: string;
 }

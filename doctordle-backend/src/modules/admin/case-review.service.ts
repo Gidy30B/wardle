@@ -2,6 +2,8 @@ import { Injectable, Logger, BadRequestException, NotFoundException } from '@nes
 import {
   CaseEditorialStatus,
   CaseSource,
+  DiagnosisMappingMethod,
+  DiagnosisMappingStatus,
   Prisma,
   ReviewDecision,
   ValidationOutcome,
@@ -10,8 +12,13 @@ import {
 import { PrismaService } from '../../core/db/prisma.service.js';
 import { CaseRevisionService } from '../case-validation/case-revision.service.js';
 import { CaseValidationService } from '../case-validation/case-validation.service.js';
+import {
+  DiagnosisRegistryEditorialService,
+} from '../diagnosis-registry/diagnosis-registry-editorial.service.js';
+import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
 import { EditorialMetricsService } from '../editorial/editorial-metrics.service.js';
 import { getApprovalResetFields } from '../editorial/policies/approval-policy.js';
+import { getCaseDiagnosisPublishReadiness } from '../editorial/policies/diagnosis-publish-readiness.policy.js';
 import {
   canMoveToReadyToPublish,
   canStartEditorialReview,
@@ -22,10 +29,187 @@ import {
   getEditorialStatusesForQueue,
   type EditorialQueueFilter,
 } from '../editorial/policies/publish-policy.js';
+import type { CreateAndLinkDiagnosisDto } from './dto/create-and-link-diagnosis.dto.js';
+import type { CreateDiagnosisAliasDto } from './dto/create-diagnosis-alias.dto.js';
+import type { CreateDiagnosisRegistryDto } from './dto/create-diagnosis-registry.dto.js';
+import type { LinkCaseDiagnosisDto } from './dto/link-case-diagnosis.dto.js';
 import type { ListEditorialCasesDto } from './dto/list-editorial-cases.dto.js';
+import type { SearchDiagnosisRegistryDto } from './dto/search-diagnosis-registry.dto.js';
 import type { SubmitCaseReviewDto } from './dto/submit-case-review.dto.js';
 
 type ReviewTransactionClient = Prisma.TransactionClient | PrismaClient;
+
+const EDITORIAL_CASE_LIST_SELECT: Prisma.CaseSelect = {
+  id: true,
+  title: true,
+  date: true,
+  difficulty: true,
+  editorialStatus: true,
+  approvedAt: true,
+  approvedByUserId: true,
+  currentRevisionId: true,
+  diagnosisRegistryId: true,
+  proposedDiagnosisText: true,
+  diagnosisMappingStatus: true,
+  diagnosisMappingMethod: true,
+  diagnosisMappingConfidence: true,
+  diagnosisEditorialNote: true,
+  diagnosis: {
+    select: {
+      id: true,
+      name: true,
+      system: true,
+    },
+  },
+  diagnosisRegistry: {
+    select: {
+      id: true,
+      canonicalName: true,
+      status: true,
+      category: true,
+      specialty: true,
+    },
+  },
+  currentRevision: {
+    select: {
+      id: true,
+      revisionNumber: true,
+      source: true,
+      createdAt: true,
+      diagnosisId: true,
+      diagnosisRegistryId: true,
+      proposedDiagnosisText: true,
+      diagnosisMappingStatus: true,
+      diagnosisMappingMethod: true,
+      diagnosisMappingConfidence: true,
+      diagnosisEditorialNote: true,
+    },
+  },
+  validationRuns: {
+    orderBy: [{ startedAt: 'desc' }],
+    take: 1,
+    select: {
+      id: true,
+      revisionId: true,
+      source: true,
+      outcome: true,
+      validatorVersion: true,
+      startedAt: true,
+      completedAt: true,
+      summary: true,
+    },
+  },
+  reviews: {
+    orderBy: [{ createdAt: 'desc' }],
+    take: 1,
+    select: {
+      id: true,
+      revisionId: true,
+      reviewerUserId: true,
+      decision: true,
+      notes: true,
+      createdAt: true,
+      decidedAt: true,
+    },
+  },
+};
+
+const EDITORIAL_CASE_DETAIL_SELECT: Prisma.CaseSelect = {
+  id: true,
+  title: true,
+  date: true,
+  difficulty: true,
+  history: true,
+  symptoms: true,
+  labs: true,
+  clues: true,
+  explanation: true,
+  differentials: true,
+  diagnosisId: true,
+  diagnosisRegistryId: true,
+  proposedDiagnosisText: true,
+  diagnosisMappingStatus: true,
+  diagnosisMappingMethod: true,
+  diagnosisMappingConfidence: true,
+  diagnosisEditorialNote: true,
+  editorialStatus: true,
+  approvedAt: true,
+  approvedByUserId: true,
+  currentRevisionId: true,
+  diagnosis: {
+    select: {
+      id: true,
+      name: true,
+      system: true,
+    },
+  },
+  diagnosisRegistry: {
+    select: {
+      id: true,
+      canonicalName: true,
+      status: true,
+      category: true,
+      specialty: true,
+    },
+  },
+  currentRevision: {
+    select: {
+      id: true,
+      revisionNumber: true,
+      source: true,
+      createdByUserId: true,
+      createdAt: true,
+      title: true,
+      date: true,
+      difficulty: true,
+      history: true,
+      symptoms: true,
+      labs: true,
+      clues: true,
+      explanation: true,
+      differentials: true,
+      diagnosisId: true,
+      diagnosisRegistryId: true,
+      proposedDiagnosisText: true,
+      diagnosisMappingStatus: true,
+      diagnosisMappingMethod: true,
+      diagnosisMappingConfidence: true,
+      diagnosisEditorialNote: true,
+    },
+  },
+  validationRuns: {
+    orderBy: [{ startedAt: 'desc' }],
+    take: 1,
+    select: {
+      id: true,
+      revisionId: true,
+      source: true,
+      publishTrack: true,
+      outcome: true,
+      validatorVersion: true,
+      summary: true,
+      findings: true,
+      triggeredByUserId: true,
+      startedAt: true,
+      completedAt: true,
+    },
+  },
+  reviews: {
+    orderBy: [{ createdAt: 'desc' }],
+    take: 1,
+    select: {
+      id: true,
+      revisionId: true,
+      reviewerUserId: true,
+      decision: true,
+      notes: true,
+      source: true,
+      publishTrack: true,
+      createdAt: true,
+      decidedAt: true,
+    },
+  },
+};
 
 @Injectable()
 export class CaseReviewService {
@@ -36,6 +220,8 @@ export class CaseReviewService {
     private readonly caseRevisionService: CaseRevisionService,
     private readonly caseValidationService: CaseValidationService,
     private readonly editorialMetrics: EditorialMetricsService,
+    private readonly diagnosisRegistryLinkService: DiagnosisRegistryLinkService,
+    private readonly diagnosisRegistryEditorialService: DiagnosisRegistryEditorialService,
   ) {}
 
   async listEditorialCases(query: ListEditorialCasesDto) {
@@ -63,63 +249,12 @@ export class CaseReviewService {
         orderBy: [{ date: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
-        select: {
-          id: true,
-          title: true,
-          date: true,
-          difficulty: true,
-          editorialStatus: true,
-          approvedAt: true,
-          approvedByUserId: true,
-          currentRevisionId: true,
-          diagnosis: {
-            select: {
-              id: true,
-              name: true,
-              system: true,
-            },
-          },
-          currentRevision: {
-            select: {
-              id: true,
-              revisionNumber: true,
-              source: true,
-              createdAt: true,
-            },
-          },
-          validationRuns: {
-            orderBy: [{ startedAt: 'desc' }],
-            take: 1,
-            select: {
-              id: true,
-              revisionId: true,
-              source: true,
-              outcome: true,
-              validatorVersion: true,
-              startedAt: true,
-              completedAt: true,
-              summary: true,
-            },
-          },
-          reviews: {
-            orderBy: [{ createdAt: 'desc' }],
-            take: 1,
-            select: {
-              id: true,
-              revisionId: true,
-              reviewerUserId: true,
-              decision: true,
-              notes: true,
-              createdAt: true,
-              decidedAt: true,
-            },
-          },
-        },
+        select: EDITORIAL_CASE_LIST_SELECT,
       }),
     ]);
 
     return {
-      items,
+      items: items.map((item) => this.attachDiagnosisEditorialSummary(item)),
       page,
       pageSize,
       total,
@@ -132,90 +267,152 @@ export class CaseReviewService {
   }
 
   async getCaseDetail(caseId: string) {
-    const caseRecord = await this.prisma.case.findUnique({
-      where: { id: caseId },
-      select: {
-        id: true,
-        title: true,
-        date: true,
-        difficulty: true,
-        history: true,
-        symptoms: true,
-        labs: true,
-        clues: true,
-        explanation: true,
-        differentials: true,
-        diagnosisId: true,
-        editorialStatus: true,
-        approvedAt: true,
-        approvedByUserId: true,
-        currentRevisionId: true,
-        diagnosis: {
-          select: {
-            id: true,
-            name: true,
-            system: true,
-          },
-        },
-        currentRevision: {
-          select: {
-            id: true,
-            revisionNumber: true,
-            source: true,
-            createdByUserId: true,
-            createdAt: true,
-            title: true,
-            date: true,
-            difficulty: true,
-            history: true,
-            symptoms: true,
-            labs: true,
-            clues: true,
-            explanation: true,
-            differentials: true,
-            diagnosisId: true,
-          },
-        },
-        validationRuns: {
-          orderBy: [{ startedAt: 'desc' }],
-          take: 1,
-          select: {
-            id: true,
-            revisionId: true,
-            source: true,
-            publishTrack: true,
-            outcome: true,
-            validatorVersion: true,
-            summary: true,
-            findings: true,
-            triggeredByUserId: true,
-            startedAt: true,
-            completedAt: true,
-          },
-        },
-        reviews: {
-          orderBy: [{ createdAt: 'desc' }],
-          take: 1,
-          select: {
-            id: true,
-            revisionId: true,
-            reviewerUserId: true,
-            decision: true,
-            notes: true,
-            source: true,
-            publishTrack: true,
-            createdAt: true,
-            decidedAt: true,
-          },
-        },
-      },
+    return this.getCaseDetailRecord(this.prisma, caseId);
+  }
+
+  async searchDiagnosisRegistry(query: SearchDiagnosisRegistryDto) {
+    return this.diagnosisRegistryEditorialService.search({
+      query: query.q,
+      limit: query.limit,
+      status: query.status,
     });
+  }
 
-    if (!caseRecord) {
-      throw new NotFoundException(`Case not found: ${caseId}`);
-    }
+  async createDiagnosisRegistry(input: CreateDiagnosisRegistryDto) {
+    return this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        (tx) =>
+          this.diagnosisRegistryEditorialService.createDiagnosis(
+            {
+              canonicalName: input.canonicalName,
+              aliases: input.aliases,
+              category: input.category,
+              specialty: input.specialty,
+              isDescriptive: input.isDescriptive,
+              isCompositional: input.isCompositional,
+              notes: input.notes,
+              searchPriority: input.searchPriority,
+            },
+            tx,
+          ),
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      ),
+    );
+  }
 
-    return caseRecord;
+  async addDiagnosisAlias(
+    diagnosisRegistryId: string,
+    input: CreateDiagnosisAliasDto,
+  ) {
+    return this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        (tx) =>
+          this.diagnosisRegistryEditorialService.addAlias(
+            diagnosisRegistryId,
+            input,
+            tx,
+          ),
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      ),
+    );
+  }
+
+  async linkDiagnosisToCase(
+    caseId: string,
+    createdByUserId: string,
+    input: LinkCaseDiagnosisDto,
+  ) {
+    this.logger.log(
+      JSON.stringify({
+        event: 'admin.case.diagnosis_link.requested',
+        caseId,
+        createdByUserId,
+        diagnosisRegistryId: input.diagnosisRegistryId,
+      }),
+    );
+
+    const result = await this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        async (tx) =>
+          this.applyDiagnosisLinkInTransaction(tx, {
+            caseId,
+            createdByUserId,
+            diagnosisRegistryId: input.diagnosisRegistryId,
+            diagnosisEditorialNote: input.diagnosisEditorialNote,
+            mappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
+            eventName: 'admin.case.diagnosis_link.completed',
+          }),
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      ),
+    );
+
+    this.editorialMetrics.recordValidationResult(
+      CaseSource.ADMIN_EDIT,
+      result.validationRun.outcome ?? ValidationOutcome.ERROR,
+    );
+
+    return result.case;
+  }
+
+  async createAndLinkDiagnosis(
+    caseId: string,
+    createdByUserId: string,
+    input: CreateAndLinkDiagnosisDto,
+  ) {
+    this.logger.log(
+      JSON.stringify({
+        event: 'admin.case.diagnosis_create_and_link.requested',
+        caseId,
+        createdByUserId,
+        canonicalName: input.canonicalName,
+      }),
+    );
+
+    const result = await this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        async (tx) => {
+          const createdDiagnosis =
+            await this.diagnosisRegistryEditorialService.createDiagnosis(
+              {
+                canonicalName: input.canonicalName,
+                aliases: input.aliases,
+                category: input.category,
+                specialty: input.specialty,
+                isDescriptive: input.isDescriptive,
+                isCompositional: input.isCompositional,
+                notes: input.notes,
+                searchPriority: input.searchPriority,
+              },
+              tx,
+            );
+
+          return this.applyDiagnosisLinkInTransaction(tx, {
+            caseId,
+            createdByUserId,
+            diagnosisRegistryId: createdDiagnosis.diagnosisRegistryId,
+            diagnosisEditorialNote: input.diagnosisEditorialNote,
+            mappingMethod: DiagnosisMappingMethod.MANUAL_CREATED,
+            eventName: 'admin.case.diagnosis_create_and_link.completed',
+          });
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      ),
+    );
+
+    this.editorialMetrics.recordValidationResult(
+      CaseSource.ADMIN_EDIT,
+      result.validationRun.outcome ?? ValidationOutcome.ERROR,
+    );
+
+    return result.case;
   }
 
   async rerunValidation(caseId: string, triggeredByUserId: string) {
@@ -615,6 +812,12 @@ export class CaseReviewService {
         explanation: true,
         differentials: true,
         diagnosisId: true,
+        diagnosisRegistryId: true,
+        proposedDiagnosisText: true,
+        diagnosisMappingStatus: true,
+        diagnosisMappingMethod: true,
+        diagnosisMappingConfidence: true,
+        diagnosisEditorialNote: true,
         createdByUserId: true,
         createdAt: true,
         validationRuns: {
@@ -693,6 +896,12 @@ export class CaseReviewService {
               explanation: true,
               differentials: true,
               diagnosisId: true,
+              diagnosisRegistryId: true,
+              proposedDiagnosisText: true,
+              diagnosisMappingStatus: true,
+              diagnosisMappingMethod: true,
+              diagnosisMappingConfidence: true,
+              diagnosisEditorialNote: true,
             },
           });
 
@@ -701,6 +910,15 @@ export class CaseReviewService {
               `Revision ${revisionId} not found for case ${caseId}`,
             );
           }
+
+          const resolvedDiagnosisLink =
+            await this.diagnosisRegistryLinkService.resolveForWrite(
+              {
+                diagnosisId: revision.diagnosisId,
+                diagnosisRegistryId: revision.diagnosisRegistryId,
+              },
+              tx,
+            );
 
           const snapshot = {
             caseId,
@@ -713,7 +931,13 @@ export class CaseReviewService {
             clues: revision.clues,
             explanation: revision.explanation,
             differentials: [...revision.differentials],
-            diagnosisId: revision.diagnosisId,
+            diagnosisId: resolvedDiagnosisLink.diagnosisId,
+            diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+            proposedDiagnosisText: revision.proposedDiagnosisText,
+            diagnosisMappingStatus: revision.diagnosisMappingStatus,
+            diagnosisMappingMethod: revision.diagnosisMappingMethod,
+            diagnosisMappingConfidence: revision.diagnosisMappingConfidence,
+            diagnosisEditorialNote: revision.diagnosisEditorialNote,
           };
 
           await tx.case.update({
@@ -729,6 +953,12 @@ export class CaseReviewService {
               explanation: this.toNullableJsonValue(snapshot.explanation),
               differentials: snapshot.differentials,
               diagnosisId: snapshot.diagnosisId,
+              diagnosisRegistryId: snapshot.diagnosisRegistryId,
+              proposedDiagnosisText: snapshot.proposedDiagnosisText,
+              diagnosisMappingStatus: snapshot.diagnosisMappingStatus,
+              diagnosisMappingMethod: snapshot.diagnosisMappingMethod,
+              diagnosisMappingConfidence: snapshot.diagnosisMappingConfidence,
+              diagnosisEditorialNote: snapshot.diagnosisEditorialNote,
               ...getApprovalResetFields(),
             },
           });
@@ -856,6 +1086,13 @@ export class CaseReviewService {
               editorialStatus: true,
               approvedAt: true,
               approvedByUserId: true,
+              diagnosisRegistryId: true,
+              diagnosisMappingStatus: true,
+              diagnosisRegistry: {
+                select: {
+                  status: true,
+                },
+              },
             },
           });
 
@@ -866,6 +1103,18 @@ export class CaseReviewService {
           if (!canMoveToReadyToPublish(caseRecord.editorialStatus)) {
             throw new BadRequestException(
               'Only APPROVED cases can be marked ready to publish',
+            );
+          }
+
+          const diagnosisPublishReadiness = getCaseDiagnosisPublishReadiness({
+            diagnosisRegistryId: caseRecord.diagnosisRegistryId,
+            diagnosisMappingStatus: caseRecord.diagnosisMappingStatus,
+            diagnosisRegistryStatus: caseRecord.diagnosisRegistry?.status ?? null,
+          });
+
+          if (!diagnosisPublishReadiness.ready) {
+            throw new BadRequestException(
+              `Case diagnosis is not ready for publish: ${diagnosisPublishReadiness.reason}`,
             );
           }
 
@@ -983,6 +1232,238 @@ export class CaseReviewService {
         readyToPublishCases,
       },
       metrics: this.editorialMetrics.snapshot().assignments,
+    };
+  }
+
+  // TODO(diagnosis-phase-7): Daily publish selection still accepts APPROVED cases
+  // through broader editorial status checks. Reuse diagnosis publish readiness
+  // there when Phase 7 turns this policy into an enforced publish gate.
+
+  private async applyDiagnosisLinkInTransaction(
+    tx: ReviewTransactionClient,
+    input: {
+      caseId: string;
+      createdByUserId: string;
+      diagnosisRegistryId: string;
+      diagnosisEditorialNote?: string;
+      mappingMethod: 'EDITOR_SELECTED' | 'MANUAL_CREATED';
+      eventName: string;
+    },
+  ) {
+    const caseRecord = await tx.case.findUnique({
+      where: { id: input.caseId },
+      select: {
+        id: true,
+        editorialStatus: true,
+        proposedDiagnosisText: true,
+        diagnosisEditorialNote: true,
+      },
+    });
+
+    if (!caseRecord) {
+      throw new NotFoundException(`Case not found: ${input.caseId}`);
+    }
+
+    if (caseRecord.editorialStatus === CaseEditorialStatus.PUBLISHED) {
+      throw new BadRequestException(
+        'Published cases cannot be re-linked through the editorial diagnosis workflow',
+      );
+    }
+
+    const linkableDiagnosis =
+      await this.diagnosisRegistryEditorialService.getLinkableDiagnosisRegistry(
+        input.diagnosisRegistryId,
+        tx,
+      );
+    const resolvedEditorialNote =
+      this.normalizeOptionalString(input.diagnosisEditorialNote) ??
+      caseRecord.diagnosisEditorialNote ??
+      null;
+
+    await tx.case.update({
+      where: { id: input.caseId },
+      data: {
+        diagnosisId: linkableDiagnosis.diagnosisId,
+        diagnosisRegistryId: linkableDiagnosis.diagnosisRegistryId,
+        proposedDiagnosisText: caseRecord.proposedDiagnosisText,
+        diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
+        diagnosisMappingMethod: input.mappingMethod,
+        diagnosisMappingConfidence: 1,
+        diagnosisEditorialNote: resolvedEditorialNote,
+        ...getApprovalResetFields(),
+      },
+    });
+
+    const snapshot = await this.caseRevisionService.getCurrentCaseSnapshotInTransaction(
+      tx,
+      input.caseId,
+    );
+    const revision =
+      await this.caseRevisionService.createRevisionFromSnapshotInTransaction(tx, {
+        caseId: input.caseId,
+        snapshot,
+        source: CaseSource.ADMIN_EDIT,
+        createdByUserId: input.createdByUserId,
+      });
+    const validationRun = await this.createValidationRunForSnapshot(tx, {
+      caseId: input.caseId,
+      revisionId: revision.revisionId,
+      source: CaseSource.ADMIN_EDIT,
+      triggeredByUserId: input.createdByUserId,
+      snapshot,
+    });
+
+    const updatedCase = await tx.case.update({
+      where: { id: input.caseId },
+      data: {
+        editorialStatus:
+          validationRun.outcome === ValidationOutcome.PASSED
+            ? CaseEditorialStatus.VALIDATED
+            : CaseEditorialStatus.NEEDS_EDIT,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    const detail = await this.getCaseDetailRecord(tx, updatedCase.id);
+
+    this.logger.log(
+      JSON.stringify({
+        event: input.eventName,
+        caseId: input.caseId,
+        revisionId: revision.revisionId,
+        revisionNumber: revision.revisionNumber,
+        diagnosisRegistryId: linkableDiagnosis.diagnosisRegistryId,
+        diagnosisId: linkableDiagnosis.diagnosisId,
+        mappingMethod: input.mappingMethod,
+        validationOutcome: validationRun.outcome,
+        editorialStatus: detail.editorialStatus,
+        createdByUserId: input.createdByUserId,
+      }),
+    );
+
+    return {
+      case: detail,
+      revision: {
+        id: revision.revisionId,
+        revisionNumber: revision.revisionNumber,
+      },
+      validationRun,
+      diagnosisRegistry: linkableDiagnosis.registry,
+    };
+  }
+
+  private async createValidationRunForSnapshot(
+    tx: ReviewTransactionClient,
+    input: {
+      caseId: string;
+      revisionId: string;
+      source: CaseSource;
+      triggeredByUserId: string;
+      snapshot: Awaited<
+        ReturnType<CaseRevisionService['getCurrentCaseSnapshotInTransaction']>
+      >;
+    },
+  ) {
+    let validationReport;
+    try {
+      validationReport =
+        this.caseValidationService.validateSnapshot(input.snapshot);
+    } catch (error) {
+      validationReport =
+        this.caseValidationService.buildExecutionErrorReport(error);
+    }
+
+    const persistencePayload =
+      this.caseValidationService.buildPersistencePayload(validationReport);
+
+    return tx.caseValidationRun.create({
+      data: {
+        caseId: input.caseId,
+        revisionId: input.revisionId,
+        source: input.source,
+        outcome: validationReport.outcome,
+        validatorVersion: validationReport.validatorVersion,
+        summary: persistencePayload.summary,
+        findings: persistencePayload.findings,
+        triggeredByUserId: input.triggeredByUserId,
+        startedAt: new Date(),
+        completedAt: new Date(),
+      },
+      select: {
+        id: true,
+        revisionId: true,
+        outcome: true,
+        validatorVersion: true,
+        summary: true,
+        findings: true,
+        startedAt: true,
+        completedAt: true,
+      },
+    });
+  }
+
+  private async getCaseDetailRecord(
+    client: ReviewTransactionClient | PrismaService,
+    caseId: string,
+  ) {
+    const caseRecord = await (client as PrismaService).case.findUnique({
+      where: { id: caseId },
+      select: EDITORIAL_CASE_DETAIL_SELECT,
+    });
+
+    if (!caseRecord) {
+      throw new NotFoundException(`Case not found: ${caseId}`);
+    }
+
+    return this.attachDiagnosisEditorialSummary(caseRecord);
+  }
+
+  private attachDiagnosisEditorialSummary<T extends {
+    diagnosisRegistryId: string | null;
+    diagnosisMappingStatus: DiagnosisMappingStatus;
+    diagnosisMappingMethod: DiagnosisMappingMethod;
+    diagnosisMappingConfidence: number | null;
+    diagnosisEditorialNote: string | null;
+    proposedDiagnosisText: string;
+    diagnosisRegistry?: {
+      id: string;
+      canonicalName: string;
+      status: unknown;
+      category: string | null;
+      specialty: string | null;
+    } | null;
+    currentRevision?: {
+      diagnosisRegistryId?: string | null;
+      diagnosisMappingStatus?: DiagnosisMappingStatus;
+      diagnosisMappingMethod?: DiagnosisMappingMethod;
+      diagnosisMappingConfidence?: number | null;
+      diagnosisEditorialNote?: string | null;
+      proposedDiagnosisText?: string;
+    } | null;
+  }>(caseRecord: T) {
+    const diagnosisPublishReadiness = getCaseDiagnosisPublishReadiness({
+      diagnosisRegistryId: caseRecord.diagnosisRegistryId,
+      diagnosisMappingStatus: caseRecord.diagnosisMappingStatus,
+      diagnosisRegistryStatus:
+        (caseRecord.diagnosisRegistry?.status as
+          | Parameters<typeof getCaseDiagnosisPublishReadiness>[0]['diagnosisRegistryStatus']
+          | undefined) ?? null,
+    });
+
+    return {
+      ...caseRecord,
+      diagnosisRegistrySummary: caseRecord.diagnosisRegistry
+        ? {
+            id: caseRecord.diagnosisRegistry.id,
+            canonicalName: caseRecord.diagnosisRegistry.canonicalName,
+            status: caseRecord.diagnosisRegistry.status,
+            category: caseRecord.diagnosisRegistry.category,
+            specialty: caseRecord.diagnosisRegistry.specialty,
+          }
+        : null,
+      diagnosisPublishReadiness,
     };
   }
 

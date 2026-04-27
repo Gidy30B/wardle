@@ -2,14 +2,36 @@ import { useAuth } from '@clerk/clerk-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildRoundViewModel } from './buildRoundViewModel'
+import {
+  deriveDiagnosisInputState,
+  deriveDiagnosisSubmitMode,
+  reconcileDiagnosisSelectionAfterTextChange,
+  type DiagnosisDictionaryAvailability,
+} from './diagnosisInput.state'
+import {
+  getCachedDiagnosisDictionarySnapshot,
+  refreshDiagnosisDictionaryIndex,
+  shouldRefreshDiagnosisDictionary,
+} from './diagnosisRegistry.cache'
+import { searchDiagnosisRegistryIndex } from './diagnosisRegistry.search'
+import { hasDisplayableExplanation } from './gameExplanation'
+import type { DiagnosisDictionaryIndex } from './diagnosisRegistry.types'
 import { startGameApi, submitGuessApi } from './game.api'
-import type { GameCase, GameResult, StartGameResponse } from './game.types'
+import type {
+  DiagnosisSelection,
+  DiagnosisSuggestion,
+  GameCase,
+  GameResult,
+  StartGameResponse,
+} from './game.types'
+import { subscribe } from './events/game.eventBus'
 import { useUserProgress } from '../user-progress/useUserProgress'
 import { useApi } from '../../lib/api'
-import { subscribe } from './events/game.eventBus'
 
 const SUBMIT_ACK_DELAY_MS = 180
 const FINAL_TRANSITION_DELAY_MS = 250
+const MIN_AUTOCOMPLETE_QUERY_LENGTH = 1
+const AUTOCOMPLETE_LIMIT = 5
 
 export type GameAttempt = {
   guess: string
@@ -63,6 +85,15 @@ function delay(ms: number): Promise<void> {
   })
 }
 
+function toDiagnosisSelection(
+  suggestion: DiagnosisSuggestion,
+): DiagnosisSelection {
+  return {
+    diagnosisRegistryId: suggestion.diagnosisRegistryId,
+    displayLabel: suggestion.displayLabel,
+  }
+}
+
 export function useGameEngine() {
   const { isLoaded, isSignedIn } = useAuth()
   const { request } = useApi()
@@ -71,27 +102,141 @@ export function useGameEngine() {
   const didInitRef = useRef(false)
   const isMountedRef = useRef(true)
   const sessionRequestRef = useRef<Promise<void> | null>(null)
+  const registryRequestRef = useRef<Promise<DiagnosisDictionaryIndex> | null>(null)
   const submitRequestRef = useRef(false)
 
   const [mode, setMode] = useState<GameEngineMode>({ type: 'LOADING' })
   const [guess, setGuess] = useState('')
+  const [selectedDiagnosis, setSelectedDiagnosis] = useState<DiagnosisSelection | null>(null)
+  const [staleSelection, setStaleSelection] = useState<DiagnosisSelection | null>(null)
+  const [suggestions, setSuggestions] = useState<DiagnosisSuggestion[]>([])
+  const [registryIndex, setRegistryIndex] = useState<DiagnosisDictionaryIndex | null>(
+    () => getCachedDiagnosisDictionarySnapshot()?.index ?? null,
+  )
+  const [dictionaryAvailability, setDictionaryAvailability] =
+    useState<DiagnosisDictionaryAvailability>(() =>
+      getCachedDiagnosisDictionarySnapshot() ? 'ready' : 'loading',
+    )
+  const [isRegistryLoading, setIsRegistryLoading] = useState(false)
+  const [registryError, setRegistryError] = useState<string | null>(null)
+  const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(0)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [caseData, setCaseData] = useState<GameCase | null>(null)
   const [clueIndex, setClueIndex] = useState(0)
   const [latestResult, setLatestResult] = useState<GameResult | null>(null)
+  const [latestPlayedLearningResult, setLatestPlayedLearningResult] =
+    useState<GameResult | null>(null)
   const [attempts, setAttempts] = useState<GameAttempt[]>([])
   const [error, setError] = useState<string | null>(null)
   const [reward, setReward] = useState<GameRewardState>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
+
+  const diagnosisInputState = useMemo(
+    () =>
+      deriveDiagnosisInputState({
+        text: guess,
+        selectedDiagnosis,
+        staleSelection,
+      }),
+    [guess, selectedDiagnosis, staleSelection],
+  )
+
+  const diagnosisSubmitMode = useMemo(
+    () =>
+      deriveDiagnosisSubmitMode({
+        diagnosisInputState,
+        dictionaryAvailability,
+      }),
+    [diagnosisInputState, dictionaryAvailability],
+  )
 
   const clearGameplayState = useCallback(() => {
     setSessionId(null)
     setCaseData(null)
     setClueIndex(0)
     setGuess('')
+    setSelectedDiagnosis(null)
+    setStaleSelection(null)
+    setSuggestions([])
+    setHighlightedSuggestionIndex(0)
     setLatestResult(null)
     setAttempts([])
   }, [])
+
+  const ensureDiagnosisRegistryLoaded = useCallback(async () => {
+    const cachedSnapshot = getCachedDiagnosisDictionarySnapshot()
+
+    if (cachedSnapshot && isMountedRef.current) {
+      setRegistryIndex(cachedSnapshot.index)
+      setDictionaryAvailability('ready')
+      setRegistryError(null)
+    }
+
+    if (registryRequestRef.current) {
+      return cachedSnapshot?.index ?? registryRequestRef.current
+    }
+
+    if (!shouldRefreshDiagnosisDictionary(cachedSnapshot)) {
+      if (!cachedSnapshot) {
+        throw new Error('Diagnosis dictionary unavailable')
+      }
+
+      return cachedSnapshot.index
+    }
+
+    const shouldBlockOnRefresh = !cachedSnapshot
+    const task = (async () => {
+      if (shouldBlockOnRefresh && isMountedRef.current) {
+        setIsRegistryLoading(true)
+        setDictionaryAvailability('loading')
+      }
+
+      try {
+        const nextRegistryIndex = await refreshDiagnosisDictionaryIndex(request)
+
+        if (!isMountedRef.current) {
+          return nextRegistryIndex
+        }
+
+        setRegistryIndex(nextRegistryIndex)
+        setDictionaryAvailability('ready')
+        setRegistryError(null)
+        return nextRegistryIndex
+      } catch (exception) {
+        const message =
+          exception instanceof Error ? exception.message : 'Unable to refresh diagnosis dictionary'
+
+        if (!isMountedRef.current) {
+          throw exception
+        }
+
+        setRegistryError(message)
+
+        if (cachedSnapshot) {
+          setDictionaryAvailability('ready')
+          return cachedSnapshot.index
+        }
+
+        setDictionaryAvailability('unavailable')
+        throw exception
+      } finally {
+        if (shouldBlockOnRefresh && isMountedRef.current) {
+          setIsRegistryLoading(false)
+        }
+
+        registryRequestRef.current = null
+      }
+    })()
+
+    registryRequestRef.current = task
+
+    if (cachedSnapshot) {
+      void task
+      return cachedSnapshot.index
+    }
+
+    return task
+  }, [request])
 
   const startSession = useCallback(async () => {
     if (sessionRequestRef.current) {
@@ -101,6 +246,7 @@ export function useGameEngine() {
     const task = (async () => {
       setMode({ type: 'LOADING' })
       setError(null)
+      void ensureDiagnosisRegistryLoaded().catch(() => undefined)
 
       try {
         const session: StartGameResponse = await startGameApi(request)
@@ -120,6 +266,10 @@ export function useGameEngine() {
         setCaseData(session.case)
         setClueIndex(session.case.clueIndex)
         setGuess('')
+        setSelectedDiagnosis(null)
+        setStaleSelection(null)
+        setSuggestions([])
+        setHighlightedSuggestionIndex(0)
         setLatestResult(null)
         setAttempts([])
         setError(null)
@@ -148,7 +298,7 @@ export function useGameEngine() {
 
     sessionRequestRef.current = task
     return task
-  }, [clearGameplayState, request])
+  }, [clearGameplayState, ensureDiagnosisRegistryLoaded, request])
 
   useEffect(() => {
     return () => {
@@ -221,10 +371,83 @@ export function useGameEngine() {
     }
   }, [mode, startSession])
 
+  useEffect(() => {
+    if (
+      mode.type !== 'PLAYING' ||
+      !sessionId ||
+      diagnosisInputState.mode === 'selected'
+    ) {
+      setSuggestions([])
+      setHighlightedSuggestionIndex(0)
+      return
+    }
+
+    const query = guess.trim()
+    if (
+      query.length < MIN_AUTOCOMPLETE_QUERY_LENGTH ||
+      !registryIndex ||
+      dictionaryAvailability === 'unavailable'
+    ) {
+      setSuggestions([])
+      setHighlightedSuggestionIndex(0)
+      return
+    }
+
+    const nextSuggestions = searchDiagnosisRegistryIndex(
+      registryIndex,
+      query,
+      AUTOCOMPLETE_LIMIT,
+    )
+
+    setSuggestions(nextSuggestions)
+    setHighlightedSuggestionIndex((current) =>
+      nextSuggestions.length === 0 ? 0 : Math.min(current, nextSuggestions.length - 1),
+    )
+  }, [
+    diagnosisInputState.mode,
+    dictionaryAvailability,
+    guess,
+    mode.type,
+    registryIndex,
+    sessionId,
+  ])
+
+  const isAutocompleteLoading =
+    mode.type === 'PLAYING' &&
+    diagnosisInputState.mode !== 'selected' &&
+    diagnosisInputState.mode !== 'empty' &&
+    isRegistryLoading &&
+    dictionaryAvailability !== 'unavailable'
+  const autocompleteError =
+    mode.type === 'PLAYING' &&
+    diagnosisInputState.mode !== 'selected' &&
+    diagnosisInputState.mode !== 'empty'
+      ? registryError
+      : null
+
+  const applyGuessTextChange = useCallback((nextGuess: string) => {
+    setGuess(nextGuess)
+
+    const nextSelectionState = reconcileDiagnosisSelectionAfterTextChange({
+      nextText: nextGuess,
+      selectedDiagnosis,
+      staleSelection,
+    })
+
+    setSelectedDiagnosis(nextSelectionState.selectedDiagnosis)
+    setStaleSelection(nextSelectionState.staleSelection)
+    setHighlightedSuggestionIndex(0)
+  }, [selectedDiagnosis, staleSelection])
+
   const submitGuess = useCallback(async () => {
     const trimmed = guess.trim()
 
-    if (mode.type !== 'PLAYING' || !sessionId || !trimmed || submitRequestRef.current) {
+    if (
+      mode.type !== 'PLAYING' ||
+      !sessionId ||
+      diagnosisSubmitMode === 'blocked' ||
+      submitRequestRef.current
+    ) {
       return undefined
     }
 
@@ -233,20 +456,40 @@ export function useGameEngine() {
     setError(null)
 
     try {
+      const clueIndexAtSubmit = clueIndex
       // The submit response is the source of truth for correctness and finality.
-      const response = await submitGuessApi(request, { guess: trimmed, sessionId })
+      const response = await submitGuessApi(request, {
+        sessionId,
+        diagnosisRegistryId: selectedDiagnosis!.diagnosisRegistryId,
+        guess: trimmed || selectedDiagnosis!.displayLabel,
+      })
 
       if (!isMountedRef.current) {
         return response
       }
 
+      const isTerminalResponse = isFinalResult(response)
+      const isCorrectTerminalResponse =
+        isTerminalResponse &&
+        (response.label === 'correct' || response.gameOverReason === 'correct')
+
       setLatestResult(response)
-      setClueIndex(response.clueIndex)
-      if (response.case) {
+      setClueIndex(isCorrectTerminalResponse ? clueIndexAtSubmit : response.clueIndex)
+      if (response.case && !isCorrectTerminalResponse) {
         setCaseData(response.case)
       }
-      setAttempts((previous) => [...previous, { guess: trimmed, label: response.label }])
+      setAttempts((previous) => [
+        ...previous,
+        {
+          guess: trimmed,
+          label: response.label,
+        },
+      ])
       setGuess('')
+      setSelectedDiagnosis(null)
+      setStaleSelection(null)
+      setSuggestions([])
+      setHighlightedSuggestionIndex(0)
 
       await delay(SUBMIT_ACK_DELAY_MS)
 
@@ -254,7 +497,11 @@ export function useGameEngine() {
         return response
       }
 
-      if (isFinalResult(response)) {
+      if (isTerminalResponse) {
+        if (hasDisplayableExplanation(response.explanation)) {
+          setLatestPlayedLearningResult(response)
+        }
+
         await delay(FINAL_TRANSITION_DELAY_MS)
 
         if (!isMountedRef.current) {
@@ -277,7 +524,14 @@ export function useGameEngine() {
     } finally {
       submitRequestRef.current = false
     }
-  }, [guess, mode.type, request, sessionId])
+  }, [
+    diagnosisSubmitMode,
+    guess,
+    mode.type,
+    request,
+    selectedDiagnosis,
+    sessionId,
+  ])
 
   const continueGame = useCallback(() => {
     if (mode.type !== 'FINAL_FEEDBACK') {
@@ -299,15 +553,97 @@ export function useGameEngine() {
     }
 
     setGuess('')
+    setSelectedDiagnosis(null)
+    setStaleSelection(null)
+    setSuggestions([])
+    setHighlightedSuggestionIndex(0)
   }, [mode.type])
 
   const backspaceGuess = useCallback(() => {
+    if (mode.type !== 'PLAYING' || guess.length === 0) {
+      return
+    }
+
+    applyGuessTextChange(guess.slice(0, -1))
+  }, [applyGuessTextChange, guess, mode.type])
+
+  const appendGuessCharacter = useCallback((value: string) => {
+    if (mode.type !== 'PLAYING' || value.length === 0) {
+      return
+    }
+
+    applyGuessTextChange(`${guess}${value}`.toUpperCase())
+  }, [applyGuessTextChange, guess, mode.type])
+
+  const changeGuess = useCallback((value: string) => {
     if (mode.type !== 'PLAYING') {
       return
     }
 
-    setGuess((current) => current.slice(0, -1))
+    applyGuessTextChange(value.toUpperCase())
+  }, [applyGuessTextChange, mode.type])
+
+  const selectSuggestion = useCallback((suggestion: DiagnosisSuggestion) => {
+    if (mode.type !== 'PLAYING') {
+      return
+    }
+
+    setGuess(suggestion.displayLabel)
+    setSelectedDiagnosis(toDiagnosisSelection(suggestion))
+    setStaleSelection(null)
+    setSuggestions([])
+    setHighlightedSuggestionIndex(0)
   }, [mode.type])
+
+  const clearSelectedSuggestion = useCallback(() => {
+    if (mode.type !== 'PLAYING' || !selectedDiagnosis) {
+      return false
+    }
+
+    setSelectedDiagnosis(null)
+    setStaleSelection(null)
+    setHighlightedSuggestionIndex(0)
+    return true
+  }, [mode.type, selectedDiagnosis])
+
+  const moveSuggestionHighlight = useCallback((direction: -1 | 1) => {
+    if (mode.type !== 'PLAYING' || suggestions.length === 0 || diagnosisInputState.mode === 'selected') {
+      return
+    }
+
+    setHighlightedSuggestionIndex((current) => {
+      const next = current + direction
+      if (next < 0) {
+        return suggestions.length - 1
+      }
+
+      if (next >= suggestions.length) {
+        return 0
+      }
+
+      return next
+    })
+  }, [diagnosisInputState.mode, mode.type, suggestions.length])
+
+  const selectHighlightedSuggestion = useCallback(() => {
+    if (mode.type !== 'PLAYING' || suggestions.length === 0 || diagnosisInputState.mode === 'selected') {
+      return false
+    }
+
+    const suggestion = suggestions[highlightedSuggestionIndex]
+    if (!suggestion) {
+      return false
+    }
+
+    selectSuggestion(suggestion)
+    return true
+  }, [
+    diagnosisInputState.mode,
+    highlightedSuggestionIndex,
+    mode.type,
+    selectSuggestion,
+    suggestions,
+  ])
 
   const waitingCountdownText = useMemo(() => {
     if (mode.type !== 'WAITING') {
@@ -323,10 +659,14 @@ export function useGameEngine() {
   const isBlocked = mode.type === 'BLOCKED'
   const isFinalFeedback = mode.type === 'FINAL_FEEDBACK'
   const isPlaying = mode.type === 'PLAYING'
-  const waitingMsRemaining = mode.type === 'WAITING' ? Math.max(0, mode.nextCaseAt.getTime() - nowMs) : null
+  const waitingMsRemaining =
+    mode.type === 'WAITING' ? Math.max(0, mode.nextCaseAt.getTime() - nowMs) : null
   const finalResult = mode.type === 'FINAL_FEEDBACK' ? mode.result : null
-  const canOpenExplanation = Boolean(latestResult?.explanation)
-  const canSubmit = isPlaying && Boolean(sessionId) && guess.trim().length > 0
+  const canOpenExplanation = hasDisplayableExplanation(latestResult?.explanation)
+  const canSubmit =
+    isPlaying &&
+    Boolean(sessionId) &&
+    diagnosisSubmitMode === 'selected-id'
   const unavailableReason = mode.type === 'BLOCKED' ? mode.reason : null
 
   const roundViewModel = useMemo(
@@ -337,6 +677,14 @@ export function useGameEngine() {
         caseData,
         clueIndex,
         guess,
+        diagnosisInputState,
+        diagnosisSubmitMode,
+        dictionaryAvailability,
+        selectedDiagnosis,
+        suggestions,
+        isAutocompleteLoading,
+        autocompleteError,
+        highlightedSuggestionIndex,
         attempts,
         latestResult,
         reward,
@@ -352,19 +700,27 @@ export function useGameEngine() {
       }),
     [
       attempts,
+      autocompleteError,
       canOpenExplanation,
       canSubmit,
       caseData,
       clueIndex,
+      diagnosisInputState,
+      diagnosisSubmitMode,
+      dictionaryAvailability,
       error,
       guess,
+      highlightedSuggestionIndex,
+      isAutocompleteLoading,
       isLoadingCase,
       isSubmitting,
       latestResult,
       mode,
       progress,
       reward,
+      selectedDiagnosis,
       sessionId,
+      suggestions,
       unavailableReason,
       waitingCountdownText,
     ],
@@ -378,8 +734,11 @@ export function useGameEngine() {
     guess,
     attempts,
     latestResult,
+    latestPlayedLearningResult,
     finalResult,
     explanation: latestResult?.explanation ?? null,
+    latestPlayedExplanation: latestPlayedLearningResult?.explanation ?? null,
+    progress,
     error,
     reward,
     waitingCountdownText,
@@ -396,9 +755,22 @@ export function useGameEngine() {
     isFinalFeedback,
     isPlaying,
     unavailableReason,
-    changeGuess: setGuess,
+    suggestions,
+    isAutocompleteLoading,
+    autocompleteError,
+    highlightedSuggestionIndex,
+    selectedDiagnosis,
+    diagnosisInputState,
+    diagnosisSubmitMode,
+    dictionaryAvailability,
+    appendGuessCharacter,
+    changeGuess,
     clearGuess,
     backspaceGuess,
+    selectSuggestion,
+    clearSelectedSuggestion,
+    moveSuggestionHighlight,
+    selectHighlightedSuggestion,
     submitGuess,
     continueGame,
     reloadSession,

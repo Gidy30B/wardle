@@ -3,7 +3,17 @@ export type EvaluationSignals = {
   synonym?: boolean;
   fuzzy?: number;
   embedding?: number;
-  retrievalMode?: 'vector' | 'fallback';
+  registryCorrectnessAuthority?: boolean;
+  retrievalMode?: 'vector' | 'fallback' | 'selected-id-only';
+  expectedDiagnosisRegistryId?: string;
+  expectedDiagnosisUsable?: boolean;
+  expectedDiagnosisStatus?: string;
+  submittedDiagnosisRegistryId?: string;
+  resolvedDiagnosisRegistryId?: string;
+  matchedAliasId?: string;
+  matchedAliasTerm?: string;
+  diagnosisResolutionMethod?: string;
+  diagnosisResolutionReason?: string;
   ontology?: {
     score: number;
     reason: string;
@@ -18,5 +28,5 @@ export type EvaluationResult = {
   signals: EvaluationSignals;
   normalizedGuess?: string;
   evaluatorVersion?: string;
-  retrievalMode?: 'vector' | 'fallback';
+  retrievalMode?: 'vector' | 'fallback' | 'selected-id-only';
 };

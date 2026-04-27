@@ -95,6 +95,16 @@ export function runStructureValidator(
     });
   }
 
+  if (!isNonEmptyString(snapshot.diagnosisRegistryId)) {
+    issues.push({
+      validator: 'structure',
+      severity: 'error' as const,
+      code: 'DIAGNOSIS_REGISTRY_ID_MISSING',
+      message: 'Diagnosis registry id is required for revision snapshots',
+      path: 'diagnosisRegistryId',
+    });
+  }
+
   return {
     validator: 'structure',
     passed: issues.every((issue) => issue.severity !== 'error'),

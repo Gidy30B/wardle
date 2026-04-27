@@ -1,4 +1,9 @@
-import { Prisma, ValidationOutcome } from '@prisma/client';
+import {
+  DiagnosisMappingMethod,
+  DiagnosisMappingStatus,
+  Prisma,
+  ValidationOutcome,
+} from '@prisma/client';
 
 export const CASE_VALIDATION_VERSION = 'shadow:v1';
 
@@ -64,6 +69,12 @@ export type CaseRevisionSnapshot = {
   explanation: Prisma.JsonValue | null;
   differentials: string[];
   diagnosisId: string;
+  diagnosisRegistryId: string;
+  proposedDiagnosisText: string;
+  diagnosisMappingStatus: DiagnosisMappingStatus;
+  diagnosisMappingMethod: DiagnosisMappingMethod;
+  diagnosisMappingConfidence: number | null;
+  diagnosisEditorialNote: string | null;
 };
 
 export type ValidationClinicalClue = {

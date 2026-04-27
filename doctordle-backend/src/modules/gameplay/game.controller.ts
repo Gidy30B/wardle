@@ -101,6 +101,7 @@ export class GameController {
       return await this.gameSessionService.submitGuess({
         sessionId: body.sessionId,
         guess: body.guess,
+        diagnosisRegistryId: body.diagnosisRegistryId,
         userId: req.user.id,
       });
     } catch (error) {
@@ -115,6 +116,22 @@ export class GameController {
       );
       throw error;
     }
+  }
+
+  @Get('diagnoses/autocomplete')
+  async autocompleteDiagnoses(
+    @Query('query') query?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedLimit = Number(limit ?? 5);
+    const safeLimit = Number.isFinite(parsedLimit)
+      ? Math.max(1, Math.min(8, Math.floor(parsedLimit)))
+      : 5;
+
+    return this.gameSessionService.autocompleteDiagnoses({
+      query: query ?? '',
+      limit: safeLimit,
+    });
   }
 
   @Post('hint')

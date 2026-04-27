@@ -1,6 +1,5 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
-import { PublishTrack } from '@prisma/client';
-import { resetEnvCacheForTests } from '../../core/config/env.validation';
+import { BadRequestException } from '@nestjs/common';
+import { DiagnosisRegistryStatus } from '@prisma/client';
 import { SessionService } from './session.service';
 
 function createSessionServiceFixture() {
@@ -8,15 +7,13 @@ function createSessionServiceFixture() {
 
   const prisma: any = {};
   prisma.gameSession = {
-    updateMany: jest
-      .fn()
-      .mockImplementation(async (args: any) => {
-        if (args.data?.processingAt instanceof Date) {
-          claimAt = args.data.processingAt;
-        }
+    updateMany: jest.fn().mockImplementation(async (args: any) => {
+      if (args.data?.processingAt instanceof Date) {
+        claimAt = args.data.processingAt;
+      }
 
-        return { count: 1 };
-      }),
+      return { count: 1 };
+    }),
     findUnique: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),
     findFirst: jest.fn().mockResolvedValue(null),
@@ -42,8 +39,8 @@ function createSessionServiceFixture() {
     getExplanation: jest.fn().mockResolvedValue(null),
   };
 
-  const evaluatorApiService = {
-    evaluateGuess: jest.fn(),
+  const diagnosisRegistryMatcherService = {
+    evaluateGameplayGuess: jest.fn(),
   };
 
   const attemptService = {
@@ -82,7 +79,7 @@ function createSessionServiceFixture() {
     prisma,
     cacheService,
     aiContentService,
-    evaluatorApiService,
+    diagnosisRegistryMatcherService,
     attemptService,
     evaluationService,
     rewardOrchestrator,
@@ -94,7 +91,7 @@ function createSessionServiceFixture() {
       prisma as never,
       cacheService as never,
       aiContentService as never,
-      evaluatorApiService as never,
+      diagnosisRegistryMatcherService as never,
       attemptService as never,
       evaluationService as never,
       rewardOrchestrator as never,
@@ -105,505 +102,257 @@ function createSessionServiceFixture() {
   };
 }
 
-describe('SessionService premium enforcement', () => {
-  afterEach(() => {
-    delete process.env.ENABLE_DEV_REPLAY;
-    resetEnvCacheForTests();
+function buildActiveSession(caseDiagnosisRegistryId: string | null) {
+  return {
+    id: 'session-1',
+    userId: 'user-1',
+    caseId: 'case-1',
+    dailyCaseId: 'daily-1',
+    userTierAtStart: 'free',
+    status: 'active',
+    processingAt: null,
+    user: {
+      subscriptionTier: 'free',
+    },
+    dailyCase: {
+      track: 'DAILY',
+    },
+    case: {
+      id: 'case-1',
+      diagnosisRegistryId: caseDiagnosisRegistryId,
+      diagnosis: {
+        name: 'Asthma',
+      },
+      difficulty: 'medium',
+      date: new Date('2026-04-22T00:00:00.000Z'),
+    },
+    attempts: [],
+  };
+}
+
+function buildFreshSession(claimAt?: Date) {
+  return {
+    id: 'session-1',
+    caseId: 'case-1',
+    userId: 'user-1',
+    dailyCaseId: 'daily-1',
+    userTierAtStart: 'free',
+    status: 'active',
+    processingAt: claimAt,
+    user: {
+      subscriptionTier: 'free',
+    },
+    dailyCase: {
+      track: 'DAILY',
+    },
+    attempts: [],
+  };
+}
+
+describe('SessionService gameplay registry correctness', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
   });
 
-  it('startDailyGame skips completed cases and opens the next unfinished case', async () => {
-    const fixture = createSessionServiceFixture();
-    fixture.dailyCasesService.getTodayCasesForUser.mockResolvedValue({
-      date: '2026-04-18',
-      cases: [{ dailyCaseId: 'dc-1' }, { dailyCaseId: 'dc-2' }],
-    });
-    fixture.prisma.gameSession.findMany.mockResolvedValue([
-      { dailyCaseId: 'dc-1', status: 'completed' },
-    ]);
-    fixture.dailyCasesService.getOrCreateGameSessionForDailyCase.mockResolvedValue({
-      session: {
-        id: 'session-2',
-        caseId: 'case-2',
-        dailyCaseId: 'dc-2',
-        status: 'active',
-        attempts: [],
-      },
-      dailyCase: {
-        id: 'dc-2',
-        caseId: 'case-2',
-        date: new Date('2026-04-18T00:00:00.000Z'),
-        case: {
-          id: 'case-2',
-          difficulty: 'easy',
-          date: new Date('2026-04-18T00:00:00.000Z'),
-        },
-      },
-      user: {
-        id: 'user-1',
-        subscriptionTier: 'free',
-      },
-    });
-
-    const result = await fixture.service.startDailyGame({ userId: 'user-1' });
-
-    expect(result.state).toBe('ready');
-    if (result.state !== 'ready') {
-      throw new Error('Expected ready state');
-    }
-    expect(fixture.dailyCasesService.getOrCreateGameSessionForDailyCase).toHaveBeenCalledWith(
-      'user-1',
-      'dc-2',
-    );
-    expect(result.sessionId).toBe('session-2');
-  });
-
-  it('startDailyGame returns waiting when all available daily cases are completed', async () => {
-    const fixture = createSessionServiceFixture();
-    fixture.dailyCasesService.getTodayCasesForUser.mockResolvedValue({
-      date: '2026-04-18',
-      cases: [{ dailyCaseId: 'dc-1' }, { dailyCaseId: 'dc-2' }],
-    });
-    fixture.prisma.gameSession.findMany.mockResolvedValue([
-      { dailyCaseId: 'dc-1', status: 'completed' },
-      { dailyCaseId: 'dc-2', status: 'completed' },
-    ]);
-
-    const result = await fixture.service.startDailyGame({ userId: 'user-1' });
-
-    expect(result.state).toBe('waiting');
-    if (result.state !== 'waiting') {
-      throw new Error('Expected waiting state');
-    }
-    expect(fixture.dailyCasesService.getOrCreateGameSessionForDailyCase).not.toHaveBeenCalled();
-    expect(result.nextCaseAt).toMatch(/T00:00:00.000Z$/);
-  });
-
-  it('startDailyGame auto-replays the most recent today session when dev replay is enabled', async () => {
-    process.env.ENABLE_DEV_REPLAY = 'true';
-    resetEnvCacheForTests();
-
-    const fixture = createSessionServiceFixture();
-    fixture.dailyCasesService.getTodayCasesForUser.mockResolvedValue({
-      date: '2026-04-18',
-      cases: [{ dailyCaseId: 'dc-1' }, { dailyCaseId: 'dc-2' }],
-    });
-    fixture.prisma.gameSession.findMany.mockResolvedValue([
-      { dailyCaseId: 'dc-1', status: 'completed' },
-      { dailyCaseId: 'dc-2', status: 'completed' },
-    ]);
-    fixture.prisma.gameSession.findFirst.mockResolvedValue({
-      dailyCaseId: 'dc-2',
-    });
-    fixture.dailyCasesService.getOrCreateGameSessionForDailyCase.mockResolvedValue({
-      session: {
-        id: 'session-replay',
-        caseId: 'case-2',
-        dailyCaseId: 'dc-2',
-        status: 'active',
-        attempts: [],
-      },
-      dailyCase: {
-        id: 'dc-2',
-        caseId: 'case-2',
-        date: new Date('2026-04-18T00:00:00.000Z'),
-        case: {
-          id: 'case-2',
-          difficulty: 'hard',
-          date: new Date('2026-04-18T00:00:00.000Z'),
-        },
-      },
-      user: {
-        id: 'user-1',
-        subscriptionTier: 'premium',
-      },
-    });
-
-    const result = await fixture.service.startDailyGame({ userId: 'user-1' });
-
-    expect(result.state).toBe('ready');
-    expect(fixture.prisma.gameSession.findFirst).toHaveBeenCalled();
-    expect(
-      fixture.dailyCasesService.resetUserSessionForDailyCaseReplay,
-    ).toHaveBeenCalledWith('user-1', 'dc-2');
-    expect(
-      fixture.dailyCasesService.getOrCreateGameSessionForDailyCase,
-    ).toHaveBeenCalledWith('user-1', 'dc-2');
-  });
-
-  it('startDailyGame keeps an active session instead of auto-replaying it in dev', async () => {
-    process.env.ENABLE_DEV_REPLAY = 'true';
-    resetEnvCacheForTests();
-
-    const fixture = createSessionServiceFixture();
-    fixture.dailyCasesService.getTodayCasesForUser.mockResolvedValue({
-      date: '2026-04-18',
-      cases: [{ dailyCaseId: 'dc-1' }, { dailyCaseId: 'dc-2' }],
-    });
-    fixture.prisma.gameSession.findMany.mockResolvedValue([
-      { dailyCaseId: 'dc-1', status: 'completed' },
-      { dailyCaseId: 'dc-2', status: 'active' },
-    ]);
-    fixture.dailyCasesService.getOrCreateGameSessionForDailyCase.mockResolvedValue({
-      session: {
-        id: 'session-2',
-        caseId: 'case-2',
-        dailyCaseId: 'dc-2',
-        status: 'active',
-        attempts: [],
-      },
-      dailyCase: {
-        id: 'dc-2',
-        caseId: 'case-2',
-        date: new Date('2026-04-18T00:00:00.000Z'),
-        case: {
-          id: 'case-2',
-          difficulty: 'hard',
-          date: new Date('2026-04-18T00:00:00.000Z'),
-        },
-      },
-      user: {
-        id: 'user-1',
-        subscriptionTier: 'premium',
-      },
-    });
-
-    const result = await fixture.service.startDailyGame({ userId: 'user-1' });
-
-    expect(result.state).toBe('ready');
-    expect(fixture.prisma.gameSession.findFirst).not.toHaveBeenCalled();
-    expect(
-      fixture.dailyCasesService.resetUserSessionForDailyCaseReplay,
-    ).not.toHaveBeenCalled();
-    expect(
-      fixture.dailyCasesService.getOrCreateGameSessionForDailyCase,
-    ).toHaveBeenCalledWith('user-1', 'dc-2');
-  });
-
-  it('startDailyGame devReplay resets the selected daily case instead of returning waiting', async () => {
-    process.env.ENABLE_DEV_REPLAY = 'true';
-    resetEnvCacheForTests();
-
-    const fixture = createSessionServiceFixture();
-    fixture.dailyCasesService.getTodayCasesForUser.mockResolvedValue({
-      date: '2026-04-18',
-      cases: [{ dailyCaseId: 'dc-1' }],
-    });
-    fixture.dailyCasesService.getOrCreateGameSessionForDailyCase.mockResolvedValue({
-      session: {
-        id: 'session-replay',
-        caseId: 'case-1',
-        dailyCaseId: 'dc-1',
-        status: 'active',
-        attempts: [],
-      },
-      dailyCase: {
-        id: 'dc-1',
-        caseId: 'case-1',
-        date: new Date('2026-04-18T00:00:00.000Z'),
-        case: {
-          id: 'case-1',
-          difficulty: 'easy',
-          date: new Date('2026-04-18T00:00:00.000Z'),
-        },
-      },
-      user: {
-        id: 'user-1',
-        subscriptionTier: 'free',
-      },
-    });
-
-    const result = await fixture.service.startDailyGame({
-      userId: 'user-1',
-      devReplay: true,
-    });
-
-    expect(result.state).toBe('ready');
-    expect(
-      fixture.dailyCasesService.resetUserSessionForDailyCaseReplay,
-    ).toHaveBeenCalledWith('user-1', 'dc-1');
-    expect(
-      fixture.dailyCasesService.getOrCreateGameSessionForDailyCase,
-    ).toHaveBeenCalledWith('user-1', 'dc-1');
-  });
-
-  it('startDailyGame devReplay uses the provided dailyCaseId when present', async () => {
-    process.env.ENABLE_DEV_REPLAY = 'true';
-    resetEnvCacheForTests();
-
-    const fixture = createSessionServiceFixture();
-    fixture.dailyCasesService.getTodayCasesForUser.mockResolvedValue({
-      date: '2026-04-18',
-      cases: [
-        { dailyCaseId: 'dc-1', track: PublishTrack.DAILY, sequenceIndex: 1 },
-        { dailyCaseId: 'dc-2', track: PublishTrack.PREMIUM, sequenceIndex: 1 },
-      ],
-    });
-    fixture.dailyCasesService.getOrCreateGameSessionForDailyCase.mockResolvedValue({
-      session: {
-        id: 'session-replay',
-        caseId: 'case-2',
-        dailyCaseId: 'dc-2',
-        status: 'active',
-        attempts: [],
-      },
-      dailyCase: {
-        id: 'dc-2',
-        caseId: 'case-2',
-        date: new Date('2026-04-18T00:00:00.000Z'),
-        case: {
-          id: 'case-2',
-          difficulty: 'hard',
-          date: new Date('2026-04-18T00:00:00.000Z'),
-        },
-      },
-      user: {
-        id: 'user-1',
-        subscriptionTier: 'premium',
-      },
-    });
-
-    await fixture.service.startDailyGame({
-      userId: 'user-1',
-      devReplay: true,
-      dailyCaseId: 'dc-2',
-    });
-
-    expect(
-      fixture.dailyCasesService.resetUserSessionForDailyCaseReplay,
-    ).toHaveBeenCalledWith('user-1', 'dc-2');
-  });
-
-  it('startDailyGame devReplay resolves track + sequenceIndex explicitly', async () => {
-    process.env.ENABLE_DEV_REPLAY = 'true';
-    resetEnvCacheForTests();
-
-    const fixture = createSessionServiceFixture();
-    fixture.dailyCasesService.getTodayCasesForUser.mockResolvedValue({
-      date: '2026-04-18',
-      cases: [
-        { dailyCaseId: 'dc-daily', track: PublishTrack.DAILY, sequenceIndex: 1 },
-        { dailyCaseId: 'dc-premium-1', track: PublishTrack.PREMIUM, sequenceIndex: 1 },
-        { dailyCaseId: 'dc-premium-2', track: PublishTrack.PREMIUM, sequenceIndex: 2 },
-      ],
-    });
-    fixture.dailyCasesService.getOrCreateGameSessionForDailyCase.mockResolvedValue({
-      session: {
-        id: 'session-replay',
-        caseId: 'case-3',
-        dailyCaseId: 'dc-premium-2',
-        status: 'active',
-        attempts: [],
-      },
-      dailyCase: {
-        id: 'dc-premium-2',
-        caseId: 'case-3',
-        date: new Date('2026-04-18T00:00:00.000Z'),
-        case: {
-          id: 'case-3',
-          difficulty: 'hard',
-          date: new Date('2026-04-18T00:00:00.000Z'),
-        },
-      },
-      user: {
-        id: 'user-1',
-        subscriptionTier: 'premium',
-      },
-    });
-
-    await fixture.service.startDailyGame({
-      userId: 'user-1',
-      devReplay: true,
-      track: PublishTrack.PREMIUM,
-      sequenceIndex: 2,
-    });
-
-    expect(
-      fixture.dailyCasesService.resetUserSessionForDailyCaseReplay,
-    ).toHaveBeenCalledWith('user-1', 'dc-premium-2');
-  });
-
-  it('startDailyGame devReplay falls back to the most recent today session', async () => {
-    process.env.ENABLE_DEV_REPLAY = 'true';
-    resetEnvCacheForTests();
-
-    const fixture = createSessionServiceFixture();
-    fixture.dailyCasesService.getTodayCasesForUser.mockResolvedValue({
-      date: '2026-04-18',
-      cases: [
-        { dailyCaseId: 'dc-daily', track: PublishTrack.DAILY, sequenceIndex: 1 },
-        { dailyCaseId: 'dc-premium-1', track: PublishTrack.PREMIUM, sequenceIndex: 1 },
-      ],
-    });
-    fixture.prisma.gameSession.findFirst.mockResolvedValue({
-      dailyCaseId: 'dc-premium-1',
-    });
-    fixture.dailyCasesService.getOrCreateGameSessionForDailyCase.mockResolvedValue({
-      session: {
-        id: 'session-replay',
-        caseId: 'case-2',
-        dailyCaseId: 'dc-premium-1',
-        status: 'active',
-        attempts: [],
-      },
-      dailyCase: {
-        id: 'dc-premium-1',
-        caseId: 'case-2',
-        date: new Date('2026-04-18T00:00:00.000Z'),
-        case: {
-          id: 'case-2',
-          difficulty: 'hard',
-          date: new Date('2026-04-18T00:00:00.000Z'),
-        },
-      },
-      user: {
-        id: 'user-1',
-        subscriptionTier: 'premium',
-      },
-    });
-
-    await fixture.service.startDailyGame({
-      userId: 'user-1',
-      devReplay: true,
-    });
-
-    expect(fixture.prisma.gameSession.findFirst).toHaveBeenCalled();
-    expect(
-      fixture.dailyCasesService.resetUserSessionForDailyCaseReplay,
-    ).toHaveBeenCalledWith('user-1', 'dc-premium-1');
-  });
-
-  it('startDailyGame devReplay rejects ambiguous replay without an explicit target', async () => {
-    process.env.ENABLE_DEV_REPLAY = 'true';
-    resetEnvCacheForTests();
-
-    const fixture = createSessionServiceFixture();
-    fixture.dailyCasesService.getTodayCasesForUser.mockResolvedValue({
-      date: '2026-04-18',
-      cases: [
-        { dailyCaseId: 'dc-daily', track: PublishTrack.DAILY, sequenceIndex: 1 },
-        { dailyCaseId: 'dc-premium-1', track: PublishTrack.PREMIUM, sequenceIndex: 1 },
-      ],
-    });
-    fixture.prisma.gameSession.findFirst.mockResolvedValue(null);
-
-    await expect(
-      fixture.service.startDailyGame({
-        userId: 'user-1',
-        devReplay: true,
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-  });
-
-  it('ignores devReplay when the env gate is disabled', async () => {
-    const fixture = createSessionServiceFixture();
-    fixture.dailyCasesService.getTodayCasesForUser.mockResolvedValue({
-      date: '2026-04-18',
-      cases: [{ dailyCaseId: 'dc-1' }],
-    });
-    fixture.prisma.gameSession.findMany.mockResolvedValue([
-      { dailyCaseId: 'dc-1', status: 'completed' },
-    ]);
-
-    const result = await fixture.service.startDailyGame({
-      userId: 'user-1',
-      devReplay: true,
-    });
-
-    expect(result.state).toBe('waiting');
-    expect(
-      fixture.dailyCasesService.resetUserSessionForDailyCaseReplay,
-    ).not.toHaveBeenCalled();
-  });
-
-  it('rejects forged free submission into a premium session', async () => {
-    const fixture = createSessionServiceFixture();
-    fixture.prisma.gameSession.findUnique.mockResolvedValueOnce({
-      id: 'session-1',
-      userId: 'user-1',
-      userTierAtStart: 'free',
-      status: 'active',
-      user: { subscriptionTier: 'free' },
-      dailyCase: { track: PublishTrack.PREMIUM },
-      case: {
-        id: 'case-1',
-        diagnosis: { name: 'Asthma' },
-        difficulty: 'easy',
-        date: new Date('2026-04-18T00:00:00.000Z'),
-      },
-      attempts: [],
-    });
-
-    await expect(
-      fixture.service.submitDailyGuess({
-        userId: 'user-1',
-        sessionId: 'session-1',
-        guess: 'asthma',
-      }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-
-    expect(fixture.evaluatorApiService.evaluateGuess).not.toHaveBeenCalled();
-  });
-
-  it('allows a downgraded user to continue an existing premium session started while premium', async () => {
+  it('uses registry evaluation to persist a correct selected diagnosis submission', async () => {
     const fixture = createSessionServiceFixture();
     fixture.prisma.gameSession.findUnique
-      .mockResolvedValueOnce({
-        id: 'session-1',
-        caseId: 'case-1',
-        userId: 'user-1',
-        dailyCaseId: 'dc-premium',
-        userTierAtStart: 'premium',
-        status: 'active',
-        user: { subscriptionTier: 'free' },
-        dailyCase: { track: PublishTrack.PREMIUM },
-        case: {
-          id: 'case-1',
-          diagnosis: { name: 'Asthma' },
-          difficulty: 'easy',
-          date: new Date('2026-04-18T00:00:00.000Z'),
+      .mockImplementationOnce(async () => buildActiveSession('registry-1'))
+      .mockImplementationOnce(async () => buildFreshSession(fixture.getClaimAt()));
+    fixture.diagnosisRegistryMatcherService.evaluateGameplayGuess.mockResolvedValue({
+      expectedDiagnosisRegistryId: 'registry-1',
+      expectedDiagnosisStatus: DiagnosisRegistryStatus.ACTIVE,
+      expectedDiagnosisUsable: true,
+      isCorrect: true,
+      resolution: {
+        submittedDiagnosisRegistryId: 'registry-1',
+        submittedGuessText: 'Asthma attack',
+        normalizedGuess: 'asthma attack',
+        resolvedDiagnosisRegistryId: 'registry-1',
+        resolutionMethod: 'SELECTED_ID',
+        isResolvable: true,
+      },
+      evaluation: {
+        score: 1,
+        label: 'correct',
+        evaluatorVersion: 'registry:v2',
+        retrievalMode: 'selected-id-only',
+        normalizedGuess: 'asthma attack',
+        signals: {
+          registryCorrectnessAuthority: true,
+          submittedDiagnosisRegistryId: 'registry-1',
+          resolvedDiagnosisRegistryId: 'registry-1',
+          diagnosisResolutionMethod: 'SELECTED_ID',
         },
-        attempts: [],
-      })
-      .mockImplementationOnce(async () => ({
-        id: 'session-1',
-        caseId: 'case-1',
-        userId: 'user-1',
-        dailyCaseId: 'dc-premium',
-        userTierAtStart: 'premium',
-        status: 'active',
-        processingAt: fixture.getClaimAt(),
-        user: { subscriptionTier: 'free' },
-        dailyCase: { track: PublishTrack.PREMIUM },
-        attempts: [],
-      }));
-
-    fixture.evaluatorApiService.evaluateGuess.mockResolvedValue({
-      label: 'correct',
-      score: 0.98,
-      evaluatorVersion: 'v2',
-      retrievalMode: 'fallback',
-      normalizedGuess: 'asthma',
-      signals: { synonym: true },
+      },
     });
     fixture.evaluationService.computeGuessOutcome.mockReturnValue({
+      clueIndex: 0,
       attemptsCount: 1,
-      computedScore: 0.98,
+      computedScore: 100,
       nextClueIndex: 1,
       gameOver: true,
       gameOverReason: 'correct',
       shouldRequestReward: true,
       isTerminalCorrect: true,
-      clueIndex: 0,
     });
 
-    const result = await fixture.service.submitDailyGuess({
-      userId: 'user-1',
+    const result = await fixture.service.submitGuess({
       sessionId: 'session-1',
-      guess: 'asthma',
+      userId: 'user-1',
+      diagnosisRegistryId: 'registry-1',
+      guess: 'Asthma attack',
     });
 
+    expect(
+      fixture.diagnosisRegistryMatcherService.evaluateGameplayGuess,
+    ).toHaveBeenCalledWith({
+      expectedDiagnosisRegistryId: 'registry-1',
+      submittedDiagnosisRegistryId: 'registry-1',
+      submittedGuessText: 'Asthma attack',
+    });
+    expect(fixture.attemptService.recordAttemptInTransaction).toHaveBeenCalledWith(
+      fixture.prisma,
+      expect.objectContaining({
+        guess: 'Asthma attack',
+        normalizedGuess: 'asthma attack',
+        selectedDiagnosisId: 'registry-1',
+        strictMatchedDiagnosisId: 'registry-1',
+        strictMatchOutcome: 'SELECTED_ID',
+        result: 'correct',
+      }),
+    );
+    expect(fixture.rewardOrchestrator.emitAttemptEvaluated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: 'correct',
+        submittedDiagnosisRegistryId: 'registry-1',
+        submittedGuessText: 'Asthma attack',
+        resolvedDiagnosisRegistryId: 'registry-1',
+        resolutionMethod: 'SELECTED_ID',
+      }),
+    );
     expect(result.result).toBe('correct');
-    expect(fixture.evaluatorApiService.evaluateGuess).toHaveBeenCalled();
-    expect(fixture.attemptService.recordAttemptInTransaction).toHaveBeenCalled();
+    expect(result.feedback?.evaluatorVersion).toBe('registry:v2');
+    expect(result.feedback?.signals?.diagnosisResolutionMethod).toBe('SELECTED_ID');
+  });
+
+  it('rejects gameplay submissions without a diagnosisRegistryId', async () => {
+    const fixture = createSessionServiceFixture();
+
+    await expect(
+      fixture.service.submitGuess({
+        sessionId: 'session-1',
+        userId: 'user-1',
+      } as never),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(
+      fixture.diagnosisRegistryMatcherService.evaluateGameplayGuess,
+    ).not.toHaveBeenCalled();
+    expect(fixture.rewardOrchestrator.emitAttemptSubmitted).not.toHaveBeenCalled();
+  });
+
+  it('handles cases without a linked registry diagnosis safely', async () => {
+    const fixture = createSessionServiceFixture();
+    fixture.prisma.gameSession.findUnique
+      .mockImplementationOnce(async () => buildActiveSession(null))
+      .mockImplementationOnce(async () => buildFreshSession(fixture.getClaimAt()));
+    fixture.diagnosisRegistryMatcherService.evaluateGameplayGuess.mockResolvedValue({
+      expectedDiagnosisRegistryId: null,
+      expectedDiagnosisStatus: null,
+      expectedDiagnosisUsable: false,
+      isCorrect: false,
+      resolution: {
+        submittedDiagnosisRegistryId: 'registry-1',
+        submittedGuessText: 'Asthma',
+        normalizedGuess: 'asthma',
+        resolvedDiagnosisRegistryId: 'registry-1',
+        resolutionMethod: 'SELECTED_ID',
+        resolutionReason: 'EXPECTED_DIAGNOSIS_MISSING',
+        isResolvable: true,
+      },
+      evaluation: {
+        score: 0,
+        label: 'wrong',
+        evaluatorVersion: 'registry:v2',
+        retrievalMode: 'selected-id-only',
+        normalizedGuess: 'asthma',
+        signals: {
+          registryCorrectnessAuthority: true,
+          expectedDiagnosisUsable: false,
+          diagnosisResolutionReason: 'EXPECTED_DIAGNOSIS_MISSING',
+          diagnosisResolutionMethod: 'SELECTED_ID',
+        },
+      },
+    });
+    fixture.evaluationService.computeGuessOutcome.mockReturnValue({
+      clueIndex: 0,
+      attemptsCount: 1,
+      computedScore: 0,
+      nextClueIndex: 1,
+      gameOver: false,
+      gameOverReason: null,
+      shouldRequestReward: false,
+      isTerminalCorrect: false,
+    });
+
+    const result = await fixture.service.submitGuess({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      diagnosisRegistryId: 'registry-1',
+      guess: 'Asthma',
+    });
+
+    expect(result.result).toBe('wrong');
+    expect(result.feedback?.signals?.expectedDiagnosisUsable).toBe(false);
+    expect(
+      fixture.rewardOrchestrator.emitRewardRequested,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('returns duplicate responses without recording a second attempt', async () => {
+    const fixture = createSessionServiceFixture();
+    fixture.prisma.gameSession.findUnique
+      .mockImplementationOnce(async () => buildActiveSession('registry-1'))
+      .mockImplementationOnce(async () => buildFreshSession(fixture.getClaimAt()));
+    fixture.diagnosisRegistryMatcherService.evaluateGameplayGuess.mockResolvedValue({
+      expectedDiagnosisRegistryId: 'registry-1',
+      expectedDiagnosisStatus: DiagnosisRegistryStatus.ACTIVE,
+      expectedDiagnosisUsable: true,
+      isCorrect: true,
+      resolution: {
+        submittedDiagnosisRegistryId: 'registry-1',
+        submittedGuessText: 'Asthma',
+        normalizedGuess: 'asthma',
+        resolvedDiagnosisRegistryId: 'registry-1',
+        resolutionMethod: 'SELECTED_ID',
+        isResolvable: true,
+      },
+      evaluation: {
+        score: 1,
+        label: 'correct',
+        evaluatorVersion: 'registry:v2',
+        retrievalMode: 'selected-id-only',
+        normalizedGuess: 'asthma',
+        signals: {
+          registryCorrectnessAuthority: true,
+        },
+      },
+    });
+    fixture.prisma.attempt.findFirst.mockResolvedValue({
+      id: 'attempt-existing',
+      result: 'correct',
+      score: 100,
+    });
+
+    const result = await fixture.service.submitGuess({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      diagnosisRegistryId: 'registry-1',
+      guess: 'Asthma',
+    });
+
+    expect(result.duplicate).toBe(true);
+    expect(fixture.attemptService.recordAttemptInTransaction).not.toHaveBeenCalled();
   });
 });

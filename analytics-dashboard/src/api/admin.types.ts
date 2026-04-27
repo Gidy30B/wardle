@@ -99,6 +99,27 @@ export type PublishTrack = 'DAILY' | 'PREMIUM' | 'PRACTICE';
 
 export type EditorialQueueFilter = 'all' | 'review' | 'publish';
 
+export type DiagnosisRegistryStatus = 'ACTIVE' | 'HIDDEN' | 'DEPRECATED' | 'DRAFT';
+
+export type DiagnosisMappingStatus =
+  | 'MATCHED'
+  | 'REVIEW_REQUIRED'
+  | 'UNRESOLVED'
+  | 'NEW_REGISTRY_ENTRY_NEEDED';
+
+export type DiagnosisMappingMethod =
+  | 'EXACT_ALIAS'
+  | 'NORMALIZED_ALIAS'
+  | 'EDITOR_SELECTED'
+  | 'MANUAL_CREATED'
+  | 'LEGACY_BACKFILL'
+  | 'NONE';
+
+export type DiagnosisPublishReadinessReason =
+  | 'missing_registry_link'
+  | 'mapping_not_publish_ready'
+  | 'registry_not_publishable';
+
 export type JsonPrimitive = string | number | boolean | null;
 
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -131,6 +152,24 @@ export type EditorialDiagnosis = {
   id: string;
   name: string;
   system: string | null;
+};
+
+export type EditorialDiagnosisRegistrySummary = {
+  id: string;
+  canonicalName: string;
+  status: DiagnosisRegistryStatus;
+  category: string | null;
+  specialty: string | null;
+  searchPriority?: number;
+  isDescriptive?: boolean;
+  isCompositional?: boolean;
+  notes?: string | null;
+  aliasPreview?: string[];
+};
+
+export type EditorialDiagnosisPublishReadiness = {
+  ready: boolean;
+  reason?: DiagnosisPublishReadinessReason;
 };
 
 export type EditorialCaseValidationRun = {
@@ -175,6 +214,12 @@ export type EditorialCurrentRevision = {
   explanation?: ExplanationBlob | null;
   differentials?: string[];
   diagnosisId?: string;
+  diagnosisRegistryId?: string | null;
+  proposedDiagnosisText?: string;
+  diagnosisMappingStatus?: DiagnosisMappingStatus;
+  diagnosisMappingMethod?: DiagnosisMappingMethod;
+  diagnosisMappingConfidence?: number | null;
+  diagnosisEditorialNote?: string | null;
 };
 
 export type EditorialCaseListItem = {
@@ -186,6 +231,14 @@ export type EditorialCaseListItem = {
   approvedAt: string | null;
   approvedByUserId: string | null;
   currentRevisionId: string | null;
+  diagnosisRegistryId: string | null;
+  proposedDiagnosisText: string;
+  diagnosisMappingStatus: DiagnosisMappingStatus;
+  diagnosisMappingMethod: DiagnosisMappingMethod;
+  diagnosisMappingConfidence: number | null;
+  diagnosisEditorialNote: string | null;
+  diagnosisRegistrySummary: EditorialDiagnosisRegistrySummary | null;
+  diagnosisPublishReadiness: EditorialDiagnosisPublishReadiness;
   diagnosis: EditorialDiagnosis;
   currentRevision: EditorialCurrentRevision | null;
   validationRuns: EditorialCaseValidationRun[];
@@ -223,6 +276,14 @@ export type EditorialCaseDetail = {
   explanation: ExplanationBlob | null;
   differentials: string[];
   diagnosisId: string;
+  diagnosisRegistryId: string | null;
+  proposedDiagnosisText: string;
+  diagnosisMappingStatus: DiagnosisMappingStatus;
+  diagnosisMappingMethod: DiagnosisMappingMethod;
+  diagnosisMappingConfidence: number | null;
+  diagnosisEditorialNote: string | null;
+  diagnosisRegistrySummary: EditorialDiagnosisRegistrySummary | null;
+  diagnosisPublishReadiness: EditorialDiagnosisPublishReadiness;
   editorialStatus: CaseEditorialStatus | null;
   approvedAt: string | null;
   approvedByUserId: string | null;
@@ -248,6 +309,12 @@ export type EditorialCaseRevision = {
   explanation: ExplanationBlob | null;
   differentials: string[];
   diagnosisId: string;
+  diagnosisRegistryId: string | null;
+  proposedDiagnosisText: string;
+  diagnosisMappingStatus: DiagnosisMappingStatus;
+  diagnosisMappingMethod: DiagnosisMappingMethod;
+  diagnosisMappingConfidence: number | null;
+  diagnosisEditorialNote: string | null;
   createdByUserId: string | null;
   createdAt: string;
   validationRuns: EditorialCaseValidationRun[];
@@ -310,6 +377,56 @@ export type RestoreCaseRevisionResult = {
 };
 
 export type MarkCaseReadyToPublishResult = EditorialCaseStatusSnapshot;
+
+export type DiagnosisRegistrySearchItem = {
+  id: string;
+  canonicalName: string;
+  status: DiagnosisRegistryStatus;
+  category: string | null;
+  specialty: string | null;
+  searchPriority: number;
+  aliasPreview: string[];
+  matchSource: 'canonical' | 'accepted_alias' | 'abbreviation' | 'search_only';
+};
+
+export type SearchDiagnosisRegistryQuery = {
+  q?: string;
+  limit?: number;
+  status?: DiagnosisRegistryStatus;
+};
+
+export type LinkCaseDiagnosisPayload = {
+  diagnosisRegistryId: string;
+  diagnosisEditorialNote?: string;
+};
+
+export type CreateDiagnosisRegistryPayload = {
+  canonicalName: string;
+  aliases?: string[];
+  category?: string;
+  specialty?: string;
+  isDescriptive?: boolean;
+  isCompositional?: boolean;
+  notes?: string;
+  searchPriority?: number;
+};
+
+export type CreateDiagnosisAndLinkPayload = CreateDiagnosisRegistryPayload & {
+  diagnosisEditorialNote?: string;
+};
+
+export type AddDiagnosisAliasPayload = {
+  alias: string;
+  kind?: 'CANONICAL' | 'ACCEPTED' | 'ABBREVIATION' | 'SEARCH_ONLY';
+  acceptedForMatch?: boolean;
+};
+
+export type CreateDiagnosisRegistryResult = {
+  diagnosisId: string;
+  diagnosisRegistryId: string;
+  mappingMethod: 'MANUAL_CREATED';
+  registry: EditorialDiagnosisRegistrySummary;
+};
 
 export type EditorialStatusSummary = {
   counts: Record<CaseEditorialStatus, number>;

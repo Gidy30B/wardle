@@ -164,6 +164,8 @@ export class DailyCasesService {
 
         const publishableCases = await tx.case.findMany({
           where: {
+            // TODO(diagnosis-phase-7): Apply diagnosis publish readiness here when
+            // publish gating moves beyond editorial status alone.
             editorialStatus: {
               in: [...ASSIGNABLE_EDITORIAL_STATUSES],
             },
@@ -369,6 +371,8 @@ export class DailyCasesService {
               completedAt: null,
               currentClueIndexLegacy: 0,
               processingAt: null,
+              processedAt: null,
+              xpAwardedAt: null,
               userTierAtStart: user.subscriptionTier,
             },
           });

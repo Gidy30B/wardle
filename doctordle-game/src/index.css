@@ -1,4 +1,17 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap');
 @import 'tailwindcss';
+
+:root {
+  --wardle-color-navy: #1A3C5E;
+  --wardle-color-navy-light: #234e7a;
+  --wardle-color-teal: #00B4A6;
+  --wardle-color-teal-dark: #009A8E;
+  --wardle-color-amber: #F4A261;
+  --wardle-color-mint: #EAF4F4;
+  --wardle-color-charcoal: #1E1E2C;
+  --wardle-color-gray: #8A9BB0;
+  --wardle-color-gray-light: #C8D6E5;
+}
 
 html,
 body,
@@ -8,9 +21,38 @@ body,
 
 body {
   margin: 0;
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #f8fafc;
-  color: #0f172a;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  background: #08111b;
+  color: var(--wardle-color-mint);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.font-brand-mono {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.wardle-nav-pill {
+  display: inline-flex;
+  gap: 2px;
+  border-radius: 9999px;
+  background: rgba(26, 60, 94, 0.5);
+  padding: 4px;
+  border: 1px solid rgba(0, 180, 166, 0.12);
+}
+
+.wardle-nav-pill > button {
+  border-radius: 9999px;
+  padding: 0.5rem 1.25rem;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  font-weight: 600;
+  font-size: 0.875rem;
 }
 
 @keyframes slide-up {
@@ -25,6 +67,18 @@ body {
 
 .animate-slide-up {
   animation: slide-up 0.25s ease-out;
+}
+
+@keyframes wardle-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes popIn {

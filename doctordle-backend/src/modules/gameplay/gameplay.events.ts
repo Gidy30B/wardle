@@ -20,6 +20,11 @@ export type AttemptEvaluatedEvent = {
   semanticScore: number;
   evaluatorVersion: string;
   retrievalMode: string;
+  submittedDiagnosisRegistryId?: string | null;
+  submittedGuessText?: string | null;
+  resolvedDiagnosisRegistryId?: string | null;
+  resolutionMethod?: string | null;
+  resolutionReason?: string | null;
 };
 
 export type AttemptRecordedEvent = {

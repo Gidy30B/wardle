@@ -1,9 +1,11 @@
 import type { RequestJson } from '../../lib/api'
+import type { DiagnosisDictionary } from './diagnosisRegistry.types'
 import type {
   ClinicalClue,
   GameCase,
   LeaderboardEntry,
   LeaderboardMode,
+  TodayCasesResponse,
   UserLeaderboardPosition,
   GameResult,
   GuessApiResponse,
@@ -46,6 +48,12 @@ export async function submitGuessApi(
   }
 }
 
+export async function getDiagnosisDictionaryApi(
+  request: RequestJson,
+): Promise<DiagnosisDictionary> {
+  return request<DiagnosisDictionary>('/diagnosis-registry/dictionary')
+}
+
 export async function startGameApi(request: RequestJson): Promise<StartGameResponse> {
   const response = await request<
     | {
@@ -80,6 +88,12 @@ export async function startGameApi(request: RequestJson): Promise<StartGameRespo
     dailyCaseId: response.dailyCaseId,
     case: attachClueIndex(response.case, response.clueIndex ?? 0),
   }
+}
+
+export async function getTodayCasesApi(
+  request: RequestJson,
+): Promise<TodayCasesResponse> {
+  return request<TodayCasesResponse>('/game/today')
 }
 
 export async function getLeaderboardApi(

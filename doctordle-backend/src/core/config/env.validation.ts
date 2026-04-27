@@ -28,6 +28,22 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === 'true'),
+  DIAGNOSIS_REGISTRY_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+  STRICT_ALIAS_MATCH_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+  DIAGNOSIS_AUTOCOMPLETE_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+  SELECTION_FIRST_SUBMISSION_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
   LOG_LEVEL: z.string().min(1),
   ALLOWED_ORIGINS: z.preprocess(emptyToUndefined, z.string().optional()),
   NETWORK_HOST: z.preprocess(emptyToUndefined, z.string().optional()),
