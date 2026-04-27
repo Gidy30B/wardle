@@ -266,7 +266,7 @@ function LeaderboardSection({
           </div>
           <div className="mt-3">
             <Button type="button" variant="ghost" onClick={onPlay} className="py-2.5 text-xs">
-              Play today's case to move up
+              Play today's case
             </Button>
           </div>
         </div>
