@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   Req,
@@ -21,6 +22,7 @@ import { LinkCaseDiagnosisDto } from './dto/link-case-diagnosis.dto';
 import { ListEditorialCasesDto } from './dto/list-editorial-cases.dto';
 import { SearchDiagnosisRegistryDto } from './dto/search-diagnosis-registry.dto';
 import { SubmitCaseReviewDto } from './dto/submit-case-review.dto';
+import { UpdateCaseDiagnosisDto } from './dto/update-case-diagnosis.dto';
 
 type GenerateCasesBody = {
   count?: number;
@@ -119,6 +121,19 @@ export class AdminController {
     @Body() body: LinkCaseDiagnosisDto,
   ) {
     return this.caseReviewService.linkDiagnosisToCase(
+      caseId,
+      request.user.id,
+      body,
+    );
+  }
+
+  @Patch('cases/:caseId/diagnosis')
+  async updateCaseDiagnosis(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: UpdateCaseDiagnosisDto,
+  ) {
+    return this.caseReviewService.updateCaseDiagnosis(
       caseId,
       request.user.id,
       body,

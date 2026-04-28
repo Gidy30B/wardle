@@ -400,6 +400,10 @@ export type LinkCaseDiagnosisPayload = {
   diagnosisEditorialNote?: string;
 };
 
+export type UpdateCaseDiagnosisPayload = {
+  canonicalDiagnosis: string;
+};
+
 export type CreateDiagnosisRegistryPayload = {
   canonicalName: string;
   aliases?: string[];

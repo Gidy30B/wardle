@@ -8,12 +8,14 @@ import {
   restoreCaseRevision,
   startCaseReview,
   submitCaseReview,
+  updateCaseDiagnosis,
   type CreateDiagnosisAndLinkPayload,
   type EditorialCaseDetail,
   type EditorialCaseListItem,
   type EditorialCaseRevision,
   type LinkCaseDiagnosisPayload,
   type ReviewDecision,
+  type UpdateCaseDiagnosisPayload,
 } from '../../api/admin';
 import type { EditorialQueueFilter } from '../../api/admin';
 import type { ApiClient } from '../../api/client';
@@ -379,6 +381,19 @@ export default function CaseDetail({
     });
   }
 
+  async function handleUpdateCaseDiagnosis(payload: UpdateCaseDiagnosisPayload) {
+    if (!detail) {
+      return false;
+    }
+
+    return runAction({
+      id: 'update-case-diagnosis',
+      pendingMessage: 'Saving canonical diagnosis...',
+      successMessage: 'Canonical diagnosis saved.',
+      run: () => updateCaseDiagnosis(client, detail.id, payload),
+    });
+  }
+
   async function handleCreateAndLinkDiagnosis(
     payload: CreateDiagnosisAndLinkPayload,
   ) {
@@ -517,6 +532,7 @@ export default function CaseDetail({
           detail={detail}
           client={client}
           anyActionPending={anyActionPending}
+          onUpdateCaseDiagnosis={handleUpdateCaseDiagnosis}
           onLinkDiagnosis={handleLinkDiagnosis}
           onCreateAndLinkDiagnosis={handleCreateAndLinkDiagnosis}
         />

@@ -2,6 +2,7 @@ type TokenGetter = (options?: { template?: string }) => Promise<string | null>;
 
 export type ApiClient = {
   get<T>(path: string): Promise<T>;
+  patch<T>(path: string, body?: unknown): Promise<T>;
   post<T>(path: string, body?: unknown): Promise<T>;
 };
 
@@ -82,6 +83,9 @@ export function createApiClient(getToken: TokenGetter): ApiClient {
   return {
     get<T>(path: string) {
       return request<T>(path, { method: 'GET' });
+    },
+    patch<T>(path: string, body?: unknown) {
+      return request<T>(path, { method: 'PATCH' }, body);
     },
     post<T>(path: string, body?: unknown) {
       return request<T>(path, { method: 'POST' }, body);

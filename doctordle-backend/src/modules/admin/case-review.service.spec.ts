@@ -16,6 +16,13 @@ describe('CaseReviewService', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
       },
+      diagnosis: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
+      diagnosisRegistry: {
+        findUnique: jest.fn(),
+      },
       caseRevision: {
         findFirst: jest.fn(),
         findMany: jest.fn(),
@@ -421,6 +428,118 @@ describe('CaseReviewService', () => {
       expect.objectContaining({
         diagnosisRegistryId: 'registry-9',
         diagnosisMappingMethod: DiagnosisMappingMethod.MANUAL_CREATED,
+      }),
+    );
+  });
+
+  it('updates the case canonical diagnosis and creates a fresh admin revision', async () => {
+    const fixture = createFixture();
+    fixture.prisma.case.findUnique
+      .mockResolvedValueOnce({
+        id: 'case-1',
+        editorialStatus: CaseEditorialStatus.REVIEW,
+        diagnosisId: 'diagnosis-old',
+        diagnosisRegistryId: 'registry-old',
+        diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
+        diagnosisMappingMethod: DiagnosisMappingMethod.LEGACY_BACKFILL,
+        diagnosisMappingConfidence: 1,
+        diagnosisEditorialNote: 'Needs canonical cleanup',
+      })
+      .mockResolvedValueOnce({
+        id: 'case-1',
+        title: 'Case title',
+        date: new Date('2026-04-20T00:00:00.000Z'),
+        difficulty: 'medium',
+        history: 'History',
+        symptoms: ['cough'],
+        labs: null,
+        clues: [],
+        explanation: {},
+        differentials: [],
+        diagnosisId: 'diagnosis-new',
+        diagnosisRegistryId: 'registry-new',
+        proposedDiagnosisText: 'Granulomatosis with polyangiitis',
+        diagnosisMappingStatus: DiagnosisMappingStatus.REVIEW_REQUIRED,
+        diagnosisMappingMethod: DiagnosisMappingMethod.NONE,
+        diagnosisMappingConfidence: null,
+        diagnosisEditorialNote: 'Needs canonical cleanup',
+        editorialStatus: CaseEditorialStatus.VALIDATED,
+        approvedAt: null,
+        approvedByUserId: null,
+        currentRevisionId: 'revision-new',
+        diagnosis: {
+          id: 'diagnosis-new',
+          name: 'Granulomatosis with polyangiitis',
+          system: null,
+        },
+        diagnosisRegistry: {
+          id: 'registry-new',
+          canonicalName: 'Granulomatosis with polyangiitis',
+          status: 'ACTIVE',
+          category: null,
+          specialty: null,
+        },
+        currentRevision: null,
+        validationRuns: [],
+        reviews: [],
+      });
+    fixture.prisma.diagnosis.findFirst.mockResolvedValue({
+      id: 'diagnosis-new',
+      name: 'Granulomatosis with polyangiitis',
+    });
+    fixture.prisma.diagnosisRegistry.findUnique.mockResolvedValue({
+      id: 'registry-old',
+      legacyDiagnosisId: 'diagnosis-old',
+    });
+    fixture.prisma.case.update
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ id: 'case-1' });
+    fixture.prisma.caseValidationRun.create.mockResolvedValue({
+      id: 'validation-1',
+      revisionId: 'revision-new',
+      outcome: ValidationOutcome.PASSED,
+      validatorVersion: 'shadow:v1',
+      summary: { summary: true },
+      findings: { findings: true },
+      startedAt: new Date('2026-04-20T00:00:00.000Z'),
+      completedAt: new Date('2026-04-20T00:00:01.000Z'),
+    });
+
+    const result = await fixture.service.updateCaseDiagnosis(
+      'case-1',
+      'user-1',
+      {
+        canonicalDiagnosis: 'Granulomatosis with polyangiitis',
+      },
+    );
+
+    expect(fixture.prisma.case.update).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: { id: 'case-1' },
+        data: expect.objectContaining({
+          diagnosisId: 'diagnosis-new',
+          diagnosisRegistryId: null,
+          proposedDiagnosisText: 'Granulomatosis with polyangiitis',
+          diagnosisMappingStatus: DiagnosisMappingStatus.REVIEW_REQUIRED,
+          diagnosisMappingMethod: DiagnosisMappingMethod.NONE,
+          diagnosisMappingConfidence: null,
+        }),
+      }),
+    );
+    expect(
+      fixture.caseRevisionService.createRevisionFromSnapshotInTransaction,
+    ).toHaveBeenCalledWith(
+      fixture.prisma,
+      expect.objectContaining({
+        source: CaseSource.ADMIN_EDIT,
+        createdByUserId: 'user-1',
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        diagnosisId: 'diagnosis-new',
+        proposedDiagnosisText: 'Granulomatosis with polyangiitis',
       }),
     );
   });

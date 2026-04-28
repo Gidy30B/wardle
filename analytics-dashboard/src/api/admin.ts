@@ -23,6 +23,7 @@ import type {
   StartCaseReviewResult,
   SubmitCaseReviewPayload,
   SubmitCaseReviewResult,
+  UpdateCaseDiagnosisPayload,
   ValidationOutcomeSummary,
 } from './admin.types';
 export type * from './admin.types';
@@ -122,6 +123,17 @@ export function linkCaseDiagnosis(
 ) {
   return client.post<EditorialCaseDetail>(
     `/admin/cases/${caseId}/diagnosis-link`,
+    payload,
+  );
+}
+
+export function updateCaseDiagnosis(
+  client: ApiClient,
+  caseId: string,
+  payload: UpdateCaseDiagnosisPayload,
+) {
+  return client.patch<EditorialCaseDetail>(
+    `/admin/cases/${caseId}/diagnosis`,
     payload,
   );
 }

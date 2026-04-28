@@ -16,6 +16,7 @@ import {
   DiagnosisRegistryEditorialService,
 } from '../diagnosis-registry/diagnosis-registry-editorial.service.js';
 import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
+import { normalizeDiagnosisTerm } from '../diagnosis-registry/diagnosis-term-normalizer.js';
 import { EditorialMetricsService } from '../editorial/editorial-metrics.service.js';
 import { getApprovalResetFields } from '../editorial/policies/approval-policy.js';
 import { getCaseDiagnosisPublishReadiness } from '../editorial/policies/diagnosis-publish-readiness.policy.js';
@@ -36,6 +37,7 @@ import type { LinkCaseDiagnosisDto } from './dto/link-case-diagnosis.dto.js';
 import type { ListEditorialCasesDto } from './dto/list-editorial-cases.dto.js';
 import type { SearchDiagnosisRegistryDto } from './dto/search-diagnosis-registry.dto.js';
 import type { SubmitCaseReviewDto } from './dto/submit-case-review.dto.js';
+import type { UpdateCaseDiagnosisDto } from './dto/update-case-diagnosis.dto.js';
 
 type ReviewTransactionClient = Prisma.TransactionClient | PrismaClient;
 
@@ -346,6 +348,159 @@ export class CaseReviewService {
             mappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
             eventName: 'admin.case.diagnosis_link.completed',
           }),
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      ),
+    );
+
+    this.editorialMetrics.recordValidationResult(
+      CaseSource.ADMIN_EDIT,
+      result.validationRun.outcome ?? ValidationOutcome.ERROR,
+    );
+
+    return result.case;
+  }
+
+  async updateCaseDiagnosis(
+    caseId: string,
+    createdByUserId: string,
+    input: UpdateCaseDiagnosisDto,
+  ) {
+    const canonicalDiagnosis = this.requireCanonicalDiagnosis(
+      input.canonicalDiagnosis,
+    );
+
+    this.logger.log(
+      JSON.stringify({
+        event: 'admin.case.diagnosis_update.requested',
+        caseId,
+        createdByUserId,
+        canonicalDiagnosis,
+      }),
+    );
+
+    const result = await this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        async (tx) => {
+          const caseRecord = await tx.case.findUnique({
+            where: { id: caseId },
+            select: {
+              id: true,
+              editorialStatus: true,
+              diagnosisId: true,
+              diagnosisRegistryId: true,
+              diagnosisMappingStatus: true,
+              diagnosisMappingMethod: true,
+              diagnosisMappingConfidence: true,
+              diagnosisEditorialNote: true,
+            },
+          });
+
+          if (!caseRecord) {
+            throw new NotFoundException(`Case not found: ${caseId}`);
+          }
+
+          if (caseRecord.editorialStatus === CaseEditorialStatus.PUBLISHED) {
+            throw new BadRequestException(
+              'Published cases cannot be edited through the editorial diagnosis workflow',
+            );
+          }
+
+          const diagnosis = await this.findOrCreateDiagnosisInTransaction(
+            tx,
+            canonicalDiagnosis,
+          );
+          const currentRegistry =
+            caseRecord.diagnosisRegistryId
+              ? await tx.diagnosisRegistry.findUnique({
+                  where: { id: caseRecord.diagnosisRegistryId },
+                  select: {
+                    id: true,
+                    legacyDiagnosisId: true,
+                  },
+                })
+              : null;
+          const keepCurrentRegistry =
+            currentRegistry?.legacyDiagnosisId === diagnosis.id;
+
+          await tx.case.update({
+            where: { id: caseId },
+            data: {
+              diagnosisId: diagnosis.id,
+              diagnosisRegistryId: keepCurrentRegistry ? currentRegistry.id : null,
+              proposedDiagnosisText: canonicalDiagnosis,
+              diagnosisMappingStatus: keepCurrentRegistry
+                ? caseRecord.diagnosisMappingStatus
+                : DiagnosisMappingStatus.REVIEW_REQUIRED,
+              diagnosisMappingMethod: keepCurrentRegistry
+                ? caseRecord.diagnosisMappingMethod
+                : DiagnosisMappingMethod.NONE,
+              diagnosisMappingConfidence: keepCurrentRegistry
+                ? caseRecord.diagnosisMappingConfidence
+                : null,
+              diagnosisEditorialNote: caseRecord.diagnosisEditorialNote,
+              ...getApprovalResetFields(),
+            },
+          });
+
+          const snapshot =
+            await this.caseRevisionService.getCurrentCaseSnapshotInTransaction(
+              tx,
+              caseId,
+            );
+          const revision =
+            await this.caseRevisionService.createRevisionFromSnapshotInTransaction(
+              tx,
+              {
+                caseId,
+                snapshot,
+                source: CaseSource.ADMIN_EDIT,
+                createdByUserId,
+              },
+            );
+          const validationRun = await this.createValidationRunForSnapshot(tx, {
+            caseId,
+            revisionId: revision.revisionId,
+            source: CaseSource.ADMIN_EDIT,
+            triggeredByUserId: createdByUserId,
+            snapshot,
+          });
+
+          await tx.case.update({
+            where: { id: caseId },
+            data: {
+              editorialStatus:
+                validationRun.outcome === ValidationOutcome.PASSED
+                  ? CaseEditorialStatus.VALIDATED
+                  : CaseEditorialStatus.NEEDS_EDIT,
+            },
+            select: {
+              id: true,
+            },
+          });
+
+          const detail = await this.getCaseDetailRecord(tx, caseId);
+
+          this.logger.log(
+            JSON.stringify({
+              event: 'admin.case.diagnosis_update.completed',
+              caseId,
+              revisionId: revision.revisionId,
+              revisionNumber: revision.revisionNumber,
+              diagnosisId: diagnosis.id,
+              diagnosisRegistryId: detail.diagnosisRegistryId,
+              validationOutcome: validationRun.outcome,
+              editorialStatus: detail.editorialStatus,
+              createdByUserId,
+            }),
+          );
+
+          return {
+            case: detail,
+            validationRun,
+          };
+        },
         {
           isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
         },
@@ -1485,6 +1640,79 @@ export class CaseReviewService {
 
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  private requireCanonicalDiagnosis(value: string): string {
+    const canonicalDiagnosis = this.normalizeOptionalString(value);
+    if (!canonicalDiagnosis) {
+      throw new BadRequestException('Canonical diagnosis is required');
+    }
+
+    if (!normalizeDiagnosisTerm(canonicalDiagnosis)) {
+      throw new BadRequestException(
+        'Canonical diagnosis must normalize to a non-empty identifier',
+      );
+    }
+
+    return canonicalDiagnosis;
+  }
+
+  private async findOrCreateDiagnosisInTransaction(
+    tx: ReviewTransactionClient,
+    canonicalDiagnosis: string,
+  ) {
+    const existing = await tx.diagnosis.findFirst({
+      where: {
+        name: {
+          equals: canonicalDiagnosis,
+          mode: 'insensitive',
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    try {
+      return await tx.diagnosis.create({
+        data: {
+          name: canonicalDiagnosis,
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
+    } catch (error) {
+      const maybePrismaError = error as { code?: string };
+      if (maybePrismaError.code !== 'P2002') {
+        throw error;
+      }
+
+      const recovered = await tx.diagnosis.findFirst({
+        where: {
+          name: {
+            equals: canonicalDiagnosis,
+            mode: 'insensitive',
+          },
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
+
+      if (!recovered) {
+        throw error;
+      }
+
+      return recovered;
+    }
   }
 
   private toNullableJsonValue(

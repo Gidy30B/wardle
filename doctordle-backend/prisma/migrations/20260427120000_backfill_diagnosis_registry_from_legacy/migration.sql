@@ -113,7 +113,7 @@ WHERE dr."legacyDiagnosisId" IS NOT NULL
 ON CONFLICT ("diagnosisRegistryId", "normalizedTerm") DO UPDATE
 SET
   "term" = EXCLUDED."term",
-  "kind" = 'CANONICAL',
+  "kind" = 'CANONICAL'::"DiagnosisAliasKind",
   "acceptedForMatch" = true,
   "rank" = 0,
   "source" = 'legacy_canonical',
@@ -121,9 +121,8 @@ SET
   "updatedAt" = CURRENT_TIMESTAMP;
 
 -- ─────────────────────────────────────────────────────────
--- Step 3: Synonyms (FIXED SECTION)
+-- Step 3: Synonyms
 -- ─────────────────────────────────────────────────────────
-
 WITH synonym_normalized AS (
   SELECT
     s."id"          AS synonym_id,
@@ -137,7 +136,6 @@ WITH synonym_normalized AS (
     AND normalize_diagnosis_term(s."term") <> dr."canonicalNormalized"
 ),
 
--- ✅ FIXED: proper aggregation (no illegal references)
 term_owner_counts AS (
   SELECT
     normalized_term,
@@ -154,6 +152,8 @@ term_owner_counts AS (
       dr."canonicalNormalized",
       dr."legacyDiagnosisId"
     FROM "DiagnosisRegistry" dr
+    WHERE dr."canonicalNormalized" IS NOT NULL
+      AND dr."legacyDiagnosisId" IS NOT NULL
   ) owners
   GROUP BY normalized_term
 ),
@@ -212,7 +212,7 @@ SELECT
   sd.registry_id,
   sd.synonym_term,
   sd.normalized_term,
-  sd.alias_kind,
+  sd.alias_kind::"DiagnosisAliasKind",
   sd.accepted_for_match,
   10,
   sd.alias_source,

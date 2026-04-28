@@ -5,6 +5,7 @@ import {
   type DiagnosisRegistrySearchItem,
   type EditorialCaseDetail,
   type LinkCaseDiagnosisPayload,
+  type UpdateCaseDiagnosisPayload,
 } from '../../api/admin';
 import type { ApiClient } from '../../api/client';
 import StatusBadge from '../../components/ui/StatusBadge';
@@ -18,6 +19,7 @@ type CaseDiagnosisSectionProps = {
   detail: EditorialCaseDetail;
   client: ApiClient;
   anyActionPending: boolean;
+  onUpdateCaseDiagnosis: (payload: UpdateCaseDiagnosisPayload) => Promise<boolean>;
   onLinkDiagnosis: (payload: LinkCaseDiagnosisPayload) => Promise<void>;
   onCreateAndLinkDiagnosis: (
     payload: CreateDiagnosisAndLinkPayload,
@@ -35,6 +37,7 @@ export default function CaseDiagnosisSection({
   detail,
   client,
   anyActionPending,
+  onUpdateCaseDiagnosis,
   onLinkDiagnosis,
   onCreateAndLinkDiagnosis,
 }: CaseDiagnosisSectionProps) {
@@ -43,8 +46,8 @@ export default function CaseDiagnosisSection({
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [selectedRegistryId, setSelectedRegistryId] = useState<string | null>(null);
+  const [caseCanonicalDiagnosis, setCaseCanonicalDiagnosis] = useState('');
   const [linkEditorialNote, setLinkEditorialNote] = useState('');
-  const [canonicalName, setCanonicalName] = useState('');
   const [aliasesInput, setAliasesInput] = useState('');
   const [category, setCategory] = useState('');
   const [specialty, setSpecialty] = useState('');
@@ -53,8 +56,10 @@ export default function CaseDiagnosisSection({
   const diagnosisSummary = getDiagnosisWorkflowSummary(detail);
 
   useEffect(() => {
-    setSearchQuery(detail.proposedDiagnosisText ?? '');
-    setCanonicalName(detail.proposedDiagnosisText ?? '');
+    const canonicalDiagnosis =
+      detail.proposedDiagnosisText || detail.diagnosis.name || '';
+    setSearchQuery(canonicalDiagnosis);
+    setCaseCanonicalDiagnosis(canonicalDiagnosis);
     setLinkEditorialNote(detail.diagnosisEditorialNote ?? '');
     setCreateEditorialNote(detail.diagnosisEditorialNote ?? '');
     setAliasesInput('');
@@ -65,6 +70,11 @@ export default function CaseDiagnosisSection({
     setSearchError(null);
     setSelectedRegistryId(detail.diagnosisRegistryId ?? null);
   }, [detail]);
+
+  const persistedCanonicalDiagnosis =
+    detail.proposedDiagnosisText || detail.diagnosis.name || '';
+  const canonicalDiagnosisDirty =
+    caseCanonicalDiagnosis.trim() !== persistedCanonicalDiagnosis.trim();
 
   async function handleSearch() {
     const trimmedQuery = searchQuery.trim();
@@ -101,6 +111,11 @@ export default function CaseDiagnosisSection({
       return;
     }
 
+    const diagnosisSaved = await persistCanonicalDiagnosisIfNeeded();
+    if (!diagnosisSaved) {
+      return;
+    }
+
     await onLinkDiagnosis({
       diagnosisRegistryId: selectedRegistryId,
       diagnosisEditorialNote: linkEditorialNote.trim() || undefined,
@@ -108,9 +123,14 @@ export default function CaseDiagnosisSection({
   }
 
   async function handleCreateAndLinkDiagnosis() {
-    const nextCanonicalName = canonicalName.trim();
+    const nextCanonicalName = caseCanonicalDiagnosis.trim();
     if (nextCanonicalName.length < 2) {
       setSearchError('Provide a canonical diagnosis name before creating it.');
+      return;
+    }
+
+    const diagnosisSaved = await persistCanonicalDiagnosisIfNeeded();
+    if (!diagnosisSaved) {
       return;
     }
 
@@ -122,6 +142,26 @@ export default function CaseDiagnosisSection({
       notes: registryNotes.trim() || undefined,
       diagnosisEditorialNote: createEditorialNote.trim() || undefined,
     });
+  }
+
+  async function persistCanonicalDiagnosisIfNeeded() {
+    const nextCanonicalDiagnosis = caseCanonicalDiagnosis.trim();
+    if (nextCanonicalDiagnosis.length < 2) {
+      setSearchError('Provide a canonical diagnosis before saving it.');
+      return false;
+    }
+
+    if (!canonicalDiagnosisDirty) {
+      return true;
+    }
+
+    return onUpdateCaseDiagnosis({
+      canonicalDiagnosis: nextCanonicalDiagnosis,
+    });
+  }
+
+  async function handleSaveCanonicalDiagnosis() {
+    await persistCanonicalDiagnosisIfNeeded();
   }
 
   return (
@@ -154,6 +194,34 @@ export default function CaseDiagnosisSection({
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 xl:col-span-3">
+            <label className="block space-y-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Canonical diagnosis
+              </span>
+              <input
+                type="text"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={caseCanonicalDiagnosis}
+                onChange={(event) => {
+                  setCaseCanonicalDiagnosis(event.target.value);
+                  setSearchQuery(event.target.value);
+                }}
+                disabled={anyActionPending}
+              />
+              <span className="block text-sm text-slate-500">
+                This is the diagnosis used for registry matching and gameplay correctness.
+              </span>
+            </label>
+            <button
+              type="button"
+              onClick={() => void handleSaveCanonicalDiagnosis()}
+              disabled={anyActionPending || !canonicalDiagnosisDirty}
+              className="mt-3 rounded-xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Save canonical diagnosis
+            </button>
+          </div>
           <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
               Proposed diagnosis
@@ -316,15 +384,18 @@ export default function CaseDiagnosisSection({
 
             <label className="block space-y-2">
               <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Canonical name
+                Canonical diagnosis
               </span>
               <input
                 type="text"
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
-                value={canonicalName}
-                onChange={(event) => setCanonicalName(event.target.value)}
+                value={caseCanonicalDiagnosis}
+                onChange={(event) => setCaseCanonicalDiagnosis(event.target.value)}
                 disabled={anyActionPending}
               />
+              <span className="block text-sm text-slate-500">
+                This is the diagnosis used for registry matching and gameplay correctness.
+              </span>
             </label>
 
             <div className="grid gap-3 md:grid-cols-2">
