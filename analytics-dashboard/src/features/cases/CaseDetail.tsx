@@ -28,12 +28,14 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import { useActionFeedback } from '../../hooks/useActionFeedback';
 import CaseClinicalSection from './CaseClinicalSection';
 import CaseDiagnosisSection from './CaseDiagnosisSection';
+import CaseGenerationQualitySection from './CaseGenerationQualitySection';
 import CaseHistorySection from './CaseHistorySection';
 import CaseValidationSection from './CaseValidationSection';
 import CaseWorkflowSection from './CaseWorkflowSection';
 import {
   getValidationIssueBuckets,
   parseCaseClues,
+  parseGenerationQuality,
   parseValidationFindingIssues,
 } from './case.transforms';
 import {
@@ -183,6 +185,10 @@ export default function CaseDetail({
     ? getDiagnosisWorkflowSummary(detail)
     : null;
   const clues = useMemo(() => parseCaseClues(detail?.clues), [detail]);
+  const generationQuality = useMemo(
+    () => parseGenerationQuality(detail?.explanation),
+    [detail],
+  );
   const showLegacyFallback =
     clues.length === 0 && Boolean(detail?.history || detail?.symptoms.length);
   const validationIssues = useMemo(
@@ -542,6 +548,8 @@ export default function CaseDetail({
           clues={clues}
           showLegacyFallback={showLegacyFallback}
         />
+
+        <CaseGenerationQualitySection quality={generationQuality} />
 
         <CaseValidationSection
           latestValidation={latestValidation}

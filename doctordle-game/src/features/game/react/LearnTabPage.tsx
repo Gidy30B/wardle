@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import WardleLogo from '../../../components/brand/WardleLogo'
 import SurfaceCard from '../../../components/ui/SurfaceCard'
-import {
-  coerceStructuredExplanation,
-  getExplanationDisplayText,
-} from '../gameExplanation'
+import { coerceStructuredExplanation } from '../gameExplanation'
 import type {
+  ClinicalClue,
   GameExplanation,
   GameResult,
+  LearnLibraryCase,
+  LearnLibraryResponse,
   PublishTrack,
-  TodayCase,
-  TodayCasesResponse,
 } from '../game.types'
 import type { RoundViewModel } from '../round.types'
 
@@ -19,44 +17,65 @@ type LearnTabPageProps = {
   latestResult: GameResult | null
   latestPlayedExplanation: GameExplanation | null
   latestPlayedResult: GameResult | null
+  learnLibrary: LearnLibraryResponse | null
+  libraryLoading: boolean
+  libraryError: string | null
   roundViewModel: RoundViewModel
-  todayCases: TodayCasesResponse | null
-  tracksLoading: boolean
-  tracksError: string | null
 }
 
-type LearnCaseStatus = 'unlocked' | 'pending' | 'locked'
+type DetailTab = 'breakdown' | 'differentials' | 'clues'
 
-type LearnCaseItem = {
-  dailyCaseId: string
-  sequenceIndex: number
-  track: PublishTrack
-  title: string
-  difficulty: string
-  status: LearnCaseStatus
-  explanation: GameExplanation | null
-  result: GameResult | null
-}
-
-type TrackGroup = {
-  track: PublishTrack
-  label: string
-  context: string
-  cases: LearnCaseItem[]
-}
-
-const TRACK_COPY: Record<PublishTrack, { label: string; context: string }> = {
+const TRACK_COPY: Record<PublishTrack, { label: string; tone: string }> = {
   DAILY: {
-    label: 'Free Daily',
-    context: 'The daily case becomes reviewable after you complete it.',
+    label: 'Daily',
+    tone: 'border-[rgba(0,180,166,0.28)] bg-[rgba(0,180,166,0.12)] text-[var(--wardle-color-teal)]',
   },
   PREMIUM: {
-    label: 'Specialty Tracks',
-    context: 'Premium track notes unlock only from cases you have played.',
+    label: 'Premium',
+    tone: 'border-[rgba(244,162,97,0.28)] bg-[rgba(244,162,97,0.12)] text-[var(--wardle-color-amber)]',
   },
   PRACTICE: {
     label: 'Practice',
-    context: 'Practice cases build a private review queue as you play.',
+    tone: 'border-white/12 bg-white/[0.06] text-white/68',
+  },
+}
+
+const DIFFICULTY_TONES: Record<string, string> = {
+  easy: 'bg-[rgba(0,180,166,0.12)] text-[var(--wardle-color-teal)]',
+  medium: 'bg-[rgba(244,162,97,0.12)] text-[var(--wardle-color-amber)]',
+  hard: 'bg-rose-400/12 text-rose-300',
+}
+
+const CLUE_TYPE_COPY: Record<ClinicalClue['type'], { label: string; abbr: string; tone: string }> = {
+  history: {
+    label: 'History',
+    abbr: 'Hx',
+    tone: 'bg-[rgba(0,180,166,0.14)] text-[var(--wardle-color-teal)]',
+  },
+  symptom: {
+    label: 'Symptom',
+    abbr: 'Sx',
+    tone: 'bg-[rgba(244,162,97,0.14)] text-[var(--wardle-color-amber)]',
+  },
+  vital: {
+    label: 'Vitals',
+    abbr: 'Vt',
+    tone: 'bg-violet-400/14 text-violet-300',
+  },
+  exam: {
+    label: 'Exam',
+    abbr: 'Ex',
+    tone: 'bg-[rgba(0,180,166,0.14)] text-[var(--wardle-color-teal)]',
+  },
+  lab: {
+    label: 'Lab',
+    abbr: 'Lb',
+    tone: 'bg-rose-400/14 text-rose-300',
+  },
+  imaging: {
+    label: 'Imaging',
+    abbr: 'Im',
+    tone: 'bg-emerald-400/14 text-emerald-300',
   },
 }
 
@@ -65,233 +84,183 @@ export default function LearnTabPage({
   latestResult,
   latestPlayedExplanation,
   latestPlayedResult,
+  learnLibrary,
+  libraryLoading,
+  libraryError,
   roundViewModel,
-  todayCases,
-  tracksLoading,
-  tracksError,
 }: LearnTabPageProps) {
-  const [selectedTrack, setSelectedTrack] = useState<PublishTrack | null>(null)
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<DetailTab>('breakdown')
 
-  const playedCaseId =
-    latestPlayedResult?.case?.id ?? latestResult?.case?.id ?? roundViewModel.caseId
-  const playedExplanation = latestPlayedExplanation ?? explanation
-  const playedResult = latestPlayedResult ?? latestResult
-
-  const trackGroups = useMemo(
+  const completedCases = useMemo(
     () =>
-      buildTrackGroups({
-        todayCases: todayCases?.cases ?? [],
-        playedCaseId,
-        playedExplanation,
-        playedResult,
+      mergeLatestPlayedCase({
+        libraryCases: learnLibrary?.cases ?? [],
+        explanation,
+        latestResult,
+        latestPlayedExplanation,
+        latestPlayedResult,
+        roundViewModel,
       }),
-    [playedCaseId, playedExplanation, playedResult, todayCases],
+    [
+      explanation,
+      latestPlayedExplanation,
+      latestPlayedResult,
+      latestResult,
+      learnLibrary,
+      roundViewModel,
+    ],
   )
 
-  const activeTrack =
-    trackGroups.find((group) => group.track === selectedTrack) ?? trackGroups[0] ?? null
-  const activeCase =
-    activeTrack?.cases.find((item) => item.dailyCaseId === selectedCaseId) ??
-    activeTrack?.cases.find((item) => item.status === 'unlocked') ??
-    activeTrack?.cases.find((item) => item.status === 'pending') ??
+  const selectedCase =
+    completedCases.find((item) => item.dailyCaseId === selectedCaseId) ??
+    completedCases[0] ??
     null
 
+  const solvedCount = completedCases.filter((item) => item.playerResult.solved).length
+  const missedCount = completedCases.length - solvedCount
+  const trackCount = new Set(completedCases.map((item) => item.track)).size
+
   useEffect(() => {
-    if (!activeTrack) {
+    if (!completedCases.length) {
       setSelectedCaseId(null)
       return
     }
 
-    if (!selectedTrack || selectedTrack !== activeTrack.track) {
-      setSelectedTrack(activeTrack.track)
+    if (
+      !selectedCaseId ||
+      !selectedCase ||
+      !completedCases.some((item) => item.dailyCaseId === selectedCase.dailyCaseId)
+    ) {
+      setSelectedCaseId(completedCases[0].dailyCaseId)
+      setActiveTab('breakdown')
     }
-
-    const selectedStillExists = activeTrack.cases.some(
-      (item) => item.dailyCaseId === selectedCaseId,
-    )
-    if (!selectedStillExists) {
-      setSelectedCaseId(
-        activeTrack.cases.find((item) => item.status === 'unlocked')?.dailyCaseId ??
-          activeTrack.cases.find((item) => item.status === 'pending')?.dailyCaseId ??
-          null,
-      )
-    }
-  }, [activeTrack, selectedCaseId, selectedTrack])
+  }, [completedCases, selectedCase, selectedCaseId])
 
   return (
     <main className="flex h-full min-h-0 w-full max-w-full flex-1 basis-0 flex-col overflow-x-hidden overflow-y-auto overscroll-contain px-1 pb-4 pt-1 sm:px-2">
       <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden">
-        <LearnHeader date={todayCases?.date ?? null} />
+        <LearnHeader
+          completedCount={completedCases.length}
+          solvedCount={solvedCount}
+          missedCount={missedCount}
+          trackCount={trackCount}
+        />
 
-        <SurfaceCard
-          eyebrow="Content Tracks"
-          title="Learning library"
-          className="min-w-0 max-w-full overflow-hidden"
-        >
-          {tracksError ? (
-            <EmptyStateCopy copy="Failed to load content tracks." tone="error" />
-          ) : tracksLoading ? (
-            <EmptyStateCopy copy="Loading content tracks..." />
-          ) : trackGroups.length > 0 ? (
-            <TrackSelector
-              groups={trackGroups}
-              activeTrack={activeTrack?.track ?? null}
-              onSelectTrack={(track) => {
-                setSelectedTrack(track)
-                setSelectedCaseId(null)
+        {libraryError ? <InlineNotice tone="error" copy="Unable to load completed cases." /> : null}
+        {libraryLoading ? <InlineNotice tone="muted" copy="Loading completed cases..." /> : null}
+
+        {completedCases.length > 0 ? (
+          <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)]">
+            <CaseLibraryList
+              cases={completedCases}
+              selectedCaseId={selectedCase?.dailyCaseId ?? null}
+              onSelectCase={(dailyCaseId) => {
+                setSelectedCaseId(dailyCaseId)
+                setActiveTab('breakdown')
               }}
             />
-          ) : (
-            <EmptyStateCopy copy="No content tracks are available for this account right now." />
-          )}
-        </SurfaceCard>
-
-        {activeTrack ? (
-          <>
-            <TrackSummary group={activeTrack} selectedItem={activeCase} />
-
-            <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-              <LearnCaseList
-                cases={activeTrack.cases}
-                selectedCaseId={activeCase?.dailyCaseId ?? null}
-                onSelectCase={setSelectedCaseId}
-              />
-
-              <SelectedExplanationDetail item={activeCase} />
-            </div>
-          </>
+            <CaseDetail
+              item={selectedCase}
+              activeTab={activeTab}
+              onChangeTab={setActiveTab}
+            />
+          </div>
+        ) : !libraryLoading ? (
+          <SurfaceCard
+            eyebrow="Completed Cases"
+            title="No explanations yet"
+            className="min-w-0 max-w-full overflow-hidden"
+          >
+            <p className="max-w-2xl text-sm leading-6 text-white/62">
+              Complete a case to add its explanation, clues, and differentials to this
+              library.
+            </p>
+          </SurfaceCard>
         ) : null}
       </div>
     </main>
   )
 }
 
-function LearnHeader({ date }: { date: string | null }) {
+function LearnHeader({
+  completedCount,
+  solvedCount,
+  missedCount,
+  trackCount,
+}: {
+  completedCount: number
+  solvedCount: number
+  missedCount: number
+  trackCount: number
+}) {
   return (
-    <section className="relative overflow-hidden rounded-[26px] border border-white/[0.06] bg-[linear-gradient(145deg,rgba(26,60,94,0.9),rgba(30,30,44,0.98)_66%)] px-5 py-6 shadow-[0_22px_54px_rgba(0,0,0,0.22)]">
-      <div className="pointer-events-none absolute -right-16 -top-16 size-44 rounded-full bg-[rgba(0,180,166,0.2)] blur-3xl" />
+    <section className="relative overflow-hidden rounded-[24px] border border-white/[0.06] bg-[linear-gradient(145deg,rgba(26,60,94,0.78),rgba(30,30,44,0.98)_70%)] px-5 py-5 shadow-[0_22px_54px_rgba(0,0,0,0.22)]">
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-white/[0.06]" />
       <div className="relative min-w-0">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <WardleLogo size="sm" subtitle="Learning Library" />
-          {date ? (
-            <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-white/72">
-              {date}
-            </span>
-          ) : null}
+          <WardleLogo size="sm" subtitle="Explanation Library" />
+          <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-white/70">
+            {completedCount} completed
+          </span>
         </div>
-        <h1 className="mt-5 text-2xl font-black text-[var(--wardle-color-mint)]">Learn</h1>
-        <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-white/68">
-          Review explanations from cases you&apos;ve played, then turn each case into
-          focused diagnostic notes.
-        </p>
+        <h1 className="mt-5 text-2xl font-black text-[var(--wardle-color-mint)]">
+          Learn
+        </h1>
+        <div className="mt-4 grid grid-cols-3 gap-2 sm:max-w-xl">
+          <MiniStat label="Solved" value={String(solvedCount)} tone="teal" />
+          <MiniStat label="Missed" value={String(missedCount)} tone="rose" />
+          <MiniStat label="Tracks" value={String(trackCount)} tone="amber" />
+        </div>
       </div>
     </section>
   )
 }
 
-function TrackSelector({
-  groups,
-  activeTrack,
-  onSelectTrack,
+function MiniStat({
+  label,
+  value,
+  tone,
 }: {
-  groups: TrackGroup[]
-  activeTrack: PublishTrack | null
-  onSelectTrack: (track: PublishTrack) => void
+  label: string
+  value: string
+  tone: 'teal' | 'amber' | 'rose'
 }) {
-  return (
-    <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
-      {groups.map((group) => {
-        const counts = getStatusCounts(group.cases)
-        const isActive = activeTrack === group.track
+  const toneClass =
+    tone === 'teal'
+      ? 'text-[var(--wardle-color-teal)]'
+      : tone === 'amber'
+        ? 'text-[var(--wardle-color-amber)]'
+        : 'text-rose-300'
 
-        return (
-          <button
-            key={group.track}
-            type="button"
-            aria-pressed={isActive}
-            onClick={() => onSelectTrack(group.track)}
-            className={`min-w-0 max-w-full overflow-hidden rounded-[18px] border p-4 text-left transition ${
-              isActive
-                ? 'border-[rgba(0,180,166,0.45)] bg-[rgba(0,180,166,0.12)]'
-                : 'border-white/10 bg-white/[0.05] hover:bg-white/[0.08]'
-            }`}
-          >
-            <p className="font-brand-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--wardle-color-teal)]/80">
-              {group.track}
-            </p>
-            <h2 className="mt-2 break-words text-base font-black text-[var(--wardle-color-mint)]">
-              {group.label}
-            </h2>
-            <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/52">
-              {group.context}
-            </p>
-            <p className="mt-3 text-xs font-semibold text-white/58">
-              {counts.unlocked}/{group.cases.length} ready
-              {counts.pending ? `, ${counts.pending} pending` : ''}
-            </p>
-          </button>
-        )
-      })}
+  return (
+    <div className="rounded-[14px] border border-white/10 bg-white/[0.05] px-3 py-2">
+      <p className={`text-lg font-black ${toneClass}`}>{value}</p>
+      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/42">
+        {label}
+      </p>
     </div>
   )
 }
 
-function TrackSummary({
-  group,
-  selectedItem,
-}: {
-  group: TrackGroup
-  selectedItem: LearnCaseItem | null
-}) {
-  const counts = getStatusCounts(group.cases)
-
-  return (
-    <section className="relative overflow-hidden rounded-[22px] border border-[rgba(0,180,166,0.14)] bg-[linear-gradient(145deg,rgba(26,60,94,0.28),rgba(30,30,44,0.82))] px-4 py-4">
-      <div className="pointer-events-none absolute -right-10 -top-16 size-36 rounded-full bg-[rgba(0,180,166,0.12)] blur-3xl" />
-      <div className="relative flex flex-wrap items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="font-brand-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--wardle-color-teal)]/80">
-            Current review context
-          </p>
-          <h2 className="mt-1 break-words text-lg font-black text-[var(--wardle-color-mint)]">
-            {selectedItem ? getSelectedCaseHeading(selectedItem) : group.label}
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-white/62">
-            {selectedItem
-              ? getSelectedCaseContext(selectedItem)
-              : group.context}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2 text-xs font-bold">
-          <StatusPill label={`${counts.unlocked} unlocked`} tone="unlocked" />
-          {counts.pending ? <StatusPill label={`${counts.pending} pending`} tone="pending" /> : null}
-          <StatusPill label={`${counts.locked} locked`} tone="locked" />
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function LearnCaseList({
+function CaseLibraryList({
   cases,
   selectedCaseId,
   onSelectCase,
 }: {
-  cases: LearnCaseItem[]
+  cases: LearnLibraryCase[]
   selectedCaseId: string | null
   onSelectCase: (dailyCaseId: string) => void
 }) {
   return (
     <SurfaceCard
-      eyebrow="Review Queue"
-      title="Cases in this track"
+      eyebrow="Completed Cases"
+      title="Review library"
       className="min-w-0 max-w-full overflow-hidden"
     >
       <div className="min-w-0 space-y-3">
         {cases.map((item) => (
-          <LearnCaseCard
+          <CaseLibraryCard
             key={item.dailyCaseId}
             item={item}
             selected={selectedCaseId === item.dailyCaseId}
@@ -303,178 +272,247 @@ function LearnCaseList({
   )
 }
 
-function LearnCaseCard({
+function CaseLibraryCard({
   item,
   selected,
   onSelect,
 }: {
-  item: LearnCaseItem
+  item: LearnLibraryCase
   selected: boolean
   onSelect: () => void
 }) {
-  const isUnlocked = item.status === 'unlocked'
-  const isPending = item.status === 'pending'
-  const displayTitle = isUnlocked ? item.title : isPending ? 'Preparing learning notes' : 'Locked case'
-  const statusCopy = getCaseStatusCopy(item.status)
+  const resultDots = buildResultDots(item.playerResult)
+  const diagnosis = item.case.diagnosis || item.case.title
 
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`block w-full min-w-0 max-w-full overflow-hidden rounded-[16px] border px-4 py-3 text-left transition ${
+      className={`block w-full min-w-0 overflow-hidden rounded-[18px] border text-left transition ${
         selected
           ? 'border-[rgba(0,180,166,0.42)] bg-[rgba(0,180,166,0.12)]'
-          : isUnlocked
-            ? 'border-[rgba(0,180,166,0.25)] bg-[rgba(0,180,166,0.08)]'
-            : 'border-white/10 bg-white/[0.04]'
+          : item.playerResult.solved
+            ? 'border-[rgba(0,180,166,0.2)] bg-[rgba(26,60,94,0.22)] hover:bg-[rgba(26,60,94,0.32)]'
+            : 'border-rose-300/14 bg-[rgba(26,60,94,0.18)] hover:bg-[rgba(26,60,94,0.28)]'
       }`}
     >
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="mb-1 font-brand-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">
-            Case {item.sequenceIndex}
-          </p>
-          <p className="break-words text-sm font-bold text-[var(--wardle-color-mint)]">
-            {displayTitle}
-          </p>
-          <p className="mt-1 break-words text-xs leading-5 text-white/45">
-            {statusCopy}
-          </p>
-          {item.status === 'locked' ? <LockedCasePreview /> : null}
+      <div className="px-4 py-3">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap gap-2">
+            <TrackBadge track={item.track} />
+            <DifficultyBadge difficulty={item.case.difficulty} />
+          </div>
+          <ResultBadge solved={item.playerResult.solved} />
         </div>
-        <StatusPill label={item.status} tone={item.status} />
+        <p className="mt-3 break-words text-base font-black text-[var(--wardle-color-mint)]">
+          {diagnosis}
+        </p>
+        <p className="mt-1 break-words text-xs leading-5 text-white/46">
+          {item.case.clues.length} clues - {item.case.date}
+        </p>
+      </div>
+      <div className="flex min-w-0 items-center justify-between gap-3 border-t border-white/[0.05] px-4 py-3">
+        <ResultDots dots={resultDots} />
+        <div className="flex shrink-0 items-center gap-3 text-xs text-white/48">
+          <span>{item.playerResult.attemptsUsed}/6 clues</span>
+          {item.playerResult.timeSecs !== null ? (
+            <span className="font-brand-mono">{formatTime(item.playerResult.timeSecs)}</span>
+          ) : null}
+        </div>
       </div>
     </button>
   )
 }
 
-function SelectedExplanationDetail({ item }: { item: LearnCaseItem | null }) {
+function CaseDetail({
+  item,
+  activeTab,
+  onChangeTab,
+}: {
+  item: LearnLibraryCase | null
+  activeTab: DetailTab
+  onChangeTab: (tab: DetailTab) => void
+}) {
   if (!item) {
-    return (
-      <SurfaceCard
-        eyebrow="Learning Notes"
-        title="No case selected"
-        className="min-w-0 max-w-full overflow-hidden"
-      >
-        <EmptyStateCopy copy="Choose a case from the track to review its learning status." />
-      </SurfaceCard>
-    )
+    return null
   }
 
-  if (item.status === 'pending') {
-    return (
-      <SurfaceCard
-        eyebrow="Selected Case"
-        title="Notes pending"
-        className="min-w-0 max-w-full overflow-hidden"
-      >
-        <FocusedEmptyState
-          title="Preparing learning notes"
-          copy="This case has been played, but its explanation is not ready yet. Check back after the notes finish processing."
-          tone="pending"
-        />
-      </SurfaceCard>
-    )
-  }
-
-  if (item.status === 'locked' || !item.explanation) {
-    return (
-      <SurfaceCard
-        eyebrow="Selected Case"
-        title="Locked notes"
-        className="min-w-0 max-w-full overflow-hidden"
-      >
-        <FocusedEmptyState
-          title="Play to unlock"
-          copy="Learning notes stay hidden until you play this case. Titles, diagnoses, clues, and explanations are intentionally protected."
-          tone="locked"
-        />
-      </SurfaceCard>
-    )
-  }
+  const explanation = coerceStructuredExplanation(item.case.explanation ?? {})
 
   return (
     <SurfaceCard
-      eyebrow="Focused Learning"
-      title="Case review"
+      eyebrow="Case Review"
+      title={item.case.diagnosis || item.case.title}
       className="min-w-0 max-w-full overflow-hidden"
     >
-      <ExplanationContent explanation={item.explanation} result={item.result} caseTitle={item.title} />
+      <div className="min-w-0 space-y-4">
+        <div className="rounded-[18px] border border-white/10 bg-white/[0.04] px-4 py-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <TrackBadge track={item.track} />
+            <DifficultyBadge difficulty={item.case.difficulty} />
+            <ResultBadge solved={item.playerResult.solved} />
+          </div>
+          <div className="mt-3 flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <ResultDots dots={buildResultDots(item.playerResult)} />
+            <p className="text-xs text-white/50">
+              {item.playerResult.solved
+                ? `Solved in ${item.playerResult.attemptsUsed} clue${item.playerResult.attemptsUsed === 1 ? '' : 's'}`
+                : 'Completed without solving'}
+              {item.playerResult.timeSecs !== null
+                ? ` - ${formatTime(item.playerResult.timeSecs)}`
+                : ''}
+            </p>
+          </div>
+        </div>
+
+        <TabSwitcher activeTab={activeTab} onChangeTab={onChangeTab} />
+
+        {activeTab === 'breakdown' ? (
+          <BreakdownTab explanation={explanation} />
+        ) : null}
+        {activeTab === 'differentials' ? (
+          <DifferentialsTab differentials={explanation?.differentials ?? []} />
+        ) : null}
+        {activeTab === 'clues' ? <CluesTab clues={item.case.clues} /> : null}
+      </div>
     </SurfaceCard>
   )
 }
 
-function ExplanationContent({
-  explanation,
-  result,
-  caseTitle,
+function TabSwitcher({
+  activeTab,
+  onChangeTab,
 }: {
-  explanation: GameExplanation
-  result: GameResult | null
-  caseTitle: string
+  activeTab: DetailTab
+  onChangeTab: (tab: DetailTab) => void
 }) {
-  const structured = coerceStructuredExplanation(explanation)
-  const displayText = getExplanationDisplayText(explanation)
+  const tabs: Array<{ id: DetailTab; label: string }> = [
+    { id: 'breakdown', label: 'Breakdown' },
+    { id: 'differentials', label: 'Differentials' },
+    { id: 'clues', label: 'Clues' },
+  ]
 
   return (
-    <div className="min-w-0 max-w-full space-y-4 overflow-hidden">
-      <div className="min-w-0 rounded-[20px] border border-[rgba(0,180,166,0.16)] bg-[rgba(0,180,166,0.08)] px-4 py-3">
-        <p className="font-brand-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--wardle-color-teal)]/80">
-          Selected case
-        </p>
-        <p className="mt-1 break-words text-base font-black text-[var(--wardle-color-mint)]">
-          {caseTitle}
-        </p>
-        {result ? (
-          <p className="mt-1 break-words text-xs text-white/45">
-            {result.gameOverReason === 'correct' || result.label === 'correct'
-              ? 'Completed correctly'
-              : 'Completed'}{' '}
-            - {result.attemptsCount ?? '--'} attempts - {result.score} points
-          </p>
-        ) : null}
-      </div>
+    <div className="grid grid-cols-3 gap-1 rounded-full bg-[rgba(26,60,94,0.5)] p-1">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => onChangeTab(tab.id)}
+          className={`rounded-full px-2 py-2 text-xs font-bold transition ${
+            activeTab === tab.id
+              ? 'bg-[var(--wardle-color-teal)] text-white'
+              : 'text-white/50 hover:text-white/78'
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
-      {structured?.summary ? (
-        <ExplanationSection title="Clinical takeaway" tone="teal">
-          <p className="break-words rounded-[16px] border border-white/8 bg-white/[0.05] px-4 py-3 text-sm leading-6 text-white/74">
-            {structured.summary}
+function BreakdownTab({
+  explanation,
+}: {
+  explanation: ReturnType<typeof coerceStructuredExplanation>
+}) {
+  if (!explanation) {
+    return <InlineNotice tone="muted" copy="Explanation is still being prepared." />
+  }
+
+  return (
+    <div className="min-w-0 space-y-4">
+      {explanation.summary ? (
+        <ReviewSection title="Summary" tone="teal">
+          <p className="break-words text-sm leading-6 text-white/74">
+            {explanation.summary}
           </p>
-        </ExplanationSection>
+        </ReviewSection>
       ) : null}
 
-      {structured?.reasoning || displayText ? (
-        <ExplanationSection title="Diagnostic reasoning" tone="teal">
-          <p className="whitespace-pre-line break-words text-sm leading-7 text-white/74">
-            {structured?.reasoning ?? displayText}
+      {explanation.keyFindings.length ? (
+        <ReviewSection title="Key Findings" tone="teal">
+          <ul className="space-y-2">
+            {explanation.keyFindings.map((finding) => (
+              <li key={finding} className="flex min-w-0 gap-3 rounded-[14px] border border-white/[0.06] bg-white/[0.04] px-3 py-2 text-sm leading-6 text-white/72">
+                <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[var(--wardle-color-teal)]" />
+                <span className="min-w-0 break-words">{finding}</span>
+              </li>
+            ))}
+          </ul>
+        </ReviewSection>
+      ) : null}
+
+      {explanation.reasoning ? (
+        <ReviewSection title="Reasoning Chain" tone="amber">
+          <p className="whitespace-pre-line break-words text-sm leading-7 text-white/72">
+            {explanation.reasoning}
           </p>
-        </ExplanationSection>
-      ) : null}
-
-      {structured?.keyFindings.length ? (
-        <ExplanationList title="Key facts" items={structured.keyFindings} tone="teal" />
-      ) : null}
-
-      {structured?.differentials.length ? (
-        <ExplanationList
-          title="Differentials"
-          items={structured.differentials}
-          tone="amber"
-        />
-      ) : null}
-
-      {structured?.clinicalPearl ? (
-        <ExplanationSection title="Clinical pearl" tone="amber">
-          <p className="break-words text-sm leading-7 text-white/74">
-            {structured.clinicalPearl}
-          </p>
-        </ExplanationSection>
+        </ReviewSection>
       ) : null}
     </div>
   )
 }
 
-function ExplanationSection({
+function DifferentialsTab({ differentials }: { differentials: string[] }) {
+  if (!differentials.length) {
+    return <InlineNotice tone="muted" copy="No differentials were stored for this case." />
+  }
+
+  return (
+    <div className="min-w-0 space-y-3">
+      {differentials.map((differential) => (
+        <div
+          key={differential}
+          className="rounded-[16px] border border-white/[0.06] bg-white/[0.04] px-4 py-3"
+        >
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <p className="min-w-0 break-words text-sm font-bold text-[var(--wardle-color-mint)]">
+              {differential}
+            </p>
+            <span className="shrink-0 rounded-full bg-rose-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-rose-300">
+              Ruled out
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CluesTab({ clues }: { clues: ClinicalClue[] }) {
+  const sortedClues = [...clues].sort((left, right) => left.order - right.order)
+
+  return (
+    <div className="min-w-0 space-y-2">
+      {sortedClues.map((clue, index) => {
+        const typeCopy = CLUE_TYPE_COPY[clue.type]
+
+        return (
+          <div
+            key={clue.id}
+            className="flex min-w-0 gap-3 rounded-[16px] border border-white/[0.06] bg-white/[0.04] px-4 py-3"
+          >
+            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] text-[10px] font-black ${typeCopy.tone}`}>
+              {typeCopy.abbr}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/42">
+                Clue {index + 1} - {typeCopy.label}
+              </p>
+              <p className="mt-1 break-words text-sm leading-6 text-white/72">
+                {clue.value}
+              </p>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function ReviewSection({
   title,
   tone,
   children,
@@ -484,270 +522,167 @@ function ExplanationSection({
   children: ReactNode
 }) {
   return (
-    <div className="min-w-0">
+    <section className="min-w-0">
       <p
-        className={`mb-2 font-brand-mono text-[10px] font-semibold uppercase tracking-[0.18em] ${
+        className={`mb-2 text-[10px] font-bold uppercase tracking-[0.16em] ${
           tone === 'teal'
-            ? 'text-[var(--wardle-color-teal)]/80'
+            ? 'text-[var(--wardle-color-teal)]/85'
             : 'text-[var(--wardle-color-amber)]/90'
         }`}
       >
         {title}
       </p>
       {children}
-    </div>
+    </section>
   )
 }
 
-function ExplanationList({
-  title,
-  items,
-  tone,
-}: {
-  title: string
-  items: string[]
-  tone: 'teal' | 'amber'
-}) {
-  return (
-    <ExplanationSection title={title} tone={tone}>
-      <ul className="space-y-2">
-        {items.map((item) => (
-          <li key={item} className="flex min-w-0 gap-3 text-sm leading-6 text-white/72">
-            <span
-              className={`mt-2 h-2 w-2 shrink-0 rounded-full ${
-                tone === 'teal'
-                  ? 'bg-[var(--wardle-color-teal)]'
-                  : 'bg-[var(--wardle-color-amber)]'
-              }`}
-            />
-            <span className="min-w-0 break-words">{item}</span>
-          </li>
-        ))}
-      </ul>
-    </ExplanationSection>
-  )
-}
-
-function buildTrackGroups({
-  todayCases,
-  playedCaseId,
-  playedExplanation,
-  playedResult,
-}: {
-  todayCases: TodayCase[]
-  playedCaseId: string | null
-  playedExplanation: GameExplanation | null
-  playedResult: GameResult | null
-}): TrackGroup[] {
-  const byTrack = new Map<PublishTrack, TodayCase[]>()
-
-  for (const todayCase of todayCases) {
-    const entries = byTrack.get(todayCase.track) ?? []
-    entries.push(todayCase)
-    byTrack.set(todayCase.track, entries)
-  }
-
-  return Array.from(byTrack.entries())
-    .sort(([left], [right]) => getTrackOrder(left) - getTrackOrder(right))
-    .map(([track, cases]) => ({
-      track,
-      label: TRACK_COPY[track]?.label ?? formatTrackLabel(track),
-      context:
-        TRACK_COPY[track]?.context ??
-        'Cases become reviewable after you complete them.',
-      cases: [...cases]
-        .sort((left, right) => left.sequenceIndex - right.sequenceIndex)
-        .map((todayCase) =>
-          buildLearnCaseItem({
-            todayCase,
-            playedCaseId,
-            playedExplanation,
-            playedResult,
-          }),
-        ),
-    }))
-}
-
-function buildLearnCaseItem({
-  todayCase,
-  playedCaseId,
-  playedExplanation,
-  playedResult,
-}: {
-  todayCase: TodayCase
-  playedCaseId: string | null
-  playedExplanation: GameExplanation | null
-  playedResult: GameResult | null
-}): LearnCaseItem {
-  const isPlayed = todayCase.case.id === playedCaseId
-  const status: LearnCaseStatus = isPlayed
-    ? playedExplanation
-      ? 'unlocked'
-      : 'pending'
-    : 'locked'
-
-  // TODO(api-gap): backend does not currently expose played explanations grouped by track.
-  // The /game/today payload may include case content, but this page only uses the latest
-  // played explanation so locked/unplayed explanations are never displayed.
-  return {
-    dailyCaseId: todayCase.dailyCaseId,
-    sequenceIndex: todayCase.sequenceIndex,
-    track: todayCase.track,
-    title: todayCase.case.title,
-    difficulty: todayCase.case.difficulty,
-    status,
-    explanation: status === 'unlocked' ? playedExplanation : null,
-    result: isPlayed ? playedResult : null,
-  }
-}
-
-function getStatusCounts(cases: LearnCaseItem[]) {
-  return cases.reduce(
-    (counts, item) => ({
-      ...counts,
-      [item.status]: counts[item.status] + 1,
-    }),
-    { unlocked: 0, pending: 0, locked: 0 } satisfies Record<LearnCaseStatus, number>,
-  )
-}
-
-function getCaseStatusCopy(status: LearnCaseStatus) {
-  switch (status) {
-    case 'unlocked':
-      return 'Ready for focused review'
-    case 'pending':
-      return 'Learning notes are being prepared'
-    case 'locked':
-      return 'Not played yet'
-  }
-}
-
-function StatusPill({
-  label,
-  tone,
-}: {
-  label: string
-  tone: LearnCaseStatus
-}) {
-  const toneClass =
-    tone === 'unlocked'
-      ? 'bg-[var(--wardle-color-teal)] text-white'
-      : tone === 'pending'
-        ? 'bg-[rgba(244,162,97,0.16)] text-[var(--wardle-color-amber)]'
-        : 'bg-white/[0.07] text-white/45'
+function TrackBadge({ track }: { track: PublishTrack }) {
+  const copy = TRACK_COPY[track] ?? TRACK_COPY.DAILY
 
   return (
-    <span
-      className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${toneClass}`}
-    >
-      {label}
+    <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${copy.tone}`}>
+      {copy.label}
     </span>
   )
 }
 
-function FocusedEmptyState({
-  title,
-  copy,
+function DifficultyBadge({ difficulty }: { difficulty: string }) {
+  const normalized = difficulty.trim().toLowerCase()
+  const tone = DIFFICULTY_TONES[normalized] ?? 'bg-white/[0.07] text-white/58'
+
+  return (
+    <span className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${tone}`}>
+      {normalized || 'standard'}
+    </span>
+  )
+}
+
+function ResultBadge({ solved }: { solved: boolean }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${
+        solved
+          ? 'bg-[rgba(0,180,166,0.14)] text-[var(--wardle-color-teal)]'
+          : 'bg-rose-400/12 text-rose-300'
+      }`}
+    >
+      {solved ? 'Solved' : 'Missed'}
+    </span>
+  )
+}
+
+function ResultDots({ dots }: { dots: Array<'used' | 'correct' | 'wrong' | 'empty'> }) {
+  return (
+    <div className="flex min-w-0 flex-1 gap-1">
+      {dots.map((dot, index) => (
+        <span
+          key={`${dot}-${index}`}
+          className={`h-1.5 min-w-0 flex-1 rounded-full ${
+            dot === 'correct'
+              ? 'bg-[var(--wardle-color-teal)]'
+              : dot === 'used'
+                ? 'bg-[rgba(0,180,166,0.36)]'
+                : dot === 'wrong'
+                  ? 'bg-rose-400'
+                  : 'bg-white/[0.08]'
+          }`}
+        />
+      ))}
+    </div>
+  )
+}
+
+function InlineNotice({
   tone,
+  copy,
 }: {
-  title: string
+  tone: 'muted' | 'error'
   copy: string
-  tone: 'pending' | 'locked'
 }) {
   return (
     <div
-      className={`rounded-[20px] border px-4 py-5 ${
-        tone === 'pending'
-          ? 'border-[rgba(244,162,97,0.24)] bg-[rgba(244,162,97,0.08)]'
-          : 'border-white/[0.08] bg-white/[0.04]'
-      }`}
-    >
-      <p
-        className={`font-brand-mono text-[10px] font-semibold uppercase tracking-[0.18em] ${
-          tone === 'pending'
-            ? 'text-[var(--wardle-color-amber)]/90'
-            : 'text-white/42'
-        }`}
-      >
-        {tone === 'pending' ? 'Pending' : 'Protected'}
-      </p>
-      <h3 className="mt-2 text-lg font-black text-[var(--wardle-color-mint)]">
-        {title}
-      </h3>
-      <p className="mt-2 text-sm leading-6 text-white/62">{copy}</p>
-      {tone === 'locked' ? <LockedCasePreview /> : null}
-    </div>
-  )
-}
-
-function getSelectedCaseHeading(item: LearnCaseItem) {
-  if (item.status === 'unlocked') {
-    return item.title
-  }
-
-  if (item.status === 'pending') {
-    return 'Preparing learning notes'
-  }
-
-  return 'Locked case selected'
-}
-
-function getSelectedCaseContext(item: LearnCaseItem) {
-  if (item.status === 'unlocked') {
-    return 'Move from the case outcome into diagnostic reasoning, differentials, key facts, and clinical pearl.'
-  }
-
-  if (item.status === 'pending') {
-    return 'The case has been played, but the explanation is still being prepared.'
-  }
-
-  return 'This case has not been played yet, so its details remain hidden.'
-}
-
-function getTrackOrder(track: PublishTrack) {
-  switch (track) {
-    case 'DAILY':
-      return 1
-    case 'PREMIUM':
-      return 2
-    case 'PRACTICE':
-      return 3
-    default:
-      return 99
-  }
-}
-
-function formatTrackLabel(track: string) {
-  return track
-    .toLowerCase()
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
-
-function EmptyStateCopy({
-  copy,
-  tone = 'muted',
-}: {
-  copy: string
-  tone?: 'muted' | 'error'
-}) {
-  return (
-    <p
-      className={`break-words text-sm leading-6 ${
-        tone === 'error' ? 'text-rose-300/90' : 'text-white/58'
+      className={`rounded-[18px] border px-4 py-3 text-sm leading-6 ${
+        tone === 'error'
+          ? 'border-rose-300/20 bg-rose-400/10 text-rose-200'
+          : 'border-white/10 bg-white/[0.04] text-white/58'
       }`}
     >
       {copy}
-    </p>
+    </div>
   )
 }
 
-function LockedCasePreview() {
-  return (
-    <div aria-hidden="true" className="mt-3 space-y-2">
-      <div className="h-2.5 w-4/5 rounded-full bg-white/[0.08]" />
-      <div className="h-2.5 w-3/5 rounded-full bg-white/[0.06]" />
-    </div>
-  )
+function buildResultDots(result: LearnLibraryCase['playerResult']) {
+  return Array.from({ length: 6 }, (_, index): 'used' | 'correct' | 'wrong' | 'empty' => {
+    if (index >= result.attemptsUsed) {
+      return 'empty'
+    }
+
+    if (result.solved && index === result.attemptsUsed - 1) {
+      return 'correct'
+    }
+
+    return result.solved ? 'used' : 'wrong'
+  })
+}
+
+function formatTime(seconds: number) {
+  const minutes = Math.floor(seconds / 60)
+  const remainder = seconds % 60
+  return `${minutes}:${String(remainder).padStart(2, '0')}`
+}
+
+function mergeLatestPlayedCase({
+  libraryCases,
+  latestPlayedExplanation,
+  latestPlayedResult,
+  explanation,
+  latestResult,
+  roundViewModel,
+}: {
+  libraryCases: LearnLibraryCase[]
+  latestPlayedExplanation: GameExplanation | null
+  latestPlayedResult: GameResult | null
+  explanation: GameExplanation | null
+  latestResult: GameResult | null
+  roundViewModel: RoundViewModel
+}) {
+  const latest = latestPlayedResult ?? latestResult
+  const latestExplanation = latestPlayedExplanation ?? explanation ?? latest?.explanation ?? null
+  const latestCase = latest?.case
+
+  if (!latest?.gameOver || !latestCase || !latestExplanation) {
+    return libraryCases
+  }
+
+  const alreadyPresent = libraryCases.some((item) => item.case.id === latestCase.id)
+  if (alreadyPresent) {
+    return libraryCases
+  }
+
+  const attemptsUsed = latest.attemptsCount ?? latest.clueIndex + 1
+  const fallbackCase: LearnLibraryCase = {
+    sessionId: 'latest',
+    dailyCaseId: latestCase.id,
+    track: 'DAILY',
+    sequenceIndex: 1,
+    completedAt: latest.completedAt ?? new Date().toISOString(),
+    playerResult: {
+      solved: latest.gameOverReason === 'correct' || latest.isTerminalCorrect,
+      attemptsUsed,
+      timeSecs: roundViewModel.elapsedSeconds ?? null,
+    },
+    case: {
+      id: latestCase.id,
+      title: roundViewModel.caseId ?? 'Completed case',
+      diagnosis: 'Completed case',
+      date: '',
+      difficulty: '',
+      clues: latestCase.clues,
+      explanation: latestExplanation,
+    },
+  }
+
+  return [fallbackCase, ...libraryCases]
 }

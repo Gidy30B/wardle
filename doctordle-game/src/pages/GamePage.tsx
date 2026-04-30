@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useGameEngine } from '../features/game/useGameEngine'
-import { useTodayCases } from '../features/game/useTodayCases'
+import { useLearnLibrary } from '../features/game/useLearnLibrary'
 import { useLeaderboard } from '../features/leaderboard/leaderboard.hook'
 import type { LeaderboardMode } from '../features/leaderboard/leaderboard.types'
 import AppGameShell from '../features/game/react/AppGameShell'
@@ -19,7 +19,7 @@ export default function GamePage() {
   const lastResultModalKeyRef = useRef<string | null>(null)
   const game = useGameEngine()
   const leaderboard = useLeaderboard(leaderboardMode)
-  const todayCases = useTodayCases()
+  const learnLibrary = useLearnLibrary()
   const organizations = useUserOrganizations()
   const currentStreak = game.progress?.currentStreak ?? null
   const organizationName = organizations.primaryOrganization?.name ?? null
@@ -126,10 +126,10 @@ export default function GamePage() {
           latestResult={game.latestResult}
           latestPlayedExplanation={game.latestPlayedExplanation}
           latestPlayedResult={game.latestPlayedLearningResult}
+          learnLibrary={learnLibrary.library}
+          libraryLoading={learnLibrary.loading}
+          libraryError={learnLibrary.error}
           roundViewModel={game.roundViewModel}
-          todayCases={todayCases.todayCases}
-          tracksLoading={todayCases.loading}
-          tracksError={todayCases.error}
         />
       ) : null}
 

@@ -71,6 +71,31 @@ type StartDailyGameResponse =
       nextCaseAt: string;
     };
 
+type CompletedLearningLibraryResponse = {
+  generatedAt: string;
+  cases: Array<{
+    sessionId: string;
+    dailyCaseId: string;
+    track: PublishTrack;
+    sequenceIndex: number;
+    completedAt: string;
+    playerResult: {
+      solved: boolean;
+      attemptsUsed: number;
+      timeSecs: number | null;
+    };
+    case: {
+      id: string;
+      title: string;
+      diagnosis: string;
+      date: string;
+      difficulty: string;
+      clues: GameplayClinicalClue[];
+      explanation: GameplayCaseExplanation | null;
+    };
+  }>;
+};
+
 @Injectable()
 export class SessionService {
   private readonly cacheTtlSeconds = 300;
@@ -113,6 +138,100 @@ export class SessionService {
     diagnosisRegistryId: string;
   }): Promise<SubmitGameGuessResponseDto> {
     return this.submitDailyGuess(input);
+  }
+
+  async getCompletedLearningLibrary(input: {
+    userId: string;
+    limit?: number;
+  }): Promise<CompletedLearningLibraryResponse> {
+    const limit = Math.max(1, Math.min(100, Math.floor(input.limit ?? 100)));
+    const sessions = await this.prisma.gameSession.findMany({
+      where: {
+        userId: input.userId,
+        status: 'completed',
+        completedAt: {
+          not: null,
+        },
+      },
+      orderBy: [{ completedAt: 'desc' }, { startedAt: 'desc' }],
+      take: limit,
+      include: {
+        dailyCase: {
+          select: {
+            id: true,
+            track: true,
+            sequenceIndex: true,
+          },
+        },
+        case: {
+          include: {
+            diagnosis: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+        attempts: {
+          select: {
+            result: true,
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+      },
+    });
+
+    const cases = await Promise.all(
+      sessions.map(async (session) => {
+        const gameplayCase = await this.hydrateGameplayCase(session.case);
+        const responseCase = this.buildCasePayload(gameplayCase);
+        const latestAttempt = session.attempts.at(-1);
+        const completedAt = session.completedAt ?? new Date();
+        const timeSecs =
+          session.startedAt && session.completedAt
+            ? Math.max(
+                0,
+                Math.round(
+                  (session.completedAt.getTime() -
+                    session.startedAt.getTime()) /
+                    1000,
+                ),
+              )
+            : null;
+
+        return {
+          sessionId: session.id,
+          dailyCaseId: session.dailyCaseId,
+          track: session.dailyCase.track,
+          sequenceIndex: session.dailyCase.sequenceIndex,
+          completedAt: completedAt.toISOString(),
+          playerResult: {
+            solved: latestAttempt?.result === 'correct',
+            attemptsUsed: session.attempts.length,
+            timeSecs,
+          },
+          case: {
+            id: session.case.id,
+            title: session.case.title,
+            diagnosis: session.case.diagnosis.name,
+            date: session.case.date.toISOString().slice(0, 10),
+            difficulty: session.case.difficulty,
+            clues: responseCase.clues,
+            explanation: this.buildGameplayExplanation({
+              explanation: session.case.explanation,
+              differentials: session.case.differentials,
+            }),
+          },
+        };
+      }),
+    );
+
+    return {
+      generatedAt: new Date().toISOString(),
+      cases,
+    };
   }
 
   async requestHint(input: { userId: string; sessionId: string }) {

@@ -5,6 +5,7 @@ import type {
   GameCase,
   LeaderboardEntry,
   LeaderboardMode,
+  LearnLibraryResponse,
   TodayCasesResponse,
   UserLeaderboardPosition,
   GameResult,
@@ -100,6 +101,12 @@ export async function getTodayCasesApi(
   request: RequestJson,
 ): Promise<TodayCasesResponse> {
   return request<TodayCasesResponse>('/game/today')
+}
+
+export async function getLearnLibraryApi(
+  request: RequestJson,
+): Promise<LearnLibraryResponse> {
+  return request<LearnLibraryResponse>('/game/learn')
 }
 
 export async function getLeaderboardApi(

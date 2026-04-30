@@ -12,6 +12,23 @@ type ValidationFindingIssue = {
   path?: string;
 };
 
+type GenerationQualityMetadata = {
+  version?: string;
+  critiqueScore?: number;
+  critiquePassed?: boolean;
+  critiqueIssues: string[];
+  critiqueRecommendations: string[];
+  estimatedDifficulty?: 'easy' | 'medium' | 'hard';
+  estimatedSolveClue?: number;
+  specialty?: string | null;
+  acuity?: 'low' | 'medium' | 'high' | null;
+  hasLabs?: boolean;
+  hasImaging?: boolean;
+  hasVitals?: boolean;
+  differentialCount?: number;
+  qualityScore?: number;
+};
+
 type ValidationIssueBuckets = {
   blockers: ValidationFindingIssue[];
   warnings: ValidationFindingIssue[];
@@ -99,6 +116,54 @@ export function parseValidationFindingIssues(
   return parsed;
 }
 
+export function parseGenerationQuality(
+  explanation: unknown,
+): GenerationQualityMetadata | null {
+  const candidate = asRecord(explanation);
+  const quality = asRecord(candidate?.generationQuality);
+
+  if (!quality) {
+    return null;
+  }
+
+  return {
+    version: typeof quality.version === 'string' ? quality.version : undefined,
+    critiqueScore:
+      typeof quality.critiqueScore === 'number'
+        ? quality.critiqueScore
+        : undefined,
+    critiquePassed:
+      typeof quality.critiquePassed === 'boolean'
+        ? quality.critiquePassed
+        : undefined,
+    critiqueIssues: parseStringArray(quality.critiqueIssues),
+    critiqueRecommendations: parseStringArray(quality.critiqueRecommendations),
+    estimatedDifficulty: parseDifficulty(quality.estimatedDifficulty),
+    estimatedSolveClue:
+      typeof quality.estimatedSolveClue === 'number'
+        ? quality.estimatedSolveClue
+        : undefined,
+    specialty:
+      typeof quality.specialty === 'string'
+        ? quality.specialty
+        : quality.specialty === null
+          ? null
+          : undefined,
+    acuity: parseAcuity(quality.acuity),
+    hasLabs: typeof quality.hasLabs === 'boolean' ? quality.hasLabs : undefined,
+    hasImaging:
+      typeof quality.hasImaging === 'boolean' ? quality.hasImaging : undefined,
+    hasVitals:
+      typeof quality.hasVitals === 'boolean' ? quality.hasVitals : undefined,
+    differentialCount:
+      typeof quality.differentialCount === 'number'
+        ? quality.differentialCount
+        : undefined,
+    qualityScore:
+      typeof quality.qualityScore === 'number' ? quality.qualityScore : undefined,
+  };
+}
+
 export function getValidationIssueBuckets(
   issues: ValidationFindingIssue[],
 ): ValidationIssueBuckets {
@@ -109,4 +174,33 @@ export function getValidationIssueBuckets(
   };
 }
 
-export type { CaseClue, ValidationFindingIssue, ValidationIssueBuckets };
+function parseStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === 'string');
+}
+
+function parseDifficulty(
+  value: unknown,
+): GenerationQualityMetadata['estimatedDifficulty'] {
+  return value === 'easy' || value === 'medium' || value === 'hard'
+    ? value
+    : undefined;
+}
+
+function parseAcuity(value: unknown): GenerationQualityMetadata['acuity'] {
+  return value === 'low' || value === 'medium' || value === 'high'
+    ? value
+    : value === null
+      ? null
+      : undefined;
+}
+
+export type {
+  CaseClue,
+  GenerationQualityMetadata,
+  ValidationFindingIssue,
+  ValidationIssueBuckets,
+};

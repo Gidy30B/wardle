@@ -158,6 +158,87 @@ describe('SessionService gameplay registry correctness', () => {
     jest.clearAllMocks();
   });
 
+  it('returns completed sessions as learning library cases', async () => {
+    const fixture = createSessionServiceFixture();
+    fixture.prisma.gameSession.findMany.mockResolvedValue([
+      {
+        id: 'session-1',
+        userId: 'user-1',
+        caseId: 'case-1',
+        dailyCaseId: 'daily-1',
+        status: 'completed',
+        startedAt: new Date('2026-04-22T08:00:00.000Z'),
+        completedAt: new Date('2026-04-22T08:01:40.000Z'),
+        dailyCase: {
+          id: 'daily-1',
+          track: 'DAILY',
+          sequenceIndex: 1,
+        },
+        case: {
+          id: 'case-1',
+          title: 'Asthma',
+          date: new Date('2026-04-22T00:00:00.000Z'),
+          difficulty: 'medium',
+          explanation: {
+            summary: 'Acute bronchospasm with reversible airflow obstruction.',
+            keyFindings: ['Wheeze'],
+            reasoning: ['Wheeze and dyspnea support asthma.'],
+          },
+          differentials: ['COPD'],
+          diagnosis: {
+            name: 'Asthma',
+          },
+        },
+        attempts: [{ result: 'wrong' }, { result: 'correct' }],
+      },
+    ]);
+
+    const result = await fixture.service.getCompletedLearningLibrary({
+      userId: 'user-1',
+    });
+
+    expect(fixture.prisma.gameSession.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'user-1',
+          status: 'completed',
+        }),
+      }),
+    );
+    expect(result.cases).toHaveLength(1);
+    expect(result.cases[0]).toEqual(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        dailyCaseId: 'daily-1',
+        track: 'DAILY',
+        sequenceIndex: 1,
+        playerResult: {
+          solved: true,
+          attemptsUsed: 2,
+          timeSecs: 100,
+        },
+        case: expect.objectContaining({
+          id: 'case-1',
+          title: 'Asthma',
+          diagnosis: 'Asthma',
+          difficulty: 'medium',
+          clues: [
+            {
+              id: 'c1-0',
+              type: 'history',
+              value: 'Shortness of breath',
+              order: 0,
+            },
+          ],
+          explanation: expect.objectContaining({
+            summary: 'Acute bronchospasm with reversible airflow obstruction.',
+            differentials: ['COPD'],
+          }),
+        }),
+      }),
+    );
+  });
+
   it('uses registry evaluation to persist a correct selected diagnosis submission', async () => {
     const fixture = createSessionServiceFixture();
     fixture.prisma.gameSession.findUnique

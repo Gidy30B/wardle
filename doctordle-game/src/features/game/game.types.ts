@@ -131,6 +131,35 @@ export type TodayCasesResponse = {
   cases: TodayCase[]
 }
 
+export type LearnPlayerResult = {
+  solved: boolean
+  attemptsUsed: number
+  timeSecs: number | null
+}
+
+export type LearnLibraryCase = {
+  sessionId: string
+  dailyCaseId: string
+  track: PublishTrack
+  sequenceIndex: number
+  completedAt: string
+  playerResult: LearnPlayerResult
+  case: {
+    id: string
+    title: string
+    diagnosis: string
+    date: string
+    difficulty: string
+    clues: ClinicalClue[]
+    explanation: GameExplanation | null
+  }
+}
+
+export type LearnLibraryResponse = {
+  generatedAt: string
+  cases: LearnLibraryCase[]
+}
+
 export type LeaderboardEntry = {
   rank: number
   userId: string

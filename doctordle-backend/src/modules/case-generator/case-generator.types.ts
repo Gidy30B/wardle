@@ -60,7 +60,11 @@ export type BatchGeneratedCaseResult =
   | {
       index: number;
       status: 'skipped';
-      reason: 'duplicate_answer';
+      reason:
+        | 'duplicate_answer'
+        | 'low_quality'
+        | 'specialty_cluster'
+        | 'difficulty_balance';
       answer: string;
     }
   | {
@@ -72,9 +76,13 @@ export type BatchGeneratedCaseResult =
 export type GenerateBatchResult = {
   batchId: string;
   requested: number;
+  generated: number;
+  accepted: number;
+  rejected: number;
   created: number;
   skipped: number;
   failed: number;
+  averageQualityScore: number | null;
   results: BatchGeneratedCaseResult[];
 };
 

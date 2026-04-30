@@ -96,6 +96,35 @@ export class GameController {
     }
   }
 
+  @Get('learn')
+  async getLearningLibrary(
+    @Req() req: AuthenticatedRequest,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedLimit = Number(limit ?? 100);
+    const safeLimit = Number.isFinite(parsedLimit)
+      ? Math.max(1, Math.min(100, Math.floor(parsedLimit)))
+      : 100;
+
+    try {
+      return await this.gameSessionService.getCompletedLearningLibrary({
+        userId: req.user.id,
+        limit: safeLimit,
+      });
+    } catch (error) {
+      this.logger.error(
+        JSON.stringify({
+          event: 'game.learn.failed',
+          userId: req.user.id,
+          limit: safeLimit,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
+  }
+
   @Post('guess')
   async submitGuess(
     @Req() req: AuthenticatedRequest,

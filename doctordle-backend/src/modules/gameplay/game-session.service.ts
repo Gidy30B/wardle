@@ -29,6 +29,10 @@ export class GameSessionService {
     return this.dailyCasesService.getTodayCasesForUser(input.userId, input.date);
   }
 
+  async getCompletedLearningLibrary(input: { userId: string; limit?: number }) {
+    return this.sessionService.getCompletedLearningLibrary(input);
+  }
+
   async submitGuess(input: {
     sessionId: string;
     userId: string;

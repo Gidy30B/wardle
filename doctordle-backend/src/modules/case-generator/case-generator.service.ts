@@ -66,7 +66,10 @@ const REQUIRED_CLUE_COUNT = 6;
 const MIN_DIFFERENTIAL_COUNT = 3;
 const MAX_DIFFERENTIAL_COUNT = 5;
 const MAX_GENERATION_ATTEMPTS = 3;
+const MAX_BATCH_SLOT_ATTEMPTS = 3;
 const MIN_CRITIQUE_SCORE = 80;
+const MIN_BATCH_QUALITY_SCORE = 80;
+const BATCH_DIFFICULTY_ROTATION = ['easy', 'medium', 'hard'] as const;
 const HIGH_ACUITY_PATTERN =
   /\b(shock|hypotension|hypoxic|hypoxia|respiratory distress|altered mental status|syncope|sepsis|unstable|crushing chest pain|acute abdomen|peritonitis)\b/i;
 const LOW_ACUITY_PATTERN =
@@ -111,6 +114,23 @@ type PersistedGeneratedExplanation = GeneratedCase['explanation'] & {
 
 type GeneratedCaseExplanationWithQuality = GeneratedCase['explanation'] & {
   generationQuality?: PersistedGeneratedExplanation['generationQuality'];
+};
+
+type BatchRejectionReason =
+  | 'duplicate_answer'
+  | 'low_quality'
+  | 'specialty_cluster'
+  | 'difficulty_balance';
+
+type BatchQualityState = {
+  generated: number;
+  accepted: number;
+  rejected: number;
+  qualityScoreTotal: number;
+  qualityScoreCount: number;
+  acceptedAnswers: Set<string>;
+  acceptedSpecialties: Map<string, number>;
+  acceptedDifficulties: Map<'easy' | 'medium' | 'hard', number>;
 };
 
 @Injectable()
@@ -563,6 +583,16 @@ export class CaseGeneratorService {
 
     const batchId = randomUUID();
     const seenAnswers = new Set<string>();
+    const qualityState: BatchQualityState = {
+      generated: 0,
+      accepted: 0,
+      rejected: 0,
+      qualityScoreTotal: 0,
+      qualityScoreCount: 0,
+      acceptedAnswers: seenAnswers,
+      acceptedSpecialties: new Map(),
+      acceptedDifficulties: new Map(),
+    };
     const concurrency = Math.max(
       1,
       Math.min(5, Math.trunc(options.concurrency ?? 5)),
@@ -592,78 +622,14 @@ export class CaseGeneratorService {
             return;
           }
 
-          try {
-            const generatedCase = await this.generateCase({
-              track: options.track,
-              difficulty: options.difficulty,
-              batchId,
-              sequence: currentIndex + 1,
-            });
-            await this.validateCaseWithRegistry(generatedCase);
-            const normalizedCase = this.normalizeCase(generatedCase);
-            const savedCase = await this.saveCase(normalizedCase, {
-              track: options.track,
-              difficulty: options.difficulty,
-              seenAnswers,
-            });
-
-            if (!savedCase) {
-              results[currentIndex] = {
-                index: currentIndex,
-                status: 'skipped',
-                reason: 'duplicate_answer',
-                answer: normalizedCase.answer,
-              };
-
-              this.logger.log(
-                JSON.stringify({
-                  event: 'case.generate.success',
-                  batchId,
-                  index: currentIndex,
-                  answer: normalizedCase.answer,
-                  outcome: 'skipped_duplicate',
-                }),
-              );
-              continue;
-            }
-
-            results[currentIndex] = {
-              index: currentIndex,
-              status: 'created',
-              caseId: savedCase.id,
-              answer: normalizedCase.answer,
-            };
-
-            this.logger.log(
-              JSON.stringify({
-                event: 'case.generate.success',
-                batchId,
-                index: currentIndex,
-                caseId: savedCase.id,
-                answer: normalizedCase.answer,
-                outcome: 'created',
-              }),
-            );
-          } catch (error) {
-            results[currentIndex] = {
-              index: currentIndex,
-              status: 'failed',
-              error:
-                error instanceof Error
-                  ? error.message
-                  : 'Unknown generation error',
-            };
-
-            this.logger.error(
-              JSON.stringify({
-                event: 'case.generate.failed',
-                batchId,
-                index: currentIndex,
-                error: error instanceof Error ? error.message : String(error),
-              }),
-              error instanceof Error ? error.stack : undefined,
-            );
-          }
+          results[currentIndex] = await this.generateBalancedBatchSlot({
+            batchId,
+            index: currentIndex,
+            requestedCount: count,
+            options,
+            seenAnswers,
+            qualityState,
+          });
         }
       },
     );
@@ -679,13 +645,24 @@ export class CaseGeneratorService {
     const failed = results.filter(
       (result) => result.status === 'failed',
     ).length;
+    const rejected = qualityState.rejected;
+    const averageQualityScore =
+      qualityState.qualityScoreCount > 0
+        ? Math.round(
+            qualityState.qualityScoreTotal / qualityState.qualityScoreCount,
+          )
+        : null;
 
     const summary: GenerateBatchResult = {
       batchId,
       requested: count,
+      generated: qualityState.generated,
+      accepted: created,
+      rejected,
       created,
       skipped,
       failed,
+      averageQualityScore,
       results,
     };
 
@@ -694,13 +671,158 @@ export class CaseGeneratorService {
         event: 'case.generate.batch.completed',
         batchId,
         requested: summary.requested,
+        generated: summary.generated,
+        accepted: summary.accepted,
+        rejected: summary.rejected,
         created: summary.created,
         skipped: summary.skipped,
         failed: summary.failed,
+        averageQualityScore: summary.averageQualityScore,
       }),
     );
 
     return summary;
+  }
+
+  private async generateBalancedBatchSlot(input: {
+    batchId: string;
+    index: number;
+    requestedCount: number;
+    options: GenerateBatchOptions;
+    seenAnswers: Set<string>;
+    qualityState: BatchQualityState;
+  }): Promise<GenerateBatchResult['results'][number]> {
+    let lastError: Error | null = null;
+    let lastRejected: { answer: string; reason: BatchRejectionReason } | null =
+      null;
+
+    for (let attempt = 1; attempt <= MAX_BATCH_SLOT_ATTEMPTS; attempt += 1) {
+      try {
+        const difficulty =
+          this.normalizeOptionalString(input.options.difficulty) ??
+          this.getBalancedBatchDifficulty(input.index, attempt);
+        const generatedCase = await this.generateCase({
+          track: input.options.track,
+          difficulty,
+          batchId: input.batchId,
+          sequence: input.index + 1,
+        });
+        input.qualityState.generated += 1;
+
+        await this.validateCaseWithRegistry(generatedCase);
+        const normalizedCase = this.normalizeCase(generatedCase);
+        const quality = this.getGenerationQuality(normalizedCase);
+        const qualityScore =
+          quality?.qualityScore ?? quality?.critiqueScore ?? null;
+        const rejectionReason = this.getBatchRejectionReason({
+          generatedCase: normalizedCase,
+          quality,
+          requestedCount: input.requestedCount,
+          options: input.options,
+          qualityState: input.qualityState,
+        });
+
+        if (rejectionReason) {
+          input.qualityState.rejected += 1;
+          lastRejected = {
+            answer: normalizedCase.answer,
+            reason: rejectionReason,
+          };
+          this.logBatchRejectedAttempt({
+            batchId: input.batchId,
+            index: input.index,
+            attempt,
+            answer: normalizedCase.answer,
+            reason: rejectionReason,
+            qualityScore,
+            specialty: quality?.specialty ?? null,
+            estimatedDifficulty: quality?.estimatedDifficulty ?? null,
+          });
+          continue;
+        }
+
+        input.seenAnswers.add(normalizedCase.answer);
+        const savedCase = await this.saveCase(normalizedCase, {
+          track: input.options.track,
+          difficulty,
+          seenAnswers: undefined,
+        });
+
+        if (!savedCase) {
+          input.qualityState.rejected += 1;
+          input.seenAnswers.delete(normalizedCase.answer);
+          lastRejected = {
+            answer: normalizedCase.answer,
+            reason: 'duplicate_answer',
+          };
+          this.logBatchRejectedAttempt({
+            batchId: input.batchId,
+            index: input.index,
+            attempt,
+            answer: normalizedCase.answer,
+            reason: 'duplicate_answer',
+            qualityScore,
+            specialty: quality?.specialty ?? null,
+            estimatedDifficulty: quality?.estimatedDifficulty ?? null,
+          });
+          continue;
+        }
+
+        this.recordAcceptedBatchCase(
+          input.qualityState,
+          normalizedCase,
+          quality,
+        );
+
+        this.logger.log(
+          JSON.stringify({
+            event: 'case.generate.success',
+            batchId: input.batchId,
+            index: input.index,
+            caseId: savedCase.id,
+            answer: normalizedCase.answer,
+            outcome: 'created',
+            qualityScore,
+            specialty: quality?.specialty ?? null,
+            estimatedDifficulty: quality?.estimatedDifficulty ?? null,
+          }),
+        );
+
+        return {
+          index: input.index,
+          status: 'created',
+          caseId: savedCase.id,
+          answer: normalizedCase.answer,
+        };
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        this.logger.error(
+          JSON.stringify({
+            event: 'case.generate.failed_attempt',
+            batchId: input.batchId,
+            index: input.index,
+            attempt,
+            error: lastError.message,
+          }),
+          lastError.stack,
+        );
+      }
+    }
+
+    if (lastRejected) {
+      return {
+        index: input.index,
+        status: 'skipped',
+        reason: lastRejected.reason,
+        answer: lastRejected.answer,
+      };
+    }
+
+    return {
+      index: input.index,
+      status: 'failed',
+      error: lastError?.message ?? 'Unknown generation error',
+    };
   }
 
   private async requestGeneratedCase(
@@ -1012,6 +1134,130 @@ export class CaseGeneratorService {
       critique.ambiguitySuitabilityScore * 0.15;
 
     return Math.round(this.clampScore(weightedScore));
+  }
+
+  private getBalancedBatchDifficulty(
+    index: number,
+    attempt: number,
+  ): 'easy' | 'medium' | 'hard' {
+    return BATCH_DIFFICULTY_ROTATION[
+      (index + attempt - 1) % BATCH_DIFFICULTY_ROTATION.length
+    ];
+  }
+
+  private getBatchRejectionReason(input: {
+    generatedCase: GeneratedCase;
+    quality: PersistedGeneratedExplanation['generationQuality'] | undefined;
+    requestedCount: number;
+    options: GenerateBatchOptions;
+    qualityState: BatchQualityState;
+  }): BatchRejectionReason | null {
+    if (input.qualityState.acceptedAnswers.has(input.generatedCase.answer)) {
+      return 'duplicate_answer';
+    }
+
+    const qualityScore =
+      input.quality?.qualityScore ?? input.quality?.critiqueScore;
+    if (
+      typeof qualityScore === 'number' &&
+      qualityScore < MIN_BATCH_QUALITY_SCORE
+    ) {
+      return 'low_quality';
+    }
+
+    if (
+      !this.normalizeOptionalString(input.options.track) &&
+      input.quality?.specialty &&
+      this.exceedsBatchClusterLimit(
+        input.qualityState.acceptedSpecialties,
+        input.quality.specialty,
+        input.requestedCount,
+      )
+    ) {
+      return 'specialty_cluster';
+    }
+
+    if (
+      !this.normalizeOptionalString(input.options.difficulty) &&
+      input.quality?.estimatedDifficulty &&
+      this.exceedsBatchClusterLimit(
+        input.qualityState.acceptedDifficulties,
+        input.quality.estimatedDifficulty,
+        input.requestedCount,
+      )
+    ) {
+      return 'difficulty_balance';
+    }
+
+    return null;
+  }
+
+  private exceedsBatchClusterLimit<T extends string>(
+    counts: Map<T, number>,
+    key: T,
+    requestedCount: number,
+  ): boolean {
+    if (requestedCount < 3) {
+      return false;
+    }
+
+    const limit = Math.max(2, Math.ceil(requestedCount * 0.5));
+    return (counts.get(key) ?? 0) >= limit;
+  }
+
+  private recordAcceptedBatchCase(
+    state: BatchQualityState,
+    generatedCase: GeneratedCase,
+    quality: PersistedGeneratedExplanation['generationQuality'] | undefined,
+  ): void {
+    state.accepted += 1;
+
+    const qualityScore = quality?.qualityScore ?? quality?.critiqueScore;
+    if (typeof qualityScore === 'number') {
+      state.qualityScoreTotal += qualityScore;
+      state.qualityScoreCount += 1;
+    }
+
+    if (quality?.specialty) {
+      state.acceptedSpecialties.set(
+        quality.specialty,
+        (state.acceptedSpecialties.get(quality.specialty) ?? 0) + 1,
+      );
+    }
+
+    if (quality?.estimatedDifficulty) {
+      state.acceptedDifficulties.set(
+        quality.estimatedDifficulty,
+        (state.acceptedDifficulties.get(quality.estimatedDifficulty) ?? 0) + 1,
+      );
+    }
+
+    state.acceptedAnswers.add(generatedCase.answer);
+  }
+
+  private logBatchRejectedAttempt(input: {
+    batchId: string;
+    index: number;
+    attempt: number;
+    answer: string;
+    reason: BatchRejectionReason;
+    qualityScore: number | null;
+    specialty: string | null;
+    estimatedDifficulty: string | null;
+  }): void {
+    this.logger.warn(
+      JSON.stringify({
+        event: 'case.generate.rejected_attempt',
+        batchId: input.batchId,
+        index: input.index,
+        attempt: input.attempt,
+        answer: input.answer,
+        reason: input.reason,
+        qualityScore: input.qualityScore,
+        specialty: input.specialty,
+        estimatedDifficulty: input.estimatedDifficulty,
+      }),
+    );
   }
 
   private clampScore(value: number): number {

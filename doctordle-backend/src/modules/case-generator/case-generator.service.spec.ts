@@ -114,6 +114,37 @@ describe('CaseGeneratorService', () => {
     ...overrides,
   });
 
+  const withGenerationQuality = (
+    generatedCase: GeneratedCase,
+    overrides: Partial<{
+      estimatedDifficulty: 'easy' | 'medium' | 'hard';
+      specialty: string | null;
+      qualityScore: number;
+    }> = {},
+  ): GeneratedCase =>
+    ({
+      ...generatedCase,
+      explanation: {
+        ...generatedCase.explanation,
+        generationQuality: {
+          version: 'case-generator:v2',
+          critiqueScore: overrides.qualityScore ?? 92,
+          critiquePassed: true,
+          critiqueIssues: [],
+          critiqueRecommendations: [],
+          estimatedDifficulty: overrides.estimatedDifficulty ?? 'medium',
+          estimatedSolveClue: 5,
+          specialty: overrides.specialty ?? null,
+          acuity: 'low',
+          hasLabs: true,
+          hasImaging: false,
+          hasVitals: true,
+          differentialCount: generatedCase.differentials.length,
+          qualityScore: overrides.qualityScore ?? 92,
+        },
+      },
+    }) as GeneratedCase;
+
   const buildService = () => {
     const tx: TransactionMock = {
       case: {
@@ -401,5 +432,127 @@ describe('CaseGeneratorService', () => {
         qualityScore: 91,
       }),
     );
+  });
+
+  it('returns batch quality summary counts and average quality score', async () => {
+    const { service } = buildService();
+    const firstCase = withGenerationQuality(buildGeneratedCase(), {
+      estimatedDifficulty: 'easy',
+      qualityScore: 90,
+    });
+    const secondCase = withGenerationQuality(
+      buildGeneratedCase({
+        answer: 'Appendicitis',
+        explanation: {
+          ...buildGeneratedCase().explanation,
+          diagnosis: 'Appendicitis',
+        },
+      }),
+      {
+        estimatedDifficulty: 'hard',
+        qualityScore: 94,
+      },
+    );
+
+    jest
+      .spyOn(service, 'generateCase')
+      .mockResolvedValueOnce(firstCase)
+      .mockResolvedValueOnce(secondCase);
+    jest
+      .spyOn(service, 'saveCase')
+      .mockResolvedValueOnce({
+        id: 'case-1',
+        title: 'asthma',
+        difficulty: 'medium',
+        date: new Date('2026-04-20T00:00:00.000Z'),
+      })
+      .mockResolvedValueOnce({
+        id: 'case-2',
+        title: 'appendicitis',
+        difficulty: 'medium',
+        date: new Date('2026-04-21T00:00:00.000Z'),
+      });
+
+    const result = await service.generateBatch({
+      count: 2,
+      concurrency: 1,
+    });
+
+    expect(result.requested).toBe(2);
+    expect(result.generated).toBe(2);
+    expect(result.accepted).toBe(2);
+    expect(result.rejected).toBe(0);
+    expect(result.created).toBe(2);
+    expect(result.skipped).toBe(0);
+    expect(result.failed).toBe(0);
+    expect(result.averageQualityScore).toBe(92);
+  });
+
+  it('rejects duplicate and low-quality batch candidates before accepting a retry', async () => {
+    const { service } = buildService();
+    const acceptedCase = withGenerationQuality(buildGeneratedCase(), {
+      qualityScore: 91,
+    });
+    const duplicateCase = withGenerationQuality(buildGeneratedCase(), {
+      qualityScore: 93,
+    });
+    const lowQualityCase = withGenerationQuality(
+      buildGeneratedCase({
+        answer: 'Appendicitis',
+        explanation: {
+          ...buildGeneratedCase().explanation,
+          diagnosis: 'Appendicitis',
+        },
+      }),
+      {
+        qualityScore: 72,
+      },
+    );
+    const retryCase = withGenerationQuality(
+      buildGeneratedCase({
+        answer: 'Pulmonary Embolism',
+        explanation: {
+          ...buildGeneratedCase().explanation,
+          diagnosis: 'Pulmonary Embolism',
+        },
+      }),
+      {
+        qualityScore: 89,
+      },
+    );
+
+    jest
+      .spyOn(service, 'generateCase')
+      .mockResolvedValueOnce(acceptedCase)
+      .mockResolvedValueOnce(duplicateCase)
+      .mockResolvedValueOnce(lowQualityCase)
+      .mockResolvedValueOnce(retryCase);
+    const saveCaseSpy = jest
+      .spyOn(service, 'saveCase')
+      .mockResolvedValueOnce({
+        id: 'case-1',
+        title: 'asthma',
+        difficulty: 'medium',
+        date: new Date('2026-04-20T00:00:00.000Z'),
+      })
+      .mockResolvedValueOnce({
+        id: 'case-2',
+        title: 'pulmonary embolism',
+        difficulty: 'medium',
+        date: new Date('2026-04-21T00:00:00.000Z'),
+      });
+
+    const result = await service.generateBatch({
+      count: 2,
+      concurrency: 1,
+    });
+
+    expect(result.generated).toBe(4);
+    expect(result.accepted).toBe(2);
+    expect(result.rejected).toBe(2);
+    expect(result.created).toBe(2);
+    expect(result.failed).toBe(0);
+    expect(result.averageQualityScore).toBe(90);
+    expect(saveCaseSpy).toHaveBeenCalledTimes(2);
   });
 });
