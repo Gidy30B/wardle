@@ -413,6 +413,7 @@ model User {
   attempts                  Attempt[]
   stats                     UserStats?
   progress                  UserProgress?
+  settings                  UserSettings?
   leaderboard               LeaderboardEntry[]
   approvedCases             Case[]                  @relation("CaseApprovedByUser")
   createdCaseRevisions      CaseRevision[]          @relation("CaseRevisionCreatedByUser")
@@ -453,6 +454,21 @@ model UserOrganization {
 
   @@unique([userId, organizationId])
   @@index([organizationId])
+  @@index([userId])
+}
+
+model UserSettings {
+  id                      String   @id @default(uuid())
+  userId                  String   @unique
+  showTimer               Boolean  @default(true)
+  hintsEnabled            Boolean  @default(true)
+  autocompleteEnabled     Boolean  @default(true)
+  difficultyPreference    String   @default("STANDARD")
+  spacedRepetitionEnabled Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
 }
 
@@ -509,6 +525,6 @@ model LeaderboardEntry {
   dailyCase       DailyCase @relation(fields: [dailyCaseId], references: [id], onDelete: Cascade)
 
   @@unique([dailyCaseId, userId])
-  @@index([dailyCaseId, score(sort: Desc), attemptsCount(sort: Asc), completedAt(sort: Asc)])
+  @@index([dailyCaseId, score(sort: Desc), attemptsCount(sort: Asc), timeToComplete(sort: Asc), completedAt(sort: Asc)])
   @@index([userId, completedAt(sort: Desc)])
 }

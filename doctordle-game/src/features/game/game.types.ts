@@ -43,6 +43,8 @@ export type StartGameResponse =
       state: 'ready'
       sessionId: string
       dailyCaseId: string
+      startedAt?: string
+      completedAt?: string | null
       case: GameCase
     }
   | {
@@ -56,6 +58,8 @@ export type GuessApiResponse = {
   isTerminalCorrect: boolean
   attemptsCount?: number
   clueIndex: number
+  startedAt?: string
+  completedAt?: string | null
   case?: GameCase
   gameOver?: boolean
   gameOverReason?: 'correct' | 'clues_exhausted' | null
@@ -93,6 +97,8 @@ export type GameResult = {
   label: 'correct' | 'close' | 'wrong'
   isTerminalCorrect: boolean
   clueIndex: number
+  startedAt?: string
+  completedAt?: string | null
   gameOver: boolean
   gameOverReason?: 'correct' | 'clues_exhausted' | null
   xpAwarded?: number
@@ -133,6 +139,9 @@ export type LeaderboardEntry = {
   streak?: number
   score: number
   attemptsCount: number
+  timeToComplete?: number | null
+  totalTimeToComplete?: number | null
+  casesCompleted?: number
   completedAt: string
 }
 

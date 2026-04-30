@@ -18,6 +18,17 @@ export type GeneratedCase = {
   };
 };
 
+export type CaseGenerationCritique = {
+  passed: boolean;
+  score: number;
+  clinicalAccuracyScore: number;
+  clueProgressionScore: number;
+  differentialQualityScore: number;
+  ambiguitySuitabilityScore: number;
+  issues: string[];
+  recommendations: string[];
+};
+
 export type GenerateCaseInput = {
   track?: string;
   difficulty?: string;

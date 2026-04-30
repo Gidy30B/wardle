@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
+import { UpdateMySettingsDto } from './dto/update-my-settings.dto';
 
 @Injectable()
 export class UsersService {
@@ -32,14 +33,7 @@ export class UsersService {
   }
 
   async updateMyProfile(userId: string, payload: UpdateMyProfileDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+    await this.assertUserExists(userId);
 
     await this.prisma.$transaction(async (tx) => {
       const nextIndividualMode =
@@ -117,6 +111,90 @@ export class UsersService {
 
     return this.getMyProfile(userId);
   }
+
+  async getMySettings(userId: string) {
+    await this.assertUserExists(userId);
+
+    const settings = await this.prisma.userSettings.upsert({
+      where: { userId },
+      update: {},
+      create: { userId },
+    });
+
+    return toUserSettingsDto(settings);
+  }
+
+  async updateMySettings(userId: string, payload: UpdateMySettingsDto) {
+    await this.assertUserExists(userId);
+
+    const data: Prisma.UserSettingsUpdateInput = {};
+
+    if (typeof payload.showTimer === 'boolean') {
+      data.showTimer = payload.showTimer;
+    }
+
+    if (typeof payload.hintsEnabled === 'boolean') {
+      data.hintsEnabled = payload.hintsEnabled;
+    }
+
+    if (typeof payload.autocompleteEnabled === 'boolean') {
+      data.autocompleteEnabled = payload.autocompleteEnabled;
+    }
+
+    if (payload.difficultyPreference) {
+      data.difficultyPreference = payload.difficultyPreference;
+    }
+
+    if (typeof payload.spacedRepetitionEnabled === 'boolean') {
+      data.spacedRepetitionEnabled = payload.spacedRepetitionEnabled;
+    }
+
+    const settings = await this.prisma.userSettings.upsert({
+      where: { userId },
+      update: data,
+      create: {
+        userId,
+        showTimer: payload.showTimer,
+        hintsEnabled: payload.hintsEnabled,
+        autocompleteEnabled: payload.autocompleteEnabled,
+        difficultyPreference: payload.difficultyPreference,
+        spacedRepetitionEnabled: payload.spacedRepetitionEnabled,
+      },
+    });
+
+    return toUserSettingsDto(settings);
+  }
+
+  private async assertUserExists(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+  }
+}
+
+function toUserSettingsDto(settings: {
+  showTimer: boolean;
+  hintsEnabled: boolean;
+  autocompleteEnabled: boolean;
+  difficultyPreference: string;
+  spacedRepetitionEnabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    showTimer: settings.showTimer,
+    hintsEnabled: settings.hintsEnabled,
+    autocompleteEnabled: settings.autocompleteEnabled,
+    difficultyPreference: settings.difficultyPreference,
+    spacedRepetitionEnabled: settings.spacedRepetitionEnabled,
+    createdAt: settings.createdAt,
+    updatedAt: settings.updatedAt,
+  };
 }
 
 function toUserProfileDto(user: {

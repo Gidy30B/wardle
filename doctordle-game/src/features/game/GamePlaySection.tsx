@@ -26,6 +26,9 @@ type GamePlaySectionProps = {
   onOpenExplanation: () => void
 }
 
+const GAMEPLAY_RENDERER =
+  import.meta.env.VITE_GAMEPLAY_RENDERER === 'phaser' ? 'phaser' : 'react'
+
 export default function GamePlaySection({
   iconSet,
   roundViewModel,
@@ -45,7 +48,9 @@ export default function GamePlaySection({
   onOpenMenu,
   onOpenExplanation,
 }: GamePlaySectionProps) {
-  const gameplayRenderer = import.meta.env.VITE_GAMEPLAY_RENDERER === 'phaser' ? 'phaser' : 'react'
+  // React is the active gameplay renderer. Phaser is deprecated and remains
+  // available only as an explicit legacy fallback via VITE_GAMEPLAY_RENDERER=phaser.
+  const gameplayRenderer = GAMEPLAY_RENDERER
   const shellRef = useRef<HTMLElement | null>(null)
   const [shellSize, setShellSize] = useState({ width: 0, height: 0 })
 

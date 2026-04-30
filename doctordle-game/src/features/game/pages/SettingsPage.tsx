@@ -1,17 +1,16 @@
 import { useAuth, useUser } from '@clerk/clerk-react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
-import SurfaceCard from '../../../components/ui/SurfaceCard'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import WardleLogo from '../../../components/brand/WardleLogo'
 import { useApi } from '../../../lib/api'
 import type { UserOrganizationMembership } from '../../organizations/organization.types'
-import { searchOrganizationsApi } from '../../organizations/organization.api'
-import type { Organization } from '../../organizations/organization.types'
 import {
   getBackendProfileApi,
-  updateBackendProfileApi,
+  getUserSettingsApi,
+  updateUserSettingsApi,
 } from '../../profile/profile.api'
+import type { DifficultyPreference, UserSettings } from '../../profile/profile.types'
 
 type SettingsPageProps = {
   currentStreak: number | null
@@ -20,6 +19,700 @@ type SettingsPageProps = {
   memberships: UserOrganizationMembership[]
 }
 
+// ─── SHARED COMPONENTS ─────────────────────────────────────────
+const DEFAULT_USER_SETTINGS: UserSettings = {
+  showTimer: true,
+  hintsEnabled: true,
+  autocompleteEnabled: true,
+  difficultyPreference: 'STANDARD',
+  spacedRepetitionEnabled: false,
+}
+
+const DIFFICULTY_OPTIONS: Array<{ value: DifficultyPreference; label: string }> = [
+  { value: 'BEGINNER', label: 'Beginner' },
+  { value: 'STANDARD', label: 'Standard' },
+  { value: 'HARD', label: 'Hard' },
+  { value: 'EXPERT', label: 'Expert' },
+]
+
+const DIFFICULTY_LABELS: Record<DifficultyPreference, string> = {
+  BEGINNER: 'Beginner',
+  STANDARD: 'Standard',
+  HARD: 'Hard',
+  EXPERT: 'Expert',
+}
+
+const SETTINGS_SCROLL_STYLE: CSSProperties = {
+  background: 'var(--wardle-color-charcoal)',
+  flex: 1,
+  height: '100%',
+  minHeight: 0,
+  overflow: 'hidden',
+  position: 'relative',
+  width: '100%',
+}
+
+const SETTINGS_SCROLLER_STYLE: CSSProperties = {
+  inset: 0,
+  minHeight: 0,
+  overflowX: 'hidden',
+  overflowY: 'auto',
+  overscrollBehavior: 'contain',
+  paddingBottom: 24,
+  position: 'absolute',
+  WebkitOverflowScrolling: 'touch',
+}
+
+function SettingsScrollFrame({
+  children,
+  contentStyle,
+}: {
+  children: ReactNode
+  contentStyle?: CSSProperties
+}) {
+  return (
+    <main style={SETTINGS_SCROLL_STYLE}>
+      <div style={{ ...SETTINGS_SCROLLER_STYLE, ...contentStyle }}>
+        {children}
+      </div>
+    </main>
+  )
+}
+
+const Toggle = ({ on, onToggle }: { on: boolean; onToggle: () => void }) => {
+  return (
+    <button
+      onClick={onToggle}
+      style={{
+        width: 44,
+        height: 26,
+        borderRadius: 13,
+        padding: 0,
+        border: 'none',
+        background: on ? 'var(--wardle-color-teal)' : 'rgba(255,255,255,0.1)',
+        cursor: 'pointer',
+        position: 'relative',
+        flexShrink: 0,
+        transition: 'background 0.25s',
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          top: 3,
+          left: 3,
+          width: 20,
+          height: 20,
+          borderRadius: '50%',
+          background: 'white',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+          transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1)',
+          transform: on ? 'translateX(18px)' : 'translateX(0)',
+        }}
+      />
+    </button>
+  )
+}
+
+const SettingRow = ({
+  icon,
+  iconBg,
+  label,
+  sublabel,
+  right,
+  onClick,
+  redLabel,
+}: {
+  icon: string
+  iconBg: string
+  label: string
+  sublabel?: string
+  right?: ReactNode
+  onClick?: () => void
+  redLabel?: boolean
+}) => (
+  <div
+    onClick={onClick}
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      padding: '13px 14px',
+      gap: 12,
+      cursor: onClick ? 'pointer' : 'default',
+      borderBottom: '1px solid rgba(255,255,255,0.04)',
+      transition: 'background 0.15s',
+    }}
+    onMouseEnter={(e) => {
+      if (onClick) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.background = 'transparent'
+    }}
+  >
+    <div
+      style={{
+        width: 34,
+        height: 34,
+        borderRadius: 10,
+        flexShrink: 0,
+        background: iconBg,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 15,
+      }}
+    >
+      {icon}
+    </div>
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 600,
+          color: redLabel ? '#E05C5C' : 'var(--wardle-color-mint)',
+        }}
+      >
+        {label}
+      </div>
+      {sublabel && (
+        <div style={{ fontSize: 11, color: 'var(--wardle-color-gray)', marginTop: 1 }}>
+          {sublabel}
+        </div>
+      )}
+    </div>
+    {right}
+  </div>
+)
+
+const SettingsGroup = ({ children }: { children: ReactNode }) => (
+  <div
+    style={{
+      margin: '0 16px',
+      background: 'rgba(26,60,94,0.22)',
+      border: '1px solid rgba(255,255,255,0.06)',
+      borderRadius: 16,
+      overflow: 'hidden',
+    }}
+  >
+    {children}
+  </div>
+)
+
+const SectionLabel = ({ children }: { children: ReactNode }) => (
+  <div
+    style={{
+      fontSize: 10,
+      fontWeight: 700,
+      color: 'var(--wardle-color-gray)',
+      textTransform: 'uppercase',
+      letterSpacing: 1.4,
+      padding: '16px 20px 8px',
+    }}
+  >
+    {children}
+  </div>
+)
+
+const BackHeader = ({ onBack, title }: { onBack: () => void; title: string }) => (
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '14px 20px 0',
+    }}
+  >
+    <button
+      onClick={onBack}
+      style={{
+        background: 'none',
+        border: 'none',
+        color: 'var(--wardle-color-teal)',
+        fontFamily: "'DM Sans', sans-serif",
+        fontSize: 14,
+        fontWeight: 700,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: 0,
+      }}
+    >
+      ‹ Settings
+    </button>
+    <span
+      style={{
+        fontSize: 12,
+        fontWeight: 700,
+        color: 'var(--wardle-color-gray)',
+        textTransform: 'uppercase',
+        letterSpacing: 1.2,
+      }}
+    >
+      {title}
+    </span>
+  </div>
+)
+
+const SubHero = ({ icon, title, desc }: { icon: string; title: string; desc: string }) => (
+  <div style={{ padding: '20px 20px 14px', textAlign: 'center' }}>
+    <div style={{ fontSize: 36, marginBottom: 8 }}>{icon}</div>
+    <div
+      style={{
+        fontSize: 17,
+        fontWeight: 800,
+        color: 'var(--wardle-color-mint)',
+        marginBottom: 4,
+      }}
+    >
+      {title}
+    </div>
+    <div style={{ fontSize: 12, color: 'var(--wardle-color-gray)', lineHeight: 1.5 }}>
+      {desc}
+    </div>
+  </div>
+)
+
+const ChevronVal = ({ label, color }: { label?: string; color?: string }) => (
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      fontSize: 12,
+      color: color || 'var(--wardle-color-gray)',
+      whiteSpace: 'nowrap',
+    }}
+  >
+    {label && <span>{label}</span>}
+    <span style={{ fontSize: 14, color: 'rgba(138,155,176,0.45)' }}>›</span>
+  </div>
+)
+
+const SegControl = ({
+  options,
+  active,
+  onChange,
+}: {
+  options: { value: string; label: string }[]
+  active: string
+  onChange: (value: string) => void
+}) => (
+  <div
+    style={{
+      display: 'flex',
+      background: 'rgba(26,60,94,0.45)',
+      borderRadius: 10,
+      padding: 3,
+      gap: 2,
+    }}
+  >
+    {options.map((o) => (
+      <button
+        key={o.value}
+        onClick={() => onChange(o.value)}
+        style={{
+          flex: 1,
+          padding: '5px 6px',
+          borderRadius: 8,
+          border: 'none',
+          background: active === o.value ? 'var(--wardle-color-teal)' : 'transparent',
+          color: active === o.value ? 'white' : 'var(--wardle-color-gray)',
+          fontFamily: "'DM Sans', sans-serif",
+          fontSize: 11,
+          fontWeight: 600,
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {o.label}
+      </button>
+    ))}
+  </div>
+)
+
+// ─── SETTINGS SUB-SCREENS ─────────────────────────────────────────
+const GameplaySettings = ({
+  onBack,
+  settings,
+  saving,
+  onUpdate,
+}: {
+  onBack: () => void
+  settings: UserSettings
+  saving: boolean
+  onUpdate: (payload: Partial<UserSettings>) => void
+}) => {
+  const diffColors: Record<DifficultyPreference, string> = {
+    BEGINNER: 'var(--wardle-color-gray)',
+    STANDARD: 'var(--wardle-color-teal)',
+    HARD: 'var(--wardle-color-amber)',
+    EXPERT: '#E05C5C',
+  }
+  const cycleDiff = () => {
+    const currentIndex = DIFFICULTY_OPTIONS.findIndex(
+      (option) => option.value === settings.difficultyPreference,
+    )
+    const next = DIFFICULTY_OPTIONS[(currentIndex + 1) % DIFFICULTY_OPTIONS.length]
+    onUpdate({ difficultyPreference: next.value })
+  }
+  return (
+    <SettingsScrollFrame>
+      <BackHeader onBack={onBack} title="Gameplay" />
+      <SubHero icon="🎮" title="Gameplay settings" desc="Tune your daily case experience" />
+      <SettingsGroup>
+        <SettingRow
+          icon="🎯"
+          iconBg="rgba(0,180,166,0.15)"
+          label="Difficulty"
+          sublabel="Adjust case complexity"
+          onClick={cycleDiff}
+          right={
+            <div style={{ fontSize: 12, color: diffColors[settings.difficultyPreference], fontWeight: 700, opacity: saving ? 0.68 : 1 }}>
+              {DIFFICULTY_LABELS[settings.difficultyPreference]} ›
+            </div>
+          }
+        />
+        <SettingRow
+          icon="⏰"
+          iconBg="rgba(244,162,97,0.15)"
+          label="Daily reminder"
+          sublabel="Notification preference is coming later"
+          right={<Toggle on={true} onToggle={() => {}} />}
+        />
+        <SettingRow
+          icon="⏱"
+          iconBg="rgba(26,60,94,0.55)"
+          label="Show timer"
+          sublabel="Elapsed time during play"
+          right={<Toggle on={settings.showTimer} onToggle={() => onUpdate({ showTimer: !settings.showTimer })} />}
+        />
+        <SettingRow
+          icon="💡"
+          iconBg="rgba(244,162,97,0.15)"
+          label="Hint system"
+          sublabel="Allow hints during a case"
+          right={<Toggle on={settings.hintsEnabled} onToggle={() => onUpdate({ hintsEnabled: !settings.hintsEnabled })} />}
+        />
+        <SettingRow
+          icon="🔍"
+          iconBg="rgba(0,180,166,0.15)"
+          label="Diagnosis autocomplete"
+          sublabel="Suggestions as you type"
+          right={<Toggle on={settings.autocompleteEnabled} onToggle={() => onUpdate({ autocompleteEnabled: !settings.autocompleteEnabled })} />}
+        />
+        <div style={{ borderBottom: 'none' }}>
+          <SettingRow
+            icon="🧠"
+            iconBg="rgba(140,100,210,0.15)"
+            label="Spaced repetition"
+            sublabel="Resurface cases you've missed"
+            right={<Toggle on={settings.spacedRepetitionEnabled} onToggle={() => onUpdate({ spacedRepetitionEnabled: !settings.spacedRepetitionEnabled })} />}
+          />
+        </div>
+      </SettingsGroup>
+    </SettingsScrollFrame>
+  )
+}
+
+const NotificationSettings = ({ onBack }: { onBack: () => void }) => {
+  const [notifs, setNotifs] = useState({
+    push: true,
+    streak: true,
+    digest: true,
+    challenge: false,
+    announcements: true,
+  })
+  const tog = (key: string) =>
+    setNotifs((p) => ({ ...p, [key]: !p[key as keyof typeof notifs] }))
+  return (
+    <SettingsScrollFrame>
+      <BackHeader onBack={onBack} title="Notifications" />
+      <SubHero icon="🔔" title="Notification settings" desc="Control when and how Wardle reaches you" />
+      <SettingsGroup>
+        <SettingRow
+          icon="📲"
+          iconBg="rgba(0,180,166,0.15)"
+          label="Push notifications"
+          sublabel="Streak alerts & leaderboard moves"
+          right={<Toggle on={notifs.push} onToggle={() => tog('push')} />}
+        />
+        <SettingRow
+          icon="🔥"
+          iconBg="rgba(244,162,97,0.15)"
+          label="Streak reminders"
+          sublabel="Alert before midnight if not played"
+          right={<Toggle on={notifs.streak} onToggle={() => tog('streak')} />}
+        />
+        <SettingRow
+          icon="🏆"
+          iconBg="rgba(244,162,97,0.15)"
+          label="Weekly leaderboard digest"
+          sublabel="Your rank summary every Monday at 9 AM"
+          right={<Toggle on={notifs.digest} onToggle={() => tog('digest')} />}
+        />
+        <SettingRow
+          icon="⚔️"
+          iconBg="rgba(140,100,210,0.15)"
+          label="Challenge alerts"
+          sublabel="When a friend challenges you"
+          right={<Toggle on={notifs.challenge} onToggle={() => tog('challenge')} />}
+        />
+        <div style={{ borderBottom: 'none' }}>
+          <SettingRow
+            icon="📣"
+            iconBg="rgba(26,60,94,0.55)"
+            label="Product announcements"
+            sublabel="New features & case packs"
+            right={<Toggle on={notifs.announcements} onToggle={() => tog('announcements')} />}
+          />
+        </div>
+      </SettingsGroup>
+    </SettingsScrollFrame>
+  )
+}
+
+const AppearanceSettings = ({ onBack }: { onBack: () => void }) => {
+  const [appear, setAppear] = useState({
+    theme: 'dark',
+    textSize: 'M',
+    animations: true,
+    colorBlind: false,
+    haptics: true,
+  })
+  return (
+    <SettingsScrollFrame>
+      <BackHeader onBack={onBack} title="Appearance" />
+      <SubHero icon="🌙" title="Appearance settings" desc="Make Wardle look exactly how you like it" />
+      <SettingsGroup>
+        <SettingRow
+          icon="🌙"
+          iconBg="rgba(26,60,94,0.55)"
+          label="Theme"
+          sublabel="Dark is default for night owls"
+          right={
+            <SegControl
+              options={[
+                { value: 'dark', label: 'Dark' },
+                { value: 'light', label: 'Light' },
+              ]}
+              active={appear.theme}
+              onChange={(v) => setAppear((p) => ({ ...p, theme: v }))}
+            />
+          }
+        />
+        <SettingRow
+          icon="Aa"
+          iconBg="rgba(0,180,166,0.15)"
+          label="Text size"
+          sublabel="For clue readability"
+          right={
+            <SegControl
+              options={[
+                { value: 'S', label: 'S' },
+                { value: 'M', label: 'M' },
+                { value: 'L', label: 'L' },
+              ]}
+              active={appear.textSize}
+              onChange={(v) => setAppear((p) => ({ ...p, textSize: v }))}
+            />
+          }
+        />
+        <SettingRow
+          icon="✨"
+          iconBg="rgba(140,100,210,0.15)"
+          label="Tile animations"
+          sublabel="Flip and reveal effects"
+          right={<Toggle on={appear.animations} onToggle={() => setAppear((p) => ({ ...p, animations: !p.animations }))} />}
+        />
+        <SettingRow
+          icon="👁"
+          iconBg="rgba(52,199,89,0.12)"
+          label="Colour-blind mode"
+          sublabel="Alternative feedback colours"
+          right={<Toggle on={appear.colorBlind} onToggle={() => setAppear((p) => ({ ...p, colorBlind: !p.colorBlind }))} />}
+        />
+        <div style={{ borderBottom: 'none' }}>
+          <SettingRow
+            icon="📳"
+            iconBg="rgba(26,60,94,0.55)"
+            label="Haptic feedback"
+            sublabel="Vibration on guess submit"
+            right={<Toggle on={appear.haptics} onToggle={() => setAppear((p) => ({ ...p, haptics: !p.haptics }))} />}
+          />
+        </div>
+      </SettingsGroup>
+    </SettingsScrollFrame>
+  )
+}
+
+const StatsSettings = ({
+  onBack,
+  currentStreak,
+  xpTotal,
+}: {
+  onBack: () => void
+  currentStreak: number | null
+  xpTotal: number | null
+}) => {
+  const stats = [
+    { v: xpTotal != null ? String(xpTotal) : '--', l: 'Total XP', color: 'var(--wardle-color-teal)' },
+    { v: `🔥 ${currentStreak ?? 0}`, l: 'Day streak', color: 'var(--wardle-color-amber)' },
+  ]
+  return (
+    <SettingsScrollFrame>
+      <BackHeader onBack={onBack} title="Learning & Stats" />
+      <SubHero icon="📊" title="Your learning stats" desc="Track your diagnostic growth over time" />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, margin: '0 16px 4px' }}>
+        {stats.map((s) => (
+          <div
+            key={s.l}
+            style={{
+              background: 'rgba(26,60,94,0.3)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 12,
+              padding: '12px',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.v}</div>
+            <div
+              style={{
+                fontSize: 10,
+                color: 'var(--wardle-color-gray)',
+                marginTop: 3,
+                textTransform: 'uppercase',
+                letterSpacing: 0.8,
+              }}
+            >
+              {s.l}
+            </div>
+          </div>
+        ))}
+      </div>
+      <SectionLabel>Detail</SectionLabel>
+      <SettingsGroup>
+        <SettingRow
+          icon="📈"
+          iconBg="rgba(0,180,166,0.15)"
+          label="Performance report"
+          sublabel="Accuracy by specialty & over time"
+          onClick={() => {}}
+          right={<ChevronVal />}
+        />
+        <SettingRow
+          icon="🏅"
+          iconBg="rgba(244,162,97,0.15)"
+          label="Specialty badges"
+          sublabel="4 earned · 11 remaining"
+          onClick={() => {}}
+          right={<ChevronVal />}
+        />
+        <div style={{ borderBottom: 'none' }}>
+          <SettingRow
+            icon="📋"
+            iconBg="rgba(26,60,94,0.55)"
+            label="Case history"
+            sublabel="All 147 cases you've played"
+            onClick={() => {}}
+            right={<ChevronVal />}
+          />
+        </div>
+      </SettingsGroup>
+    </SettingsScrollFrame>
+  )
+}
+
+const AccountSettings = ({
+  onBack,
+  onSignOut,
+  organizationName,
+}: {
+  onBack: () => void
+  onSignOut: () => void
+  organizationName: string | null
+}) => {
+  const [privacy, setPrivacy] = useState({ publicProfile: true, anonData: true })
+  return (
+    <SettingsScrollFrame>
+      <BackHeader onBack={onBack} title="Account & Privacy" />
+      <SubHero icon="👤" title="Account & privacy" desc="Wardle will never sell your data" />
+      <SectionLabel>Account</SectionLabel>
+      <SettingsGroup>
+        <SettingRow
+          icon="🎓"
+          iconBg="rgba(52,199,89,0.12)"
+          label="School verification"
+          sublabel={organizationName ? `Verified · ${organizationName}` : 'No organization connected'}
+          onClick={() => {}}
+          right={<div style={{ fontSize: 12, color: 'var(--wardle-color-teal)', fontWeight: 700 }}>{organizationName ? '✓ Verified' : 'Add school'}</div>}
+        />
+        <div style={{ borderBottom: 'none' }}>
+          <SettingRow
+            icon="🔑"
+            iconBg="rgba(26,60,94,0.55)"
+            label="Change password"
+            sublabel="Sent to your registered email"
+            onClick={() => {}}
+            right={<ChevronVal />}
+          />
+        </div>
+      </SettingsGroup>
+      <SectionLabel>Privacy</SectionLabel>
+      <SettingsGroup>
+        <SettingRow
+          icon="👁"
+          iconBg="rgba(0,180,166,0.15)"
+          label="Public leaderboard profile"
+          sublabel="Others can see your rank & streak"
+          right={<Toggle on={privacy.publicProfile} onToggle={() => setPrivacy((p) => ({ ...p, publicProfile: !p.publicProfile }))} />}
+        />
+        <SettingRow
+          icon="📈"
+          iconBg="rgba(26,60,94,0.55)"
+          label="Share anonymised data"
+          sublabel="Help improve case difficulty"
+          right={<Toggle on={privacy.anonData} onToggle={() => setPrivacy((p) => ({ ...p, anonData: !p.anonData }))} />}
+        />
+        <div style={{ borderBottom: 'none' }}>
+          <SettingRow
+            icon="📄"
+            iconBg="rgba(26,60,94,0.55)"
+            label="Privacy policy"
+            sublabel="How we handle your data"
+            onClick={() => {}}
+            right={<ChevronVal />}
+          />
+        </div>
+      </SettingsGroup>
+      <SectionLabel>Danger zone</SectionLabel>
+      <SettingsGroup>
+        <SettingRow
+          icon="🚪"
+          iconBg="rgba(26,60,94,0.55)"
+          label="Sign out"
+          sublabel="Your streak is safe — don't worry"
+          onClick={onSignOut}
+          right={<ChevronVal />}
+        />
+        <div style={{ borderBottom: 'none' }}>
+          <SettingRow
+            icon="⛔"
+            iconBg="rgba(224,92,92,0.12)"
+            label="Delete account"
+            sublabel="Permanent — streak will be lost"
+            redLabel
+            onClick={() => {}}
+            right={<ChevronVal color="#E05C5C" />}
+          />
+        </div>
+      </SettingsGroup>
+    </SettingsScrollFrame>
+  )
+}
+
+// ─── SETTINGS MAIN SCREEN ─────────────────────────────────────────
 export default function SettingsPage({
   currentStreak,
   xpTotal,
@@ -30,6 +723,7 @@ export default function SettingsPage({
   const { user } = useUser()
   const { request } = useApi()
   const queryClient = useQueryClient()
+  const [subScreen, setSubScreen] = useState<string | null>(null)
 
   const profileQuery = useQuery({
     queryKey: ['profile', 'me'],
@@ -38,27 +732,23 @@ export default function SettingsPage({
     placeholderData: (previousData) => previousData,
   })
 
-  const backendProfile = profileQuery.data
-  const resolvedMemberships =
-    backendProfile?.memberships && backendProfile.memberships.length > 0
-      ? backendProfile.memberships
-      : memberships
-  const activeOrganization =
-    backendProfile?.activeOrganization ??
-    resolvedMemberships.find((membership) => membership.status === 'ACTIVE')?.organization ??
-    null
+  const settingsQuery = useQuery({
+    queryKey: ['settings', 'me'],
+    queryFn: async () => getUserSettingsApi(request),
+    enabled: isLoaded && isSignedIn,
+    placeholderData: (previousData) => previousData,
+  })
 
-  const [isEditingProfile, setIsEditingProfile] = useState(false)
-  const [displayNameInput, setDisplayNameInput] = useState('')
-  const [trainingLevelInput, setTrainingLevelInput] = useState('')
-  const [countryInput, setCountryInput] = useState('')
-  const [individualModeInput, setIndividualModeInput] = useState(true)
-  const [selectedOrganizationId, setSelectedOrganizationId] = useState<string | null>(null)
-  const [organizationQuery, setOrganizationQuery] = useState('')
-  const [organizationResults, setOrganizationResults] = useState<Organization[]>([])
-  const [searchingOrganizations, setSearchingOrganizations] = useState(false)
-  const [savingProfile, setSavingProfile] = useState(false)
-  const [saveError, setSaveError] = useState('')
+  const settingsMutation = useMutation({
+    mutationFn: async (payload: Partial<UserSettings>) =>
+      updateUserSettingsApi(request, payload),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['settings', 'me'], settings)
+    },
+  })
+
+  const backendProfile = profileQuery.data
+  const settings = settingsQuery.data ?? DEFAULT_USER_SETTINGS
 
   const fallbackDisplayName =
     user?.fullName ??
@@ -66,461 +756,336 @@ export default function SettingsPage({
     user?.primaryEmailAddress?.emailAddress?.split('@')[0] ??
     'Wardle clinician'
 
-  const displayName =
-    backendProfile?.displayName?.trim() || fallbackDisplayName
-  const email = user?.primaryEmailAddress?.emailAddress ?? 'Signed in'
+  const displayName = backendProfile?.displayName?.trim() || fallbackDisplayName
+  const trainingLevel = backendProfile?.trainingLevel?.trim() || null
+  const membershipLabel =
+    memberships.length > 0
+      ? `${memberships.length} organization${memberships.length === 1 ? '' : 's'}`
+      : 'Individual'
 
-  const organizationOptions = useMemo(() => {
-    const fromMemberships = resolvedMemberships.map((membership) => membership.organization)
-    const merged = new Map<string, Organization>()
+  // Sub-screen renderers
+  if (subScreen === 'gameplay')
+    return (
+      <GameplaySettings
+        onBack={() => setSubScreen(null)}
+        settings={settings}
+        saving={settingsMutation.isPending}
+        onUpdate={(payload) => settingsMutation.mutate(payload)}
+      />
+    )
+  if (subScreen === 'notifications') return <NotificationSettings onBack={() => setSubScreen(null)} />
+  if (subScreen === 'appearance') return <AppearanceSettings onBack={() => setSubScreen(null)} />
+  if (subScreen === 'stats')
+    return (
+      <StatsSettings
+        onBack={() => setSubScreen(null)}
+        currentStreak={currentStreak}
+        xpTotal={xpTotal}
+      />
+    )
+  if (subScreen === 'account')
+    return (
+      <AccountSettings
+        onBack={() => setSubScreen(null)}
+        onSignOut={() => void signOut()}
+        organizationName={organizationName}
+      />
+    )
 
-    for (const organization of [...fromMemberships, ...organizationResults]) {
-      merged.set(organization.id, organization)
-    }
-
-    return Array.from(merged.values())
-  }, [organizationResults, resolvedMemberships])
-
-  useEffect(() => {
-    if (!backendProfile) {
-      return
-    }
-
-    if (isEditingProfile) {
-      return
-    }
-
-    setDisplayNameInput(backendProfile.displayName?.trim() ?? fallbackDisplayName)
-    setTrainingLevelInput(backendProfile.trainingLevel?.trim() ?? '')
-    setCountryInput(backendProfile.country?.trim() ?? '')
-    setIndividualModeInput(backendProfile.individualMode ?? !backendProfile.activeOrganization)
-    setSelectedOrganizationId(backendProfile.activeOrganization?.id ?? null)
-  }, [backendProfile, fallbackDisplayName, isEditingProfile])
-
-  useEffect(() => {
-    if (!isEditingProfile || individualModeInput) {
-      return
-    }
-
-    const query = organizationQuery.trim()
-    if (query.length < 2) {
-      setOrganizationResults([])
-      return
-    }
-
-    let active = true
-    const timeout = window.setTimeout(() => {
-      setSearchingOrganizations(true)
-      searchOrganizationsApi(request, query)
-        .then((results) => {
-          if (!active) {
-            return
-          }
-
-          setOrganizationResults(results)
-        })
-        .catch((error: unknown) => {
-          if (!active) {
-            return
-          }
-
-          setSaveError(error instanceof Error ? error.message : 'Unable to search organizations.')
-        })
-        .finally(() => {
-          if (active) {
-            setSearchingOrganizations(false)
-          }
-        })
-    }, 250)
-
-    return () => {
-      active = false
-      window.clearTimeout(timeout)
-    }
-  }, [individualModeInput, isEditingProfile, organizationQuery, request])
-
-  const beginEditProfile = () => {
-    setSaveError('')
-    setIsEditingProfile(true)
-  }
-
-  const cancelEditProfile = () => {
-    if (backendProfile) {
-      setDisplayNameInput(backendProfile.displayName?.trim() ?? fallbackDisplayName)
-      setTrainingLevelInput(backendProfile.trainingLevel?.trim() ?? '')
-      setCountryInput(backendProfile.country?.trim() ?? '')
-      setIndividualModeInput(backendProfile.individualMode ?? !backendProfile.activeOrganization)
-      setSelectedOrganizationId(backendProfile.activeOrganization?.id ?? null)
-    }
-    setOrganizationQuery('')
-    setOrganizationResults([])
-    setSaveError('')
-    setIsEditingProfile(false)
-  }
-
-  const saveProfile = async () => {
-    setSaveError('')
-
-    if (!displayNameInput.trim()) {
-      setSaveError('Display name is required.')
-      return
-    }
-
-    if (!individualModeInput && !selectedOrganizationId) {
-      setSaveError('Select an organization or switch to individual mode.')
-      return
-    }
-
-    setSavingProfile(true)
-    try {
-      await updateBackendProfileApi(request, {
-        displayName: displayNameInput.trim(),
-        trainingLevel: trainingLevelInput.trim() || undefined,
-        country: countryInput.trim() || undefined,
-        individualMode: individualModeInput,
-        organizationId: individualModeInput ? null : selectedOrganizationId,
-      })
-
-      await queryClient.invalidateQueries({ queryKey: ['profile', 'me'] })
-      await queryClient.invalidateQueries({ queryKey: ['organizations', 'me'] })
-
-      setIsEditingProfile(false)
-      setOrganizationQuery('')
-      setOrganizationResults([])
-    } catch (error: unknown) {
-      setSaveError(error instanceof Error ? error.message : 'Unable to save profile settings.')
-    } finally {
-      setSavingProfile(false)
-    }
-  }
+  const menuItems = [
+    {
+      id: 'gameplay',
+      icon: '🎮',
+      bg: 'rgba(0,180,166,0.15)',
+      label: 'Gameplay',
+      sub: 'Difficulty, hints, timer',
+    },
+    {
+      id: 'notifications',
+      icon: '🔔',
+      bg: 'rgba(244,162,97,0.15)',
+      label: 'Notifications',
+      sub: 'Reminders, alerts, digest',
+    },
+    {
+      id: 'appearance',
+      icon: '🌙',
+      bg: 'rgba(26,60,94,0.55)',
+      label: 'Appearance',
+      sub: 'Theme, text size, animations',
+    },
+    {
+      id: 'stats',
+      icon: '📊',
+      bg: 'rgba(140,100,210,0.15)',
+      label: 'Learning & Stats',
+      sub: 'Performance, badges, history',
+    },
+    {
+      id: 'account',
+      icon: '👤',
+      bg: 'rgba(26,60,94,0.55)',
+      label: 'Account & Privacy',
+      sub: 'Password, data, sign out',
+    },
+  ]
 
   return (
-    <main className="flex h-full min-h-0 w-full flex-1 flex-col overflow-y-auto px-1 pb-4 pt-1 sm:px-2">
-      <div className="space-y-4">
-        <section className="relative overflow-hidden rounded-[26px] border border-white/[0.06] bg-[linear-gradient(145deg,rgba(26,60,94,0.88),rgba(30,30,44,0.98)_68%)] px-5 py-6 shadow-[0_22px_54px_rgba(0,0,0,0.22)]">
-          <div className="pointer-events-none absolute -right-16 -top-16 size-44 rounded-full bg-[rgba(0,180,166,0.16)] blur-3xl" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-white/[0.06]" />
-          <div className="relative">
-            <WardleLogo size="sm" subtitle="Settings" />
-            <h1 className="mt-5 text-2xl font-black text-[var(--wardle-color-mint)]">
-              Settings
-            </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/68">
-              Manage your profile, organization, account, and app help.
-            </p>
-          </div>
-        </section>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <SurfaceCard eyebrow="Profile" title="User summary">
-            {isEditingProfile ? (
-              <div className="space-y-3">
-                <Field label="Display name">
-                  <input
-                    value={displayNameInput}
-                    onChange={(event) => setDisplayNameInput(event.target.value)}
-                    className={inputClassName}
-                    placeholder="Dr. in the making..."
-                    maxLength={80}
-                  />
-                </Field>
-
-                <Field label="Profile mode">
-                  <div className="grid grid-cols-2 gap-2">
-                    <ToggleButton
-                      active={individualModeInput}
-                      onClick={() => {
-                        setIndividualModeInput(true)
-                        setSelectedOrganizationId(null)
-                      }}
-                      label="Individual"
-                    />
-                    <ToggleButton
-                      active={!individualModeInput}
-                      onClick={() => setIndividualModeInput(false)}
-                      label="Organization"
-                    />
-                  </div>
-                </Field>
-
-                {!individualModeInput ? (
-                  <>
-                    <Field label="Organization">
-                      <select
-                        className={inputClassName}
-                        value={selectedOrganizationId ?? ''}
-                        onChange={(event) =>
-                          setSelectedOrganizationId(event.target.value || null)
-                        }
-                      >
-                        <option value="">Select an organization</option>
-                        {organizationOptions.map((organization) => (
-                          <option key={organization.id} value={organization.id}>
-                            {organization.name}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-
-                    <Field label="Search organizations">
-                      <input
-                        value={organizationQuery}
-                        onChange={(event) => setOrganizationQuery(event.target.value)}
-                        className={inputClassName}
-                        placeholder="Search to add another organization option"
-                      />
-                    </Field>
-
-                    {searchingOrganizations ? (
-                      <p className="text-xs text-white/48">Searching organizations...</p>
-                    ) : null}
-                  </>
-                ) : null}
-
-                <Field label="Training level (optional)">
-                  <input
-                    value={trainingLevelInput}
-                    onChange={(event) => setTrainingLevelInput(event.target.value)}
-                    className={inputClassName}
-                    placeholder="Intern, Resident, Student..."
-                    maxLength={80}
-                  />
-                </Field>
-
-                <Field label="Country (optional)">
-                  <input
-                    value={countryInput}
-                    onChange={(event) => setCountryInput(event.target.value)}
-                    className={inputClassName}
-                    placeholder="Kenya"
-                    maxLength={80}
-                  />
-                </Field>
-
-                {saveError ? (
-                  <div className="rounded-[14px] border border-[rgba(224,92,92,0.32)] bg-[rgba(224,92,92,0.12)] px-4 py-3 text-sm text-[#ff9a9a]">
-                    {saveError}
-                  </div>
-                ) : null}
-
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    disabled={savingProfile}
-                    onClick={() => void saveProfile()}
-                    className="rounded-[14px] border border-[rgba(0,180,166,0.34)] bg-[rgba(0,180,166,0.18)] px-4 py-3 text-sm font-bold text-[var(--wardle-color-mint)] transition hover:border-[rgba(0,180,166,0.5)] disabled:cursor-not-allowed disabled:opacity-55"
-                  >
-                    {savingProfile ? 'Saving...' : 'Save profile'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={savingProfile}
-                    onClick={cancelEditProfile}
-                    className="rounded-[14px] border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-sm font-bold text-white/66 transition hover:border-white/[0.16] disabled:cursor-not-allowed disabled:opacity-55"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <InfoRow label="Name" value={displayName} />
-                <InfoRow label="Email" value={email} />
-                <InfoRow
-                  label="Profile mode"
-                  value={(backendProfile?.individualMode ?? !activeOrganization) ? 'Individual' : 'Organization'}
-                />
-                <InfoRow
-                  label="Current streak"
-                  value={currentStreak != null ? String(currentStreak) : '--'}
-                />
-                <InfoRow label="XP" value={xpTotal != null ? String(xpTotal) : '--'} />
-                <InfoRow label="Training level" value={backendProfile?.trainingLevel?.trim() || '--'} />
-                <InfoRow label="Country" value={backendProfile?.country?.trim() || '--'} />
-
-                <button
-                  type="button"
-                  onClick={beginEditProfile}
-                  className="w-full rounded-[14px] border border-[rgba(0,180,166,0.3)] bg-[rgba(0,180,166,0.12)] px-4 py-3 text-sm font-bold text-[var(--wardle-color-mint)] transition hover:border-[rgba(0,180,166,0.46)]"
-                >
-                  Edit profile
-                </button>
-              </div>
-            )}
-          </SurfaceCard>
-
-          <SurfaceCard eyebrow="Organization" title="Institution">
-            {activeOrganization || organizationName ? (
-              <div className="space-y-3">
-                <InfoRow label="Active organization" value={activeOrganization?.name ?? organizationName ?? '--'} />
-                <InfoRow label="Memberships" value={String(resolvedMemberships.length)} />
-              </div>
-            ) : (
-              <p className="text-sm leading-6 text-white/64">
-                You are currently playing as an individual. Organization membership is optional
-                and can support future institution features.
-              </p>
-            )}
-            <div className="mt-4 rounded-[16px] border border-white/[0.08] bg-white/[0.04] px-4 py-3">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-white/42">
-                Rank filters
-              </p>
-              <p className="mt-1 text-sm text-white/58">
-                Organization rank filters are not enabled yet.
-              </p>
-            </div>
-          </SurfaceCard>
-        </div>
-
-        <SurfaceCard eyebrow="Account" title="Actions">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => void signOut()}
-              className="rounded-[16px] border border-[rgba(224,92,92,0.24)] bg-[rgba(224,92,92,0.1)] px-4 py-3 text-sm font-bold text-[#ffabab] transition hover:border-[rgba(224,92,92,0.36)]"
-            >
-              Sign out
-            </button>
-            <button
-              type="button"
-              onClick={beginEditProfile}
-              className="rounded-[16px] border border-[rgba(0,180,166,0.24)] bg-[rgba(0,180,166,0.1)] px-4 py-3 text-sm font-bold text-[var(--wardle-color-mint)] transition hover:border-[rgba(0,180,166,0.4)]"
-            >
-              Edit profile
-            </button>
-          </div>
-        </SurfaceCard>
-
-        <section className="grid gap-4 lg:grid-cols-2">
-          <HelpCard
-            eyebrow="How To Play"
-            title="Round flow"
-            items={[
-              'Start with one revealed clinical clue.',
-              'Study the case details before choosing a diagnosis.',
-              'Submit from the diagnosis suggestion list, not from free text alone.',
-              'Each wrong submission unlocks another clue until the case resolves.',
-            ]}
-          />
-          <HelpCard
-            eyebrow="Scoring"
-            title="What improves your result"
-            items={[
-              'Fewer clues used means a stronger solve.',
-              'Finishing earlier preserves more viability and usually yields better rewards.',
-              'Correct outcomes can award XP and streak progress when the backend returns them.',
-            ]}
-          />
-          <HelpCard
-            eyebrow="Diagnosis Selection"
-            title="Why submit can be blocked"
-            items={[
-              'Typing alone is not enough when the engine requires a selected registry match.',
-              'Changing the guess after selecting a suggestion creates a stale selection.',
-              'Pick a fresh suggestion again before submitting.',
-            ]}
-          />
-          <HelpCard
-            eyebrow="Rewards"
-            title="Streaks and progression"
-            items={[
-              'Streak display uses your durable user progress.',
-              'XP totals and level display when progress data is available.',
-              'If the backend does not return a reward for a round, the app shows only the real data it has.',
-            ]}
-          />
-        </section>
-
-        <SurfaceCard eyebrow="App" title="Support">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <InfoRow label="App" value="Wardle" />
-            <InfoRow label="Support" value="Contact support for account or Clerk verification issues." />
-          </div>
-        </SurfaceCard>
+    <SettingsScrollFrame contentStyle={{
+      paddingLeft: 'var(--px-1)',
+      paddingRight: 'var(--px-1)',
+      paddingTop: 'var(--pt-1)',
+    }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '14px 20px 0',
+        }}
+      >
+        <WardleLogo size="sm" />
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: 'var(--wardle-color-gray)',
+            textTransform: 'uppercase',
+            letterSpacing: 1.2,
+          }}
+        >
+          Settings
+        </span>
       </div>
-    </main>
-  )
-}
 
-const inputClassName =
-  'w-full rounded-[14px] border border-[rgba(0,180,166,0.24)] bg-[rgba(26,60,94,0.36)] px-4 py-3 text-sm font-semibold text-[var(--wardle-color-mint)] outline-none transition placeholder:text-white/30 focus:border-[rgba(0,180,166,0.62)]'
-
-function Field({
-  label,
-  children,
-}: {
-  label: string
-  children: ReactNode
-}) {
-  return (
-    <label className="block">
-      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.14em] text-white/42">
-        {label}
-      </span>
-      {children}
-    </label>
-  )
-}
-
-function ToggleButton({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean
-  onClick: () => void
-  label: string
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-[14px] border px-3 py-2 text-sm font-bold transition ${
-        active
-          ? 'border-[rgba(0,180,166,0.44)] bg-[rgba(0,180,166,0.16)] text-[var(--wardle-color-mint)]'
-          : 'border-white/[0.08] bg-white/[0.04] text-white/56 hover:border-white/[0.16]'
-      }`}
-    >
-      {label}
-    </button>
-  )
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[16px] border border-white/[0.08] bg-white/[0.04] px-4 py-3">
-      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/38">
-        {label}
-      </p>
-      <p className="mt-1 min-w-0 break-words text-sm font-bold text-[var(--wardle-color-mint)]">
-        {value}
-      </p>
-    </div>
-  )
-}
-
-function HelpCard({
-  eyebrow,
-  title,
-  items,
-}: {
-  eyebrow: string
-  title: string
-  items: string[]
-}) {
-  return (
-    <SurfaceCard eyebrow={eyebrow} title={title}>
-      <ul className="space-y-3">
-        {items.map((item) => (
-          <li
-            key={item}
-            className="flex gap-3 rounded-[18px] border border-white/8 bg-white/5 px-4 py-3 text-sm leading-6 text-white/72"
+      {/* Profile card */}
+      <div
+        style={{
+          margin: '16px 16px 0',
+          background: 'rgba(26,60,94,0.45)',
+          border: '1px solid rgba(0,180,166,0.22)',
+          borderRadius: 18,
+          padding: '14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          cursor: 'pointer',
+        }}
+      >
+        <div
+          style={{
+            width: 50,
+            height: 50,
+            borderRadius: '50%',
+            flexShrink: 0,
+            background: 'linear-gradient(135deg, var(--wardle-color-teal), var(--wardle-color-navy))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 20,
+            fontWeight: 800,
+            color: 'white',
+            position: 'relative',
+          }}
+        >
+          {displayName.charAt(0).toUpperCase()}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: -2,
+              right: -2,
+              width: 16,
+              height: 16,
+              borderRadius: '50%',
+              background: 'var(--wardle-color-amber)',
+              border: '2px solid var(--wardle-color-charcoal)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 8,
+            }}
           >
-            <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[var(--wardle-color-teal)]" />
-            <span>{item}</span>
-          </li>
+            🏅
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: 'var(--wardle-color-mint)',
+            }}
+          >
+            {displayName}
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--wardle-color-gray)',
+              marginTop: 1,
+            }}
+          >
+            {organizationName ?? membershipLabel} · {trainingLevel ?? 'Training level unset'}
+          </div>
+          <div
+            style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 9,
+              color: 'var(--wardle-color-teal)',
+              marginTop: 3,
+              letterSpacing: 1,
+            }}
+          >
+            FOUNDING MEMBER
+          </div>
+        </div>
+        <div style={{ color: 'var(--wardle-color-gray)', fontSize: 16 }}>›</div>
+      </div>
+
+      {/* Streak bar */}
+      <div
+        style={{
+          margin: '10px 16px 0',
+          background: 'rgba(244,162,97,0.08)',
+          border: '1px solid rgba(244,162,97,0.22)',
+          borderRadius: 13,
+          padding: '10px 13px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+        }}
+      >
+        <span style={{ fontSize: 22 }}>🔥</span>
+        <div style={{ flex: 1 }}>
+          <div
+            style={{
+              fontSize: 15,
+              fontWeight: 800,
+              color: 'var(--wardle-color-amber)',
+            }}
+          >
+            {currentStreak ?? 0}-day streak
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--wardle-color-gray)' }}>Keep it going!</div>
+        </div>
+        <button
+          style={{
+            background: 'rgba(244,162,97,0.15)',
+            border: '1px solid rgba(244,162,97,0.3)',
+            borderRadius: 8,
+            padding: '4px 9px',
+            fontSize: 11,
+            fontWeight: 700,
+            color: 'var(--wardle-color-amber)',
+            cursor: 'pointer',
+            fontFamily: "'DM Sans', sans-serif",
+          }}
+        >
+          🛡 Shield
+        </button>
+      </div>
+
+      {/* Wardle Plus card */}
+      <div
+        style={{
+          margin: '10px 16px 0',
+          background: 'rgba(26,60,94,0.55)',
+          border: '1px solid rgba(244,162,97,0.3)',
+          borderRadius: 16,
+          padding: '14px',
+        }}
+      >
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            background: 'rgba(244,162,97,0.15)',
+            border: '1px solid rgba(244,162,97,0.3)',
+            borderRadius: 20,
+            padding: '3px 9px',
+            fontSize: 9,
+            fontWeight: 700,
+            color: 'var(--wardle-color-amber)',
+            letterSpacing: 1,
+            textTransform: 'uppercase',
+            marginBottom: 7,
+          }}
+        >
+          ★ Wardle Plus
+        </div>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 800,
+            color: 'var(--wardle-color-mint)',
+            marginBottom: 3,
+          }}
+        >
+          Upgrade your diagnosis game
+        </div>
+        <div
+          style={{
+            fontSize: 11,
+            color: 'var(--wardle-color-gray)',
+            lineHeight: 1.45,
+            marginBottom: 10,
+          }}
+        >
+          Unlimited archive, specialty tracks, exam prep & analytics.
+        </div>
+        <button
+          style={{
+            width: '100%',
+            padding: '10px',
+            borderRadius: 10,
+            border: 'none',
+            background: 'linear-gradient(135deg, var(--wardle-color-amber), #e8834a)',
+            color: 'white',
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          Upgrade — KES 299/month →
+        </button>
+      </div>
+
+      {/* Menu items */}
+      <SectionLabel>Preferences</SectionLabel>
+      <SettingsGroup>
+        {menuItems.map((item, i) => (
+          <div
+            key={item.id}
+            style={{
+              borderBottom: i < menuItems.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+            }}
+          >
+            <SettingRow
+              icon={item.icon}
+              iconBg={item.bg}
+              label={item.label}
+              sublabel={item.sub}
+              onClick={() => setSubScreen(item.id)}
+              right={<ChevronVal />}
+            />
+          </div>
         ))}
-      </ul>
-    </SurfaceCard>
+      </SettingsGroup>
+
+      <div
+        style={{
+          textAlign: 'center',
+          padding: '14px 20px 4px',
+          fontFamily: "'IBM Plex Mono', monospace",
+          fontSize: 9,
+          color: 'rgba(138,155,176,0.35)',
+          letterSpacing: 1,
+        }}
+      >
+        WARDLE v1.0.3 · BUILD 2026.04
+      </div>
+    </SettingsScrollFrame>
   )
 }

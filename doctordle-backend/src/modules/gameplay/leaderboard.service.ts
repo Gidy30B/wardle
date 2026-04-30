@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { RedisCacheService } from '../../core/cache/redis-cache.service';
 import { AppLoggerService } from '../../core/logger/app-logger.service';
@@ -10,6 +11,7 @@ type LeaderboardRow = {
   userId: string;
   score: number;
   attemptsCount: number;
+  timeToComplete: number | null;
   completedAt: Date;
   user: {
     displayName: string | null;
@@ -24,7 +26,10 @@ type LeaderboardRow = {
   };
 };
 
-type LeaderboardAggregate = LeaderboardRow;
+type LeaderboardAggregate = LeaderboardRow & {
+  casesCompleted: number;
+  totalTimeToComplete: number | null;
+};
 
 type LeaderboardEntryDto = {
   rank: number;
@@ -34,6 +39,9 @@ type LeaderboardEntryDto = {
   streak?: number;
   score: number;
   attemptsCount: number;
+  timeToComplete?: number | null;
+  totalTimeToComplete?: number | null;
+  casesCompleted?: number;
   completedAt: string;
 };
 
@@ -73,7 +81,7 @@ export class LeaderboardService {
 
   async getToday(limit = 50) {
     const { date } = this.getUtcDayRange();
-    const key = `leaderboard:daily:v3:${date}:${limit}`;
+    const key = `leaderboard:daily:v4:${date}:${limit}`;
 
     const cached = await this.cache.get(key);
     if (cached) {
@@ -96,6 +104,7 @@ export class LeaderboardService {
       orderBy: [
         { score: 'desc' },
         { attemptsCount: 'asc' },
+        { timeToComplete: { sort: 'asc', nulls: 'last' } },
         { completedAt: 'asc' },
       ],
       take: limit,
@@ -103,6 +112,7 @@ export class LeaderboardService {
         userId: true,
         score: true,
         attemptsCount: true,
+        timeToComplete: true,
         completedAt: true,
         user: this.getPublicUserSelect(),
       },
@@ -113,7 +123,11 @@ export class LeaderboardService {
     );
 
     if (ranked.length > 0) {
-      await this.cache.set(key, JSON.stringify(ranked), this.leaderboardTtlSeconds);
+      await this.cache.set(
+        key,
+        JSON.stringify(ranked),
+        this.leaderboardTtlSeconds,
+      );
     }
 
     return ranked;
@@ -121,7 +135,7 @@ export class LeaderboardService {
 
   async getWeekly(limit = 50) {
     const { start, end, keyDate } = this.getUtcRollingWeekRange();
-    const key = `leaderboard:weekly:v3:${keyDate}:${limit}`;
+    const key = `leaderboard:weekly:v4:${keyDate}:${limit}`;
 
     const cached = await this.cache.get(key);
     if (cached) {
@@ -136,12 +150,14 @@ export class LeaderboardService {
     const rows = await this.getWeeklyRows(start, end);
     const ranked = this.aggregateWeeklyRows(rows)
       .slice(0, limit)
-      .map((row, index) =>
-      this.toLeaderboardEntry(row, index + 1),
-    );
+      .map((row, index) => this.toLeaderboardEntry(row, index + 1));
 
     if (ranked.length > 0) {
-      await this.cache.set(key, JSON.stringify(ranked), this.leaderboardTtlSeconds);
+      await this.cache.set(
+        key,
+        JSON.stringify(ranked),
+        this.leaderboardTtlSeconds,
+      );
     }
 
     return ranked;
@@ -166,6 +182,7 @@ export class LeaderboardService {
           userId: true,
           score: true,
           attemptsCount: true,
+          timeToComplete: true,
           completedAt: true,
           user: this.getPublicUserSelect(),
         },
@@ -178,15 +195,7 @@ export class LeaderboardService {
       const betterCount = await this.prisma.leaderboardEntry.count({
         where: {
           dailyCaseId: dailyCase.dailyCaseId,
-          OR: [
-            { score: { gt: entry.score } },
-            { score: entry.score, attemptsCount: { lt: entry.attemptsCount } },
-            {
-              score: entry.score,
-              attemptsCount: entry.attemptsCount,
-              completedAt: { lt: entry.completedAt },
-            },
-          ],
+          OR: this.getDailyBetterEntryWhere(entry),
         },
       });
 
@@ -212,7 +221,7 @@ export class LeaderboardService {
     score: number;
     attemptsCount: number;
     completedAt: Date;
-    timeToComplete?: number;
+    timeToComplete?: number | null;
   }) {
     const existing = await this.prisma.leaderboardEntry.findUnique({
       where: {
@@ -237,10 +246,17 @@ export class LeaderboardService {
     } else {
       const shouldReplace =
         input.score > existing.score ||
-        (input.score === existing.score && input.attemptsCount < existing.attemptsCount) ||
+        (input.score === existing.score &&
+          input.attemptsCount < existing.attemptsCount) ||
         (input.score === existing.score &&
           input.attemptsCount === existing.attemptsCount &&
-          input.completedAt < existing.completedAt);
+          this.compareCompletionTieBreakers(
+            {
+              timeToComplete: input.timeToComplete ?? null,
+              completedAt: input.completedAt,
+            },
+            existing,
+          ) < 0);
 
       if (shouldReplace) {
         await this.prisma.leaderboardEntry.update({
@@ -257,9 +273,14 @@ export class LeaderboardService {
 
     const { date } = this.getUtcDayRange(input.completedAt);
     const deleted = await this.cache.deleteByPrefix(`leaderboard:daily:`);
-    const weeklyDeleted = await this.cache.deleteByPrefix('leaderboard:weekly:');
+    const weeklyDeleted = await this.cache.deleteByPrefix(
+      'leaderboard:weekly:',
+    );
     this.logger.info({ date, deleted }, 'leaderboard.cache_invalidated');
-    this.logger.info({ deleted: weeklyDeleted }, 'leaderboard.weekly.cache_invalidated');
+    this.logger.info(
+      { deleted: weeklyDeleted },
+      'leaderboard.weekly.cache_invalidated',
+    );
   }
 
   private getUtcDayRange(value = new Date()) {
@@ -278,11 +299,11 @@ export class LeaderboardService {
 
   private getDailyCacheKey(limit: number) {
     const { date } = this.getUtcDayRange();
-    return `leaderboard:daily:v3:${date}:${limit}`;
+    return `leaderboard:daily:v4:${date}:${limit}`;
   }
 
   private getWeeklyCacheKey(limit: number, keyDate?: string) {
-    return `leaderboard:weekly:v3:${keyDate ?? this.getUtcRollingWeekRange().keyDate}:${limit}`;
+    return `leaderboard:weekly:v4:${keyDate ?? this.getUtcRollingWeekRange().keyDate}:${limit}`;
   }
 
   private getPublicUserSelect() {
@@ -314,7 +335,10 @@ export class LeaderboardService {
     };
   }
 
-  private async getWeeklyRows(start: Date, end: Date): Promise<LeaderboardRow[]> {
+  private async getWeeklyRows(
+    start: Date,
+    end: Date,
+  ): Promise<LeaderboardRow[]> {
     return this.prisma.leaderboardEntry.findMany({
       where: {
         completedAt: {
@@ -326,6 +350,7 @@ export class LeaderboardService {
         userId: true,
         score: true,
         attemptsCount: true,
+        timeToComplete: true,
         completedAt: true,
         user: this.getPublicUserSelect(),
       },
@@ -339,12 +364,21 @@ export class LeaderboardService {
       const current = aggregates.get(row.userId);
 
       if (!current) {
-        aggregates.set(row.userId, { ...row });
+        aggregates.set(row.userId, {
+          ...row,
+          casesCompleted: 1,
+          totalTimeToComplete: row.timeToComplete,
+        });
         continue;
       }
 
       current.score += row.score;
       current.attemptsCount += row.attemptsCount;
+      current.casesCompleted += 1;
+      current.totalTimeToComplete =
+        current.totalTimeToComplete == null || row.timeToComplete == null
+          ? null
+          : current.totalTimeToComplete + row.timeToComplete;
       current.completedAt =
         current.completedAt < row.completedAt
           ? current.completedAt
@@ -356,19 +390,35 @@ export class LeaderboardService {
         return right.score - left.score;
       }
 
+      if (left.casesCompleted !== right.casesCompleted) {
+        return right.casesCompleted - left.casesCompleted;
+      }
+
       if (left.attemptsCount !== right.attemptsCount) {
         return left.attemptsCount - right.attemptsCount;
+      }
+
+      const timeComparison = this.compareNullableTime(
+        left.totalTimeToComplete,
+        right.totalTimeToComplete,
+      );
+      if (timeComparison !== 0) {
+        return timeComparison;
       }
 
       return left.completedAt.getTime() - right.completedAt.getTime();
     });
   }
 
-  private toLeaderboardEntry(row: LeaderboardRow, rank: number): LeaderboardEntryDto {
+  private toLeaderboardEntry(
+    row: LeaderboardRow,
+    rank: number,
+  ): LeaderboardEntryDto {
     const displayName = row.user.displayName?.trim() || undefined;
     const organizationName =
       row.user.organizations[0]?.organization.name.trim() || undefined;
     const streak = row.user.stats?.currentStreak;
+    const aggregate = row as Partial<LeaderboardAggregate>;
 
     return {
       rank,
@@ -378,8 +428,93 @@ export class LeaderboardService {
       ...(typeof streak === 'number' ? { streak } : {}),
       score: row.score,
       attemptsCount: row.attemptsCount,
+      timeToComplete: row.timeToComplete,
+      ...(aggregate.totalTimeToComplete !== undefined
+        ? { totalTimeToComplete: aggregate.totalTimeToComplete }
+        : {}),
+      ...(aggregate.casesCompleted !== undefined
+        ? { casesCompleted: aggregate.casesCompleted }
+        : {}),
       completedAt: row.completedAt.toISOString(),
     };
+  }
+
+  private compareCompletionTieBreakers(
+    left: { timeToComplete: number | null; completedAt: Date },
+    right: { timeToComplete: number | null; completedAt: Date },
+  ) {
+    const timeComparison = this.compareNullableTime(
+      left.timeToComplete,
+      right.timeToComplete,
+    );
+    if (timeComparison !== 0) {
+      return timeComparison;
+    }
+
+    return left.completedAt.getTime() - right.completedAt.getTime();
+  }
+
+  private compareNullableTime(left: number | null, right: number | null) {
+    if (left == null && right == null) {
+      return 0;
+    }
+
+    if (left == null) {
+      return 1;
+    }
+
+    if (right == null) {
+      return -1;
+    }
+
+    return left - right;
+  }
+
+  private getDailyBetterEntryWhere(entry: {
+    score: number;
+    attemptsCount: number;
+    timeToComplete: number | null;
+    completedAt: Date;
+  }): Prisma.LeaderboardEntryWhereInput[] {
+    const sameScoreAndAttempts = {
+      score: entry.score,
+      attemptsCount: entry.attemptsCount,
+    };
+
+    const fasterTime =
+      entry.timeToComplete == null
+        ? {
+            ...sameScoreAndAttempts,
+            timeToComplete: {
+              not: null,
+            },
+          }
+        : {
+            ...sameScoreAndAttempts,
+            timeToComplete: {
+              lt: entry.timeToComplete,
+            },
+          };
+
+    const sameTimeEarlierCompletion =
+      entry.timeToComplete == null
+        ? {
+            ...sameScoreAndAttempts,
+            timeToComplete: null,
+            completedAt: { lt: entry.completedAt },
+          }
+        : {
+            ...sameScoreAndAttempts,
+            timeToComplete: entry.timeToComplete,
+            completedAt: { lt: entry.completedAt },
+          };
+
+    return [
+      { score: { gt: entry.score } },
+      { score: entry.score, attemptsCount: { lt: entry.attemptsCount } },
+      fasterTime,
+      sameTimeEarlierCompletion,
+    ];
   }
 
   private getUtcRollingWeekRange(value = new Date()) {

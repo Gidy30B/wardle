@@ -38,6 +38,8 @@ type BuildRoundViewModelInput = {
   attempts: GameAttempt[]
   latestResult: GameResult | null
   reward: GameRewardState
+  elapsedSeconds: number | null
+  elapsedTimeText: string | null
   isLoadingCase: boolean
   error: string | null
   waitingCountdownText: string | null
@@ -238,6 +240,8 @@ export function buildRoundViewModel({
   attempts,
   latestResult,
   reward,
+  elapsedSeconds,
+  elapsedTimeText,
   isLoadingCase,
   error,
   waitingCountdownText,
@@ -348,6 +352,8 @@ export function buildRoundViewModel({
     finalExplanation,
     outcomeTone,
     reward,
+    elapsedSeconds,
+    elapsedTimeText,
     waitingCountdownText: mode.type === 'WAITING' ? waitingCountdownText ?? '00:00:00' : null,
     unavailableReason: resolvedUnavailableReason,
     canRetry: mode.type === 'BLOCKED' && canRetry,

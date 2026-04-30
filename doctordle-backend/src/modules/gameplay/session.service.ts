@@ -43,6 +43,7 @@ type PersistGuessResult =
       nextClueIndex: number;
       gameOver: boolean;
       gameOverReason: 'correct' | 'clues_exhausted' | null;
+      completedAt: Date | null;
       shouldRequestReward: boolean;
       isTerminalCorrect: boolean;
     };
@@ -61,6 +62,8 @@ type StartDailyGameResponse =
       dailyCaseId: string;
       clueIndex: number;
       attemptsCount: number;
+      startedAt: string;
+      completedAt: string | null;
       case: ReturnType<SessionService['buildCasePayload']>;
     }
   | {
@@ -169,7 +172,10 @@ export class SessionService {
         })
       : input.dailyCaseId
         ? input.dailyCaseId
-        : await this.resolveStartableDailyCaseId(input.userId, todayCases.cases);
+        : await this.resolveStartableDailyCaseId(
+            input.userId,
+            todayCases.cases,
+          );
 
     if (!selectedDailyCaseId && !replayMode) {
       this.logEvent('daily.start.dev_replay.auto_lookup', {
@@ -195,7 +201,7 @@ export class SessionService {
           requestedDailyCaseId: input.dailyCaseId ?? null,
           requestedTrack: input.track ?? null,
           requestedSequenceIndex: input.sequenceIndex ?? null,
-        })
+        });
       }
 
       this.logWarnEvent('daily.start.waiting.no_selected_case', {
@@ -223,7 +229,7 @@ export class SessionService {
         requestedDailyCaseId: input.dailyCaseId ?? null,
         requestedTrack: input.track ?? null,
         requestedSequenceIndex: input.sequenceIndex ?? null,
-      })
+      });
 
       await this.dailyCasesService.resetUserSessionForDailyCaseReplay(
         input.userId,
@@ -231,10 +237,11 @@ export class SessionService {
       );
     }
 
-    const result = await this.dailyCasesService.getOrCreateGameSessionForDailyCase(
-      input.userId,
-      selectedDailyCaseId,
-    );
+    const result =
+      await this.dailyCasesService.getOrCreateGameSessionForDailyCase(
+        input.userId,
+        selectedDailyCaseId,
+      );
     const selectedCase: Pick<CaseModel, 'id' | 'difficulty' | 'date'> = {
       id: result.dailyCase.case.id,
       date: result.dailyCase.case.date,
@@ -300,6 +307,10 @@ export class SessionService {
       dailyCaseId: result.dailyCase.id,
       clueIndex,
       attemptsCount: resumedAttempts.length,
+      startedAt: result.session.startedAt.toISOString(),
+      completedAt: result.session.completedAt
+        ? result.session.completedAt.toISOString()
+        : null,
       case: responseCase,
     };
   }
@@ -534,8 +545,7 @@ export class SessionService {
               userId: input.userId,
               guess: submittedGuess,
               normalizedGuess,
-              selectedDiagnosisId:
-                resolution.submittedDiagnosisRegistryId,
+              selectedDiagnosisId: resolution.submittedDiagnosisRegistryId,
               strictMatchedDiagnosisId: resolution.resolvedDiagnosisRegistryId,
               strictMatchOutcome: resolution.resolutionMethod,
               score: outcome.computedScore,
@@ -546,13 +556,15 @@ export class SessionService {
                 strictMatchMatched: registryGuessEvaluation.isCorrect,
                 strictMatchOutcome: resolution.resolutionMethod,
                 selectedDiagnosisId: resolution.submittedDiagnosisRegistryId,
-                strictMatchedDiagnosisId: resolution.resolvedDiagnosisRegistryId,
+                strictMatchedDiagnosisId:
+                  resolution.resolvedDiagnosisRegistryId,
                 retrievalMode: evaluation.retrievalMode ?? 'selected-id-only',
               } as Prisma.InputJsonValue,
               evaluatorVersion: evaluation.evaluatorVersion ?? 'registry:v2',
               clueIndexAtAttempt: outcome.clueIndex,
             });
 
+            const completedAt = outcome.gameOver ? new Date() : null;
             const sessionUpdate = outcome.gameOver
               ? await tx.gameSession.updateMany({
                   where: {
@@ -563,7 +575,7 @@ export class SessionService {
                   },
                   data: {
                     status: 'completed',
-                    completedAt: new Date(),
+                    completedAt,
                     processingAt: null,
                   },
                 })
@@ -592,6 +604,7 @@ export class SessionService {
               nextClueIndex: outcome.nextClueIndex,
               gameOver: outcome.gameOver,
               gameOverReason: outcome.gameOverReason,
+              completedAt,
               shouldRequestReward: outcome.shouldRequestReward,
               isTerminalCorrect: outcome.isTerminalCorrect,
             } satisfies PersistGuessResult;
@@ -617,6 +630,10 @@ export class SessionService {
           attemptsCount: persisted.attemptsCount,
           clueIndex: persisted.clueIndex,
           isTerminalCorrect: false,
+          startedAt: session.startedAt.toISOString(),
+          completedAt: session.completedAt
+            ? session.completedAt.toISOString()
+            : null,
           duplicate: true,
         };
       }
@@ -651,6 +668,12 @@ export class SessionService {
         semanticScore: evaluation.score,
         clueIndex: persisted.nextClueIndex,
         isTerminalCorrect: persisted.isTerminalCorrect,
+        startedAt: session.startedAt.toISOString(),
+        completedAt: persisted.completedAt
+          ? persisted.completedAt.toISOString()
+          : session.completedAt
+            ? session.completedAt.toISOString()
+            : null,
         case: responseCase,
         gameOver: persisted.gameOver,
         gameOverReason: persisted.gameOverReason,
@@ -859,10 +882,12 @@ export class SessionService {
     }
 
     if (input.dailyCaseId) {
-      const exactMatch = cases.find((entry) => entry.dailyCaseId === input.dailyCaseId);
+      const exactMatch = cases.find(
+        (entry) => entry.dailyCaseId === input.dailyCaseId,
+      );
       if (!exactMatch) {
         throw new BadRequestException(
-          'Requested dev replay dailyCaseId is not available in today\'s feed',
+          "Requested dev replay dailyCaseId is not available in today's feed",
         );
       }
 
@@ -872,12 +897,13 @@ export class SessionService {
     if (input.track && input.sequenceIndex) {
       const exactTrackMatch = cases.find(
         (entry) =>
-          entry.track === input.track && entry.sequenceIndex === input.sequenceIndex,
+          entry.track === input.track &&
+          entry.sequenceIndex === input.sequenceIndex,
       );
 
       if (!exactTrackMatch) {
         throw new BadRequestException(
-          'Requested dev replay track/sequenceIndex is not available in today\'s feed',
+          "Requested dev replay track/sequenceIndex is not available in today's feed",
         );
       }
 
@@ -889,7 +915,7 @@ export class SessionService {
 
       if (trackCases.length === 0) {
         throw new BadRequestException(
-          'Requested dev replay track is not available in today\'s feed',
+          "Requested dev replay track is not available in today's feed",
         );
       }
 
@@ -897,10 +923,11 @@ export class SessionService {
         return trackCases[0].dailyCaseId;
       }
 
-      const recentTrackSession = await this.findMostRecentTodaySessionDailyCaseId(
-        userId,
-        trackCases.map((entry) => entry.dailyCaseId),
-      );
+      const recentTrackSession =
+        await this.findMostRecentTodaySessionDailyCaseId(
+          userId,
+          trackCases.map((entry) => entry.dailyCaseId),
+        );
 
       if (recentTrackSession) {
         return recentTrackSession;
@@ -1102,13 +1129,11 @@ export class SessionService {
     );
   }
 
-  private async hydrateGameplayCase(
-    selectedCase: {
-      id: string;
-      difficulty: string;
-      date: Date;
-    },
-  ): Promise<GameplayCaseView> {
+  private async hydrateGameplayCase(selectedCase: {
+    id: string;
+    difficulty: string;
+    date: Date;
+  }): Promise<GameplayCaseView> {
     return {
       ...selectedCase,
       clues: await this.getCaseClues(selectedCase.id),
@@ -1116,10 +1141,9 @@ export class SessionService {
   }
 
   private async getCaseClues(caseId: string): Promise<GameplayClinicalClue[]> {
-    const rows = await this.prisma.$queryRawUnsafe<Array<{ clues: unknown | null }>>(
-      'SELECT "clues" FROM "Case" WHERE "id" = $1',
-      caseId,
-    );
+    const rows = await this.prisma.$queryRawUnsafe<
+      Array<{ clues: unknown | null }>
+    >('SELECT "clues" FROM "Case" WHERE "id" = $1', caseId);
 
     const rawClues = rows[0]?.clues;
     const parsedClues = this.parseCaseClues(caseId, rawClues);
@@ -1164,7 +1188,10 @@ export class SessionService {
         return [];
       }
 
-      if (typeof candidate.order !== 'number' || !Number.isInteger(candidate.order)) {
+      if (
+        typeof candidate.order !== 'number' ||
+        !Number.isInteger(candidate.order)
+      ) {
         return [];
       }
 
@@ -1231,7 +1258,12 @@ export class SessionService {
         : this.normalizeOptionalText(explanationRecord?.reasoning);
     const differentials = this.normalizeStringArray(input.differentials);
 
-    if (!summary && keyFindings.length === 0 && !reasoning && differentials.length === 0) {
+    if (
+      !summary &&
+      keyFindings.length === 0 &&
+      !reasoning &&
+      differentials.length === 0
+    ) {
       return null;
     }
 
@@ -1356,5 +1388,4 @@ export class SessionService {
       'Premium access is required to continue this daily case',
     );
   }
-
 }

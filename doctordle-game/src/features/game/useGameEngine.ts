@@ -13,7 +13,10 @@ import {
   refreshDiagnosisDictionaryIndex,
   shouldRefreshDiagnosisDictionary,
 } from './diagnosisRegistry.cache'
-import { searchDiagnosisRegistryIndex } from './diagnosisRegistry.search'
+import {
+  normalizeDiagnosisSearchText,
+  searchDiagnosisRegistryIndex,
+} from './diagnosisRegistry.search'
 import { hasDisplayableExplanation } from './gameExplanation'
 import type { DiagnosisDictionaryIndex } from './diagnosisRegistry.types'
 import { startGameApi, submitGuessApi } from './game.api'
@@ -27,6 +30,7 @@ import type {
 import { subscribe } from './events/game.eventBus'
 import { useUserProgress } from '../user-progress/useUserProgress'
 import { useApi } from '../../lib/api'
+import { useUserSettings } from '../profile/useUserSettings'
 
 const SUBMIT_ACK_DELAY_MS = 180
 const FINAL_TRANSITION_DELAY_MS = 250
@@ -42,6 +46,11 @@ export type GameRewardState = {
   xp: number
   streak?: number
   receivedAt: number
+} | null
+
+type SessionTimingState = {
+  startedAt: string
+  completedAt: string | null
 } | null
 
 export type GameEngineMode =
@@ -79,6 +88,14 @@ function formatCountdown(target: Date, nowMs: number): string {
   return `${hh}:${mm}:${ss}`
 }
 
+function formatElapsedTime(seconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(seconds))
+  const minutes = Math.floor(safeSeconds / 60)
+  const remainingSeconds = safeSeconds % 60
+
+  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms)
@@ -94,11 +111,41 @@ function toDiagnosisSelection(
   }
 }
 
+function findExactDiagnosisSelection(
+  index: DiagnosisDictionaryIndex | null,
+  value: string,
+): DiagnosisSelection | null {
+  const normalizedValue = normalizeDiagnosisSearchText(value)
+
+  if (!index || !normalizedValue) {
+    return null
+  }
+
+  const match = index.entries.find((entry) => {
+    if (entry.labelNormalized === normalizedValue) {
+      return true
+    }
+
+    return entry.aliases.some((alias) => alias.normalizedValue === normalizedValue)
+  })
+
+  return match
+    ? {
+        diagnosisRegistryId: match.id,
+        displayLabel: match.label,
+      }
+    : null
+}
+
 export function useGameEngine() {
   const { isLoaded, isSignedIn } = useAuth()
   const { request } = useApi()
   const queryClient = useQueryClient()
   const { progress } = useUserProgress()
+  const settingsQuery = useUserSettings()
+  const settings = settingsQuery.data
+  const showTimer = settings?.showTimer ?? true
+  const autocompleteEnabled = settings?.autocompleteEnabled ?? true
   const didInitRef = useRef(false)
   const isMountedRef = useRef(true)
   const sessionRequestRef = useRef<Promise<void> | null>(null)
@@ -121,6 +168,7 @@ export function useGameEngine() {
   const [registryError, setRegistryError] = useState<string | null>(null)
   const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(0)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [sessionTiming, setSessionTiming] = useState<SessionTimingState>(null)
   const [caseData, setCaseData] = useState<GameCase | null>(null)
   const [clueIndex, setClueIndex] = useState(0)
   const [latestResult, setLatestResult] = useState<GameResult | null>(null)
@@ -152,6 +200,7 @@ export function useGameEngine() {
 
   const clearGameplayState = useCallback(() => {
     setSessionId(null)
+    setSessionTiming(null)
     setCaseData(null)
     setClueIndex(0)
     setGuess('')
@@ -263,6 +312,14 @@ export function useGameEngine() {
         }
 
         setSessionId(session.sessionId)
+        setSessionTiming(
+          session.startedAt
+            ? {
+                startedAt: session.startedAt,
+                completedAt: session.completedAt ?? null,
+              }
+            : null,
+        )
         setCaseData(session.case)
         setClueIndex(session.case.clueIndex)
         setGuess('')
@@ -334,8 +391,12 @@ export function useGameEngine() {
     })
   }, [queryClient])
 
+  const shouldTick =
+    mode.type === 'WAITING' ||
+    Boolean(showTimer && sessionTiming?.startedAt && !sessionTiming.completedAt)
+
   useEffect(() => {
-    if (mode.type !== 'WAITING') {
+    if (!shouldTick) {
       return
     }
 
@@ -348,7 +409,7 @@ export function useGameEngine() {
     return () => {
       window.clearInterval(interval)
     }
-  }, [mode.type])
+  }, [shouldTick])
 
   useEffect(() => {
     if (mode.type !== 'WAITING') {
@@ -375,6 +436,7 @@ export function useGameEngine() {
     if (
       mode.type !== 'PLAYING' ||
       !sessionId ||
+      !autocompleteEnabled ||
       diagnosisInputState.mode === 'selected'
     ) {
       setSuggestions([])
@@ -405,6 +467,7 @@ export function useGameEngine() {
     )
   }, [
     diagnosisInputState.mode,
+    autocompleteEnabled,
     dictionaryAvailability,
     guess,
     mode.type,
@@ -413,12 +476,14 @@ export function useGameEngine() {
   ])
 
   const isAutocompleteLoading =
+    autocompleteEnabled &&
     mode.type === 'PLAYING' &&
     diagnosisInputState.mode !== 'selected' &&
     diagnosisInputState.mode !== 'empty' &&
     isRegistryLoading &&
     dictionaryAvailability !== 'unavailable'
   const autocompleteError =
+    autocompleteEnabled &&
     mode.type === 'PLAYING' &&
     diagnosisInputState.mode !== 'selected' &&
     diagnosisInputState.mode !== 'empty'
@@ -428,16 +493,21 @@ export function useGameEngine() {
   const applyGuessTextChange = useCallback((nextGuess: string) => {
     setGuess(nextGuess)
 
-    const nextSelectionState = reconcileDiagnosisSelectionAfterTextChange({
-      nextText: nextGuess,
-      selectedDiagnosis,
-      staleSelection,
-    })
+    const nextSelectionState = autocompleteEnabled
+      ? reconcileDiagnosisSelectionAfterTextChange({
+          nextText: nextGuess,
+          selectedDiagnosis,
+          staleSelection,
+        })
+      : {
+          selectedDiagnosis: findExactDiagnosisSelection(registryIndex, nextGuess),
+          staleSelection: null,
+        }
 
     setSelectedDiagnosis(nextSelectionState.selectedDiagnosis)
     setStaleSelection(nextSelectionState.staleSelection)
     setHighlightedSuggestionIndex(0)
-  }, [selectedDiagnosis, staleSelection])
+  }, [autocompleteEnabled, registryIndex, selectedDiagnosis, staleSelection])
 
   const submitGuess = useCallback(async () => {
     const trimmed = guess.trim()
@@ -467,6 +537,22 @@ export function useGameEngine() {
       if (!isMountedRef.current) {
         return response
       }
+
+      setSessionTiming((current) => {
+        if (!response.startedAt && !response.completedAt) {
+          return current
+        }
+
+        const currentStartedAt = current?.startedAt
+        if (!response.startedAt && !currentStartedAt) {
+          return current
+        }
+
+        return {
+          startedAt: response.startedAt ?? currentStartedAt!,
+          completedAt: response.completedAt ?? current?.completedAt ?? null,
+        }
+      })
 
       const isTerminalResponse = isFinalResult(response)
       const isCorrectTerminalResponse =
@@ -653,6 +739,33 @@ export function useGameEngine() {
     return formatCountdown(mode.nextCaseAt, nowMs)
   }, [mode, nowMs])
 
+  const elapsedSeconds = useMemo(() => {
+    if (!sessionTiming?.startedAt) {
+      return null
+    }
+
+    const startedAtMs = Date.parse(sessionTiming.startedAt)
+    if (!Number.isFinite(startedAtMs)) {
+      return null
+    }
+
+    const completedAtMs = sessionTiming.completedAt
+      ? Date.parse(sessionTiming.completedAt)
+      : null
+    if (completedAtMs !== null && !Number.isFinite(completedAtMs)) {
+      return null
+    }
+
+    return Math.max(
+      0,
+      Math.floor(((completedAtMs ?? nowMs) - startedAtMs) / 1000),
+    )
+  }, [nowMs, sessionTiming])
+
+  const elapsedTimeText = useMemo(() => {
+    return !showTimer || elapsedSeconds === null ? null : formatElapsedTime(elapsedSeconds)
+  }, [elapsedSeconds, showTimer])
+
   const isLoadingCase = mode.type === 'LOADING'
   const isSubmitting = mode.type === 'SUBMITTING'
   const isWaiting = mode.type === 'WAITING'
@@ -688,6 +801,8 @@ export function useGameEngine() {
         attempts,
         latestResult,
         reward,
+        elapsedSeconds,
+        elapsedTimeText,
         isLoadingCase,
         error,
         waitingCountdownText,
@@ -709,6 +824,8 @@ export function useGameEngine() {
       diagnosisSubmitMode,
       dictionaryAvailability,
       error,
+      elapsedSeconds,
+      elapsedTimeText,
       guess,
       highlightedSuggestionIndex,
       isAutocompleteLoading,
@@ -719,6 +836,7 @@ export function useGameEngine() {
       progress,
       reward,
       selectedDiagnosis,
+      sessionTiming,
       sessionId,
       suggestions,
       unavailableReason,
@@ -743,6 +861,8 @@ export function useGameEngine() {
     reward,
     waitingCountdownText,
     waitingMsRemaining,
+    elapsedSeconds,
+    elapsedTimeText,
     hasActiveSession: Boolean(sessionId),
     canSubmit,
     submitDisabled: !canSubmit || isSubmitting,

@@ -1,5 +1,28 @@
 import { resetEnvCacheForTests } from '../../core/config/env.validation';
 import { CaseGeneratorService } from './case-generator.service';
+import type { GeneratedCase } from './case-generator.types';
+
+type TransactionMock = {
+  case: {
+    findFirst: jest.Mock;
+    create: jest.Mock;
+  };
+  diagnosis: {
+    upsert: jest.Mock;
+  };
+};
+
+function mockCompletion(payload: unknown) {
+  return {
+    choices: [
+      {
+        message: {
+          content: JSON.stringify(payload),
+        },
+      },
+    ],
+  };
+}
 
 describe('CaseGeneratorService', () => {
   const requiredEnv = {
@@ -32,8 +55,67 @@ describe('CaseGeneratorService', () => {
     resetEnvCacheForTests();
   });
 
-  it('writes diagnosisRegistryId when persisting a generated case', async () => {
-    const tx: any = {
+  const buildGeneratedCase = (
+    overrides: Partial<GeneratedCase> = {},
+  ): GeneratedCase => ({
+    answer: 'Asthma',
+    clues: [
+      {
+        type: 'history',
+        value:
+          'Child with intermittent cough after exercise and cold air exposure',
+        order: 0,
+      },
+      {
+        type: 'symptom',
+        value: 'Episodic nocturnal wheezing with chest tightness',
+        order: 1,
+      },
+      {
+        type: 'vital',
+        value: 'Oxygen saturation is 96% on room air with mild tachypnea',
+        order: 2,
+      },
+      {
+        type: 'exam',
+        value: 'Diffuse expiratory wheezes with a prolonged expiratory phase',
+        order: 3,
+      },
+      {
+        type: 'lab',
+        value:
+          'Peak expiratory flow improves by 18% after inhaled bronchodilator',
+        order: 4,
+      },
+      {
+        type: 'lab',
+        value:
+          'Spirometry shows reversible airflow obstruction with FEV1 increase of 15%',
+        order: 5,
+      },
+    ],
+    differentials: [
+      'Chronic obstructive pulmonary disease',
+      'Vocal cord dysfunction',
+      'Heart failure',
+    ],
+    explanation: {
+      diagnosis: 'Asthma',
+      summary: 'Reversible episodic bronchoconstriction explains the symptoms.',
+      reasoning: [
+        'Exercise-triggered nocturnal wheezing, diffuse expiratory wheezes, and reversible obstruction support the diagnosis over the listed alternatives.',
+      ],
+      keyFindings: [
+        'Nocturnal wheeze',
+        'Bronchodilator response',
+        'Reversible airflow obstruction',
+      ],
+    },
+    ...overrides,
+  });
+
+  const buildService = () => {
+    const tx: TransactionMock = {
       case: {
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({
@@ -49,16 +131,21 @@ describe('CaseGeneratorService', () => {
         }),
       },
     };
-    const prisma: any = {
+    const prisma = {
       case: {
         findFirst: jest.fn().mockResolvedValue(null),
       },
-      $transaction: jest.fn(async (handler: (transaction: any) => unknown) =>
-        handler(tx),
+      diagnosisRegistry: {
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+      $transaction: jest.fn(
+        (handler: (transaction: TransactionMock) => unknown) => handler(tx),
       ),
     };
     const caseValidationOrchestrator = {
-      runShadowForGeneratedCaseInTransaction: jest.fn().mockResolvedValue(undefined),
+      runShadowForGeneratedCaseInTransaction: jest
+        .fn()
+        .mockResolvedValue(undefined),
     };
     const diagnosisRegistryLinkService = {
       resolveForWrite: jest.fn().mockResolvedValue({
@@ -74,21 +161,19 @@ describe('CaseGeneratorService', () => {
       diagnosisRegistryLinkService as never,
     );
 
-    await service.saveCase({
-      answer: 'Asthma',
-      clues: [
-        { type: 'history', value: 'Exercise intolerance', order: 0 },
-        { type: 'symptom', value: 'Wheezing', order: 1 },
-        { type: 'exam', value: 'Prolonged expiratory phase', order: 2 },
-      ],
-      differentials: ['COPD'],
-      explanation: {
-        diagnosis: 'Asthma',
-        summary: 'Summary',
-        reasoning: ['Reasoning'],
-        keyFindings: ['Finding'],
-      },
-    });
+    return {
+      tx,
+      prisma,
+      caseValidationOrchestrator,
+      diagnosisRegistryLinkService,
+      service,
+    };
+  };
+
+  it('writes diagnosisRegistryId when persisting a generated case', async () => {
+    const { tx, diagnosisRegistryLinkService, service } = buildService();
+
+    await service.saveCase(buildGeneratedCase());
 
     expect(diagnosisRegistryLinkService.resolveForWrite).toHaveBeenCalledWith(
       {
@@ -98,6 +183,8 @@ describe('CaseGeneratorService', () => {
     );
     expect(tx.case.create).toHaveBeenCalledWith(
       expect.objectContaining({
+        // Jest asymmetric matchers are typed as any in this nested object.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         data: expect.objectContaining({
           diagnosisId: 'diagnosis-1',
           diagnosisRegistryId: 'registry-1',
@@ -106,6 +193,212 @@ describe('CaseGeneratorService', () => {
           diagnosisMappingMethod: 'LEGACY_BACKFILL',
           diagnosisMappingConfidence: 1,
         }),
+      }),
+    );
+  });
+
+  it('rejects generated cases that do not include exactly 6 clues', () => {
+    const { service } = buildService();
+
+    expect(() =>
+      service.validateCase(
+        buildGeneratedCase({
+          clues: buildGeneratedCase().clues.slice(0, 5),
+        }),
+      ),
+    ).toThrow('Generated case must include exactly 6 clues');
+  });
+
+  it('rejects generated cases with too few differentials', () => {
+    const { service } = buildService();
+
+    expect(() =>
+      service.validateCase(
+        buildGeneratedCase({
+          differentials: ['Chronic obstructive pulmonary disease'],
+        }),
+      ),
+    ).toThrow('Generated case must include 3-5 plausible differentials');
+  });
+
+  it('rejects answer leakage before the confirmatory clue', () => {
+    const { service } = buildService();
+    const generatedCase = buildGeneratedCase({
+      clues: buildGeneratedCase().clues.map((clue) =>
+        clue.order === 2
+          ? { ...clue, value: 'Asthma symptoms worsen after exercise' }
+          : clue,
+      ),
+    });
+
+    expect(() => service.validateCase(generatedCase)).toThrow(
+      'leaks the final diagnosis before the confirmatory clue',
+    );
+  });
+
+  it('accepts the confirmatory clue naming the diagnosis', () => {
+    const { service } = buildService();
+    const generatedCase = buildGeneratedCase({
+      clues: buildGeneratedCase().clues.map((clue) =>
+        clue.order === 5
+          ? {
+              ...clue,
+              value:
+                'Spirometry shows reversible airflow obstruction consistent with asthma and FEV1 increase of 15%',
+            }
+          : clue,
+      ),
+    });
+
+    expect(() => service.validateCase(generatedCase)).not.toThrow();
+  });
+
+  it('rejects registry alias leakage before the confirmatory clue', async () => {
+    const { prisma, service } = buildService();
+    prisma.diagnosisRegistry.findFirst.mockResolvedValue({
+      canonicalName: 'Pulmonary Embolism',
+      displayLabel: 'Pulmonary Embolism',
+      aliases: [{ term: 'PE' }],
+    });
+
+    await expect(
+      service.saveCase(
+        buildGeneratedCase({
+          answer: 'Pulmonary Embolism',
+          clues: buildGeneratedCase().clues.map((clue) =>
+            clue.order === 2
+              ? { ...clue, value: 'CTA is ordered because PE is likely' }
+              : clue,
+          ),
+          explanation: {
+            ...buildGeneratedCase().explanation,
+            diagnosis: 'Pulmonary Embolism',
+          },
+        }),
+      ),
+    ).rejects.toThrow('leaks the final diagnosis before the confirmatory clue');
+  });
+
+  it('persists generation quality metadata in the explanation JSON', async () => {
+    const { tx, service } = buildService();
+
+    await service.saveCase({
+      ...buildGeneratedCase(),
+      explanation: {
+        ...buildGeneratedCase().explanation,
+        generationQuality: {
+          version: 'case-generator:v2',
+          critiqueScore: 94,
+          critiquePassed: true,
+          critiqueIssues: [],
+          critiqueRecommendations: [],
+          estimatedDifficulty: 'medium',
+          estimatedSolveClue: 5,
+          specialty: null,
+          acuity: 'low',
+          hasLabs: true,
+          hasImaging: false,
+          hasVitals: true,
+          differentialCount: 3,
+          qualityScore: 94,
+        },
+      },
+    } as GeneratedCase);
+
+    expect(tx.case.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // Jest asymmetric matchers are typed as any in this nested object.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        data: expect.objectContaining({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          explanation: expect.objectContaining({
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            generationQuality: expect.objectContaining({
+              critiqueScore: 94,
+              critiquePassed: true,
+              estimatedDifficulty: 'medium',
+              estimatedSolveClue: 5,
+              hasLabs: true,
+              hasImaging: false,
+              hasVitals: true,
+              differentialCount: 3,
+              qualityScore: 94,
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('retries failed generations and attaches passing critique metadata', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    resetEnvCacheForTests();
+    const { prisma, service } = buildService();
+    const generatedCase = buildGeneratedCase();
+    const create = jest
+      .fn()
+      .mockResolvedValueOnce(
+        mockCompletion({
+          ...generatedCase,
+          clues: generatedCase.clues.slice(0, 5),
+        }),
+      )
+      .mockResolvedValueOnce(mockCompletion(generatedCase))
+      .mockResolvedValueOnce(
+        mockCompletion({
+          passed: true,
+          score: 92,
+          clinicalAccuracyScore: 96,
+          clueProgressionScore: 88,
+          differentialQualityScore: 90,
+          ambiguitySuitabilityScore: 84,
+          issues: [],
+          recommendations: ['Ready for editorial review'],
+        }),
+      );
+
+    Object.defineProperty(service, 'openaiClient', {
+      value: {
+        chat: {
+          completions: {
+            create,
+          },
+        },
+      },
+    });
+
+    const result = await service.generateCase();
+    const explanation = result.explanation as GeneratedCase['explanation'] & {
+      generationQuality?: {
+        critiqueScore: number;
+        critiquePassed: boolean;
+        estimatedDifficulty: string;
+        estimatedSolveClue: number;
+        specialty: string | null;
+        acuity: string | null;
+        hasLabs: boolean;
+        hasImaging: boolean;
+        hasVitals: boolean;
+        differentialCount: number;
+        qualityScore: number;
+      };
+    };
+
+    expect(create).toHaveBeenCalledTimes(3);
+    expect(prisma.diagnosisRegistry.findFirst).toHaveBeenCalled();
+    expect(explanation.generationQuality).toEqual(
+      expect.objectContaining({
+        critiqueScore: 92,
+        critiquePassed: true,
+        estimatedDifficulty: 'medium',
+        estimatedSolveClue: 5,
+        specialty: null,
+        acuity: 'low',
+        hasLabs: true,
+        hasImaging: false,
+        hasVitals: true,
+        differentialCount: 3,
+        qualityScore: 91,
       }),
     );
   });

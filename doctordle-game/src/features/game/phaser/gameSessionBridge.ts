@@ -1,5 +1,7 @@
 import type { RoundViewModel, RoundVisibleClue } from '../round.types'
 
+// Deprecated bridge for the legacy Phaser fallback. React gameplay owns new UI
+// behavior; keep this mapping narrow so Phaser continues to mirror RoundViewModel.
 export type PhaserVisibleClue = RoundVisibleClue
 export type PhaserGameSessionSnapshot = RoundViewModel
 

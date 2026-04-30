@@ -19,6 +19,22 @@ import {
   GAME_COMPLETION_QUEUE_NAME,
 } from './queue.constants';
 
+export function computeTimeToCompleteSeconds(input: {
+  startedAt: Date | null | undefined;
+  completedAt: Date | null | undefined;
+}): number | null {
+  if (!input.startedAt || !input.completedAt) {
+    return null;
+  }
+
+  return Math.max(
+    0,
+    Math.round(
+      (input.completedAt.getTime() - input.startedAt.getTime()) / 1000,
+    ),
+  );
+}
+
 @Injectable()
 export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(QueueProcessor.name);
@@ -310,6 +326,10 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
           `Completed session ${payload.sessionId} is missing completedAt`,
         );
       }
+      const timeToComplete = computeTimeToCompleteSeconds({
+        startedAt: session.startedAt,
+        completedAt: session.completedAt,
+      });
 
       const latestAttempt = session.attempts[0];
       if (!latestAttempt) {
@@ -332,8 +352,13 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
           attemptsCount: session._count.attempts,
         });
 
-        if (!awardResult.applied && awardResult.reason === 'session_not_found') {
-          throw new Error(`Unable to award XP for session ${payload.sessionId}`);
+        if (
+          !awardResult.applied &&
+          awardResult.reason === 'session_not_found'
+        ) {
+          throw new Error(
+            `Unable to award XP for session ${payload.sessionId}`,
+          );
         }
 
         if (awardResult.applied) {
@@ -360,12 +385,7 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
         score: latestAttempt.score,
         attemptsCount: session._count.attempts,
         completedAt,
-        timeToComplete: Math.max(
-          0,
-          Math.round(
-            (completedAt.getTime() - session.startedAt.getTime()) / 1000,
-          ),
-        ),
+        timeToComplete,
       });
 
       await this.prisma.gameSession.updateMany({

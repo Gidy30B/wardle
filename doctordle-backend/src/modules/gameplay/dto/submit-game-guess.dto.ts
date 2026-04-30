@@ -32,6 +32,8 @@ export type SubmitGameGuessResponseDto = {
   attemptsCount: number;
   clueIndex: number;
   isTerminalCorrect: boolean;
+  startedAt?: string;
+  completedAt?: string | null;
   semanticScore?: number;
   duplicate?: boolean;
   case?: {

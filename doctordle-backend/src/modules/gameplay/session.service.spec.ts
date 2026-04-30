@@ -23,7 +23,9 @@ function createSessionServiceFixture() {
   );
   prisma.$queryRawUnsafe = jest.fn().mockResolvedValue([
     {
-      clues: [{ id: 'c1-0', type: 'history', value: 'Shortness of breath', order: 0 }],
+      clues: [
+        { id: 'c1-0', type: 'history', value: 'Shortness of breath', order: 0 },
+      ],
     },
   ]);
   prisma.attempt = {
@@ -111,6 +113,8 @@ function buildActiveSession(caseDiagnosisRegistryId: string | null) {
     userTierAtStart: 'free',
     status: 'active',
     processingAt: null,
+    startedAt: new Date('2026-04-22T08:00:00.000Z'),
+    completedAt: null,
     user: {
       subscriptionTier: 'free',
     },
@@ -158,34 +162,38 @@ describe('SessionService gameplay registry correctness', () => {
     const fixture = createSessionServiceFixture();
     fixture.prisma.gameSession.findUnique
       .mockImplementationOnce(async () => buildActiveSession('registry-1'))
-      .mockImplementationOnce(async () => buildFreshSession(fixture.getClaimAt()));
-    fixture.diagnosisRegistryMatcherService.evaluateGameplayGuess.mockResolvedValue({
-      expectedDiagnosisRegistryId: 'registry-1',
-      expectedDiagnosisStatus: DiagnosisRegistryStatus.ACTIVE,
-      expectedDiagnosisUsable: true,
-      isCorrect: true,
-      resolution: {
-        submittedDiagnosisRegistryId: 'registry-1',
-        submittedGuessText: 'Asthma attack',
-        normalizedGuess: 'asthma attack',
-        resolvedDiagnosisRegistryId: 'registry-1',
-        resolutionMethod: 'SELECTED_ID',
-        isResolvable: true,
-      },
-      evaluation: {
-        score: 1,
-        label: 'correct',
-        evaluatorVersion: 'registry:v2',
-        retrievalMode: 'selected-id-only',
-        normalizedGuess: 'asthma attack',
-        signals: {
-          registryCorrectnessAuthority: true,
+      .mockImplementationOnce(async () =>
+        buildFreshSession(fixture.getClaimAt()),
+      );
+    fixture.diagnosisRegistryMatcherService.evaluateGameplayGuess.mockResolvedValue(
+      {
+        expectedDiagnosisRegistryId: 'registry-1',
+        expectedDiagnosisStatus: DiagnosisRegistryStatus.ACTIVE,
+        expectedDiagnosisUsable: true,
+        isCorrect: true,
+        resolution: {
           submittedDiagnosisRegistryId: 'registry-1',
+          submittedGuessText: 'Asthma attack',
+          normalizedGuess: 'asthma attack',
           resolvedDiagnosisRegistryId: 'registry-1',
-          diagnosisResolutionMethod: 'SELECTED_ID',
+          resolutionMethod: 'SELECTED_ID',
+          isResolvable: true,
+        },
+        evaluation: {
+          score: 1,
+          label: 'correct',
+          evaluatorVersion: 'registry:v2',
+          retrievalMode: 'selected-id-only',
+          normalizedGuess: 'asthma attack',
+          signals: {
+            registryCorrectnessAuthority: true,
+            submittedDiagnosisRegistryId: 'registry-1',
+            resolvedDiagnosisRegistryId: 'registry-1',
+            diagnosisResolutionMethod: 'SELECTED_ID',
+          },
         },
       },
-    });
+    );
     fixture.evaluationService.computeGuessOutcome.mockReturnValue({
       clueIndex: 0,
       attemptsCount: 1,
@@ -211,7 +219,9 @@ describe('SessionService gameplay registry correctness', () => {
       submittedDiagnosisRegistryId: 'registry-1',
       submittedGuessText: 'Asthma attack',
     });
-    expect(fixture.attemptService.recordAttemptInTransaction).toHaveBeenCalledWith(
+    expect(
+      fixture.attemptService.recordAttemptInTransaction,
+    ).toHaveBeenCalledWith(
       fixture.prisma,
       expect.objectContaining({
         guess: 'Asthma attack',
@@ -222,7 +232,9 @@ describe('SessionService gameplay registry correctness', () => {
         result: 'correct',
       }),
     );
-    expect(fixture.rewardOrchestrator.emitAttemptEvaluated).toHaveBeenCalledWith(
+    expect(
+      fixture.rewardOrchestrator.emitAttemptEvaluated,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
         result: 'correct',
         submittedDiagnosisRegistryId: 'registry-1',
@@ -233,7 +245,9 @@ describe('SessionService gameplay registry correctness', () => {
     );
     expect(result.result).toBe('correct');
     expect(result.feedback?.evaluatorVersion).toBe('registry:v2');
-    expect(result.feedback?.signals?.diagnosisResolutionMethod).toBe('SELECTED_ID');
+    expect(result.feedback?.signals?.diagnosisResolutionMethod).toBe(
+      'SELECTED_ID',
+    );
   });
 
   it('rejects gameplay submissions without a diagnosisRegistryId', async () => {
@@ -249,42 +263,48 @@ describe('SessionService gameplay registry correctness', () => {
     expect(
       fixture.diagnosisRegistryMatcherService.evaluateGameplayGuess,
     ).not.toHaveBeenCalled();
-    expect(fixture.rewardOrchestrator.emitAttemptSubmitted).not.toHaveBeenCalled();
+    expect(
+      fixture.rewardOrchestrator.emitAttemptSubmitted,
+    ).not.toHaveBeenCalled();
   });
 
   it('handles cases without a linked registry diagnosis safely', async () => {
     const fixture = createSessionServiceFixture();
     fixture.prisma.gameSession.findUnique
       .mockImplementationOnce(async () => buildActiveSession(null))
-      .mockImplementationOnce(async () => buildFreshSession(fixture.getClaimAt()));
-    fixture.diagnosisRegistryMatcherService.evaluateGameplayGuess.mockResolvedValue({
-      expectedDiagnosisRegistryId: null,
-      expectedDiagnosisStatus: null,
-      expectedDiagnosisUsable: false,
-      isCorrect: false,
-      resolution: {
-        submittedDiagnosisRegistryId: 'registry-1',
-        submittedGuessText: 'Asthma',
-        normalizedGuess: 'asthma',
-        resolvedDiagnosisRegistryId: 'registry-1',
-        resolutionMethod: 'SELECTED_ID',
-        resolutionReason: 'EXPECTED_DIAGNOSIS_MISSING',
-        isResolvable: true,
-      },
-      evaluation: {
-        score: 0,
-        label: 'wrong',
-        evaluatorVersion: 'registry:v2',
-        retrievalMode: 'selected-id-only',
-        normalizedGuess: 'asthma',
-        signals: {
-          registryCorrectnessAuthority: true,
-          expectedDiagnosisUsable: false,
-          diagnosisResolutionReason: 'EXPECTED_DIAGNOSIS_MISSING',
-          diagnosisResolutionMethod: 'SELECTED_ID',
+      .mockImplementationOnce(async () =>
+        buildFreshSession(fixture.getClaimAt()),
+      );
+    fixture.diagnosisRegistryMatcherService.evaluateGameplayGuess.mockResolvedValue(
+      {
+        expectedDiagnosisRegistryId: null,
+        expectedDiagnosisStatus: null,
+        expectedDiagnosisUsable: false,
+        isCorrect: false,
+        resolution: {
+          submittedDiagnosisRegistryId: 'registry-1',
+          submittedGuessText: 'Asthma',
+          normalizedGuess: 'asthma',
+          resolvedDiagnosisRegistryId: 'registry-1',
+          resolutionMethod: 'SELECTED_ID',
+          resolutionReason: 'EXPECTED_DIAGNOSIS_MISSING',
+          isResolvable: true,
+        },
+        evaluation: {
+          score: 0,
+          label: 'wrong',
+          evaluatorVersion: 'registry:v2',
+          retrievalMode: 'selected-id-only',
+          normalizedGuess: 'asthma',
+          signals: {
+            registryCorrectnessAuthority: true,
+            expectedDiagnosisUsable: false,
+            diagnosisResolutionReason: 'EXPECTED_DIAGNOSIS_MISSING',
+            diagnosisResolutionMethod: 'SELECTED_ID',
+          },
         },
       },
-    });
+    );
     fixture.evaluationService.computeGuessOutcome.mockReturnValue({
       clueIndex: 0,
       attemptsCount: 1,
@@ -314,31 +334,35 @@ describe('SessionService gameplay registry correctness', () => {
     const fixture = createSessionServiceFixture();
     fixture.prisma.gameSession.findUnique
       .mockImplementationOnce(async () => buildActiveSession('registry-1'))
-      .mockImplementationOnce(async () => buildFreshSession(fixture.getClaimAt()));
-    fixture.diagnosisRegistryMatcherService.evaluateGameplayGuess.mockResolvedValue({
-      expectedDiagnosisRegistryId: 'registry-1',
-      expectedDiagnosisStatus: DiagnosisRegistryStatus.ACTIVE,
-      expectedDiagnosisUsable: true,
-      isCorrect: true,
-      resolution: {
-        submittedDiagnosisRegistryId: 'registry-1',
-        submittedGuessText: 'Asthma',
-        normalizedGuess: 'asthma',
-        resolvedDiagnosisRegistryId: 'registry-1',
-        resolutionMethod: 'SELECTED_ID',
-        isResolvable: true,
-      },
-      evaluation: {
-        score: 1,
-        label: 'correct',
-        evaluatorVersion: 'registry:v2',
-        retrievalMode: 'selected-id-only',
-        normalizedGuess: 'asthma',
-        signals: {
-          registryCorrectnessAuthority: true,
+      .mockImplementationOnce(async () =>
+        buildFreshSession(fixture.getClaimAt()),
+      );
+    fixture.diagnosisRegistryMatcherService.evaluateGameplayGuess.mockResolvedValue(
+      {
+        expectedDiagnosisRegistryId: 'registry-1',
+        expectedDiagnosisStatus: DiagnosisRegistryStatus.ACTIVE,
+        expectedDiagnosisUsable: true,
+        isCorrect: true,
+        resolution: {
+          submittedDiagnosisRegistryId: 'registry-1',
+          submittedGuessText: 'Asthma',
+          normalizedGuess: 'asthma',
+          resolvedDiagnosisRegistryId: 'registry-1',
+          resolutionMethod: 'SELECTED_ID',
+          isResolvable: true,
+        },
+        evaluation: {
+          score: 1,
+          label: 'correct',
+          evaluatorVersion: 'registry:v2',
+          retrievalMode: 'selected-id-only',
+          normalizedGuess: 'asthma',
+          signals: {
+            registryCorrectnessAuthority: true,
+          },
         },
       },
-    });
+    );
     fixture.prisma.attempt.findFirst.mockResolvedValue({
       id: 'attempt-existing',
       result: 'correct',
@@ -353,6 +377,8 @@ describe('SessionService gameplay registry correctness', () => {
     });
 
     expect(result.duplicate).toBe(true);
-    expect(fixture.attemptService.recordAttemptInTransaction).not.toHaveBeenCalled();
+    expect(
+      fixture.attemptService.recordAttemptInTransaction,
+    ).not.toHaveBeenCalled();
   });
 });

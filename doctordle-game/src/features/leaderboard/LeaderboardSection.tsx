@@ -24,18 +24,12 @@ type LeaderboardSectionProps = {
   onPlay: () => void
 }
 
-function formatCompletionTime(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return '-'
-  }
+function formatDuration(totalSeconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds))
+  const minutes = Math.floor(safeSeconds / 60)
+  const seconds = safeSeconds % 60
 
-  return date.toLocaleString([], {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
 function formatScore(score: number) {
@@ -203,6 +197,7 @@ function LeaderboardSection({
                     currentStreak,
                     organizationName,
                     includeTime: true,
+                    mode,
                     iconSet,
                   })}
                   isCurrentUser={entry.userId === currentUserId}
@@ -226,6 +221,7 @@ function LeaderboardSection({
                   currentStreak,
                   organizationName,
                   includeTime: true,
+                  mode,
                   iconSet,
                 })}
                 isCurrentUser
@@ -265,9 +261,28 @@ function LeaderboardSection({
             <RankStat label={`${iconSet.accuracy} Accuracy`} value={accuracy != null ? `${Math.round(accuracy)}%` : '--'} />
           </div>
           <div className="mt-3">
-            <Button type="button" variant="ghost" onClick={onPlay} className="py-2.5 text-xs">
-              Play today's case
-            </Button>
+            {currentUserPosition?.completedAt ? (
+              (() => {
+                const completedDate = new Date(currentUserPosition.completedAt).toLocaleDateString()
+                const todayDate = new Date().toLocaleDateString()
+                const completedToday = completedDate === todayDate
+                return (
+                  <Button
+                    type="button"
+                    variant={completedToday ? 'secondary' : 'ghost'}
+                    onClick={onPlay}
+                    disabled={completedToday}
+                    className="py-2.5 text-xs"
+                  >
+                    {completedToday ? 'Completed today ✓' : "Play today's case"}
+                  </Button>
+                )
+              })()
+            ) : (
+              <Button type="button" variant="ghost" onClick={onPlay} className="py-2.5 text-xs">
+                Play today's case
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -418,6 +433,7 @@ function getEntryMeta({
   currentStreak,
   organizationName,
   includeTime,
+  mode,
   iconSet,
 }: {
   entry: LeaderboardEntry
@@ -425,6 +441,7 @@ function getEntryMeta({
   currentStreak: number | null
   organizationName: string | null
   includeTime: boolean
+  mode: LeaderboardMode
   iconSet: AppIconSet
 }) {
   const parts: string[] = []
@@ -443,8 +460,10 @@ function getEntryMeta({
 
   parts.push(`${iconSet.clues} ${entry.attemptsCount} attempts`)
 
-  if (includeTime) {
-    parts.push(`${iconSet.time} ${formatCompletionTime(entry.completedAt)}`)
+  const duration =
+    mode === 'weekly' ? entry.totalTimeToComplete : entry.timeToComplete
+  if (includeTime && duration != null) {
+    parts.push(`${iconSet.time} ${formatDuration(duration)}`)
   }
 
   return parts.join(' - ')

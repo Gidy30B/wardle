@@ -83,6 +83,8 @@ export type RoundViewModel = {
   finalExplanation: string | null
   outcomeTone: RoundOutcomeTone | null
   reward: GameRewardState
+  elapsedSeconds: number | null
+  elapsedTimeText: string | null
   waitingCountdownText: string | null
   unavailableReason: string | null
   canRetry: boolean

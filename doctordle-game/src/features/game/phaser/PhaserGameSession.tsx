@@ -3,6 +3,8 @@ import Phaser from 'phaser'
 import { DEBUG_RENDER_AUDIT, createCaseScene, getCaseSceneCanvasSize, getCaseSceneRenderResolution, type CaseScene } from './CaseScene'
 import type { PhaserGameSessionIntents, PhaserGameSessionSnapshot } from './gameSessionBridge'
 
+// Deprecated legacy renderer: keep buildable as an explicit fallback only.
+// New gameplay UI should be implemented in ../react and shared view-model code.
 type PhaserGameSessionProps = {
   snapshot: PhaserGameSessionSnapshot
   intents: PhaserGameSessionIntents

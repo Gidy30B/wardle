@@ -39,6 +39,8 @@ export async function submitGuessApi(
     label: response.result,
     isTerminalCorrect: response.isTerminalCorrect,
     clueIndex: response.clueIndex,
+    startedAt: response.startedAt,
+    completedAt: response.completedAt ?? null,
     gameOver: response.gameOver ?? response.result === 'correct',
     gameOverReason: response.gameOverReason ?? null,
     xpAwarded: response.xpAwarded,
@@ -64,6 +66,8 @@ export async function startGameApi(request: RequestJson): Promise<StartGameRespo
         state?: 'ready'
         sessionId: string
         dailyCaseId: string
+        startedAt?: string
+        completedAt?: string | null
         clueIndex?: number
         case: Omit<GameCase, 'clueIndex'>
       }
@@ -86,6 +90,8 @@ export async function startGameApi(request: RequestJson): Promise<StartGameRespo
     state: 'ready',
     sessionId: response.sessionId,
     dailyCaseId: response.dailyCaseId,
+    startedAt: response.startedAt,
+    completedAt: response.completedAt ?? null,
     case: attachClueIndex(response.case, response.clueIndex ?? 0),
   }
 }

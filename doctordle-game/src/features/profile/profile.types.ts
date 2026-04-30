@@ -19,6 +19,29 @@ export type BackendProfile = {
   progress?: UserProgress | null
 }
 
+export type DifficultyPreference = 'BEGINNER' | 'STANDARD' | 'HARD' | 'EXPERT'
+
+export type UserSettings = {
+  showTimer: boolean
+  hintsEnabled: boolean
+  autocompleteEnabled: boolean
+  difficultyPreference: DifficultyPreference
+  spacedRepetitionEnabled: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type UserSettingsUpdate = Partial<
+  Pick<
+    UserSettings,
+    | 'showTimer'
+    | 'hintsEnabled'
+    | 'autocompleteEnabled'
+    | 'difficultyPreference'
+    | 'spacedRepetitionEnabled'
+  >
+>
+
 export type WardleProfileOnboarding = {
   displayName: string
   university: string

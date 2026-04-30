@@ -9,6 +9,15 @@ import ReactGuessInput from './ReactGuessInput'
 import type { RoundViewModel } from '../round.types'
 import type { AppIconSet } from '../../../theme/icons'
 
+
+type ProgressState =
+  | 'correct'
+  | 'danger'
+  | 'warning'
+  | 'active'
+  | 'revealed'
+  | 'locked'
+
 type ReactGamePlaySurfaceProps = {
   iconSet: AppIconSet
   roundViewModel: RoundViewModel
@@ -21,14 +30,6 @@ type ReactGamePlaySurfaceProps = {
   onSubmit: () => void
   onReload?: () => void
 }
-
-type ProgressState =
-  | 'correct'
-  | 'danger'
-  | 'warning'
-  | 'active'
-  | 'revealed'
-  | 'locked'
 
 export default function ReactGamePlaySurface({
   iconSet,
@@ -51,8 +52,6 @@ export default function ReactGamePlaySurface({
       : Math.max(0, roundViewModel.revealedClueCount - 1)
   const attemptsRemaining = Math.max(0, visualSlotCount - roundViewModel.attemptsCount)
   const streakValue = currentStreak
-  const xpTotal =
-    typeof roundViewModel.hud.xpTotal === 'number' ? roundViewModel.hud.xpTotal : null
   const caseCode = roundViewModel.caseId ? `CASE ${roundViewModel.caseId}` : 'CASE PENDING'
   const isInteractive =
     roundViewModel.mode === 'PLAYING' || roundViewModel.mode === 'SUBMITTING'
@@ -124,10 +123,9 @@ export default function ReactGamePlaySurface({
           <div className="flex items-start justify-between gap-4">
             <WardleLogo size="sm" />
             <div className="flex flex-wrap justify-end gap-2">
-              {streakValue != null ? <Pill tone="amber">{iconSet.streak} Streak {streakValue}</Pill> : null}
-              {xpTotal != null ? <Pill tone="navy">{xpTotal} XP</Pill> : null}
-              {xpTotal == null && streakValue == null && roundViewModel.hud.level != null ? (
-                <Pill tone="navy">Level {roundViewModel.hud.level}</Pill>
+              {streakValue != null ? <Pill tone="amber">{iconSet.streak}{streakValue}</Pill> : null}
+              {roundViewModel.elapsedTimeText ? (
+                <Pill tone="navy">{iconSet.time} {roundViewModel.elapsedTimeText}</Pill>
               ) : null}
             </div>
           </div>
@@ -152,14 +150,6 @@ export default function ReactGamePlaySurface({
 
           <div className="mt-4">
             <ReactGameProgress states={progressStates} />
-            <div className="mt-2 flex justify-between text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">
-              <span>
-                {roundViewModel.mode === 'WAITING'
-                  ? roundViewModel.waitingCountdownText ?? 'Waiting'
-                  : `${iconSet.clues} ${roundViewModel.revealedClueCount}/${visualSlotCount} clues`}
-              </span>
-              <span>{iconSet.time} {attemptsRemaining} left</span>
-            </div>
           </div>
         </div>
       </header>
