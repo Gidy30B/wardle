@@ -14,6 +14,8 @@ import {
   GAME_COMPLETED_JOB_NAME,
   GAME_COMPLETION_QUEUE_NAME,
   HINT_GENERATE_JOB_NAME,
+  NOTIFICATION_CREATE_JOB_NAME,
+  NOTIFICATION_QUEUE_NAME,
 } from './queue.constants';
 
 export type GameCompletedJobPayload = {
@@ -30,6 +32,18 @@ export type ExplanationGenerateJobPayload = {
   userId: string;
 };
 
+export type NotificationCreateJobPayload = {
+  userId: string;
+  type: string;
+  category: string;
+  title: string;
+  body: string;
+  data?: Record<string, unknown>;
+  priority?: 'low' | 'normal' | 'high';
+  idempotencyKey: string;
+  correlationId?: string;
+};
+
 type QueueHealth = {
   waiting: number;
   active: number;
@@ -41,6 +55,7 @@ type QueueHealth = {
 export type QueueHealthSummary = {
   gameCompletion: QueueHealth;
   aiContent: QueueHealth;
+  notifications: QueueHealth;
 };
 
 @Injectable()
@@ -51,6 +66,7 @@ export class QueueService implements OnModuleDestroy {
   private readonly aiContentQueue: Queue<
     HintGenerateJobPayload | ExplanationGenerateJobPayload
   >;
+  private readonly notificationQueue: Queue<NotificationCreateJobPayload>;
   private readonly enqueueLimitPerSecond = 200;
 
   constructor() {
@@ -79,6 +95,12 @@ export class QueueService implements OnModuleDestroy {
     >(AI_CONTENT_QUEUE_NAME, {
       connection: this.connection,
     });
+    this.notificationQueue = new Queue<NotificationCreateJobPayload>(
+      NOTIFICATION_QUEUE_NAME,
+      {
+        connection: this.connection,
+      },
+    );
   }
 
   async enqueueGameCompleted(payload: GameCompletedJobPayload): Promise<void> {
@@ -152,10 +174,64 @@ export class QueueService implements OnModuleDestroy {
     });
   }
 
+  async enqueueNotification(payload: NotificationCreateJobPayload): Promise<void> {
+    await this.assertEnqueueRateLimit(NOTIFICATION_QUEUE_NAME);
+
+    const jobOptions: JobsOptions = {
+      jobId: this.buildJobId(NOTIFICATION_CREATE_JOB_NAME, payload.idempotencyKey),
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 1000,
+      },
+      removeOnComplete: {
+        age: 3600,
+        count: 1000,
+      },
+      removeOnFail: {
+        age: 86400,
+        count: 5000,
+      },
+    };
+
+    const job = await this.notificationQueue
+      .add(NOTIFICATION_CREATE_JOB_NAME, payload, jobOptions)
+      .catch(async (error) => {
+        const existing = await this.notificationQueue.getJob(jobOptions.jobId!);
+        if (existing) {
+          this.logger.log(
+            JSON.stringify({
+              event: 'queue.job_skipped_duplicate',
+              queue: NOTIFICATION_QUEUE_NAME,
+              jobId: existing.id,
+              jobName: NOTIFICATION_CREATE_JOB_NAME,
+              userId: payload.userId,
+              notificationType: payload.type,
+            }),
+          );
+          return existing;
+        }
+
+        throw error;
+      });
+
+    this.logger.log(
+      JSON.stringify({
+        event: 'queue.job_enqueued',
+        queue: NOTIFICATION_QUEUE_NAME,
+        jobId: job.id,
+        jobName: NOTIFICATION_CREATE_JOB_NAME,
+        userId: payload.userId,
+        notificationType: payload.type,
+      }),
+    );
+  }
+
   async getHealth(): Promise<QueueHealthSummary> {
     return {
       gameCompletion: await this.getQueueHealth(this.gameCompletionQueue),
       aiContent: await this.getQueueHealth(this.aiContentQueue),
+      notifications: await this.getQueueHealth(this.notificationQueue),
     };
   }
 
@@ -296,6 +372,15 @@ export class QueueService implements OnModuleDestroy {
         JSON.stringify({
           event: 'queue.close.failed',
           queue: AI_CONTENT_QUEUE_NAME,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    });
+    await this.notificationQueue.close().catch((error) => {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'queue.close.failed',
+          queue: NOTIFICATION_QUEUE_NAME,
           error: error instanceof Error ? error.message : String(error),
         }),
       );

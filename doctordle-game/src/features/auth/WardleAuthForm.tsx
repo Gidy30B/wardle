@@ -1,6 +1,8 @@
 import { useSignIn, useSignUp } from '@clerk/clerk-react'
+import { Capacitor } from '@capacitor/core'
 import { useMemo, useState, type ReactNode } from 'react'
 import Button from '../../components/ui/Button'
+import { getClerkOAuthRedirects } from './authRedirects'
 import { savePendingAuthProfile } from './authProfileSync'
 
 type AuthMode = 'signin' | 'signup'
@@ -151,10 +153,21 @@ export default function WardleAuthForm() {
     setOauthLoading(true)
 
     try {
+      const isNativePlatform = Capacitor.isNativePlatform()
+      const platform = Capacitor.getPlatform()
+      const { redirectUrl, redirectUrlComplete } = getClerkOAuthRedirects()
+
+      console.log('[Wardle OAuth redirect]', {
+        isNativePlatform,
+        platform,
+        redirectUrl,
+        redirectUrlComplete,
+      })
+
       await signInState.signIn.authenticateWithRedirect({
         strategy: 'oauth_google',
-        redirectUrl: getAuthRedirectUrl('/sso-callback'),
-        redirectUrlComplete: getAuthRedirectUrl('/'),
+        redirectUrl,
+        redirectUrlComplete,
       })
     } catch (exception) {
       setError(getClerkErrorMessage(exception))
@@ -538,12 +551,4 @@ function getFunctionProperty(value: unknown, key: string) {
 
   const property = (value as Record<string, unknown>)[key]
   return typeof property === 'function' ? property : null
-}
-
-function getAuthRedirectUrl(path: string) {
-  if (typeof window === 'undefined') {
-    return path
-  }
-
-  return new URL(path, window.location.origin).toString()
 }

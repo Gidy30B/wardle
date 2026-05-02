@@ -13,6 +13,7 @@ import { RewardOrchestrator } from '../gameplay/reward-orchestrator.service';
 import { StreakService } from '../gameplay/streak.service';
 import { XpService } from '../gameplay/xp.service';
 import { RedisPubSubService } from '../../core/redis/redis-pubsub.service';
+import { NotificationProducerService } from '../notifications/notification-producer.service';
 import { GameCompletedJobPayload } from './queue.service';
 import {
   GAME_COMPLETED_JOB_NAME,
@@ -51,6 +52,7 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
     private readonly leaderboardService: LeaderboardService,
     private readonly rewardOrchestrator: RewardOrchestrator,
     private readonly redisPubSub: RedisPubSubService,
+    private readonly notificationProducer: NotificationProducerService,
   ) {
     const redisUrl = getEnv().REDIS_URL;
     this.connection = new Redis(redisUrl, {
@@ -375,6 +377,13 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
               xp: awardResult.xpGained,
               streak,
             },
+          });
+
+          await this.notificationProducer.rewardXpAwarded({
+            userId: payload.userId,
+            sessionId: payload.sessionId,
+            xp: awardResult.xpGained,
+            streak,
           });
         }
       }

@@ -1,12 +1,9 @@
 import { useAuth } from '@clerk/clerk-react'
 import { useCallback } from 'react'
+import { getApiBaseUrl } from './runtimeUrls'
 
-const apiBaseUrl = import.meta.env.VITE_API_URL
+const apiBaseUrl = getApiBaseUrl()
 const clerkJwtAudience = import.meta.env.VITE_CLERK_JWT_AUDIENCE
-
-if (!apiBaseUrl) {
-  throw new Error('Missing VITE_API_URL')
-}
 
 if (!clerkJwtAudience) {
   throw new Error('Missing VITE_CLERK_JWT_AUDIENCE')

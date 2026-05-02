@@ -33,7 +33,15 @@ export function createOrganizationApi(
 export function getMyOrganizationsApi(
   request: RequestJson,
 ): Promise<UserOrganizationMembership[]> {
-  return request<UserOrganizationMembership[]>('/organizations/me')
+  return request<UserOrganizationMembership[] | { memberships?: UserOrganizationMembership[] }>(
+    '/organizations/me',
+  ).then((payload) => {
+    if (Array.isArray(payload)) {
+      return payload
+    }
+
+    return Array.isArray(payload.memberships) ? payload.memberships : []
+  })
 }
 
 export function joinOrganizationApi(

@@ -6,6 +6,7 @@ import { buildShareCardDataFromRound } from '../../share/shareCardData'
 import ReactClueCard from './ReactClueCard'
 import ReactGameProgress from './ReactGameProgress'
 import ReactGuessInput from './ReactGuessInput'
+import NotificationBell from '../../notifications/NotificationBell'
 import type { RoundViewModel } from '../round.types'
 import type { AppIconSet } from '../../../theme/icons'
 
@@ -116,39 +117,40 @@ export default function ReactGamePlaySurface({
         `}
       </style>
 
-      <header className="relative mx-1 mt-1 overflow-hidden rounded-[26px] border border-white/[0.06] bg-[linear-gradient(145deg,rgba(26,60,94,0.92),rgba(30,30,44,0.98)_64%)] px-4 pb-4 pt-4 shadow-[0_22px_54px_rgba(0,0,0,0.24)] sm:mx-2 sm:px-5">
-        <div className="pointer-events-none absolute -right-14 -top-16 size-44 rounded-full bg-[rgba(0,180,166,0.22)] blur-3xl" />
-        <div className="pointer-events-none absolute inset-x-5 bottom-0 h-px bg-white/[0.06]" />
-        <div className="relative">
+      <header className="sticky top-0 z-20 bg-[var(--wardle-color-charcoal)] px-5 pt-3">
+        <div>
           <div className="flex items-start justify-between gap-4">
             <WardleLogo size="sm" />
-            <div className="flex flex-wrap justify-end gap-2">
-              {streakValue != null ? <Pill tone="amber">{iconSet.streak}{streakValue}</Pill> : null}
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {streakValue != null ? <Pill tone="amber">{iconSet.streak}<span>{streakValue}</span></Pill> : null}
               {roundViewModel.elapsedTimeText ? (
-                <Pill tone="navy">{iconSet.time} {roundViewModel.elapsedTimeText}</Pill>
+                <Pill tone="navy">{roundViewModel.elapsedTimeText}</Pill>
               ) : null}
+              <div className="shrink-0">
+                <NotificationBell compact />
+              </div>
             </div>
           </div>
 
-          <div className="mt-5 flex items-end justify-between gap-4">
+          <div className="mt-3 flex items-end justify-between gap-4">
             <div className="min-w-0">
               <p className="font-brand-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--wardle-color-teal)]/85">
                 {caseCode}
               </p>
-              <h1 className="mt-2 text-[1.25rem] font-black text-[var(--wardle-color-mint)] sm:text-[1.45rem]">
-                {iconSet.play} What&apos;s the diagnosis?
+              <h1 className="mt-0.5 text-[17px] font-black text-[var(--wardle-color-mint)] sm:text-[17px]">
+                What&apos;s the diagnosis?
               </h1>
             </div>
             <div className="shrink-0 text-right">
               <p className="text-[10px] uppercase tracking-[0.16em] text-white/42">Attempts</p>
-              <p className="mt-1 text-2xl font-black text-[var(--wardle-color-mint)]">
+              <p className="mt-0.5 text-xl font-black text-[var(--wardle-color-mint)]">
                 {roundViewModel.attemptsCount}
-                <span className="ml-1 text-sm font-medium text-white/40">/6</span>
+                <span className="ml-1 text-[13px] font-normal text-white/40">/6</span>
               </p>
             </div>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-2.5">
             <ReactGameProgress states={progressStates} />
           </div>
         </div>
@@ -304,10 +306,10 @@ function Pill({
 }) {
   return (
     <div
-      className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 ${
         tone === 'amber'
-          ? 'border border-[rgba(244,162,97,0.28)] bg-[rgba(244,162,97,0.12)] text-[var(--wardle-color-amber)]'
-          : 'border border-white/8 bg-[rgba(26,60,94,0.45)] text-white/65'
+          ? 'border border-[rgba(244,162,97,0.3)] bg-[rgba(244,162,97,0.15)] text-[13px] font-bold text-[var(--wardle-color-amber)]'
+          : 'bg-[rgba(26,60,94,0.5)] font-brand-mono text-xs text-[var(--wardle-color-gray)]'
       }`}
     >
       {children}

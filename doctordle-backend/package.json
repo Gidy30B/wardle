@@ -16,7 +16,7 @@
     "start:worker:ai": "node dist/worker-ai.js",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main.js || node dist/src/main.js",
+    "start:prod": "sh -c 'if [ -f dist/main.js ]; then node dist/main.js; else node dist/src/main.js; fi'",
     "seed:cases": "ts-node src/scripts/seed-cases.ts",
     "embed:diagnoses": "ts-node ./scripts/embed-diagnoses.ts",
     "backfill:daily-case": "ts-node ./scripts/backfill-daily-case.ts",

@@ -414,6 +414,8 @@ model User {
   stats                     UserStats?
   progress                  UserProgress?
   settings                  UserSettings?
+  notifications             Notification[]
+  notificationPreferences   NotificationPreference[]
   leaderboard               LeaderboardEntry[]
   approvedCases             Case[]                  @relation("CaseApprovedByUser")
   createdCaseRevisions      CaseRevision[]          @relation("CaseRevisionCreatedByUser")
@@ -469,6 +471,43 @@ model UserSettings {
   updatedAt               DateTime @updatedAt
   user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+}
+
+model Notification {
+  id             String    @id @default(uuid())
+  userId         String
+  type           String
+  category       String
+  title          String
+  body           String
+  data           Json?
+  priority       String    @default("normal")
+  readAt         DateTime?
+  seenAt         DateTime?
+  createdAt      DateTime  @default(now())
+  expiresAt      DateTime?
+  idempotencyKey String    @unique
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, readAt])
+  @@index([type])
+  @@index([category])
+}
+
+model NotificationPreference {
+  id           String   @id @default(uuid())
+  userId       String
+  category     String
+  inAppEnabled Boolean  @default(true)
+  pushEnabled  Boolean  @default(false)
+  emailEnabled Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
   @@index([userId])
 }
 

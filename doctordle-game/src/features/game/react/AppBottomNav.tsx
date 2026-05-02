@@ -29,7 +29,7 @@ export default function AppBottomNav({
   return (
     <nav
       aria-label="Game tabs"
-      className="mx-auto flex w-full max-w-[760px] items-center justify-between rounded-[28px] border border-white/10 bg-[rgba(28,28,40,0.96)] px-2 py-2 shadow-[0_28px_70px_rgba(0,0,0,0.38)] backdrop-blur-xl"
+      className="wardle-bottom-nav"
     >
       {appNavItems.map((item) => {
         const disabled = item.id === 'learn' && !canOpenLearn
@@ -42,16 +42,13 @@ export default function AppBottomNav({
             onClick={() => onChangeTab(item.id)}
             disabled={disabled}
             aria-current={isActive ? 'page' : undefined}
-            className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-[18px] px-2 py-2 text-center transition ${
-              isActive
-                ? 'bg-[rgba(0,180,166,0.14)] text-[var(--wardle-color-teal)]'
-                : 'text-white/52 hover:bg-white/5 hover:text-white/74'
-            } disabled:cursor-not-allowed disabled:opacity-35`}
+            className="wardle-bottom-nav__item"
+            data-active={isActive ? 'true' : 'false'}
           >
-            <span aria-hidden="true" className="text-lg leading-none">
+            <span aria-hidden="true" className="wardle-bottom-nav__icon">
               {item.icon}
             </span>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.14em]">
+            <span className="wardle-bottom-nav__label">
               {item.label}
             </span>
           </button>

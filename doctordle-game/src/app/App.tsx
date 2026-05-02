@@ -3,7 +3,7 @@ import { AnimatePresence } from 'framer-motion'
 import { useEffect } from 'react'
 import GamePage from '../pages/GamePage'
 import LandingScreen from './components/LandingScreen'
-import AuthLoadingScreen from './components/AuthLoadingScreen'
+import WardleLoadingScreen from './components/WardleLoadingScreen'
 import AnimatedScreen from './components/AnimatedScreen'
 import { disconnectSocket, initSocket } from '../game/ws-client'
 import ProfileOnboardingScreen from '../features/profile/ProfileOnboardingScreen'
@@ -71,12 +71,12 @@ export default function App() {
     <AnimatePresence initial={false}>
       {isOAuthCallback ? (
         <AnimatedScreen screenKey="oauth-callback">
-          <AuthLoadingScreen />
+          <WardleLoadingScreen />
           <AuthenticateWithRedirectCallback />
         </AnimatedScreen>
       ) : screen === 'loading' ? (
         <AnimatedScreen screenKey="loading">
-          <AuthLoadingScreen />
+          <WardleLoadingScreen />
         </AnimatedScreen>
       ) : screen === 'signed-out' ? (
         <AnimatedScreen screenKey="signed-out">

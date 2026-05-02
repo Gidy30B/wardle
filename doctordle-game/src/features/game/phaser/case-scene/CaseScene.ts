@@ -1932,7 +1932,10 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
     const renderResolution = this.getRenderResolutionFactor()
     const board = this.layoutMetrics.board
     const firstKey = this.keyboardButtons[0]?.view.background
-    const newestClue = Array.from(this.clueCards.values()).at(-1)?.background
+    const clueCards = Array.from(this.clueCards.values())
+    const newestClue = clueCards.length > 0
+      ? clueCards[clueCards.length - 1]?.background
+      : undefined
     const guessBackground = this.guessBar?.background
     const geometryEntries = this.collectGeometryAudit()
     const fractionalCount = geometryEntries.filter((entry) => entry.fractional).length
@@ -5882,4 +5885,5 @@ export const caseSceneConfig = {
   width: LOGICAL_WIDTH,
   height: LOGICAL_HEIGHT,
 }
+
 

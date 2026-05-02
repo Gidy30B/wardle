@@ -13,6 +13,7 @@ import { AuthModule } from './auth/auth.module';
 import { QueueModule } from './modules/queue/queue.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   controllers: [HealthController],
@@ -30,6 +31,7 @@ import { OrganizationsModule } from './modules/organizations/organizations.modul
     CaseGeneratorModule,
     RealtimeModule,
     OrganizationsModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

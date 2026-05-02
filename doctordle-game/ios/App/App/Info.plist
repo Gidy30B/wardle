@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+
+<!--
+  ─────────────────────────────────────────────────────────────────
+  Wardle — iOS Info.plist additions
+  ─────────────────────────────────────────────────────────────────
+  Capacitor generates the base Info.plist when you run `cap add ios`.
+  Merge the keys below into ios/App/App/Info.plist via Xcode or manually.
+  ─────────────────────────────────────────────────────────────────
+-->
+
+<plist version="1.0">
+<dict>
+
+  <!-- ── App display name ──────────────────────────────────────── -->
+  <key>CFBundleDisplayName</key>
+  <string>Wardle</string>
+
+  <key>CFBundleName</key>
+  <string>Wardle</string>
+
+  <!-- ── Status bar: hidden so Capacitor StatusBar plugin controls it -->
+  <key>UIStatusBarHidden</key>
+  <false/>
+  <key>UIStatusBarStyle</key>
+  <string>UIStatusBarStyleLightContent</string>
+
+  <!-- ── View controller–based status bar (required for plugin control) -->
+  <key>UIViewControllerBasedStatusBarAppearance</key>
+  <true/>
+
+  <!-- ── Full-screen / notch support ─────────────────────────── -->
+  <!-- Tells iOS the app supports edge-to-edge layout -->
+  <key>UILaunchStoryboardName</key>
+  <string>LaunchScreen</string>
+
+  <!-- ── Supported orientations ───────────────────────────────── -->
+  <!-- Portrait only — matches the 390px phone-frame design -->
+  <key>UISupportedInterfaceOrientations</key>
+  <array>
+    <string>UIInterfaceOrientationPortrait</string>
+  </array>
+
+  <key>UISupportedInterfaceOrientations~ipad</key>
+  <array>
+    <string>UIInterfaceOrientationPortrait</string>
+    <string>UIInterfaceOrientationPortraitUpsideDown</string>
+  </array>
+
+  <!-- ── ATS: allow font loading from Google Fonts ────────────── -->
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <false/>
+    <key>NSExceptionDomains</key>
+    <dict>
+      <key>fonts.googleapis.com</key>
+      <dict>
+        <key>NSExceptionAllowsInsecureHTTPLoads</key>
+        <false/>
+        <key>NSIncludesSubdomains</key>
+        <true/>
+      </dict>
+      <key>fonts.gstatic.com</key>
+      <dict>
+        <key>NSExceptionAllowsInsecureHTTPLoads</key>
+        <false/>
+        <key>NSIncludesSubdomains</key>
+        <true/>
+      </dict>
+    </dict>
+  </dict>
+
+</dict>
+</plist>

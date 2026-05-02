@@ -6,23 +6,30 @@
   --wardle-color-navy-light: #234e7a;
   --wardle-color-teal: #00B4A6;
   --wardle-color-teal-dark: #009A8E;
+  --wardle-color-teal-light: #00C9BA;
   --wardle-color-amber: #F4A261;
+  --wardle-color-amber-light: #F7BA85;
   --wardle-color-mint: #EAF4F4;
+  --wardle-color-mint-dark: #D4ECEC;
   --wardle-color-charcoal: #1E1E2C;
+  --wardle-color-red: #E05C5C;
   --wardle-color-gray: #8A9BB0;
   --wardle-color-gray-light: #C8D6E5;
+  --wardle-native-status-bar: #1E1E2C;
+  --wardle-native-nav-bar: #1E1E2C;
 }
 
 html,
 body,
 #root {
   min-height: 100%;
+  background: var(--wardle-color-charcoal);
 }
 
 body {
   margin: 0;
   font-family: 'DM Sans', system-ui, sans-serif;
-  background: #08111b;
+  background: var(--wardle-color-charcoal);
   color: var(--wardle-color-mint);
 }
 
@@ -53,6 +60,69 @@ textarea {
   transition: all 0.2s ease;
   font-weight: 600;
   font-size: 0.875rem;
+}
+
+.wardle-bottom-nav-shell {
+  flex-shrink: 0;
+  background: rgba(28, 28, 40, 0.96);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding-bottom: env(safe-area-inset-bottom);
+  backdrop-filter: blur(12px);
+}
+
+.wardle-bottom-nav {
+  display: flex;
+  width: 100%;
+  background: rgba(28, 28, 40, 0.96);
+  padding: 10px 0 20px;
+}
+
+.wardle-bottom-nav__item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--wardle-color-gray);
+  cursor: pointer;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+
+.wardle-bottom-nav__item:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.wardle-bottom-nav__item[data-active='true'] {
+  color: var(--wardle-color-teal);
+}
+
+.wardle-bottom-nav__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  transform: scale(1);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.wardle-bottom-nav__item[data-active='true'] .wardle-bottom-nav__icon {
+  background: rgba(0, 180, 166, 0.13);
+  transform: scale(1.1);
+}
+
+.wardle-bottom-nav__label {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: currentColor;
 }
 
 @keyframes slide-up {

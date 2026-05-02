@@ -28,4 +28,4 @@ EXPOSE 3000
 
 HEALTHCHECK CMD wget --spider -q http://localhost:3000/api/health || exit 1
 
-CMD ["sh", "-c", "npx prisma migrate deploy && (node dist/main.js || node dist/src/main.js)"]
+CMD ["sh", "-c", "npx prisma migrate deploy && npm run start:prod"]

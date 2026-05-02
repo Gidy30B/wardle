@@ -114,7 +114,19 @@ export async function getLeaderboardApi(
   mode: LeaderboardMode,
 ): Promise<LeaderboardEntry[]> {
   const endpoint = mode === 'daily' ? '/game/leaderboard/today' : '/game/leaderboard/weekly'
-  return request<LeaderboardEntry[]>(`${endpoint}?limit=20`)
+  const payload = await request<
+    LeaderboardEntry[] | { leaderboard?: LeaderboardEntry[]; entries?: LeaderboardEntry[] }
+  >(`${endpoint}?limit=20`)
+
+  if (Array.isArray(payload)) {
+    return payload
+  }
+
+  if (Array.isArray(payload.leaderboard)) {
+    return payload.leaderboard
+  }
+
+  return Array.isArray(payload.entries) ? payload.entries : []
 }
 
 export async function getCurrentUserLeaderboardPositionApi(

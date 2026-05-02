@@ -252,7 +252,7 @@ export function buildRoundViewModel({
   canSubmit,
   submitDisabled,
 }: BuildRoundViewModelInput): RoundViewModel {
-  const latestAttempt = attempts.at(-1) ?? null
+  const latestAttempt = attempts.length > 0 ? attempts[attempts.length - 1] : null
   const gameplayClues = caseData?.clues ?? latestResult?.case?.clues ?? []
   const gameplayVisibleClues = gameplayClues.filter((clue) => clue.order <= clueIndex)
   const totalClues = latestResult?.case?.clues.length ?? caseData?.clues.length ?? 0
@@ -466,3 +466,4 @@ function getSubmitPromptLabel(
         : 'Selection required'
   }
 }
+

@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- Subtle radial glow on the background -->
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="70%">
+      <stop offset="0%"   stop-color="#1e3a5f"/>
+      <stop offset="100%" stop-color="#0f1e35"/>
+    </radialGradient>
+
+    <!-- Soft drop shadow for each tile -->
+    <filter id="tileShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+
+    <!-- Glow filter for the centre teal tile -->
+    <filter id="tealGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- ── Background ──────────────────────────────────────────── -->
+  <rect width="1024" height="1024" rx="230" fill="url(#bgGrad)"/>
+
+  <!-- ── Grid: 5×5, centred, 140px tiles, 22px gap ───────────
+       Grid total = 5×140 + 4×22 = 788px
+       Offset = (1024 - 788) / 2 = 118px
+  -->
+
+  <!-- Row 1 -->
+  <rect x="118"  y="118"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="280"  y="118"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="442"  y="118"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="604"  y="118"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="766"  y="118"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+
+  <!-- Row 2 -->
+  <rect x="118"  y="280"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="280"  y="280"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="442"  y="280"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="604"  y="280"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="766"  y="280"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+
+  <!-- Row 3 — centre tile is teal -->
+  <rect x="118"  y="442"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="280"  y="442"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <!-- TEAL CENTRE TILE (row 3, col 3 = index [2][2]) -->
+  <rect x="442"  y="442"  width="140" height="140" rx="28" fill="#00B4A6" filter="url(#tileShadow)"/>
+  <!-- Teal glow halo behind the tile -->
+  <rect x="442"  y="442"  width="140" height="140" rx="28" fill="#00B4A6" opacity="0.35" filter="url(#tealGlow)"/>
+  <rect x="604"  y="442"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="766"  y="442"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+
+  <!-- Row 4 -->
+  <rect x="118"  y="604"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="280"  y="604"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="442"  y="604"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="604"  y="604"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="766"  y="604"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+
+  <!-- Row 5 -->
+  <rect x="118"  y="766"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="280"  y="766"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="442"  y="766"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="604"  y="766"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+  <rect x="766"  y="766"  width="140" height="140" rx="28" fill="#EAF4F4" opacity="0.92" filter="url(#tileShadow)"/>
+</svg>

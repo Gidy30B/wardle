@@ -14,7 +14,7 @@ export function useUserOrganizations() {
     placeholderData: (previousData) => previousData,
   })
 
-  const memberships = query.data ?? []
+  const memberships = Array.isArray(query.data) ? query.data : []
   const activeMemberships = memberships.filter((membership) => membership.status === 'ACTIVE')
   const primaryOrganization = activeMemberships[0]?.organization ?? null
 

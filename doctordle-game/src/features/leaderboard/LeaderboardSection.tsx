@@ -105,16 +105,14 @@ function LeaderboardSection({
 
   return (
     <section className="w-full">
-      <div className="overflow-hidden rounded-[26px] border border-white/[0.06] bg-[var(--wardle-color-charcoal)] shadow-[0_22px_54px_rgba(0,0,0,0.22)] transition-opacity duration-200">
-      <div className="relative overflow-hidden bg-[linear-gradient(145deg,rgba(26,60,94,0.94),rgba(30,30,44,0.96)_68%)] px-5 py-5">
-        <div className="pointer-events-none absolute -right-16 -top-16 size-44 rounded-full bg-[rgba(0,180,166,0.18)] blur-3xl" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-white/[0.06]" />
-        <div className="relative mb-4 flex items-center justify-between gap-4">
+      <div className="bg-[var(--wardle-color-charcoal)] transition-opacity duration-200">
+      <div className="sticky top-0 z-20 -mx-1 border-b border-white/[0.05] bg-[var(--wardle-color-navy)] px-4 pb-4 pt-3 sm:-mx-2 sm:px-5 lg:mx-0">
+        <div className="mb-4 flex items-center justify-between gap-4">
           <WardleLogo size="sm" />
           <div className="text-sm font-semibold text-white/55">{iconSet.rank} Leaderboard</div>
         </div>
 
-        <div className="wardle-nav-pill relative mb-3">
+        <div className="wardle-nav-pill mb-3">
           {(['global', 'school', 'friends'] as const).map((scope) => {
             const isGlobal = scope === 'global'
 
@@ -136,7 +134,7 @@ function LeaderboardSection({
           })}
         </div>
 
-        <div className="relative flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           <PeriodButton active={mode === 'daily'} onClick={handleModeChange('daily')}>
             Daily
           </PeriodButton>
@@ -154,6 +152,7 @@ function LeaderboardSection({
         </div>
       </div>
 
+      <div className="mt-1 overflow-hidden rounded-[22px] border border-white/[0.06] bg-[var(--wardle-color-charcoal)] shadow-[0_18px_44px_rgba(0,0,0,0.18)]">
       <div className="min-h-[240px] px-5 py-4 transition-opacity duration-200">
         {error ? (
           <p className="text-sm text-rose-300/90">Failed to load leaderboard.</p>
@@ -285,6 +284,7 @@ function LeaderboardSection({
             )}
           </div>
         </div>
+      </div>
       </div>
       </div>
     </section>

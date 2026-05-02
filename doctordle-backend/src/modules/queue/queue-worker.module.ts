@@ -13,6 +13,7 @@ import { RewardOrchestrator } from '../gameplay/reward-orchestrator.service';
 import { StreakService } from '../gameplay/streak.service';
 import { XpService } from '../gameplay/xp.service';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { QueueProcessor } from './queue.processor';
 
 @Module({
@@ -21,6 +22,7 @@ import { QueueProcessor } from './queue.processor';
     CasesModule,
     EventsModule,
     RealtimeModule,
+    NotificationsModule,
     RedisModule,
   ],
   providers: [

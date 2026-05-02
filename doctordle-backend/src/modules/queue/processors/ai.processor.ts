@@ -6,6 +6,7 @@ import { PrismaService } from '../../../core/db/prisma.service';
 import { RedisPubSubService } from '../../../core/redis/redis-pubsub.service';
 import { ExplanationService } from '../../ai/explanation.service';
 import { HintService } from '../../ai/hint.service';
+import { NotificationProducerService } from '../../notifications/notification-producer.service';
 import {
   AI_CONTENT_QUEUE_NAME,
   EXPLANATION_GENERATE_JOB_NAME,
@@ -29,6 +30,7 @@ export class AiProcessor implements OnModuleInit, OnModuleDestroy {
     private readonly hintService: HintService,
     private readonly explanationService: ExplanationService,
     private readonly redisPubSub: RedisPubSubService,
+    private readonly notificationProducer: NotificationProducerService,
   ) {
     const redisUrl = getEnv().REDIS_URL;
     this.connection = new Redis(redisUrl, {
@@ -186,6 +188,11 @@ export class AiProcessor implements OnModuleInit, OnModuleDestroy {
         },
       });
 
+      await this.notificationProducer.explanationReady({
+        userId,
+        caseId,
+      });
+
       this.logger.log(
         JSON.stringify({
           event: 'queue.ai.explanation.skipped_already_exists',
@@ -212,6 +219,11 @@ export class AiProcessor implements OnModuleInit, OnModuleDestroy {
         caseId,
         content,
       },
+    });
+
+    await this.notificationProducer.explanationReady({
+      userId,
+      caseId,
     });
 
     this.logger.log(

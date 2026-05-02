@@ -358,19 +358,25 @@ export function useGameEngine() {
   }, [clearGameplayState, ensureDiagnosisRegistryLoaded, request])
 
   useEffect(() => {
+    isMountedRef.current = true
+
     return () => {
       isMountedRef.current = false
     }
   }, [])
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || didInitRef.current) {
+    if (!isLoaded || !isSignedIn) {
+      return
+    }
+
+    if (didInitRef.current && (sessionId || mode.type !== 'LOADING')) {
       return
     }
 
     didInitRef.current = true
     void startSession()
-  }, [isLoaded, isSignedIn, startSession])
+  }, [isLoaded, isSignedIn, mode.type, sessionId, startSession])
 
   useEffect(() => {
     return subscribe((event) => {

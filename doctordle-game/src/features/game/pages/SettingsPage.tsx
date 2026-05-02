@@ -219,7 +219,12 @@ const BackHeader = ({ onBack, title }: { onBack: () => void; title: string }) =>
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      padding: '14px 20px 0',
+      padding: '14px 20px',
+      position: 'sticky',
+      top: 0,
+      zIndex: 20,
+      background: 'var(--wardle-color-charcoal)',
+      borderBottom: '1px solid rgba(255,255,255,0.05)',
     }}
   >
     <button
@@ -841,7 +846,12 @@ export default function SettingsPage({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '14px 20px 0',
+          padding: '14px 20px',
+          position: 'sticky',
+          top: 0,
+          zIndex: 20,
+          background: 'var(--wardle-color-charcoal)',
+          borderBottom: '1px solid rgba(255,255,255,0.05)',
         }}
       >
         <WardleLogo size="sm" />

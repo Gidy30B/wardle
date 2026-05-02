@@ -12,6 +12,10 @@ import type { Server, Socket } from 'socket.io';
 import { ClerkJwtService } from '../../auth/clerk-jwt.service';
 import { PrismaService } from '../../core/db/prisma.service';
 import { RedisPubSubService } from '../../core/redis/redis-pubsub.service';
+import {
+  NOTIFICATION_V1_CREATED_EVENT,
+  type NotificationCreatedRealtimePayload,
+} from '../notifications/notification.types';
 
 type RewardAppliedPayload = {
   xp: number;
@@ -37,6 +41,11 @@ type RealtimeEnvelope =
       type: typeof GAME_V1_EXPLANATION_READY_EVENT;
       userId: string;
       payload: ExplanationReadyPayload;
+    }
+  | {
+      type: typeof NOTIFICATION_V1_CREATED_EVENT;
+      userId: string;
+      payload: NotificationCreatedRealtimePayload;
     };
 
 @WebSocketGateway({ cors: { origin: '*' } })

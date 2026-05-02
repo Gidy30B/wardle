@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Wardle</string>
+    <string name="title_activity_main">Wardle</string>
+    <string name="package_name">app.wardle.medcase</string>
+    <string name="custom_url_scheme">app.wardle.medcase</string>
+</resources>
