@@ -1,5 +1,6 @@
 import { toBlob } from 'html-to-image'
 import type { ShareCardData } from './shareCard.types'
+import { shareNatively } from './nativeShare'
 import { buildShareText, getShareUrl } from './shareText'
 
 export type ShareImageResult = 'shared' | 'copied' | 'downloaded' | 'idle'
@@ -8,6 +9,18 @@ export async function shareCardImage(
   cardElement: HTMLElement,
   data: ShareCardData,
 ): Promise<ShareImageResult> {
+  const shareText = buildShareText(data)
+  const shareUrl = getShareUrl()
+
+  if (await shareNatively({
+    title: 'Wardle score',
+    text: shareText,
+    url: shareUrl,
+    dialogTitle: 'Share Wardle score',
+  })) {
+    return 'shared'
+  }
+
   const blob = await toBlob(cardElement, {
     backgroundColor: '#0d2440',
     cacheBust: true,
@@ -19,14 +32,12 @@ export async function shareCardImage(
   }
 
   const file = new File([blob], getShareImageFilename(data), { type: 'image/png' })
-  const shareText = buildShareText(data)
-
   try {
     if (navigator.canShare?.({ files: [file] }) && navigator.share) {
       await navigator.share({
         title: 'Wardle score',
         text: shareText,
-        url: getShareUrl(),
+        url: shareUrl,
         files: [file],
       })
       return 'shared'

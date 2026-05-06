@@ -8,13 +8,20 @@ import AnimatedScreen from './components/AnimatedScreen'
 import { disconnectSocket, initSocket } from '../game/ws-client'
 import ProfileOnboardingScreen from '../features/profile/ProfileOnboardingScreen'
 import { useProfileOnboarding } from '../features/profile/useProfileOnboarding'
+import {
+  ROOT_PATH,
+  getNativeOAuthCallbackUrl,
+  isClerkOAuthCallbackPath,
+  shouldBounceOAuthCallbackToNativeApp,
+} from '../features/auth/authRedirects'
 
 type EntryScreen = 'loading' | 'profile-onboarding' | 'signed-in' | 'signed-out'
 
 export default function App() {
   const { getToken, isLoaded, isSignedIn, userId } = useAuth()
   const profileOnboarding = useProfileOnboarding()
-  const isOAuthCallback = window.location.pathname === '/sso-callback'
+  const isOAuthCallback = isClerkOAuthCallbackPath(window.location.pathname)
+  const shouldBounceToNative = shouldBounceOAuthCallbackToNativeApp()
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -57,6 +64,14 @@ export default function App() {
     }
   }, [getToken, isLoaded, isSignedIn, userId])
 
+  useEffect(() => {
+    if (!shouldBounceToNative) {
+      return
+    }
+
+    window.location.replace(getNativeOAuthCallbackUrl())
+  }, [shouldBounceToNative])
+
   const screen: EntryScreen = !isLoaded
     ? 'loading'
     : isSignedIn !== true
@@ -69,10 +84,23 @@ export default function App() {
 
   return (
     <AnimatePresence initial={false}>
-      {isOAuthCallback ? (
+      {isOAuthCallback && shouldBounceToNative ? (
+        <AnimatedScreen screenKey="oauth-native-bounce">
+          <WardleLoadingScreen />
+        </AnimatedScreen>
+      ) : isOAuthCallback ? (
         <AnimatedScreen screenKey="oauth-callback">
           <WardleLoadingScreen />
-          <AuthenticateWithRedirectCallback />
+          <AuthenticateWithRedirectCallback
+            signInFallbackRedirectUrl={ROOT_PATH}
+            signUpFallbackRedirectUrl={ROOT_PATH}
+            signInForceRedirectUrl={ROOT_PATH}
+            signUpForceRedirectUrl={ROOT_PATH}
+            signInUrl={ROOT_PATH}
+            signUpUrl={ROOT_PATH}
+            continueSignUpUrl={ROOT_PATH}
+            verifyEmailAddressUrl={ROOT_PATH}
+          />
         </AnimatedScreen>
       ) : screen === 'loading' ? (
         <AnimatedScreen screenKey="loading">

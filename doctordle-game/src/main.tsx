@@ -24,6 +24,15 @@ async function initNative() {
   })
 
   try {
+    const launchUrl = await CapacitorApp.getLaunchUrl()
+    if (launchUrl?.url) {
+      handleNativeAppUrl(launchUrl.url)
+    }
+  } catch (_) {
+    // Launch URL can be unavailable on some platform/plugin combinations.
+  }
+
+  try {
     // Match the StatusBar to the app's styling
     await StatusBar.setStyle({ style: Style.Light });
     await StatusBar.setBackgroundColor({ color: WARDLE_NATIVE_BACKGROUND });
@@ -51,6 +60,14 @@ function handleNativeAppUrl(appUrl: string) {
   }
 }
 
+function clerkNavigate(to: string) {
+  window.location.assign(to)
+}
+
+function clerkReplace(to: string) {
+  window.location.replace(to)
+}
+
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
 if (!clerkPublishableKey) {
@@ -72,7 +89,14 @@ const root = createRoot(container);
 
 root.render(
   <StrictMode>
-    <ClerkProvider publishableKey={clerkPublishableKey}>
+    <ClerkProvider
+      publishableKey={clerkPublishableKey}
+      routerPush={clerkNavigate}
+      routerReplace={clerkReplace}
+      signInFallbackRedirectUrl="/"
+      signUpFallbackRedirectUrl="/"
+      afterSignOutUrl="/"
+    >
       <QueryClientProvider client={queryClient}>
         <AppErrorBoundary>
           <App />

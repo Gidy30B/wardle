@@ -1,36 +1,20 @@
-import { Capacitor } from '@capacitor/core'
-
 export const CLERK_OAUTH_CALLBACK_PATH = '/sso-callback'
 export const NATIVE_AUTH_CUSTOM_SCHEME = 'app.wardle.medcase'
-export const NATIVE_AUTH_CUSTOM_CALLBACK_URL = `${NATIVE_AUTH_CUSTOM_SCHEME}://sso-callback`
+export const NATIVE_AUTH_CALLBACK_HOST = 'sso-callback'
+export const NATIVE_AUTH_COMPLETE_HOST = 'oauth-complete'
+export const ROOT_PATH = '/'
 
 type ClerkOAuthRedirects = {
   redirectUrl: string
   redirectUrlComplete: string
+  kind: 'same-origin'
 }
 
-const ROOT_PATH = '/'
-
 export function getClerkOAuthRedirects(): ClerkOAuthRedirects {
-  if (typeof window === 'undefined') {
-    return {
-      redirectUrl: CLERK_OAUTH_CALLBACK_PATH,
-      redirectUrlComplete: ROOT_PATH,
-    }
-  }
-
-  if (!Capacitor.isNativePlatform()) {
-    return {
-      redirectUrl: buildWebUrl(CLERK_OAUTH_CALLBACK_PATH),
-      redirectUrlComplete: buildWebUrl(ROOT_PATH),
-    }
-  }
-
   return {
-    redirectUrl: getNativeOAuthCallbackUrl(),
-    // Keep the post-callback navigation inside the already-mounted WebView.
-    // The native handoff only needs to happen for the Clerk callback itself.
-    redirectUrlComplete: ROOT_PATH,
+    redirectUrl: buildSameOriginUrl(CLERK_OAUTH_CALLBACK_PATH),
+    redirectUrlComplete: buildSameOriginUrl(ROOT_PATH),
+    kind: 'same-origin',
   }
 }
 
@@ -47,60 +31,47 @@ export function mapNativeAuthUrlToInternalPath(appUrl: string): string | null {
     return withSearchAndHash(CLERK_OAUTH_CALLBACK_PATH, parsedUrl)
   }
 
-  if (!isConfiguredNativeHttpsAppLink(parsedUrl)) {
+  if (isCustomSchemeComplete(parsedUrl)) {
+    return withSearchAndHash(ROOT_PATH, parsedUrl)
+  }
+
+  if (parsedUrl.origin !== getWindowOrigin()) {
     return null
   }
 
-  const path =
-    parsedUrl.pathname === ROOT_PATH && parsedUrl.searchParams.has('__clerk_handshake')
-      ? CLERK_OAUTH_CALLBACK_PATH
-      : normalizePath(parsedUrl.pathname)
-
-  return withSearchAndHash(path, parsedUrl)
+  return withSearchAndHash(normalizePath(parsedUrl.pathname), parsedUrl)
 }
 
-export function getNativeAuthAppLinkHost(): string | null {
-  const origin = getConfiguredNativeHttpsOrigin()
-  return origin ? new URL(origin).host : null
-}
-
-function getNativeOAuthCallbackUrl() {
-  const explicitUrl = sanitizeUrl(getEnv('VITE_NATIVE_AUTH_REDIRECT_URL'))
-  if (explicitUrl) {
-    return explicitUrl
-  }
-
-  const nativeHttpsOrigin = getConfiguredNativeHttpsOrigin()
-  if (nativeHttpsOrigin) {
-    return new URL(CLERK_OAUTH_CALLBACK_PATH, nativeHttpsOrigin).toString()
-  }
-
-  const customUrl = sanitizeUrl(getEnv('VITE_NATIVE_AUTH_CUSTOM_CALLBACK_URL'))
-  return customUrl ?? NATIVE_AUTH_CUSTOM_CALLBACK_URL
-}
-
-function getConfiguredNativeHttpsOrigin() {
-  return sanitizeHttpsOrigin(
-    getEnv('VITE_NATIVE_AUTH_APP_LINK_ORIGIN') ??
-      getEnv('VITE_NATIVE_AUTH_REDIRECT_ORIGIN'),
-  )
-}
-
-function isCustomSchemeCallback(url: URL) {
-  return url.protocol === `${NATIVE_AUTH_CUSTOM_SCHEME}:` && url.host === 'sso-callback'
-}
-
-function isConfiguredNativeHttpsAppLink(url: URL) {
-  if (url.protocol !== 'https:') {
+export function shouldBounceOAuthCallbackToNativeApp() {
+  if (typeof window === 'undefined') {
     return false
   }
 
-  const nativeHttpsOrigin = getConfiguredNativeHttpsOrigin()
-  return nativeHttpsOrigin ? url.origin === nativeHttpsOrigin : false
+  if (!isClerkOAuthCallbackPath(window.location.pathname)) {
+    return false
+  }
+
+  if (hasCapacitorNativeBridge()) {
+    return false
+  }
+
+  return isLikelyMobileBrowser()
 }
 
-function buildWebUrl(path: string) {
-  return new URL(path, window.location.origin).toString()
+export function getNativeOAuthCallbackUrl() {
+  if (typeof window === 'undefined') {
+    return `${NATIVE_AUTH_CUSTOM_SCHEME}://${NATIVE_AUTH_CALLBACK_HOST}`
+  }
+
+  return `${NATIVE_AUTH_CUSTOM_SCHEME}://${NATIVE_AUTH_CALLBACK_HOST}${window.location.search}${window.location.hash}`
+}
+
+export function isClerkOAuthCallbackPath(pathname: string) {
+  return normalizePath(pathname) === CLERK_OAUTH_CALLBACK_PATH
+}
+
+function buildSameOriginUrl(path: string) {
+  return new URL(path, getWindowOrigin()).toString()
 }
 
 function withSearchAndHash(path: string, url: URL) {
@@ -111,35 +82,25 @@ function normalizePath(path: string) {
   return path.startsWith('/') ? path : `/${path}`
 }
 
-function sanitizeUrl(value: string | undefined) {
-  if (!value) {
-    return null
-  }
-
-  try {
-    return new URL(value.trim()).toString()
-  } catch (_) {
-    return null
-  }
+function getWindowOrigin() {
+  return typeof window === 'undefined' ? 'https://wardle-nu.vercel.app' : window.location.origin
 }
 
-function sanitizeHttpsOrigin(value: string | undefined) {
-  if (!value) {
-    return null
-  }
-
-  try {
-    const url = new URL(value.trim())
-    if (url.protocol !== 'https:') {
-      return null
-    }
-
-    return url.origin
-  } catch (_) {
-    return null
-  }
+function isCustomSchemeCallback(url: URL) {
+  return url.protocol === `${NATIVE_AUTH_CUSTOM_SCHEME}:` && url.host === NATIVE_AUTH_CALLBACK_HOST
 }
 
-function getEnv(key: string) {
-  return (import.meta.env[key] as string | undefined)?.trim() || undefined
+function isCustomSchemeComplete(url: URL) {
+  return url.protocol === `${NATIVE_AUTH_CUSTOM_SCHEME}:` && url.host === NATIVE_AUTH_COMPLETE_HOST
+}
+
+function hasCapacitorNativeBridge() {
+  return Boolean(
+    (window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
+      ?.isNativePlatform?.(),
+  )
+}
+
+function isLikelyMobileBrowser() {
+  return /Android|iPhone|iPad|iPod/i.test(window.navigator.userAgent)
 }

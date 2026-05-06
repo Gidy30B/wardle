@@ -234,3 +234,92 @@ textarea {
 .animate-streak-pulse {
   animation: streakPulse 0.4s ease-in-out;
 }
+
+@keyframes learn-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes learn-card-flip-enter {
+  from {
+    opacity: 0;
+    transform: rotateX(-8deg) translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: rotateX(0deg) translateY(0);
+  }
+}
+
+@keyframes learn-clue-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.learn-card-enter {
+  animation: learn-card-enter 260ms ease-out;
+}
+
+.learn-card-flip-enter {
+  animation: learn-card-flip-enter 300ms ease-out;
+  transform-origin: top center;
+}
+
+.learn-clue-enter {
+  animation: learn-clue-enter 240ms ease-out both;
+}
+
+@keyframes wardle-learn-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes wardle-learn-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.wardle-learn-slide-up {
+  animation: wardle-learn-slide-up 220ms ease-out both;
+}
+
+.wardle-learn-fade {
+  animation: wardle-learn-fade 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .learn-card-enter,
+  .learn-card-flip-enter,
+  .learn-clue-enter,
+  .wardle-learn-slide-up,
+  .wardle-learn-fade {
+    animation: none;
+  }
+}

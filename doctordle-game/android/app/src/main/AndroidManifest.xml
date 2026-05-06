@@ -28,21 +28,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
-                <data
-                    android:scheme="app.wardle.medcase"
-                    android:host="sso-callback" />
-            </intent-filter>
-
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-
-                <data
-                    android:scheme="https"
-                    android:host="${wardleAppLinkHost}"
-                    android:pathPrefix="/" />
+                <data android:scheme="@string/custom_url_scheme" />
             </intent-filter>
 
         </activity>

@@ -14,6 +14,15 @@
     "cap:run:android": "npm run build && cap sync android && cap run android"
   },
   "dependencies": {
+    "@capacitor/android": "^6.1.0",
+    "@capacitor/app": "^6.0.0",
+    "@capacitor/core": "^6.1.0",
+    "@capacitor/haptics": "^6.0.0",
+    "@capacitor/ios": "^6.1.0",
+    "@capacitor/keyboard": "^6.0.0",
+    "@capacitor/share": "^6.0.4",
+    "@capacitor/splash-screen": "^6.0.0",
+    "@capacitor/status-bar": "^6.0.0",
     "@clerk/clerk-react": "^5.61.4",
     "@tanstack/react-query": "^5.96.2",
     "framer-motion": "^12.38.0",
@@ -22,17 +31,10 @@
     "phaser": "^3.90.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "socket.io-client": "^4.8.1",
-    "@capacitor/android": "^6.1.0",
-    "@capacitor/app": "^6.0.0",
-    "@capacitor/core": "^6.1.0",
-    "@capacitor/haptics": "^6.0.0",
-    "@capacitor/ios": "^6.1.0",
-    "@capacitor/keyboard": "^6.0.0",
-    "@capacitor/splash-screen": "^6.0.0",
-    "@capacitor/status-bar": "^6.0.0"
+    "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^6.1.0",
     "@tailwindcss/vite": "^4.2.2",
     "@types/node": "^24.12.0",
     "@types/react": "^19.2.14",
@@ -42,7 +44,6 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
-    "vite": "^8.0.1",
-    "@capacitor/cli": "^6.1.0"
+    "vite": "^8.0.1"
   }
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import AppBottomNav, { appNavItems, type AppGameTab } from './AppBottomNav'
 import { APP_ICONS } from '../../../theme/icons'
+import WardleLogo from '../../../components/brand/WardleLogo'
 
 type AppGameShellProps = {
   activeTab: AppGameTab
@@ -25,6 +26,10 @@ export default function AppGameShell({
     <div className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[var(--wardle-color-charcoal)] text-[var(--wardle-color-mint)]">
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <aside className="hidden w-[244px] shrink-0 border-r border-white/10 bg-[var(--wardle-color-charcoal)] px-4 pb-5 pt-4 lg:flex lg:flex-col">
+          <div className="mb-4 flex items-center justify-between">
+            <WardleLogo size="sm" />
+          </div>
+
           <nav aria-label="Game tabs" className="space-y-2">
             {appNavItems.map((item) => {
               const disabled = item.id === 'learn' && !canOpenLearn

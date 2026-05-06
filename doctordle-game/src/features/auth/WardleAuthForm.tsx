@@ -155,14 +155,17 @@ export default function WardleAuthForm() {
     try {
       const isNativePlatform = Capacitor.isNativePlatform()
       const platform = Capacitor.getPlatform()
-      const { redirectUrl, redirectUrlComplete } = getClerkOAuthRedirects()
+      const { kind, redirectUrl, redirectUrlComplete } = getClerkOAuthRedirects()
 
-      console.log('[Wardle OAuth redirect]', {
-        isNativePlatform,
-        platform,
-        redirectUrl,
-        redirectUrlComplete,
-      })
+      if (import.meta.env.DEV) {
+        console.log('[Wardle OAuth redirect]', {
+          isNativePlatform,
+          platform,
+          kind,
+          redirectUrl,
+          redirectUrlComplete,
+        })
+      }
 
       await signInState.signIn.authenticateWithRedirect({
         strategy: 'oauth_google',

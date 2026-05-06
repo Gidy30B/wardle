@@ -4,6 +4,11 @@ const config: CapacitorConfig = {
   appId: "app.wardle.medcase",
   appName: "Wardle",
   webDir: "dist",
+  server: {
+    hostname: "wardle-nu.vercel.app",
+    androidScheme: "https",
+    iosScheme: "https",
+  },
 
   // ── Server ──────────────────────────────────────────────────────
   // Remove `url` for production builds. Uncomment only for live-reload dev.

@@ -1,7 +1,10 @@
+import { Capacitor } from '@capacitor/core'
 import type { ShareAttemptLabel, ShareCardData } from './shareCard.types'
+import { shareNatively } from './nativeShare'
 
 const FALLBACK_SHARE_URL = 'https://wardle.app'
 const PLACEHOLDER_HOSTS = new Set(['your-app.vercel.app', 'example.com'])
+const CAPACITOR_LOCAL_HOSTS = new Set(['localhost', '127.0.0.1'])
 
 const emojiByAttempt: Record<ShareAttemptLabel, string> = {
   correct: '🟩',
@@ -49,6 +52,13 @@ export function getShareUrl() {
   }
 
   if (typeof window !== 'undefined' && window.location?.origin) {
+    if (
+      Capacitor.isNativePlatform() &&
+      CAPACITOR_LOCAL_HOSTS.has(window.location.hostname)
+    ) {
+      return FALLBACK_SHARE_URL
+    }
+
     return window.location.origin
   }
 
@@ -102,13 +112,23 @@ export function buildShareText(data: ShareCardData) {
 
 export async function shareScoreText(data: ShareCardData): Promise<'shared' | 'copied' | 'idle'> {
   const shareText = buildShareText(data)
+  const shareUrl = getShareUrl()
+
+  if (await shareNatively({
+    title: 'Wardle score',
+    text: shareText,
+    url: shareUrl,
+    dialogTitle: 'Share Wardle score',
+  })) {
+    return 'shared'
+  }
 
   try {
     if (navigator.share) {
       await navigator.share({
         title: 'Wardle score',
         text: shareText,
-        url: getShareUrl(),
+        url: shareUrl,
       })
       return 'shared'
     }
