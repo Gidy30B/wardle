@@ -4,7 +4,7 @@ import { Capacitor } from '@capacitor/core'
 type NativeShareOptions = {
   title: string
   text: string
-  url: string
+  url?: string
   dialogTitle?: string
 }
 

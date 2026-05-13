@@ -17,6 +17,10 @@ import {
   DailyCasesService,
   hasPremiumTrackAccess,
 } from './daily-cases.service';
+import {
+  formatDailyCaseDisplayLabel,
+  formatDailyCaseTrackDisplayLabel,
+} from './daily-case-labels.js';
 import type {
   GameplayCaseExplanation,
   GameplayClinicalClue,
@@ -50,6 +54,9 @@ type PersistGuessResult =
 
 type GameplayCaseView = {
   id: string;
+  publicNumber: number | null;
+  displayLabel?: string;
+  trackDisplayLabel?: string;
   difficulty: string;
   date: Date;
   clues: GameplayClinicalClue[];
@@ -60,6 +67,11 @@ type StartDailyGameResponse =
       state: 'ready';
       sessionId: string;
       dailyCaseId: string;
+      casePublicNumber: number | null;
+      displayLabel: string;
+      trackDisplayLabel: string;
+      dailyCaseDisplayLabel: string;
+      dailyCaseTrackDisplayLabel: string;
       clueIndex: number;
       attemptsCount: number;
       startedAt: string;
@@ -76,6 +88,9 @@ type CompletedLearningLibraryResponse = {
   cases: Array<{
     sessionId: string;
     dailyCaseId: string;
+    casePublicNumber: number | null;
+    displayLabel: string;
+    trackDisplayLabel: string;
     track: PublishTrack;
     sequenceIndex: number;
     completedAt: string;
@@ -86,6 +101,9 @@ type CompletedLearningLibraryResponse = {
     };
     case: {
       id: string;
+      publicNumber: number | null;
+      displayLabel: string;
+      trackDisplayLabel: string;
       title: string;
       diagnosis: string;
       date: string;
@@ -159,6 +177,7 @@ export class SessionService {
         dailyCase: {
           select: {
             id: true,
+            date: true,
             track: true,
             sequenceIndex: true,
           },
@@ -204,6 +223,17 @@ export class SessionService {
         return {
           sessionId: session.id,
           dailyCaseId: session.dailyCaseId,
+          casePublicNumber: session.case.publicNumber ?? null,
+          displayLabel: formatDailyCaseDisplayLabel({
+            ...session.dailyCase,
+            case: session.case,
+          }),
+          trackDisplayLabel: formatDailyCaseTrackDisplayLabel(
+            {
+              ...session.dailyCase,
+              case: session.case,
+            },
+          ),
           track: session.dailyCase.track,
           sequenceIndex: session.dailyCase.sequenceIndex,
           completedAt: completedAt.toISOString(),
@@ -214,6 +244,9 @@ export class SessionService {
           },
           case: {
             id: session.case.id,
+            publicNumber: session.case.publicNumber ?? null,
+            displayLabel: responseCase.displayLabel,
+            trackDisplayLabel: responseCase.trackDisplayLabel,
             title: session.case.title,
             diagnosis: session.case.diagnosis.name,
             date: session.case.date.toISOString().slice(0, 10),
@@ -289,12 +322,15 @@ export class SessionService {
           track: input.track,
           sequenceIndex: input.sequenceIndex,
         })
-      : input.dailyCaseId
-        ? input.dailyCaseId
-        : await this.resolveStartableDailyCaseId(
-            input.userId,
-            todayCases.cases,
-          );
+      : this.resolveRequestedStartDailyCaseId(todayCases.cases, {
+          dailyCaseId: input.dailyCaseId,
+          track: input.track,
+          sequenceIndex: input.sequenceIndex,
+        }) ??
+        (await this.resolveStartableDailyCaseId(
+          input.userId,
+          todayCases.cases,
+        ));
 
     if (!selectedDailyCaseId && !replayMode) {
       this.logEvent('daily.start.dev_replay.auto_lookup', {
@@ -361,6 +397,14 @@ export class SessionService {
         input.userId,
         selectedDailyCaseId,
       );
+
+    this.assertSessionMatchesDailyCase({
+      sessionId: result.session.id,
+      sessionCaseId: result.session.caseId,
+      dailyCaseId: result.dailyCase.id,
+      dailyCaseCaseId: result.dailyCase.caseId,
+    });
+
     const selectedCase: Pick<CaseModel, 'id' | 'difficulty' | 'date'> = {
       id: result.dailyCase.case.id,
       date: result.dailyCase.case.date,
@@ -403,7 +447,15 @@ export class SessionService {
       resumedAttempts,
       maxClues,
     );
-    const responseCase = this.buildCasePayload(gameplayCase);
+    const displayLabel = formatDailyCaseDisplayLabel(result.dailyCase);
+    const trackDisplayLabel = formatDailyCaseTrackDisplayLabel(
+      result.dailyCase,
+    );
+    const responseCase = {
+      ...this.buildCasePayload(gameplayCase),
+      displayLabel,
+      trackDisplayLabel,
+    };
 
     this.logEvent('daily.case.selected', {
       userId: result.user.id,
@@ -424,6 +476,11 @@ export class SessionService {
       state: 'ready',
       sessionId: result.session.id,
       dailyCaseId: result.dailyCase.id,
+      casePublicNumber: result.dailyCase.case.publicNumber ?? null,
+      displayLabel,
+      trackDisplayLabel,
+      dailyCaseDisplayLabel: displayLabel,
+      dailyCaseTrackDisplayLabel: trackDisplayLabel,
       clueIndex,
       attemptsCount: resumedAttempts.length,
       startedAt: result.session.startedAt.toISOString(),
@@ -1105,6 +1162,57 @@ export class SessionService {
     return replayDailyCaseId;
   }
 
+  private resolveRequestedStartDailyCaseId(
+    cases: Array<{
+      dailyCaseId: string;
+      track: PublishTrack;
+      sequenceIndex: number;
+    }>,
+    input: {
+      dailyCaseId?: string;
+      track?: PublishTrack;
+      sequenceIndex?: number;
+    },
+  ): string | null {
+    if (input.dailyCaseId) {
+      const exactMatch = cases.find(
+        (entry) => entry.dailyCaseId === input.dailyCaseId,
+      );
+
+      if (!exactMatch) {
+        throw new BadRequestException(
+          "Requested dailyCaseId is not available in today's feed",
+        );
+      }
+
+      return exactMatch.dailyCaseId;
+    }
+
+    if (!input.track && !input.sequenceIndex) {
+      return null;
+    }
+
+    if (!input.track || !input.sequenceIndex) {
+      throw new BadRequestException(
+        'Provide both track and sequenceIndex to select a daily case',
+      );
+    }
+
+    const exactTrackMatch = cases.find(
+      (entry) =>
+        entry.track === input.track &&
+        entry.sequenceIndex === input.sequenceIndex,
+    );
+
+    if (!exactTrackMatch) {
+      throw new BadRequestException(
+        "Requested track/sequenceIndex is not available in today's feed",
+      );
+    }
+
+    return exactTrackMatch.dailyCaseId;
+  }
+
   private async findMostRecentTodaySessionDailyCaseId(
     userId: string,
     dailyCaseIds: string[],
@@ -1250,11 +1358,13 @@ export class SessionService {
 
   private async hydrateGameplayCase(selectedCase: {
     id: string;
+    publicNumber?: number | null;
     difficulty: string;
     date: Date;
   }): Promise<GameplayCaseView> {
     return {
       ...selectedCase,
+      publicNumber: selectedCase.publicNumber ?? null,
       clues: await this.getCaseClues(selectedCase.id),
     };
   }
@@ -1404,6 +1514,17 @@ export class SessionService {
 
     return {
       id: selectedCase.id,
+      casePublicNumber: selectedCase.publicNumber,
+      displayLabel:
+        selectedCase.displayLabel ??
+        (selectedCase.publicNumber
+          ? `Case ${selectedCase.publicNumber}`
+          : `Daily Case ${selectedCase.date.toISOString().slice(0, 10)} #1`),
+      trackDisplayLabel:
+        selectedCase.trackDisplayLabel ??
+        (selectedCase.publicNumber
+          ? `Daily Case ${selectedCase.publicNumber}`
+          : `Daily Case ${selectedCase.date.toISOString().slice(0, 10)} #1`),
       difficulty: selectedCase.difficulty,
       date: selectedCase.date.toISOString().slice(0, 10),
       clues,
@@ -1485,6 +1606,28 @@ export class SessionService {
     }
 
     return null;
+  }
+
+  private assertSessionMatchesDailyCase(input: {
+    sessionId: string;
+    sessionCaseId: string;
+    dailyCaseId: string;
+    dailyCaseCaseId: string;
+  }): void {
+    if (input.sessionCaseId === input.dailyCaseCaseId) {
+      return;
+    }
+
+    this.logWarnEvent('daily.start.session_assignment_mismatch', {
+      sessionId: input.sessionId,
+      dailyCaseId: input.dailyCaseId,
+      sessionCaseId: input.sessionCaseId,
+      dailyCaseCaseId: input.dailyCaseCaseId,
+    });
+
+    throw new BadRequestException(
+      'Session case no longer matches the assigned daily case',
+    );
   }
 
   private assertSessionSubmitAccess(input: {

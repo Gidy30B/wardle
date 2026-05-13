@@ -35,6 +35,7 @@ export function buildShareCardDataFromRound(
 
   return {
     caseId: roundViewModel.caseId,
+    caseLabel: roundViewModel.caseDisplayLabel,
     result: isCorrect ? 'correct' : 'failed',
     attemptsUsed,
     cluesUsed,
@@ -62,6 +63,7 @@ export function buildShareCardDataFromResult(
 
   return {
     caseId: result.case?.id ?? fallback.caseId,
+    caseLabel: result.case?.displayLabel ?? fallback.caseDisplayLabel,
     result: isCorrect ? 'correct' : 'failed',
     attemptsUsed,
     cluesUsed: Math.min(attemptsUsed, totalClues),

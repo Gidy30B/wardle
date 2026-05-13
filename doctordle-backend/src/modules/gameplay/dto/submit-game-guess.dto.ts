@@ -38,6 +38,9 @@ export type SubmitGameGuessResponseDto = {
   duplicate?: boolean;
   case?: {
     id: string;
+    casePublicNumber: number | null;
+    displayLabel: string;
+    trackDisplayLabel: string;
     difficulty: string;
     date: string;
     clues: GameplayClinicalClue[];

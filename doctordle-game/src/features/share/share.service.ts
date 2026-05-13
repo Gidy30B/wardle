@@ -30,6 +30,7 @@ export function buildShareText(data: {
 }) {
   return buildDesignedShareText({
     caseId: null,
+    caseLabel: null,
     result: data.result,
     attemptsUsed: data.attempts,
     cluesUsed: data.attempts,

@@ -67,6 +67,9 @@ export async function startGameApi(request: RequestJson): Promise<StartGameRespo
         state?: 'ready'
         sessionId: string
         dailyCaseId: string
+        casePublicNumber?: number | null
+        displayLabel?: string
+        trackDisplayLabel?: string
         startedAt?: string
         completedAt?: string | null
         clueIndex?: number
@@ -91,6 +94,9 @@ export async function startGameApi(request: RequestJson): Promise<StartGameRespo
     state: 'ready',
     sessionId: response.sessionId,
     dailyCaseId: response.dailyCaseId,
+    casePublicNumber: response.casePublicNumber ?? response.case.casePublicNumber ?? null,
+    displayLabel: response.displayLabel ?? response.case.displayLabel,
+    trackDisplayLabel: response.trackDisplayLabel ?? response.case.trackDisplayLabel,
     startedAt: response.startedAt,
     completedAt: response.completedAt ?? null,
     case: attachClueIndex(response.case, response.clueIndex ?? 0),

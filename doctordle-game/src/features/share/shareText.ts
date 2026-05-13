@@ -4,7 +4,14 @@ import { shareNatively } from './nativeShare'
 
 const FALLBACK_SHARE_URL = 'https://wardle.app'
 const PLACEHOLDER_HOSTS = new Set(['your-app.vercel.app', 'example.com'])
-const CAPACITOR_LOCAL_HOSTS = new Set(['localhost', '127.0.0.1'])
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0'])
+const PREVIEW_HOST_SUFFIXES = [
+  '.vercel.app',
+  '.netlify.app',
+  '.pages.dev',
+  '.railway.app',
+  '.render.com',
+]
 
 const emojiByAttempt: Record<ShareAttemptLabel, string> = {
   correct: '🟩',
@@ -46,45 +53,80 @@ export function buildDesignerShareBlocks(data: ShareCardData): string[] {
 }
 
 export function getShareUrl() {
-  const envUrl = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_SHARE_URL?.trim()
-  if (envUrl && isValidShareUrl(envUrl)) {
+  const env = (import.meta as {
+    env?: Record<string, string | boolean | undefined>
+  }).env
+  const isProduction = env?.PROD === true || env?.MODE === 'production'
+  const envUrl = typeof env?.VITE_SHARE_URL === 'string' ? env.VITE_SHARE_URL.trim() : ''
+
+  if (envUrl && isValidShareUrl(envUrl, { allowLocal: !isProduction })) {
     return envUrl
   }
 
+  if (isProduction) {
+    return FALLBACK_SHARE_URL
+  }
+
   if (typeof window !== 'undefined' && window.location?.origin) {
-    if (
-      Capacitor.isNativePlatform() &&
-      CAPACITOR_LOCAL_HOSTS.has(window.location.hostname)
-    ) {
+    if (Capacitor.isNativePlatform() && isLocalHost(window.location.hostname)) {
       return FALLBACK_SHARE_URL
     }
 
-    return window.location.origin
+    if (isValidShareUrl(window.location.origin, { allowLocal: true })) {
+      return window.location.origin
+    }
   }
 
   return FALLBACK_SHARE_URL
 }
 
-function isValidShareUrl(url: string): boolean {
+function isValidShareUrl(
+  url: string,
+  { allowLocal }: { allowLocal: boolean },
+): boolean {
   try {
     const parsed = new URL(url)
-    if (PLACEHOLDER_HOSTS.has(parsed.hostname)) {
+    const hostname = parsed.hostname.toLowerCase()
+
+    if (parsed.protocol !== 'https:' && !(allowLocal && parsed.protocol === 'http:')) {
       return false
     }
 
-    if (parsed.hostname.includes('your-app') || parsed.hostname.includes('example')) {
+    if (PLACEHOLDER_HOSTS.has(hostname)) {
       return false
     }
 
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+    if (hostname.includes('your-app') || hostname.includes('example')) {
+      return false
+    }
+
+    if (!allowLocal && isLocalHost(hostname)) {
+      return false
+    }
+
+    if (!allowLocal && isPreviewHost(hostname)) {
+      return false
+    }
+
+    return true
   } catch {
     return false
   }
 }
 
-export function buildShareText(data: ShareCardData) {
-  const shareUrl = getShareUrl()
-  const caseLabel = data.caseId ? `Case ${data.caseId}` : 'Daily Diagnosis'
+function isLocalHost(hostname: string) {
+  return LOCAL_HOSTS.has(hostname.toLowerCase())
+}
+
+function isPreviewHost(hostname: string) {
+  return PREVIEW_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix))
+}
+
+function buildShareTextLines(
+  data: ShareCardData,
+  { includeUrl }: { includeUrl: boolean },
+) {
+  const caseLabel = data.caseLabel ?? 'Daily Diagnosis'
   const resultLine =
     data.result === 'correct'
       ? `Solved in ${data.cluesUsed}/${data.totalClues} clues`
@@ -103,15 +145,24 @@ export function buildShareText(data: ShareCardData) {
     `Score: ${data.score}`,
     streakLine,
     xpLine,
-    '',
-    shareUrl,
+    includeUrl ? '' : null,
+    includeUrl ? getShareUrl() : null,
   ]
     .filter((line): line is string => line != null)
     .join('\n')
 }
 
+export function buildShareText(data: ShareCardData) {
+  return buildShareTextLines(data, { includeUrl: true })
+}
+
+export function buildShareTextForShareSheet(data: ShareCardData) {
+  return buildShareTextLines(data, { includeUrl: false })
+}
+
 export async function shareScoreText(data: ShareCardData): Promise<'shared' | 'copied' | 'idle'> {
-  const shareText = buildShareText(data)
+  const clipboardText = buildShareText(data)
+  const shareText = buildShareTextForShareSheet(data)
   const shareUrl = getShareUrl()
 
   if (await shareNatively({
@@ -137,7 +188,7 @@ export async function shareScoreText(data: ShareCardData): Promise<'shared' | 'c
   }
 
   try {
-    await navigator.clipboard.writeText(shareText)
+    await navigator.clipboard.writeText(clipboardText)
     return 'copied'
   } catch {
     return 'idle'

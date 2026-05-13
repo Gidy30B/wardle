@@ -10,16 +10,31 @@ const emptyToUndefined = (value: unknown) => {
   return trimmed.length === 0 ? undefined : trimmed;
 };
 
+const optionalBooleanWithDefault = (defaultValue: boolean) =>
+  z
+    .preprocess(emptyToUndefined, z.string().optional())
+    .transform((value) =>
+      value === undefined ? defaultValue : value === 'true',
+    );
+
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
-  CLERK_SECRET_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  CLERK_SECRET_KEY: z.preprocess(
+    emptyToUndefined,
+    z.string().min(1).optional(),
+  ),
   CLERK_JWT_ISSUER: z.string().url(),
   CLERK_JWT_AUDIENCE: z.string().min(1),
   OPENAI_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-  HOST: z.preprocess(emptyToUndefined, z.string().min(1).optional()).default('0.0.0.0'),
+  HOST: z
+    .preprocess(emptyToUndefined, z.string().min(1).optional())
+    .default('0.0.0.0'),
   PORT: z.coerce.number().int().positive().optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']),
+  APP_PROCESS_ROLE: z
+    .preprocess(emptyToUndefined, z.enum(['api', 'worker']).optional())
+    .default('api'),
   DEV_BYPASS_DAILY_LIMIT: z
     .string()
     .optional()
@@ -44,11 +59,27 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === 'true'),
+  DAILY_SCHEDULER_ENABLED: optionalBooleanWithDefault(true),
+  DAILY_SCHEDULE_WINDOW_DAYS: z
+    .preprocess(
+      emptyToUndefined,
+      z.coerce.number().int().min(1).max(31).optional(),
+    )
+    .default(7),
+  DAILY_SCHEDULE_TIMEZONE: z
+    .preprocess(emptyToUndefined, z.string().min(1).optional())
+    .default('Africa/Nairobi'),
+  DAILY_SCHEDULE_CRON: z
+    .preprocess(emptyToUndefined, z.string().min(1).optional())
+    .default('5 0 * * *'),
   LOG_LEVEL: z.string().min(1),
   ALLOWED_ORIGINS: z.preprocess(emptyToUndefined, z.string().optional()),
   NETWORK_HOST: z.preprocess(emptyToUndefined, z.string().optional()),
   CLERK_JWKS_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
-  INTERNAL_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  INTERNAL_API_KEY: z.preprocess(
+    emptyToUndefined,
+    z.string().min(1).optional(),
+  ),
   EMBEDDING_MODEL: z.string().min(1),
   SCORE_WEIGHT_EXACT: z.coerce.number(),
   SCORE_WEIGHT_SYNONYM: z.coerce.number(),
@@ -71,7 +102,10 @@ export function validateEnv(): AppEnv {
     throw new Error(`Invalid environment configuration: ${details}`);
   }
 
-  if (parsed.data.NODE_ENV === 'production' && parsed.data.DEV_BYPASS_DAILY_LIMIT) {
+  if (
+    parsed.data.NODE_ENV === 'production' &&
+    parsed.data.DEV_BYPASS_DAILY_LIMIT
+  ) {
     throw new Error('DEV_BYPASS_DAILY_LIMIT must not be enabled in production');
   }
 

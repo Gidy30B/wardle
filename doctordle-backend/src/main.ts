@@ -6,6 +6,7 @@ import { createCorsOptions } from './core/config/cors.util';
 import { validateEnv } from './core/config/env.validation';
 
 async function bootstrap() {
+  process.env.APP_PROCESS_ROLE ??= 'api';
   const env = validateEnv();
   const app = await NestFactory.create(AppModule);
   app.enableShutdownHooks();

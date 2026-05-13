@@ -513,6 +513,7 @@ export class CaseGeneratorService {
 
             const persistedCase = await tx.case.create({
               data: {
+                publicNumber: await this.getNextCasePublicNumber(tx),
                 title: normalizedCase.answer,
                 date: this.nextCaseDate(),
                 difficulty: this.normalizeDifficulty(options.difficulty),
@@ -1428,6 +1429,26 @@ export class CaseGeneratorService {
     const explanation =
       generatedCase.explanation as GeneratedCaseExplanationWithQuality;
     return explanation.generationQuality;
+  }
+
+  private async getNextCasePublicNumber(
+    client: Prisma.TransactionClient,
+  ): Promise<number> {
+    const latest = await client.case.findFirst({
+      where: {
+        publicNumber: {
+          not: null,
+        },
+      },
+      orderBy: {
+        publicNumber: 'desc',
+      },
+      select: {
+        publicNumber: true,
+      },
+    });
+
+    return (latest?.publicNumber ?? 0) + 1;
   }
 
   private isDuplicatePrismaError(error: unknown): boolean {

@@ -1,10 +1,14 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma, PublishTrack } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { RedisCacheService } from '../../core/cache/redis-cache.service';
 import { AppLoggerService } from '../../core/logger/app-logger.service';
 import { MetricsService } from '../../core/logger/metrics.service';
-import { CasesService } from '../cases/cases.service';
+import { DailyCasesService } from './daily-cases.service';
 
 type LeaderboardMode = 'daily' | 'weekly';
 type LeaderboardRow = {
@@ -60,7 +64,7 @@ export class LeaderboardService {
     private readonly cache: RedisCacheService,
     private readonly logger: AppLoggerService,
     private readonly metrics: MetricsService,
-    private readonly casesService: CasesService,
+    private readonly dailyCasesService: DailyCasesService,
   ) {}
 
   async getCacheDiagnostic(input: {
@@ -93,14 +97,18 @@ export class LeaderboardService {
     this.metrics.increment('leaderboard.cache.miss');
     this.logger.info({ key }, 'leaderboard.cache_miss');
 
-    const dailyCase = await this.casesService.getTodayCase();
+    const dailyCase = await this.dailyCasesService.findDailyCaseForDate({
+      date: new Date(),
+      track: PublishTrack.DAILY,
+      sequenceIndex: 1,
+    });
 
     if (!dailyCase) {
       return [];
     }
 
     const rows = await this.prisma.leaderboardEntry.findMany({
-      where: { dailyCaseId: dailyCase.dailyCaseId },
+      where: { dailyCaseId: dailyCase.id },
       orderBy: [
         { score: 'desc' },
         { attemptsCount: 'asc' },
@@ -165,7 +173,11 @@ export class LeaderboardService {
 
   async getUserPosition(input: { userId: string; mode: LeaderboardMode }) {
     if (input.mode === 'daily') {
-      const dailyCase = await this.casesService.getTodayCase();
+      const dailyCase = await this.dailyCasesService.findDailyCaseForDate({
+        date: new Date(),
+        track: PublishTrack.DAILY,
+        sequenceIndex: 1,
+      });
 
       if (!dailyCase) {
         return null;
@@ -174,7 +186,7 @@ export class LeaderboardService {
       const entry = await this.prisma.leaderboardEntry.findUnique({
         where: {
           dailyCaseId_userId: {
-            dailyCaseId: dailyCase.dailyCaseId,
+            dailyCaseId: dailyCase.id,
             userId: input.userId,
           },
         },
@@ -194,7 +206,7 @@ export class LeaderboardService {
 
       const betterCount = await this.prisma.leaderboardEntry.count({
         where: {
-          dailyCaseId: dailyCase.dailyCaseId,
+          dailyCaseId: dailyCase.id,
           OR: this.getDailyBetterEntryWhere(entry),
         },
       });
@@ -216,13 +228,17 @@ export class LeaderboardService {
   }
 
   async upsertCompletion(input: {
+    sessionId: string;
     userId: string;
+    caseId: string;
     dailyCaseId: string;
     score: number;
     attemptsCount: number;
     completedAt: Date;
     timeToComplete?: number | null;
   }) {
+    await this.assertCompletionMatchesAssignedDailyCase(input);
+
     const existing = await this.prisma.leaderboardEntry.findUnique({
       where: {
         dailyCaseId_userId: {
@@ -295,6 +311,59 @@ export class LeaderboardService {
       start,
       end,
     };
+  }
+
+  private async assertCompletionMatchesAssignedDailyCase(input: {
+    sessionId: string;
+    userId: string;
+    caseId: string;
+    dailyCaseId: string;
+  }): Promise<void> {
+    const session = await this.prisma.gameSession.findUnique({
+      where: {
+        id: input.sessionId,
+      },
+      select: {
+        id: true,
+        userId: true,
+        caseId: true,
+        dailyCaseId: true,
+        status: true,
+        dailyCase: {
+          select: {
+            caseId: true,
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException(
+        `Game session not found for leaderboard entry: ${input.sessionId}`,
+      );
+    }
+
+    if (
+      session.userId !== input.userId ||
+      session.dailyCaseId !== input.dailyCaseId ||
+      session.caseId !== input.caseId
+    ) {
+      throw new BadRequestException(
+        'Leaderboard completion does not match the game session',
+      );
+    }
+
+    if (session.status !== 'completed') {
+      throw new BadRequestException(
+        'Leaderboard completion requires a completed game session',
+      );
+    }
+
+    if (session.caseId !== session.dailyCase.caseId) {
+      throw new BadRequestException(
+        'Leaderboard completion case does not match the assigned daily case',
+      );
+    }
   }
 
   private getDailyCacheKey(limit: number) {

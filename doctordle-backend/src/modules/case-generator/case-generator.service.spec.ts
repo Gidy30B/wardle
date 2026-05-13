@@ -228,6 +228,23 @@ describe('CaseGeneratorService', () => {
     );
   });
 
+  it('assigns the next public number when persisting a generated case', async () => {
+    const { tx, service } = buildService();
+    tx.case.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ publicNumber: 237 });
+
+    await service.saveCase(buildGeneratedCase());
+
+    expect(tx.case.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          publicNumber: 238,
+        }),
+      }),
+    );
+  });
+
   it('rejects generated cases that do not include exactly 6 clues', () => {
     const { service } = buildService();
 

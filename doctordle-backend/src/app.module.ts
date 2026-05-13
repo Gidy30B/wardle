@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { HealthController } from './health.controller';
 import { DatabaseModule } from './core/db/database.module';
 import { AdminModule } from './modules/admin/admin.module';
@@ -18,6 +19,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 @Module({
   controllers: [HealthController],
   imports: [
+    ScheduleModule.forRoot(),
     DatabaseModule,
     CasesModule,
     KnowledgeModule,

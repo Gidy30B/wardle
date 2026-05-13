@@ -4,6 +4,7 @@ export type ShareCardResult = 'correct' | 'failed'
 
 export type ShareCardData = {
   caseId: string | null
+  caseLabel: string | null
   result: ShareCardResult
   attemptsUsed: number
   cluesUsed: number

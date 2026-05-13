@@ -77,6 +77,23 @@ async function main() {
         });
 
         if (!dailyCase) {
+          const caseRecord = await prisma.case.findUnique({
+            where: {
+              id: session.caseId,
+            },
+            select: {
+              title: true,
+              editorialStatus: true,
+              currentRevisionId: true,
+              currentRevision: {
+                select: {
+                  date: true,
+                  publishTrack: true,
+                },
+              },
+            },
+          });
+
           dailyCase = await prisma.dailyCase.create({
             data: {
               caseId: session.caseId,
@@ -89,6 +106,24 @@ async function main() {
               caseId: true,
             },
           });
+          console.log(
+            JSON.stringify({
+              event: 'daily_case.created',
+              source: 'seed',
+              normalizedDate: startedDayUtc.toISOString(),
+              track: PublishTrack.DAILY,
+              sequenceIndex: 1,
+              dailyCaseId: dailyCase.id,
+              caseId: dailyCase.caseId,
+              caseTitle: caseRecord?.title ?? null,
+              editorialStatus: caseRecord?.editorialStatus ?? null,
+              currentRevisionId: caseRecord?.currentRevisionId ?? null,
+              currentRevisionDate:
+                caseRecord?.currentRevision?.date.toISOString() ?? null,
+              currentRevisionPublishTrack:
+                caseRecord?.currentRevision?.publishTrack ?? null,
+            }),
+          );
           createdDailyCaseCount += 1;
         }
 
@@ -96,7 +131,8 @@ async function main() {
       }
 
       const needsUpdate =
-        nextUserId !== session.userId || nextDailyCaseId !== session.dailyCaseId;
+        nextUserId !== session.userId ||
+        nextDailyCaseId !== session.dailyCaseId;
 
       if (!needsUpdate) {
         skippedCount += 1;

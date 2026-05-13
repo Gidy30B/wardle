@@ -50,7 +50,10 @@ See full deployment checklist in:
 
 Headers:
 
-- `x-internal-key: <INTERNAL_API_KEY>`
+- `x-internal-key: $INTERNAL_API_KEY`
+
+Use the value from your local or deployed `INTERNAL_API_KEY` env var. Do not
+paste the literal secret into docs or scripts.
 
 #### Response
 

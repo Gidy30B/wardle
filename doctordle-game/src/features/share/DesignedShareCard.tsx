@@ -73,7 +73,7 @@ forwardedRef,
         <div className="flex items-center justify-between gap-3 border-b border-[rgba(0,180,166,0.14)] bg-[linear-gradient(90deg,rgba(0,180,166,0.13),rgba(26,60,94,0.78))] px-5 py-4">
           <WardleLogo size="sm" />
           <div className="font-brand-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--wardle-color-teal)]">
-            {data.caseId ? `Case ${data.caseId}` : 'Daily Case'}
+            {data.caseLabel ?? 'Daily Case'}
           </div>
         </div>
 
@@ -130,7 +130,7 @@ forwardedRef,
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <Button type="button" onClick={handleShare}>
             {actionState === 'shared'
-              ? 'Shared image'
+              ? 'Shared'
               : actionState === 'copied'
                 ? 'Image copied'
                 : actionState === 'downloaded'

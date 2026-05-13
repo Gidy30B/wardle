@@ -39,6 +39,8 @@ export class DevController {
       return {
         success: true,
         dailyCaseId: context.dailyCaseId,
+        displayLabel: context.displayLabel,
+        trackDisplayLabel: context.trackDisplayLabel,
         caseId: context.caseId,
         date: context.date.toISOString().slice(0, 10),
       };

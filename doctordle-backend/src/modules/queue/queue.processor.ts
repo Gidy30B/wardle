@@ -281,8 +281,14 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
         where: { id: payload.sessionId },
         select: {
           id: true,
+          caseId: true,
           userId: true,
           dailyCaseId: true,
+          dailyCase: {
+            select: {
+              caseId: true,
+            },
+          },
           startedAt: true,
           completedAt: true,
           processingAt: true,
@@ -320,6 +326,12 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
 
       if (session.status !== 'completed') {
         throw new Error(`Session ${payload.sessionId} is not completed yet`);
+      }
+
+      if (session.caseId !== session.dailyCase.caseId) {
+        throw new Error(
+          `Session ${payload.sessionId} case does not match assigned daily case`,
+        );
       }
 
       const completedAt = session.completedAt;
@@ -389,7 +401,9 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
       }
 
       await this.leaderboardService.upsertCompletion({
+        sessionId: session.id,
         userId: payload.userId,
+        caseId: session.caseId,
         dailyCaseId: session.dailyCaseId,
         score: latestAttempt.score,
         attemptsCount: session._count.attempts,

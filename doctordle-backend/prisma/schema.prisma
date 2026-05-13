@@ -184,6 +184,7 @@ model DiagnosisAlias {
 
 model Case {
   id                         String                 @id @default(uuid())
+  publicNumber               Int?                   @unique
   title                      String
   date                       DateTime               @unique
   difficulty                 String

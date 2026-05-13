@@ -21,6 +21,7 @@ export default function ShareScoreCard({
       <DesignedShareCard
         data={{
           caseId: null,
+          caseLabel: null,
           result,
           attemptsUsed: attempts.length,
           cluesUsed: attempts.length,

@@ -7,6 +7,7 @@ import { AppLoggerService } from '../../core/logger/app-logger.service';
 import { MetricsService } from '../../core/logger/metrics.service';
 import { RedisModule } from '../../core/redis/redis.module';
 import { CasesModule } from '../cases/cases.module';
+import { DailyCasesModule } from '../gameplay/daily-cases.module';
 import { GameplayEventLogger } from '../gameplay/gameplay-event-logger.service';
 import { LeaderboardService } from '../gameplay/leaderboard.service';
 import { RewardOrchestrator } from '../gameplay/reward-orchestrator.service';
@@ -20,6 +21,7 @@ import { QueueProcessor } from './queue.processor';
   imports: [
     DatabaseModule,
     CasesModule,
+    DailyCasesModule,
     EventsModule,
     RealtimeModule,
     NotificationsModule,

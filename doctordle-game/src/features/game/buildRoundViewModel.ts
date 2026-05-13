@@ -322,6 +322,16 @@ export function buildRoundViewModel({
     loopState: getLoopState(mode),
     sessionId,
     caseId: caseData?.id ?? latestResult?.case?.id ?? null,
+    casePublicNumber:
+      caseData?.casePublicNumber ?? latestResult?.case?.casePublicNumber ?? null,
+    caseDisplayLabel:
+      caseData?.displayLabel ?? latestResult?.case?.displayLabel ?? 'Daily Case',
+    caseTrackDisplayLabel:
+      caseData?.trackDisplayLabel ??
+      latestResult?.case?.trackDisplayLabel ??
+      caseData?.displayLabel ??
+      latestResult?.case?.displayLabel ??
+      'Daily Case',
     isLoading: isLoadingCase,
     totalClues,
     revealedClueCount,

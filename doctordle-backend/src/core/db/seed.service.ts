@@ -79,11 +79,6 @@ export class SeedService {
         date: caseData.date.toISOString().slice(0, 10),
       });
 
-      await casesService.assignDailyCase(
-        caseData.date.toISOString().slice(0, 10),
-        createdCase.id,
-      );
-
       this.logger.log(`Seeded case lifecycle: ${createdCase.id}`);
     }
 

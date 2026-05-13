@@ -53,7 +53,7 @@ export default function ReactGamePlaySurface({
       : Math.max(0, roundViewModel.revealedClueCount - 1)
   const attemptsRemaining = Math.max(0, visualSlotCount - roundViewModel.attemptsCount)
   const streakValue = currentStreak
-  const caseCode = roundViewModel.caseId ? `CASE ${roundViewModel.caseId}` : 'CASE PENDING'
+  const caseCode = roundViewModel.caseTrackDisplayLabel.toUpperCase()
   const isInteractive =
     roundViewModel.mode === 'PLAYING' || roundViewModel.mode === 'SUBMITTING'
   const shareCardData =

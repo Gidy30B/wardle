@@ -66,6 +66,8 @@ function createSessionServiceFixture() {
     getTodayCasesForUser: jest.fn(),
     getOrCreateGameSessionForDailyCase: jest.fn(),
     resetUserSessionForDailyCaseReplay: jest.fn().mockResolvedValue(undefined),
+    publishDailyCasesForDate: jest.fn(),
+    ensureScheduleWindow: jest.fn(),
   };
 
   const logger = {
@@ -171,6 +173,7 @@ describe('SessionService gameplay registry correctness', () => {
         completedAt: new Date('2026-04-22T08:01:40.000Z'),
         dailyCase: {
           id: 'daily-1',
+          date: new Date('2026-04-22T00:00:00.000Z'),
           track: 'DAILY',
           sequenceIndex: 1,
         },
@@ -237,6 +240,135 @@ describe('SessionService gameplay registry correctness', () => {
         }),
       }),
     );
+  });
+
+  it('rejects daily start when the returned session case differs from the DailyCase case', async () => {
+    const fixture = createSessionServiceFixture();
+    fixture.dailyCasesService.getTodayCasesForUser.mockResolvedValue({
+      date: '2026-04-22',
+      cases: [
+        {
+          dailyCaseId: 'daily-1',
+          track: 'DAILY',
+          sequenceIndex: 1,
+        },
+      ],
+    });
+    fixture.dailyCasesService.getOrCreateGameSessionForDailyCase.mockResolvedValue(
+      {
+        user: {
+          id: 'user-1',
+          subscriptionTier: 'free',
+        },
+        session: {
+          id: 'session-1',
+          caseId: 'case-old',
+          dailyCaseId: 'daily-1',
+          status: 'active',
+          startedAt: new Date('2026-04-22T08:00:00.000Z'),
+          completedAt: null,
+          attempts: [],
+        },
+        dailyCase: {
+          id: 'daily-1',
+          caseId: 'case-1',
+          date: new Date('2026-04-22T00:00:00.000Z'),
+          track: 'DAILY',
+          sequenceIndex: 1,
+          case: {
+            id: 'case-1',
+            date: new Date('2026-04-22T00:00:00.000Z'),
+            difficulty: 'medium',
+          },
+        },
+      },
+    );
+
+    await expect(
+      fixture.service.startDailyGame({ userId: 'user-1' }),
+    ).rejects.toThrow('Session case no longer matches the assigned daily case');
+
+    expect(fixture.cacheService.set).not.toHaveBeenCalled();
+  });
+
+  it('returns waiting for daily start when no scheduled case exists without creating a DailyCase', async () => {
+    const fixture = createSessionServiceFixture();
+    fixture.dailyCasesService.getTodayCasesForUser.mockResolvedValue({
+      date: '2026-04-22',
+      cases: [],
+    });
+
+    const result = await fixture.service.startDailyGame({ userId: 'user-1' });
+
+    expect(result).toEqual({
+      state: 'waiting',
+      nextCaseAt: expect.any(String),
+    });
+    expect(
+      fixture.dailyCasesService.getOrCreateGameSessionForDailyCase,
+    ).not.toHaveBeenCalled();
+    expect(
+      fixture.dailyCasesService.publishDailyCasesForDate,
+    ).not.toHaveBeenCalled();
+    expect(
+      fixture.dailyCasesService.ensureScheduleWindow,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('starts from an existing scheduled DailyCase without invoking scheduling writes', async () => {
+    const fixture = createSessionServiceFixture();
+    fixture.dailyCasesService.getTodayCasesForUser.mockResolvedValue({
+      date: '2026-04-22',
+      cases: [
+        {
+          dailyCaseId: 'daily-1',
+          track: 'DAILY',
+          sequenceIndex: 1,
+        },
+      ],
+    });
+    fixture.dailyCasesService.getOrCreateGameSessionForDailyCase.mockResolvedValue(
+      {
+        user: {
+          id: 'user-1',
+          subscriptionTier: 'free',
+        },
+        session: {
+          id: 'session-1',
+          caseId: 'case-1',
+          dailyCaseId: 'daily-1',
+          status: 'active',
+          startedAt: new Date('2026-04-22T08:00:00.000Z'),
+          completedAt: null,
+          attempts: [],
+        },
+        dailyCase: {
+          id: 'daily-1',
+          caseId: 'case-1',
+          date: new Date('2026-04-22T00:00:00.000Z'),
+          track: 'DAILY',
+          sequenceIndex: 1,
+          case: {
+            id: 'case-1',
+            date: new Date('2026-04-22T00:00:00.000Z'),
+            difficulty: 'medium',
+          },
+        },
+      },
+    );
+
+    const result = await fixture.service.startDailyGame({ userId: 'user-1' });
+
+    expect(result.state).toBe('ready');
+    expect(
+      fixture.dailyCasesService.getOrCreateGameSessionForDailyCase,
+    ).toHaveBeenCalledWith('user-1', 'daily-1');
+    expect(
+      fixture.dailyCasesService.publishDailyCasesForDate,
+    ).not.toHaveBeenCalled();
+    expect(
+      fixture.dailyCasesService.ensureScheduleWindow,
+    ).not.toHaveBeenCalled();
   });
 
   it('uses registry evaluation to persist a correct selected diagnosis submission', async () => {

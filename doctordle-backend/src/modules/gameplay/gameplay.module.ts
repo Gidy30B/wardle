@@ -15,8 +15,7 @@ import { DiagnosisRegistrySnapshotService } from '../diagnosis-registry/diagnosi
 import { DiagnosticsModule } from '../diagnostics/diagnostics.module';
 import { QueueModule } from '../queue/queue.module';
 import { AttemptService } from './attempt.service';
-import { DailyCasesService } from './daily-cases.service';
-import { DailyLimitService } from './daily-limit.service';
+import { DailyCasesModule } from './daily-cases.module';
 import { EvaluationService } from './evaluation.service';
 import { GameController } from './game.controller';
 import { GameplayEventLogger } from './gameplay-event-logger.service';
@@ -37,6 +36,7 @@ import { XpService } from './xp.service';
   imports: [
     AiModule,
     CasesModule,
+    DailyCasesModule,
     DiagnosticsModule,
     QueueModule,
     EventsModule,
@@ -44,7 +44,6 @@ import { XpService } from './xp.service';
   controllers: [GameController, UserProgressController, DiagnosisRegistryController],
   providers: [
     GameSessionService,
-    DailyCasesService,
     SessionService,
     DiagnosisRegistryMatcherService,
     DiagnosisAutocompleteService,
@@ -52,7 +51,6 @@ import { XpService } from './xp.service';
     DiagnosisRegistryDictionaryService,
     DiagnosisRegistrySnapshotService,
     AttemptService,
-    DailyLimitService,
     ScoringService,
     EvaluationService,
     RewardOrchestrator,
@@ -69,6 +67,12 @@ import { XpService } from './xp.service';
     AppLoggerService,
     MetricsService,
   ],
-  exports: [UserProgressService, StreakService, LeaderboardService, XpService],
+  exports: [
+    DailyCasesModule,
+    UserProgressService,
+    StreakService,
+    LeaderboardService,
+    XpService,
+  ],
 })
 export class GameplayModule {}

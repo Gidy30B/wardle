@@ -1,15 +1,17 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
-  Case as CaseModel,
-  CaseEditorialStatus,
-  PublishTrack,
-} from '@prisma/client';
+  BadRequestException,
+  GoneException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { Case as CaseModel, PublishTrack } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { EditorialMetricsService } from '../editorial/editorial-metrics.service.js';
 import {
-  ASSIGNABLE_EDITORIAL_STATUSES,
-  isPublishEligibleEditorialStatus,
-} from '../editorial/policies/publish-policy.js';
+  formatDailyCaseDisplayLabel,
+  formatDailyCaseTrackDisplayLabel,
+} from '../gameplay/daily-case-labels.js';
 import { AIContentService } from '../ai/ai-content.service';
 import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
 import {
@@ -39,6 +41,9 @@ export type CreatedCaseRecord = CaseRecord;
 
 export type DailyCaseAssignmentRecord = {
   dailyCaseId: string;
+  casePublicNumber: number | null;
+  displayLabel: string;
+  trackDisplayLabel: string;
   date: string;
   track: PublishTrack;
   sequenceIndex: number;
@@ -47,6 +52,9 @@ export type DailyCaseAssignmentRecord = {
 
 export type TodayCaseContext = {
   dailyCaseId: string;
+  casePublicNumber: number | null;
+  displayLabel: string;
+  trackDisplayLabel: string;
   caseId: string;
   date: Date;
   case: CaseModel;
@@ -88,46 +96,52 @@ export class CasesService {
       }),
     });
 
-    const created = dto.date
-      ? await this.prisma.case.upsert({
-          where: { date },
-          update: {
-            title: dto.title,
-            history: dto.history,
-            symptoms: dto.symptoms,
-            diagnosisId: resolvedDiagnosisLink.diagnosisId,
-            diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
-            ...diagnosisMappingFields,
-          },
-          create: {
-            title: dto.title,
-            date,
-            difficulty: 'medium',
-            history: dto.history,
-            symptoms: dto.symptoms,
-            diagnosisId: resolvedDiagnosisLink.diagnosisId,
-            diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
-            ...diagnosisMappingFields,
-          },
-          include: {
-            diagnosis: true,
-          },
-        })
-      : await this.prisma.case.create({
-          data: {
-            title: dto.title,
-            date,
-            difficulty: 'medium',
-            history: dto.history,
-            symptoms: dto.symptoms,
-            diagnosisId: resolvedDiagnosisLink.diagnosisId,
-            diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
-            ...diagnosisMappingFields,
-          },
-          include: {
-            diagnosis: true,
-          },
-        });
+    const created = await this.withPublicNumberRetry(async () => {
+      const publicNumber = await this.getNextCasePublicNumber(this.prisma);
+
+      return dto.date
+        ? this.prisma.case.upsert({
+            where: { date },
+            update: {
+              title: dto.title,
+              history: dto.history,
+              symptoms: dto.symptoms,
+              diagnosisId: resolvedDiagnosisLink.diagnosisId,
+              diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+              ...diagnosisMappingFields,
+            },
+            create: {
+              publicNumber,
+              title: dto.title,
+              date,
+              difficulty: 'medium',
+              history: dto.history,
+              symptoms: dto.symptoms,
+              diagnosisId: resolvedDiagnosisLink.diagnosisId,
+              diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+              ...diagnosisMappingFields,
+            },
+            include: {
+              diagnosis: true,
+            },
+          })
+        : this.prisma.case.create({
+            data: {
+              publicNumber,
+              title: dto.title,
+              date,
+              difficulty: 'medium',
+              history: dto.history,
+              symptoms: dto.symptoms,
+              diagnosisId: resolvedDiagnosisLink.diagnosisId,
+              diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+              ...diagnosisMappingFields,
+            },
+            include: {
+              diagnosis: true,
+            },
+          });
+    });
 
     this.logger.log(
       JSON.stringify({
@@ -140,10 +154,6 @@ export class CasesService {
       }),
     );
 
-    if (dto.date) {
-      await this.assignDailyCase(dto.date, created.id);
-    }
-
     void this.aiContentService.scheduleCaseContent(created.id, {
       source: 'case_created',
     });
@@ -151,326 +161,102 @@ export class CasesService {
     return this.mapCaseRecord(created);
   }
 
-  async assignDailyCase(date: string, caseId: string): Promise<DailyCaseAssignmentRecord> {
-    const normalizedDate = this.parseDailyDate(date);
-
-    const foundCase = await this.prisma.case.findUnique({
-      where: { id: caseId },
-      include: { diagnosis: true },
-    });
-
-    if (!foundCase) {
-      throw new NotFoundException(`Case not found: ${caseId}`);
-    }
-
-    this.assertCaseEligibleForAssignment(foundCase, 'explicit');
-
-    const dailyCase = await this.prisma.dailyCase.upsert({
-      where: {
-        date_track_sequenceIndex: {
-          date: normalizedDate,
-          track: PublishTrack.DAILY,
-          sequenceIndex: 1,
-        },
-      },
-      update: {
-        caseId,
-      },
-      create: {
-        date: normalizedDate,
-        caseId,
-        track: PublishTrack.DAILY,
-        sequenceIndex: 1,
-      },
-      include: {
-        case: {
-          include: {
-            diagnosis: true,
-          },
-        },
-      },
-    });
-
-    this.logger.log(
-      JSON.stringify({
-        event: 'cases.daily_case.assigned',
-        assignmentMode: 'explicit',
-        date: normalizedDate.toISOString(),
-        caseId,
-        editorialStatus: foundCase.editorialStatus,
-      }),
+  async assignDailyCase(
+    _date: string,
+    _caseId: string,
+  ): Promise<DailyCaseAssignmentRecord> {
+    throw new GoneException(
+      'Legacy daily case assignment has been retired; use DailyCasesService.publishDailyCasesForDate',
     );
-
-    this.editorialMetrics.recordAssignmentAccepted('explicit');
-
-    return {
-      dailyCaseId: dailyCase.id,
-      date: dailyCase.date.toISOString().slice(0, 10),
-      track: dailyCase.track,
-      sequenceIndex: dailyCase.sequenceIndex,
-      case: this.mapCaseRecord(dailyCase.case),
-    };
   }
 
   async getTodayCase(): Promise<TodayCaseContext> {
     const today = this.getUtcDateOnly(new Date());
+    const track = PublishTrack.DAILY;
+    const sequenceIndex = 1;
 
     const existing = await this.prisma.dailyCase.findUnique({
       where: {
         date_track_sequenceIndex: {
           date: today,
-          track: PublishTrack.DAILY,
-          sequenceIndex: 1,
+          track,
+          sequenceIndex,
         },
       },
       include: {
-        case: true,
+        case: {
+          include: {
+            diagnosis: true,
+            currentRevision: {
+              select: {
+                id: true,
+                date: true,
+                publishTrack: true,
+              },
+            },
+          },
+        },
       },
     });
 
-    if (existing) {
-      if (!this.hasPlayableClueArray(existing.case.clues)) {
-        this.logger.warn(
-          JSON.stringify({
-            event: 'cases.today.invalid_daily_case_removed',
-            dailyCaseId: existing.id,
-            caseId: existing.caseId,
-            date: existing.date.toISOString(),
-          }),
-        );
-
-        await this.prisma.dailyCase
-          .delete({
-            where: { id: existing.id },
-          })
-          .catch((error) => {
-            const maybePrismaError = error as { code?: string };
-            if (maybePrismaError.code !== 'P2025') {
-              throw error;
-            }
-          });
-      } else {
-        this.logger.log(
-          JSON.stringify({
-            event: 'cases.today.existing',
-            dailyCaseId: existing.id,
-            caseId: existing.caseId,
-            date: existing.date.toISOString(),
-          }),
-        );
-
-        return this.mapTodayCaseContext(existing);
-      }
-    }
-
-    const selectedCaseId = await this.findLatestPlayableCaseId();
-
-    if (!selectedCaseId) {
+    if (!existing) {
       this.logger.warn(
         JSON.stringify({
-          event: 'cases.today.no_eligible_case',
-          assignmentMode: 'lazy',
-          date: today.toISOString(),
-          eligibleEditorialStatuses: ASSIGNABLE_EDITORIAL_STATUSES,
-        }),
-      );
-      this.editorialMetrics.recordAssignmentRejected('lazy', null);
-      this.editorialMetrics.recordLazyNoEligibleCaseMiss();
-
-      throw new NotFoundException(
-        'No playable clue-based cases available to assign for today',
-      );
-    }
-
-    const selectedCase = await this.prisma.case.findUnique({
-      where: { id: selectedCaseId },
-    });
-
-    if (!selectedCase) {
-      throw new NotFoundException(
-        `Playable case disappeared before daily assignment: ${selectedCaseId}`,
-      );
-    }
-
-    try {
-      const created = await this.prisma.dailyCase.create({
-        data: {
-          date: today,
-          caseId: selectedCase.id,
-          track: PublishTrack.DAILY,
-          sequenceIndex: 1,
-        },
-        include: {
-          case: true,
-        },
-      });
-
-      this.logger.log(
-        JSON.stringify({
-          event: 'cases.today.created',
-          assignmentMode: 'lazy',
-          dailyCaseId: created.id,
-          caseId: created.caseId,
-          date: created.date.toISOString(),
-          editorialStatus: selectedCase.editorialStatus,
+          event: 'cases.today.missing',
+          normalizedDate: today.toISOString(),
+          track,
+          sequenceIndex,
         }),
       );
 
-      this.editorialMetrics.recordAssignmentAccepted('lazy');
+      throw new NotFoundException('No daily case has been published for today');
+    }
 
-      return this.mapTodayCaseContext(created);
-    } catch (error) {
-      const maybePrismaError = error as { code?: string };
-      if (maybePrismaError.code !== 'P2002') {
-        throw error;
-      }
-
-      const recovered = await this.prisma.dailyCase.findUnique({
-        where: {
-          date_track_sequenceIndex: {
-            date: today,
-            track: PublishTrack.DAILY,
-            sequenceIndex: 1,
-          },
-        },
-        include: {
-          case: true,
-        },
-      });
-
-      if (!recovered) {
-        throw error;
-      }
-
+    if (!this.hasPlayableClueArray(existing.case.clues)) {
       this.logger.warn(
         JSON.stringify({
-          event: 'cases.today.race_recovered',
-          assignmentMode: 'lazy',
-          dailyCaseId: recovered.id,
-          caseId: recovered.caseId,
-          date: recovered.date.toISOString(),
+          event: 'cases.today.invalid_daily_case',
+          dailyCaseId: existing.id,
+          caseId: existing.caseId,
+          normalizedDate: today.toISOString(),
+          track,
+          sequenceIndex,
         }),
       );
 
-      return this.mapTodayCaseContext(recovered);
+      throw new BadRequestException(
+        'Published daily case is not playable and was not modified',
+      );
     }
+
+    this.logger.log(
+      JSON.stringify({
+        event: 'cases.today.existing',
+        dailyCaseId: existing.id,
+        caseId: existing.caseId,
+        normalizedDate: today.toISOString(),
+        track,
+        sequenceIndex,
+      }),
+    );
+
+    return this.mapTodayCaseContext(existing);
   }
 
   private hasPlayableClueArray(value: unknown): boolean {
     return Array.isArray(value) && value.length > 0;
   }
 
-  private async findLatestPlayableCaseId(): Promise<string | null> {
-    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
-      SELECT "id"
-      FROM "Case"
-      WHERE "editorialStatus" IN (${CaseEditorialStatus.APPROVED}, ${CaseEditorialStatus.READY_TO_PUBLISH})
-        AND "clues" IS NOT NULL
-        AND jsonb_typeof("clues") = 'array'
-        AND jsonb_array_length("clues") > 0
-      ORDER BY "date" DESC
-      LIMIT 1
-    `;
-
-    return rows[0]?.id ?? null;
-  }
-
   async resetTodayCase(): Promise<ResetTodayCaseResult> {
-    const today = this.getUtcDateOnly(new Date());
-    const date = today.toISOString().slice(0, 10);
-
-    this.logger.log(
-      JSON.stringify({
-        event: 'cases.daily_case.reset.started',
-        date,
-        caseId: null,
-      }),
+    throw new GoneException(
+      'Legacy daily case reset has been retired; publish or manage daily cases through DailyCasesService',
     );
-
-    const result = await this.prisma.$transaction(async (tx) => {
-      const dailyCase = await tx.dailyCase.findUnique({
-        where: {
-          date_track_sequenceIndex: {
-            date: today,
-            track: PublishTrack.DAILY,
-            sequenceIndex: 1,
-          },
-        },
-        select: {
-          id: true,
-          caseId: true,
-        },
-      });
-
-      if (!dailyCase) {
-        return {
-          date,
-          dailyCaseId: null,
-          caseId: null,
-          dailyCaseDeleted: false,
-          caseDeleted: false,
-        } satisfies ResetTodayCaseResult;
-      }
-
-      await tx.dailyCase.delete({
-        where: {
-          id: dailyCase.id,
-        },
-      });
-
-      const caseDeleteResult = await tx.case.deleteMany({
-        where: {
-          id: dailyCase.caseId,
-        },
-      });
-
-      return {
-        date,
-        dailyCaseId: dailyCase.id,
-        caseId: dailyCase.caseId,
-        dailyCaseDeleted: true,
-        caseDeleted: caseDeleteResult.count > 0,
-      } satisfies ResetTodayCaseResult;
-    });
-
-    this.logger.log(
-      JSON.stringify({
-        event: 'cases.daily_case.reset.completed',
-        date: result.date,
-        caseId: result.caseId,
-        dailyCaseId: result.dailyCaseId,
-        dailyCaseDeleted: result.dailyCaseDeleted,
-        caseDeleted: result.caseDeleted,
-      }),
-    );
-
-    return result;
   }
 
   async rebuildTodayCase(): Promise<TodayCaseContext> {
-    const today = this.getUtcDateOnly(new Date());
-    const date = today.toISOString().slice(0, 10);
-
-    this.logger.log(
-      JSON.stringify({
-        event: 'cases.daily_case.rebuild.started',
-        date,
-        caseId: null,
-      }),
+    throw new GoneException(
+      'Legacy daily case rebuild has been retired; use DailyCasesService.publishDailyCasesForDate',
     );
-
-    await this.resetTodayCase();
-    const context = await this.getTodayCase();
-
-    this.logger.log(
-      JSON.stringify({
-        event: 'cases.daily_case.rebuild.completed',
-        date: context.date.toISOString().slice(0, 10),
-        caseId: context.caseId,
-      }),
-    );
-
-    return context;
   }
 
   async getCaseByDate(date: string): Promise<CaseRecord> {
@@ -549,7 +335,9 @@ export class CasesService {
     }));
   }
 
-  async getDiagnosisByName(name: string): Promise<DiagnosisCatalogItem | undefined> {
+  async getDiagnosisByName(
+    name: string,
+  ): Promise<DiagnosisCatalogItem | undefined> {
     const diagnosis = await this.prisma.diagnosis.findUnique({
       where: { name },
       include: {
@@ -589,46 +377,75 @@ export class CasesService {
     };
   }
 
+  private async getNextCasePublicNumber(
+    client: Pick<PrismaService, 'case'>,
+  ): Promise<number> {
+    const latest = await client.case.findFirst({
+      where: {
+        publicNumber: {
+          not: null,
+        },
+      },
+      orderBy: {
+        publicNumber: 'desc',
+      },
+      select: {
+        publicNumber: true,
+      },
+    });
+
+    return (latest?.publicNumber ?? 0) + 1;
+  }
+
+  private async withPublicNumberRetry<T>(operation: () => Promise<T>) {
+    const maxAttempts = 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (
+          attempt >= maxAttempts ||
+          !this.isPublicNumberUniqueViolation(error)
+        ) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error('Unable to allocate case public number');
+  }
+
+  private isPublicNumberUniqueViolation(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null || !('code' in error)) {
+      return false;
+    }
+
+    if (error.code !== 'P2002') {
+      return false;
+    }
+
+    const target = (error as { meta?: { target?: unknown } }).meta?.target;
+    return Array.isArray(target) && target.includes('publicNumber');
+  }
+
   private mapTodayCaseContext(found: {
     id: string;
     caseId: string;
     date: Date;
+    track: PublishTrack;
+    sequenceIndex: number;
     case: CaseModel;
   }): TodayCaseContext {
     return {
       dailyCaseId: found.id,
+      casePublicNumber: found.case.publicNumber,
+      displayLabel: formatDailyCaseDisplayLabel(found),
+      trackDisplayLabel: formatDailyCaseTrackDisplayLabel(found),
       caseId: found.caseId,
       date: found.date,
       case: found.case,
     };
-  }
-
-  private assertCaseEligibleForAssignment(foundCase: {
-    id: string;
-    editorialStatus: CaseEditorialStatus | null;
-  }, mode: 'explicit' | 'lazy'): void {
-    if (isPublishEligibleEditorialStatus(foundCase.editorialStatus)) {
-      return;
-    }
-
-    this.logger.warn(
-      JSON.stringify({
-        event: 'cases.daily_case.assignment_ineligible',
-        assignmentMode: mode,
-        caseId: foundCase.id,
-        editorialStatus: foundCase.editorialStatus,
-        allowedEditorialStatuses: ASSIGNABLE_EDITORIAL_STATUSES,
-      }),
-    );
-
-    this.editorialMetrics.recordAssignmentRejected(
-      mode,
-      foundCase.editorialStatus,
-    );
-
-    throw new BadRequestException(
-      'Case is not eligible for new assignment until it is APPROVED or READY_TO_PUBLISH',
-    );
   }
 
   private parseDailyDate(value: string): Date {
@@ -641,6 +458,8 @@ export class CasesService {
   }
 
   private getUtcDateOnly(value: Date): Date {
-    return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+    return new Date(
+      Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
+    );
   }
 }

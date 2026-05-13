@@ -56,6 +56,9 @@ export type RoundViewModel = {
   loopState: RoundLoopState
   sessionId: string | null
   caseId: string | null
+  casePublicNumber: number | null
+  caseDisplayLabel: string
+  caseTrackDisplayLabel: string
   isLoading: boolean
   totalClues: number
   revealedClueCount: number

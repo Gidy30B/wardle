@@ -1,7 +1,7 @@
 import { toBlob } from 'html-to-image'
 import type { ShareCardData } from './shareCard.types'
 import { shareNatively } from './nativeShare'
-import { buildShareText, getShareUrl } from './shareText'
+import { buildShareTextForShareSheet, getShareUrl } from './shareText'
 
 export type ShareImageResult = 'shared' | 'copied' | 'downloaded' | 'idle'
 
@@ -9,17 +9,8 @@ export async function shareCardImage(
   cardElement: HTMLElement,
   data: ShareCardData,
 ): Promise<ShareImageResult> {
-  const shareText = buildShareText(data)
+  const shareText = buildShareTextForShareSheet(data)
   const shareUrl = getShareUrl()
-
-  if (await shareNatively({
-    title: 'Wardle score',
-    text: shareText,
-    url: shareUrl,
-    dialogTitle: 'Share Wardle score',
-  })) {
-    return 'shared'
-  }
 
   const blob = await toBlob(cardElement, {
     backgroundColor: '#0d2440',
@@ -43,7 +34,16 @@ export async function shareCardImage(
       return 'shared'
     }
   } catch {
-    // Native share cancellation falls through to clipboard/download options.
+    // Share cancellation falls through to native/text, clipboard, or download options.
+  }
+
+  if (await shareNatively({
+    title: 'Wardle score',
+    text: shareText,
+    url: shareUrl,
+    dialogTitle: 'Share Wardle score',
+  })) {
+    return 'shared'
   }
 
   try {
@@ -62,9 +62,8 @@ export async function shareCardImage(
   return 'downloaded'
 }
 
-function getShareImageFilename(data: ShareCardData) {
-  const caseSlug = data.caseId ? data.caseId.replace(/[^a-z0-9-]/gi, '-') : 'daily'
-  return `wardle-${caseSlug}-score.png`
+function getShareImageFilename(_data: ShareCardData) {
+  return 'wardle-score.png'
 }
 
 function downloadBlob(blob: Blob, filename: string) {

@@ -23,28 +23,53 @@ SET "userId" = 'legacy-unattributed-user'
 WHERE "userId" IS NULL;
 
 -- Create missing DailyCase rows by UTC day (one per day) from sessions that still need dailyCaseId
-INSERT INTO "DailyCase" ("id", "caseId", "date", "createdAt")
-SELECT
-  gen_random_uuid()::text,
-  pick."caseId",
-  pick."dayUtc"::date,
-  CURRENT_TIMESTAMP
-FROM (
-  SELECT DISTINCT ON (day_utc)
-    day_utc AS "dayUtc",
-    "caseId"
+WITH inserted_daily_cases AS (
+  INSERT INTO "DailyCase" ("id", "caseId", "date", "track", "sequenceIndex", "createdAt")
+  SELECT
+    gen_random_uuid()::text,
+    pick."caseId",
+    pick."dayUtc"::date,
+    'DAILY',
+    1,
+    CURRENT_TIMESTAMP
   FROM (
-    SELECT
-      gs."caseId",
-      (date_trunc('day', gs."startedAt" AT TIME ZONE 'UTC'))::date AS day_utc,
-      gs."startedAt"
-    FROM "GameSession" gs
-    WHERE gs."dailyCaseId" IS NULL
-  ) q
-  ORDER BY day_utc, "startedAt" ASC
-) pick
-LEFT JOIN "DailyCase" dc ON dc."date" = pick."dayUtc"::date
-WHERE dc."id" IS NULL;
+    SELECT DISTINCT ON (day_utc)
+      day_utc AS "dayUtc",
+      "caseId"
+    FROM (
+      SELECT
+        gs."caseId",
+        (date_trunc('day', gs."startedAt" AT TIME ZONE 'UTC'))::date AS day_utc,
+        gs."startedAt"
+      FROM "GameSession" gs
+      WHERE gs."dailyCaseId" IS NULL
+    ) q
+    ORDER BY day_utc, "startedAt" ASC
+  ) pick
+  LEFT JOIN "DailyCase" dc
+    ON dc."date" = pick."dayUtc"::date
+    AND dc."track" = 'DAILY'
+    AND dc."sequenceIndex" = 1
+  WHERE dc."id" IS NULL
+  RETURNING "id", "caseId", "date", "track", "sequenceIndex"
+)
+SELECT json_build_object(
+  'event', 'daily_case.created',
+  'source', 'seed',
+  'normalizedDate', inserted_daily_cases."date",
+  'track', inserted_daily_cases."track",
+  'sequenceIndex', inserted_daily_cases."sequenceIndex",
+  'dailyCaseId', inserted_daily_cases."id",
+  'caseId', inserted_daily_cases."caseId",
+  'caseTitle', c."title",
+  'editorialStatus', c."editorialStatus",
+  'currentRevisionId', c."currentRevisionId",
+  'currentRevisionDate', cr."date",
+  'currentRevisionPublishTrack', cr."publishTrack"
+) AS daily_case_creation_log
+FROM inserted_daily_cases
+LEFT JOIN "Case" c ON c."id" = inserted_daily_cases."caseId"
+LEFT JOIN "CaseRevision" cr ON cr."id" = c."currentRevisionId";
 
 -- Backfill GameSession.dailyCaseId by UTC day
 UPDATE "GameSession" gs

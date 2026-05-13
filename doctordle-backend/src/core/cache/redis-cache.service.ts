@@ -70,6 +70,48 @@ export class RedisCacheService implements OnModuleDestroy {
     });
   }
 
+  async acquireLock(
+    key: string,
+    value: string,
+    ttlSeconds: number,
+  ): Promise<boolean | null> {
+    try {
+      const result = await this.client.set(key, value, 'EX', ttlSeconds, 'NX');
+      return result === 'OK';
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'redis.lock.acquire.failed',
+          key,
+          ttlSeconds,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      return null;
+    }
+  }
+
+  async releaseLock(key: string, value: string): Promise<boolean> {
+    try {
+      const released = await this.client.eval(
+        "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+        1,
+        key,
+        value,
+      );
+      return released === 1;
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'redis.lock.release.failed',
+          key,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      return false;
+    }
+  }
+
   async increment(key: string, ttlSeconds: number): Promise<number> {
     const count = await this.client.incr(key).catch((error) => {
       this.logger.warn(
@@ -112,25 +154,25 @@ export class RedisCacheService implements OnModuleDestroy {
 
   async deleteByPrefix(prefix: string): Promise<number> {
     try {
-    let cursor = '0';
-    let deleted = 0;
+      let cursor = '0';
+      let deleted = 0;
 
-    do {
-      const [nextCursor, keys] = await this.client.scan(
-        cursor,
-        'MATCH',
-        `${prefix}*`,
-        'COUNT',
-        '100',
-      );
-      cursor = nextCursor;
+      do {
+        const [nextCursor, keys] = await this.client.scan(
+          cursor,
+          'MATCH',
+          `${prefix}*`,
+          'COUNT',
+          '100',
+        );
+        cursor = nextCursor;
 
-      if (keys.length > 0) {
-        deleted += await this.client.del(...keys);
-      }
-    } while (cursor !== '0');
+        if (keys.length > 0) {
+          deleted += await this.client.del(...keys);
+        }
+      } while (cursor !== '0');
 
-    return deleted;
+      return deleted;
     } catch (error) {
       this.logger.warn(
         JSON.stringify({

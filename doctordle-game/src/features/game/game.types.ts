@@ -24,6 +24,9 @@ export type ClinicalClue = {
 
 export type GameCase = {
   id: string
+  casePublicNumber?: number | null
+  displayLabel?: string
+  trackDisplayLabel?: string
   clues: ClinicalClue[]
   clueIndex: number
 }
@@ -43,6 +46,11 @@ export type StartGameResponse =
       state: 'ready'
       sessionId: string
       dailyCaseId: string
+      casePublicNumber?: number | null
+      displayLabel?: string
+      trackDisplayLabel?: string
+      dailyCaseDisplayLabel?: string
+      dailyCaseTrackDisplayLabel?: string
       startedAt?: string
       completedAt?: string | null
       case: GameCase
@@ -113,10 +121,16 @@ export type PublishTrack = 'DAILY' | 'PREMIUM' | 'PRACTICE'
 
 export type TodayCase = {
   dailyCaseId: string
+  casePublicNumber?: number | null
+  displayLabel?: string
+  trackDisplayLabel?: string
   track: PublishTrack
   sequenceIndex: number
   case: {
     id: string
+    publicNumber?: number | null
+    displayLabel?: string
+    trackDisplayLabel?: string
     title: string
     date: string
     difficulty: string
@@ -140,12 +154,18 @@ export type LearnPlayerResult = {
 export type LearnLibraryCase = {
   sessionId: string
   dailyCaseId: string
+  casePublicNumber?: number | null
+  displayLabel?: string
+  trackDisplayLabel?: string
   track: PublishTrack
   sequenceIndex: number
   completedAt: string
   playerResult: LearnPlayerResult
   case: {
     id: string
+    publicNumber?: number | null
+    displayLabel?: string
+    trackDisplayLabel?: string
     title: string
     diagnosis: string
     date: string
