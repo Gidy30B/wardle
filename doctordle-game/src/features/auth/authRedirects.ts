@@ -3,19 +3,41 @@ export const NATIVE_AUTH_CUSTOM_SCHEME = 'app.wardle.medcase'
 export const NATIVE_AUTH_CALLBACK_HOST = 'sso-callback'
 export const NATIVE_AUTH_COMPLETE_HOST = 'oauth-complete'
 export const ROOT_PATH = '/'
+export const PRODUCTION_WEB_ORIGIN = 'https://wardle-nu.vercel.app'
+const NATIVE_CALLBACK_MARKER = 'native'
 
 type ClerkOAuthRedirects = {
   redirectUrl: string
   redirectUrlComplete: string
-  kind: 'same-origin'
+  kind: 'web' | 'native'
 }
 
 export function getClerkOAuthRedirects(): ClerkOAuthRedirects {
+  if (isNativeRuntime()) {
+    return {
+      redirectUrl: buildNativeWebCallbackUrl(),
+      redirectUrlComplete: PRODUCTION_WEB_ORIGIN,
+      kind: 'native',
+    }
+  }
+
   return {
     redirectUrl: buildSameOriginUrl(CLERK_OAUTH_CALLBACK_PATH),
     redirectUrlComplete: buildSameOriginUrl(ROOT_PATH),
-    kind: 'same-origin',
+    kind: 'web',
   }
+}
+
+export function getClerkFallbackRedirectUrl() {
+  return isNativeRuntime() ? ROOT_PATH : buildSameOriginUrl(ROOT_PATH)
+}
+
+export function isNativeRuntime() {
+  return Boolean(
+    typeof window !== 'undefined' &&
+      (window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
+        ?.isNativePlatform?.(),
+  )
 }
 
 export function mapNativeAuthUrlToInternalPath(appUrl: string): string | null {
@@ -51,11 +73,11 @@ export function shouldBounceOAuthCallbackToNativeApp() {
     return false
   }
 
-  if (hasCapacitorNativeBridge()) {
+  if (isNativeRuntime()) {
     return false
   }
 
-  return isLikelyMobileBrowser()
+  return new URLSearchParams(window.location.search).get(NATIVE_CALLBACK_MARKER) === '1'
 }
 
 export function getNativeOAuthCallbackUrl() {
@@ -74,6 +96,12 @@ function buildSameOriginUrl(path: string) {
   return new URL(path, getWindowOrigin()).toString()
 }
 
+function buildNativeWebCallbackUrl() {
+  const url = new URL(CLERK_OAUTH_CALLBACK_PATH, PRODUCTION_WEB_ORIGIN)
+  url.searchParams.set(NATIVE_CALLBACK_MARKER, '1')
+  return url.toString()
+}
+
 function withSearchAndHash(path: string, url: URL) {
   return `${path}${url.search}${url.hash}`
 }
@@ -83,7 +111,7 @@ function normalizePath(path: string) {
 }
 
 function getWindowOrigin() {
-  return typeof window === 'undefined' ? 'https://wardle-nu.vercel.app' : window.location.origin
+  return typeof window === 'undefined' ? PRODUCTION_WEB_ORIGIN : window.location.origin
 }
 
 function isCustomSchemeCallback(url: URL) {
@@ -92,15 +120,4 @@ function isCustomSchemeCallback(url: URL) {
 
 function isCustomSchemeComplete(url: URL) {
   return url.protocol === `${NATIVE_AUTH_CUSTOM_SCHEME}:` && url.host === NATIVE_AUTH_COMPLETE_HOST
-}
-
-function hasCapacitorNativeBridge() {
-  return Boolean(
-    (window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
-      ?.isNativePlatform?.(),
-  )
-}
-
-function isLikelyMobileBrowser() {
-  return /Android|iPhone|iPad|iPod/i.test(window.navigator.userAgent)
 }

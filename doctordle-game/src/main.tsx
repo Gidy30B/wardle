@@ -9,7 +9,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './app/App'
 import AppErrorBoundary from './app/components/AppErrorBoundary'
-import { mapNativeAuthUrlToInternalPath } from './features/auth/authRedirects'
+import {
+  getClerkFallbackRedirectUrl,
+  mapNativeAuthUrlToInternalPath,
+} from './features/auth/authRedirects'
 
 const WARDLE_NATIVE_BACKGROUND = '#1E1E2C'
 
@@ -74,6 +77,8 @@ if (!clerkPublishableKey) {
   throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY')
 }
 
+const clerkFallbackRedirectUrl = getClerkFallbackRedirectUrl()
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -93,9 +98,9 @@ root.render(
       publishableKey={clerkPublishableKey}
       routerPush={clerkNavigate}
       routerReplace={clerkReplace}
-      signInFallbackRedirectUrl="/"
-      signUpFallbackRedirectUrl="/"
-      afterSignOutUrl="/"
+      signInFallbackRedirectUrl={clerkFallbackRedirectUrl}
+      signUpFallbackRedirectUrl={clerkFallbackRedirectUrl}
+      afterSignOutUrl={clerkFallbackRedirectUrl}
     >
       <QueryClientProvider client={queryClient}>
         <AppErrorBoundary>

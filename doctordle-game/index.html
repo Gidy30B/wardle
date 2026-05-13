@@ -7,6 +7,25 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      ;(() => {
+        const isNativeRuntime = Boolean(
+          window.Capacitor?.isNativePlatform?.(),
+        )
+        const isNativeAuthCallback =
+          window.location.pathname === '/sso-callback' &&
+          new URLSearchParams(window.location.search).get('native') === '1' &&
+          !isNativeRuntime
+
+        if (!isNativeAuthCallback) {
+          return
+        }
+
+        window.location.replace(
+          `app.wardle.medcase://sso-callback${window.location.search}${window.location.hash}`,
+        )
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

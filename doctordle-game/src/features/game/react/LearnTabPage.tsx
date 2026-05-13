@@ -1245,9 +1245,9 @@ function DiagnosisRecallSurface({
     updater: (current: LearnReviewState) => LearnReviewState,
   ) => void;
 }) {
-  const [recallPhase, setRecallPhase] = useState<"question" | "answer">(
-    "question",
-  );
+  const [recallPhase, setRecallPhase] = useState<
+    "question" | "answer" | "complete"
+  >("question");
   const [visibleClueCount, setVisibleClueCount] = useState(1);
   const [query, setQuery] = useState("");
   const [selectedOption, setSelectedOption] =
@@ -1284,7 +1284,6 @@ function DiagnosisRecallSurface({
   ).length;
   const canAdvanceFromAnswer = recallPhase === "answer" && hasRatedCurrentCard;
   const isFinalCase = queueIndex >= queueSize - 1;
-  const progressPct = Math.round((queueIndex / Math.max(1, queueSize)) * 100);
 
   const rateRecallConfidence = (confidence: LearnConfidence) => {
     const reviewedAt = new Date();
@@ -1339,38 +1338,47 @@ function DiagnosisRecallSurface({
       onNext();
       return;
     }
-    setShowExitConfirm(true);
+    setRecallPhase("complete");
   };
+
+  if (recallPhase === "complete") {
+    return (
+      <div className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-[#13141f] px-4">
+        <RecallCompletionScreen
+          queue={allCases}
+          reviewStateByCaseKey={reviewStateByCaseKey}
+          onDone={onExit}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--wardle-color-charcoal)]">
-      <div className="shrink-0 border-b border-white/[0.06] bg-[var(--wardle-color-charcoal)] px-5 pb-3 pt-3">
-        <div className="flex items-center gap-3">
+      <div className="shrink-0 border-b border-white/[0.07] bg-[#13141f] px-4 pb-3 pt-3">
+        <div className="mb-2.5 flex items-center gap-2.5">
           <button
             type="button"
             onClick={() => setShowExitConfirm(true)}
-            className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] border border-white/[0.12] bg-white/[0.06] text-base text-white/70"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.12] bg-white/[0.05] text-[15px] font-bold leading-none text-white/48 transition active:scale-[0.98] hover:bg-white/[0.08]"
             aria-label="Exit recall"
           >
-            ←
+            ×
           </button>
-          <div className="min-w-0 flex-1">
-            <div className="mb-1.5 flex items-center justify-between gap-2">
-              <span className="text-[11px] text-white/34">
-                Case {queueIndex + 1} of {queueSize}
-              </span>
-              <b className="font-brand-mono text-[11px] font-bold text-[var(--wardle-color-teal)]">
-                {progressPct}%
-              </b>
-            </div>
-            <div className="h-[6px] overflow-hidden rounded-full bg-white/[0.08]">
-              <div
-                className="h-full rounded-full bg-[var(--wardle-color-teal)] transition-all duration-300"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-          </div>
+          <span className="min-w-0 flex-1 text-center font-brand-mono text-[10px] font-bold uppercase tracking-[0.14em] text-white/34">
+            Adaptive recall
+          </span>
+          <span className="shrink-0 font-brand-mono text-[10px] text-white/34">
+            {ratedCount}/{queueSize} rated
+          </span>
         </div>
+
+        <RecallProgressTrack
+          queue={allCases}
+          queueIndex={queueIndex}
+          queueSize={queueSize}
+          reviewStateByCaseKey={reviewStateByCaseKey}
+        />
       </div>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4">
@@ -1385,7 +1393,6 @@ function DiagnosisRecallSurface({
             key={`${item.dailyCaseId}-answer`}
             item={item}
             committedAnswer={committedAnswer}
-            committedAnswerId={committedAnswerId}
             wasCorrect={wasCorrect}
             reviewState={reviewState}
             onRateConfidence={rateRecallConfidence}
@@ -1427,11 +1434,7 @@ function DiagnosisRecallSurface({
             </button>
             <button
               type="button"
-              onClick={
-                isFinalCase && canAdvanceFromAnswer
-                  ? () => setShowExitConfirm(true)
-                  : goNext
-              }
+              onClick={goNext}
               disabled={!canAdvanceFromAnswer}
               className={`rounded-[13px] border px-3 py-3 text-sm font-bold transition disabled:opacity-30 ${
                 canAdvanceFromAnswer
@@ -1486,6 +1489,140 @@ function DiagnosisRecallSurface({
   );
 }
 
+function RecallCompletionScreen({
+  queue,
+  reviewStateByCaseKey,
+  onDone,
+}: {
+  queue: LearnLibraryCase[];
+  reviewStateByCaseKey: LearnReviewStateByCaseKey;
+  onDone: () => void;
+}) {
+  const counts = queue.reduce(
+    (acc, item) => {
+      const confidence =
+        reviewStateByCaseKey[getLearnReviewCaseKey(item)]?.confidence;
+      if (confidence) acc[confidence] += 1;
+      return acc;
+    },
+    { again: 0, hard: 0, good: 0, easy: 0 } as Record<
+      LearnConfidence,
+      number
+    >,
+  );
+
+  const reviewedCount = counts.again + counts.hard + counts.good + counts.easy;
+
+  return (
+    <section className="wardle-learn-slide-up flex min-h-full flex-col items-center justify-center px-1 py-8 text-center">
+      <div className="flex h-20 w-20 items-center justify-center rounded-full border border-[rgba(0,180,166,0.3)] bg-[rgba(0,180,166,0.12)] text-4xl font-black text-[var(--wardle-color-teal)] shadow-[0_0_42px_rgba(0,180,166,0.12)]">
+        ✓
+      </div>
+      <h2 className="mt-5 text-2xl font-black tracking-[-0.02em] text-white/92">
+        Session done!
+      </h2>
+      <p className="mt-2 max-w-[280px] text-[13px] leading-6 text-white/46">
+        You've reviewed {reviewedCount || queue.length} case
+        {(reviewedCount || queue.length) === 1 ? "" : "s"} due today. Next
+        sessions are scheduled based on your ratings.
+      </p>
+
+      <div className="mt-6 grid w-full grid-cols-2 gap-2">
+        <RecallCompletionStat label="Easy" value={counts.easy} tone="blue" />
+        <RecallCompletionStat label="Good" value={counts.good} tone="teal" />
+        <RecallCompletionStat label="Hard" value={counts.hard} tone="amber" />
+        <RecallCompletionStat label="Again" value={counts.again} tone="rose" />
+      </div>
+
+      <button
+        type="button"
+        onClick={onDone}
+        className="mt-6 w-full rounded-[14px] bg-[var(--wardle-color-teal)] px-4 py-4 text-[15px] font-black text-white transition active:scale-[0.98]"
+      >
+        Back to Learn
+      </button>
+    </section>
+  );
+}
+
+function RecallCompletionStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "blue" | "teal" | "amber" | "rose";
+}) {
+  const toneClass =
+    tone === "blue"
+      ? "text-blue-300"
+      : tone === "teal"
+        ? "text-[var(--wardle-color-teal)]"
+        : tone === "amber"
+          ? "text-[var(--wardle-color-amber)]"
+          : "text-rose-300";
+
+  return (
+    <div className="rounded-[14px] border border-white/[0.12] bg-[#252840] px-3 py-4">
+      <div
+        className={`font-brand-mono text-[22px] font-black leading-none ${toneClass}`}
+      >
+        {value}
+      </div>
+      <div className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-white/26">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function RecallProgressTrack({
+  queue,
+  queueIndex,
+  queueSize,
+  reviewStateByCaseKey,
+}: {
+  queue: LearnLibraryCase[];
+  queueIndex: number;
+  queueSize: number;
+  reviewStateByCaseKey: LearnReviewStateByCaseKey;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <div className="flex min-w-0 flex-1 items-center gap-[3px]">
+        {queue.map((queueItem, index) => {
+          const state = reviewStateByCaseKey[getLearnReviewCaseKey(queueItem)];
+          const confidence = state?.confidence;
+          const current = index === queueIndex;
+          const tone = getRecallProgressTone(confidence);
+          return (
+            <span
+              key={queueItem.dailyCaseId || queueItem.sessionId || index}
+              className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+                current
+                  ? "h-1.5 bg-[var(--wardle-color-teal)] shadow-[0_0_14px_rgba(0,180,166,0.28)]"
+                  : tone
+              }`}
+            />
+          );
+        })}
+      </div>
+      <span className="ml-1 shrink-0 font-brand-mono text-[10px] text-white/28">
+        {queueIndex + 1}/{queueSize}
+      </span>
+    </div>
+  );
+}
+
+function getRecallProgressTone(confidence: LearnConfidence | undefined) {
+  if (confidence === "again") return "bg-rose-400/60";
+  if (confidence === "hard") return "bg-[rgba(244,162,97,0.6)]";
+  if (confidence === "good") return "bg-[rgba(0,180,166,0.5)]";
+  if (confidence === "easy") return "bg-blue-400/60";
+  return "bg-white/[0.08]";
+}
+
 function RecallQuestionContent({
   item,
   sortedClues,
@@ -1499,17 +1636,23 @@ function RecallQuestionContent({
   const specialty = getCaseSpecialty(item);
 
   return (
-    <section className="wardle-learn-slide-up min-w-0 space-y-4 pb-2">
-      <div className="flex min-w-0 items-center justify-between gap-3">
-        <span className="font-brand-mono text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--wardle-color-teal)]">
+    <section className="wardle-learn-slide-up min-w-0 pb-2">
+      <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+        <span className="font-brand-mono text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--wardle-color-teal)]">
           {specialty.label}
         </span>
-        <span className="shrink-0 font-brand-mono text-[11px] text-white/32">
+        <span className="shrink-0 font-brand-mono text-[10px] text-white/28">
           {visibleClueCount} of {sortedClues.length} clues
         </span>
       </div>
 
-      <div className="space-y-2">
+      <div className="mb-3.5">
+        <h2 className="mt-1.5 text-[20px] font-black leading-tight tracking-[-0.02em] text-white/92">
+          What's the diagnosis?
+        </h2>
+      </div>
+
+      <div className="space-y-[7px]">
         {visibleClues.map((clue, index) => (
           <RecallClueCard
             key={clue.id}
@@ -1518,16 +1661,22 @@ function RecallQuestionContent({
             active={index === visibleClues.length - 1}
           />
         ))}
-        {sortedClues.slice(visibleClueCount).map((clue, lockedIndex) => (
-          <div
-            key={clue.id}
-            className="rounded-[14px] border border-white/[0.12] bg-white/[0.055] px-3.5 py-3 opacity-35"
-          >
-            <p className="text-[12px] italic text-white/34">
-              Clue {visibleClueCount + lockedIndex + 1} — locked
-            </p>
-          </div>
-        ))}
+        {sortedClues.slice(visibleClueCount).map((clue, lockedIndex) => {
+          const typeCopy = CLUE_TYPE_COPY[clue.type];
+          return (
+            <div
+              key={clue.id}
+              className="flex min-w-0 gap-2.5 rounded-[13px] border border-white/[0.14] bg-white/[0.025] px-3 py-2.5 opacity-45"
+            >
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] border border-white/[0.1] bg-transparent font-brand-mono text-[9px] font-black text-white/20">
+                {typeCopy.abbr}
+              </div>
+              <p className="min-w-0 self-center text-[12px] italic text-white/30">
+                Clue {visibleClueCount + lockedIndex + 1} — locked
+              </p>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -1555,7 +1704,6 @@ function RecallAnswerComposer({
   onCommit: () => void;
 }) {
   const showOptions = query.trim().length > 0 && matchingOptions.length > 0;
-  const showFallbackHint = query.trim().length >= 3 && !selectedOption;
 
   return (
     <div className="shrink-0 border-t border-white/[0.07] bg-[rgba(18,18,28,0.98)] px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-3 shadow-[0_-18px_40px_rgba(0,0,0,0.25)]">
@@ -1572,9 +1720,6 @@ function RecallAnswerComposer({
         </button>
       )}
 
-      <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-white/42">
-        What's your diagnosis?
-      </div>
 
       {showOptions && (
         <div className="mb-2 max-h-[152px] space-y-1.5 overflow-y-auto rounded-[13px] border border-white/[0.07] bg-[#202436] p-1.5">
@@ -1593,9 +1738,6 @@ function RecallAnswerComposer({
               >
                 <span className="min-w-0 truncate text-sm font-bold">
                   {option.label}
-                </span>
-                <span className="shrink-0 font-brand-mono text-[9px] uppercase tracking-[0.12em] text-white/24">
-                  Registry
                 </span>
               </button>
             );
@@ -1620,12 +1762,6 @@ function RecallAnswerComposer({
         </button>
       </div>
 
-      {showFallbackHint && (
-        <p className="mt-2 text-[11px] leading-5 text-white/28">
-          Pick a registry match for clean scoring, or submit typed text if it is
-          missing.
-        </p>
-      )}
     </div>
   );
 }
@@ -1643,25 +1779,29 @@ function RecallClueCard({
 
   return (
     <div
-      className={`flex min-w-0 gap-3 rounded-[12px] border px-3 py-3 transition-colors ${
+      className={`flex min-w-0 gap-2.5 rounded-[13px] border px-3 py-2.5 transition-colors ${
         active
-          ? "wardle-learn-slide-up border-[rgba(0,180,166,0.16)] bg-[rgba(0,180,166,0.05)]"
-          : "border-white/[0.05] bg-white/[0.025]"
+          ? "wardle-learn-slide-up border-[rgba(0,180,166,0.42)] bg-[rgba(0,180,166,0.08)]"
+          : "border-white/[0.16] bg-white/[0.035]"
       }`}
     >
       <div
-        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] border text-[9px] font-black ${typeCopy.tone}`}
+        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] border font-brand-mono text-[9px] font-black ${typeCopy.tone}`}
       >
         {typeCopy.abbr}
       </div>
       <div className="min-w-0 flex-1">
         <p
-          className={`font-brand-mono text-[9px] font-bold uppercase tracking-[0.14em] ${active ? "text-[var(--wardle-color-teal)]/60" : "text-white/26"}`}
+          className={`font-brand-mono text-[9px] font-bold uppercase tracking-[0.12em] ${
+            active ? "text-[var(--wardle-color-teal)]/60" : "text-white/26"
+          }`}
         >
-          Clue {index + 1} · {typeCopy.label}
+          {typeCopy.label} · Clue {index + 1}
         </p>
         <p
-          className={`mt-1 break-words text-sm leading-6 ${active ? "text-white/80" : "text-white/48"}`}
+          className={`mt-1 break-words text-[13px] leading-[1.55] ${
+            active ? "text-white/82" : "text-white/48"
+          }`}
         >
           {clue.value}
         </p>
@@ -1675,14 +1815,12 @@ function RecallClueCard({
 function RecallAnswerCard({
   item,
   committedAnswer,
-  committedAnswerId,
   wasCorrect,
   reviewState,
   onRateConfidence,
 }: {
   item: LearnLibraryCase;
   committedAnswer: string;
-  committedAnswerId?: string;
   wasCorrect: boolean;
   reviewState: LearnReviewState;
   onRateConfidence: (confidence: LearnConfidence) => void;
@@ -1719,9 +1857,6 @@ function RecallAnswerCard({
           <span className="font-bold text-[var(--wardle-color-mint)]">
             {committedAnswer}
           </span>
-        </p>
-        <p className="mt-1 font-brand-mono text-[10px] uppercase tracking-[0.12em] text-white/26">
-          {committedAnswerId ? "Registry matched" : "Free-text fallback"}
         </p>
       </div>
 
