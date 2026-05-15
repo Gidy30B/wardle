@@ -14,9 +14,12 @@ import {
   shouldRefreshDiagnosisDictionary,
 } from './diagnosisRegistry.cache'
 import {
-  normalizeDiagnosisSearchText,
-  searchDiagnosisRegistryIndex,
-} from './diagnosisRegistry.search'
+  DEFAULT_DIAGNOSIS_AUTOCOMPLETE_LIMIT,
+  findExactDiagnosisSelection,
+  MIN_DIAGNOSIS_AUTOCOMPLETE_QUERY_LENGTH,
+  searchDiagnosisAutocomplete,
+  toDiagnosisSelection,
+} from './diagnosis'
 import { hasDisplayableExplanation } from './gameExplanation'
 import type { DiagnosisDictionaryIndex } from './diagnosisRegistry.types'
 import { startGameApi, submitGuessApi } from './game.api'
@@ -34,8 +37,6 @@ import { useUserSettings } from '../profile/useUserSettings'
 
 const SUBMIT_ACK_DELAY_MS = 180
 const FINAL_TRANSITION_DELAY_MS = 250
-const MIN_AUTOCOMPLETE_QUERY_LENGTH = 1
-const AUTOCOMPLETE_LIMIT = 5
 
 export type GameAttempt = {
   guess: string
@@ -100,41 +101,6 @@ function delay(ms: number): Promise<void> {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms)
   })
-}
-
-function toDiagnosisSelection(
-  suggestion: DiagnosisSuggestion,
-): DiagnosisSelection {
-  return {
-    diagnosisRegistryId: suggestion.diagnosisRegistryId,
-    displayLabel: suggestion.displayLabel,
-  }
-}
-
-function findExactDiagnosisSelection(
-  index: DiagnosisDictionaryIndex | null,
-  value: string,
-): DiagnosisSelection | null {
-  const normalizedValue = normalizeDiagnosisSearchText(value)
-
-  if (!index || !normalizedValue) {
-    return null
-  }
-
-  const match = index.entries.find((entry) => {
-    if (entry.labelNormalized === normalizedValue) {
-      return true
-    }
-
-    return entry.aliases.some((alias) => alias.normalizedValue === normalizedValue)
-  })
-
-  return match
-    ? {
-        diagnosisRegistryId: match.id,
-        displayLabel: match.label,
-      }
-    : null
 }
 
 export function useGameEngine() {
@@ -452,7 +418,7 @@ export function useGameEngine() {
 
     const query = guess.trim()
     if (
-      query.length < MIN_AUTOCOMPLETE_QUERY_LENGTH ||
+      query.length < MIN_DIAGNOSIS_AUTOCOMPLETE_QUERY_LENGTH ||
       !registryIndex ||
       dictionaryAvailability === 'unavailable'
     ) {
@@ -461,10 +427,10 @@ export function useGameEngine() {
       return
     }
 
-    const nextSuggestions = searchDiagnosisRegistryIndex(
+    const nextSuggestions = searchDiagnosisAutocomplete(
       registryIndex,
       query,
-      AUTOCOMPLETE_LIMIT,
+      DEFAULT_DIAGNOSIS_AUTOCOMPLETE_LIMIT,
     )
 
     setSuggestions(nextSuggestions)

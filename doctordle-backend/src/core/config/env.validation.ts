@@ -72,6 +72,26 @@ const envSchema = z.object({
   DAILY_SCHEDULE_CRON: z
     .preprocess(emptyToUndefined, z.string().min(1).optional())
     .default('5 0 * * *'),
+  NOTIFICATION_CAMPAIGNS_ENABLED: optionalBooleanWithDefault(false),
+  NOTIFICATION_CAMPAIGN_LIMIT: z
+    .preprocess(
+      emptyToUndefined,
+      z.coerce.number().int().min(1).max(10000).optional(),
+    )
+    .default(500),
+  PUSH_NOTIFICATIONS_ENABLED: optionalBooleanWithDefault(false),
+  FIREBASE_PROJECT_ID: z.preprocess(
+    emptyToUndefined,
+    z.string().min(1).optional(),
+  ),
+  FIREBASE_CLIENT_EMAIL: z.preprocess(
+    emptyToUndefined,
+    z.string().email().optional(),
+  ),
+  FIREBASE_PRIVATE_KEY: z.preprocess(
+    emptyToUndefined,
+    z.string().min(1).optional(),
+  ),
   LOG_LEVEL: z.string().min(1),
   ALLOWED_ORIGINS: z.preprocess(emptyToUndefined, z.string().optional()),
   NETWORK_HOST: z.preprocess(emptyToUndefined, z.string().optional()),

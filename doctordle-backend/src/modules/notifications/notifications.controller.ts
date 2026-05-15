@@ -7,17 +7,11 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import { Request } from 'express';
+import type { AuthenticatedRequest } from '../../auth/authenticated-request.interface';
 import { ListNotificationsDto } from './dto/list-notifications.dto';
 import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 import { NotificationsService } from './notifications.service';
 import { NotificationPreferencesService } from './notification-preferences.service';
-
-type AuthenticatedRequest = Request & {
-  user: {
-    userId: string;
-  };
-};
 
 @Controller('notifications')
 export class NotificationsController {
@@ -29,7 +23,7 @@ export class NotificationsController {
   @Get()
   list(@Req() req: AuthenticatedRequest, @Query() query: ListNotificationsDto) {
     return this.notificationsService.listForUser({
-      userId: req.user.userId,
+      userId: req.user.id,
       limit: query.limit,
       unreadOnly: query.unreadOnly,
     });
@@ -37,18 +31,18 @@ export class NotificationsController {
 
   @Get('unread-count')
   unreadCount(@Req() req: AuthenticatedRequest) {
-    return this.notificationsService.getUnreadCount(req.user.userId);
+    return this.notificationsService.getUnreadCount(req.user.id);
   }
 
   @Get('preferences')
   async preferences(@Req() req: AuthenticatedRequest) {
-    const preferences = await this.preferencesService.listForUser(req.user.userId);
+    const preferences = await this.preferencesService.listForUser(req.user.id);
     return { preferences };
   }
 
   @Patch('read-all')
   markAllRead(@Req() req: AuthenticatedRequest) {
-    return this.notificationsService.markAllRead(req.user.userId);
+    return this.notificationsService.markAllRead(req.user.id);
   }
 
   @Patch('preferences')
@@ -57,7 +51,7 @@ export class NotificationsController {
     @Body() body: UpdateNotificationPreferencesDto,
   ) {
     const preferences = await this.preferencesService.updateForUser(
-      req.user.userId,
+      req.user.id,
       body.preferences,
     );
     return { preferences };
@@ -66,7 +60,7 @@ export class NotificationsController {
   @Patch(':id/read')
   async markRead(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     const notification = await this.notificationsService.markRead(
-      req.user.userId,
+      req.user.id,
       id,
     );
     return { notification };

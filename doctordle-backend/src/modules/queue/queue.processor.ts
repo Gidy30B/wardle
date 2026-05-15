@@ -36,6 +36,8 @@ export function computeTimeToCompleteSeconds(input: {
   );
 }
 
+const STREAK_MILESTONES = new Set([3, 7, 14, 30, 60, 100, 365]);
+
 @Injectable()
 export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(QueueProcessor.name);
@@ -397,6 +399,14 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
             xp: awardResult.xpGained,
             streak,
           });
+
+          if (STREAK_MILESTONES.has(streak)) {
+            await this.notificationProducer.enqueueStreakMilestone({
+              userId: payload.userId,
+              sessionId: payload.sessionId,
+              streak,
+            });
+          }
         }
       }
 

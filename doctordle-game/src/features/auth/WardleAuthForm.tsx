@@ -1,11 +1,13 @@
 import { useSignIn, useSignUp } from '@clerk/clerk-react'
-import { Capacitor } from '@capacitor/core'
 import { useMemo, useState, type ReactNode } from 'react'
 import Button from '../../components/ui/Button'
-import { getClerkOAuthRedirects } from './authRedirects'
 import { savePendingAuthProfile } from './authProfileSync'
 
 type AuthMode = 'signin' | 'signup'
+type PendingEmailCode =
+  | { kind: 'signin'; email: string }
+  | { kind: 'signup'; email: string }
+  | null
 
 const UNIVERSITIES = [
   'University of Nairobi',
@@ -25,35 +27,32 @@ export default function WardleAuthForm() {
   const [displayName, setDisplayName] = useState('')
   const [university, setUniversity] = useState('')
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [pendingEmailVerification, setPendingEmailVerification] = useState(false)
+  const [pendingEmailCode, setPendingEmailCode] = useState<PendingEmailCode>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [oauthLoading, setOauthLoading] = useState(false)
 
   const clerkReady = signInState.isLoaded && signUpState.isLoaded
   const submitLabel = useMemo(() => {
     if (loading) {
-      if (pendingEmailVerification) {
+      if (pendingEmailCode) {
         return 'Verify and Continue'
       }
 
-      return mode === 'signin' ? 'Checking vitals...' : 'Creating profile...'
+      return mode === 'signin' ? 'Sending code...' : 'Sending verification...'
     }
 
-    if (pendingEmailVerification) {
+    if (pendingEmailCode) {
       return 'Verify and Continue'
     }
 
-    return mode === 'signin' ? 'Sign In' : 'Join the Founding Class'
-  }, [loading, mode, pendingEmailVerification])
+    return mode === 'signin' ? 'Send Sign-In Code' : 'Send Verification Code'
+  }, [loading, mode, pendingEmailCode])
 
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode)
     setError('')
-    setPendingEmailVerification(false)
+    setPendingEmailCode(null)
     setVerificationCode('')
   }
 
@@ -65,7 +64,7 @@ export default function WardleAuthForm() {
       return
     }
 
-    if (pendingEmailVerification) {
+    if (pendingEmailCode) {
       if (!verificationCode.trim()) {
         setError('Enter the verification code Clerk sent to your email.')
         return
@@ -73,11 +72,19 @@ export default function WardleAuthForm() {
 
       setLoading(true)
       try {
-        await completeSignUpVerification({
-          signUp: signUpState.signUp,
-          setActive: signUpState.setActive,
-          verificationCode,
-        })
+        if (pendingEmailCode.kind === 'signin') {
+          await completeSignInVerification({
+            signIn: signInState.signIn,
+            setActive: signInState.setActive,
+            verificationCode,
+          })
+        } else {
+          await completeSignUpVerification({
+            signUp: signUpState.signUp,
+            setActive: signUpState.setActive,
+            verificationCode,
+          })
+        }
       } catch (exception) {
         setError(getClerkErrorMessage(exception))
       } finally {
@@ -85,6 +92,8 @@ export default function WardleAuthForm() {
       }
       return
     }
+
+    const normalizedEmail = email.trim()
 
     if (mode === 'signup' && !displayName.trim()) {
       setError('Enter the display name your classmates will see.')
@@ -96,13 +105,8 @@ export default function WardleAuthForm() {
       return
     }
 
-    if (!email.includes('@')) {
+    if (!normalizedEmail.includes('@')) {
       setError("That email doesn't look right.")
-      return
-    }
-
-    if (password.length < 1) {
-      setError('Enter your password.')
       return
     }
 
@@ -110,71 +114,38 @@ export default function WardleAuthForm() {
 
     try {
       if (mode === 'signin') {
-        await completeSignIn({
+        const signInResult = await startSignInEmailCode({
           signIn: signInState.signIn,
           setActive: signInState.setActive,
-          email,
-          password,
+          email: normalizedEmail,
         })
+        if (signInResult === 'needs_email_verification') {
+          setPendingEmailCode({ kind: 'signin', email: normalizedEmail })
+          setVerificationCode('')
+          setError('Check your email for the Wardle sign-in code.')
+        }
       } else {
         savePendingAuthProfile({
-          email,
+          email: normalizedEmail,
           displayName,
           university,
         })
 
-        const signUpResult = await completeSignUp({
+        const signUpResult = await startSignUpEmailCode({
           signUp: signUpState.signUp,
           setActive: signUpState.setActive,
-          email,
-          password,
+          email: normalizedEmail,
         })
         if (signUpResult === 'needs_email_verification') {
-          setPendingEmailVerification(true)
+          setPendingEmailCode({ kind: 'signup', email: normalizedEmail })
           setVerificationCode('')
-          setError('Check your email for the Clerk verification code.')
+          setError('Check your email for the Wardle verification code.')
         }
       }
     } catch (exception) {
       setError(getClerkErrorMessage(exception))
     } finally {
       setLoading(false)
-    }
-  }
-
-  const handleGoogleOAuth = async () => {
-    setError('')
-
-    if (!signInState.isLoaded) {
-      setError('Authentication is still loading. Try again in a moment.')
-      return
-    }
-
-    setOauthLoading(true)
-
-    try {
-      const isNativePlatform = Capacitor.isNativePlatform()
-      const platform = Capacitor.getPlatform()
-      const { kind, redirectUrl, redirectUrlComplete } = getClerkOAuthRedirects()
-
-      if (import.meta.env.DEV) {
-        console.log('[Wardle OAuth redirect]', {
-          isNativePlatform,
-          platform,
-          kind,
-          redirectUrl,
-          redirectUrlComplete,
-        })
-      }
-
-      await signInState.signIn.authenticateWithRedirect({
-        strategy: 'oauth_google',
-        redirectUrl,
-        redirectUrlComplete,
-      })
-    } catch (exception) {
-      setError(getClerkErrorMessage(exception))
-      setOauthLoading(false)
     }
   }
 
@@ -204,14 +175,17 @@ export default function WardleAuthForm() {
           void handleSubmit()
         }}
       >
-        {pendingEmailVerification ? (
+        {pendingEmailCode ? (
           <div className="rounded-[14px] border border-[rgba(0,180,166,0.24)] bg-[rgba(0,180,166,0.08)] px-4 py-3 text-sm leading-6 text-white/64">
-            We created your Clerk sign-up attempt. Enter the verification code sent to{' '}
-            <span className="font-bold text-[var(--wardle-color-mint)]">{email}</span>.
+            Enter the {pendingEmailCode.kind === 'signin' ? 'sign-in' : 'verification'} code sent to{' '}
+            <span className="font-bold text-[var(--wardle-color-mint)]">
+              {pendingEmailCode.email}
+            </span>
+            .
           </div>
         ) : null}
 
-        {mode === 'signup' && !pendingEmailVerification ? (
+        {mode === 'signup' && !pendingEmailCode ? (
           <>
             <Field label="Display name">
               <input
@@ -239,7 +213,7 @@ export default function WardleAuthForm() {
           </>
         ) : null}
 
-        {pendingEmailVerification ? (
+        {pendingEmailCode ? (
           <Field label="Verification code">
             <input
               value={verificationCode}
@@ -251,38 +225,16 @@ export default function WardleAuthForm() {
             />
           </Field>
         ) : (
-          <>
-            <Field label="Email">
-              <input
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                type="email"
-                placeholder="you@medschool.ac.ke"
-                className={inputClassName}
-                autoComplete={mode === 'signin' ? 'email' : 'username'}
-              />
-            </Field>
-
-            <Field label="Password">
-              <div className="relative">
-                <input
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="********"
-                  className={`${inputClassName} pr-16`}
-                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((value) => !value)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-white/45"
-                >
-                  {showPassword ? 'Hide' : 'Show'}
-                </button>
-              </div>
-            </Field>
-          </>
+          <Field label="Email">
+            <input
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              type="email"
+              placeholder="you@medschool.ac.ke"
+              className={inputClassName}
+              autoComplete="email"
+            />
+          </Field>
         )}
 
         {error ? (
@@ -295,43 +247,21 @@ export default function WardleAuthForm() {
           {submitLabel}
         </Button>
 
-        {!pendingEmailVerification ? (
-          <>
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-white/[0.08]" />
-              <span className="text-xs font-semibold text-white/38">or continue with</span>
-              <div className="h-px flex-1 bg-white/[0.08]" />
-            </div>
-
-            <button
-              type="button"
-              disabled={oauthLoading || !signInState.isLoaded}
-              onClick={() => void handleGoogleOAuth()}
-              className="flex w-full items-center justify-center gap-3 rounded-[14px] border border-white/[0.1] bg-white/[0.05] px-4 py-3.5 text-sm font-bold text-[var(--wardle-color-mint)] transition hover:border-[rgba(0,180,166,0.28)] hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-55"
-            >
-              <span className="flex size-6 items-center justify-center rounded-full bg-white text-sm font-black text-[#4285f4]">
-                G
-              </span>
-              {oauthLoading ? 'Opening Google...' : 'Continue with Google'}
-            </button>
-          </>
-        ) : null}
-
-        {pendingEmailVerification ? (
+        {pendingEmailCode ? (
           <button
             type="button"
             className="w-full text-center text-xs font-bold text-white/45 transition hover:text-white/70"
             onClick={() => {
-              setPendingEmailVerification(false)
+              setPendingEmailCode(null)
               setVerificationCode('')
               setError('')
             }}
           >
-            Edit sign-up details
+            Edit email details
           </button>
         ) : null}
 
-        {mode === 'signup' && !pendingEmailVerification ? (
+        {mode === 'signup' && !pendingEmailCode ? (
           <div className="rounded-[14px] border border-[rgba(244,162,97,0.24)] bg-[rgba(244,162,97,0.08)] px-4 py-3">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--wardle-color-amber)]">
               Founding member perk
@@ -370,47 +300,69 @@ function Field({
   )
 }
 
-async function completeSignIn({
+async function startSignInEmailCode({
   signIn,
   setActive,
   email,
-  password,
 }: {
   signIn: NonNullable<ReturnType<typeof useSignIn>['signIn']>
   setActive: NonNullable<ReturnType<typeof useSignIn>['setActive']>
   email: string
-  password: string
 }) {
   const createResult = await signIn.create({
-    strategy: 'password',
     identifier: email.trim(),
-    password,
   })
   throwIfClerkResultError(createResult)
 
-  if (getStringProperty(createResult, 'status') === 'needs_second_factor') {
+  if (await tryActivateCompletedAttempt(signIn, setActive, createResult)) {
+    return 'complete'
+  }
+
+  const emailCodeFactor = getEmailCodeFirstFactor(createResult) ?? getEmailCodeFirstFactor(signIn)
+  if (!emailCodeFactor?.emailAddressId) {
     throw new Error(
-      'This account needs an additional verification step. Please use your configured Clerk sign-in method or contact support.',
+      'This account does not have email code sign-in enabled. Please contact support.',
     )
   }
 
-  await activateCompletedAttempt(signIn, setActive, createResult)
+  const prepareResult = await signIn.prepareFirstFactor({
+    strategy: 'email_code',
+    emailAddressId: emailCodeFactor.emailAddressId,
+  })
+  throwIfClerkResultError(prepareResult)
+
+  return 'needs_email_verification'
 }
 
-async function completeSignUp({
+async function completeSignInVerification({
+  signIn,
+  setActive,
+  verificationCode,
+}: {
+  signIn: NonNullable<ReturnType<typeof useSignIn>['signIn']>
+  setActive: NonNullable<ReturnType<typeof useSignIn>['setActive']>
+  verificationCode: string
+}) {
+  const verificationResult = await signIn.attemptFirstFactor({
+    strategy: 'email_code',
+    code: verificationCode.trim(),
+  })
+  throwIfClerkResultError(verificationResult)
+
+  await activateCompletedAttempt(signIn, setActive, verificationResult)
+}
+
+async function startSignUpEmailCode({
   signUp,
   setActive,
   email,
-  password,
 }: {
   signUp: NonNullable<ReturnType<typeof useSignUp>['signUp']>
   setActive: NonNullable<ReturnType<typeof useSignUp>['setActive']>
   email: string
-  password: string
 }) {
   const signUpResult = await signUp.create({
     emailAddress: email.trim(),
-    password,
   })
   throwIfClerkResultError(signUpResult)
 
@@ -452,7 +404,7 @@ async function activateCompletedAttempt(
     getStringProperty(latestResult, 'status') ?? getStringProperty(resource, 'status')
 
   // TODO(auth-blocker): the custom Clerk sign-in UI does not yet implement
-  // second-factor flows. Add a dedicated MFA/email-code step before enabling
+  // MFA second-factor flows. Add a dedicated second-factor step before enabling
   // accounts that return `needs_second_factor`.
   if (status === 'needs_second_factor') {
     throw new Error(
@@ -536,6 +488,18 @@ function getArrayProperty(value: unknown, key: string): unknown[] {
 
   const property = (value as Record<string, unknown>)[key]
   return Array.isArray(property) ? property : []
+}
+
+function getEmailCodeFirstFactor(value: unknown): { emailAddressId: string } | null {
+  const factors = getArrayProperty(value, 'supportedFirstFactors')
+  for (const factor of factors) {
+    const emailAddressId = getStringProperty(factor, 'emailAddressId')
+    if (getStringProperty(factor, 'strategy') === 'email_code' && emailAddressId) {
+      return { emailAddressId }
+    }
+  }
+
+  return null
 }
 
 function getStringProperty(value: unknown, key: string): string | null {

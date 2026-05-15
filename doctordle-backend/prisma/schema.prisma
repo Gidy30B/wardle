@@ -417,6 +417,7 @@ model User {
   settings                  UserSettings?
   notifications             Notification[]
   notificationPreferences   NotificationPreference[]
+  pushDeviceTokens          PushDeviceToken[]
   leaderboard               LeaderboardEntry[]
   approvedCases             Case[]                  @relation("CaseApprovedByUser")
   createdCaseRevisions      CaseRevision[]          @relation("CaseRevisionCreatedByUser")
@@ -509,6 +510,22 @@ model NotificationPreference {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, category])
+  @@index([userId])
+}
+
+model PushDeviceToken {
+  id          String    @id @default(uuid())
+  userId      String
+  token       String    @unique
+  platform    String
+  deviceId    String?
+  appVersion  String?
+  lastSeenAt  DateTime
+  disabledAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
 }
 

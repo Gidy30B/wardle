@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { NotificationPreferencesService } from './notification-preferences.service';
 import type { NotificationCategoryValue, NotificationPriority } from './notification.types';
+import { PushNotificationsService } from './push-notifications.service';
 
 export type CreateNotificationInput = {
   userId: string;
@@ -17,9 +18,13 @@ export type CreateNotificationInput = {
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly preferences: NotificationPreferencesService,
+    @Optional()
+    private readonly pushNotifications?: PushNotificationsService,
   ) {}
 
   async listForUser(input: {
@@ -109,7 +114,11 @@ export class NotificationsService {
   }
 
   async createIfEnabled(input: CreateNotificationInput) {
-    const enabled = await this.preferences.isInAppEnabled(input.userId, input.category);
+    const enabled = await this.preferences.isNotificationEnabled({
+      userId: input.userId,
+      type: input.type,
+      category: input.category,
+    });
 
     if (!enabled) {
       return {
@@ -131,6 +140,18 @@ export class NotificationsService {
           idempotencyKey: input.idempotencyKey,
         },
       });
+
+      await this.pushNotifications
+        ?.sendForNotification(notification)
+        .catch((error) => {
+          this.logger.warn(
+            JSON.stringify({
+              event: 'notification.push.side_effect.failed',
+              notificationId: notification.id,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          );
+        });
 
       return {
         created: true as const,
