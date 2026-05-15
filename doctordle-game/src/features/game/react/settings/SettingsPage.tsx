@@ -2,6 +2,7 @@ import { useAuth, useUser } from '@clerk/clerk-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useApi } from '../../../../lib/api'
+import { cleanupRegisteredPushToken } from '../../../notifications/pushRegistration'
 import {
   getBackendProfileApi,
   getUserSettingsApi,
@@ -69,6 +70,10 @@ export default function SettingsPage({
   const organizationLabel = organizationName ?? getMembershipLabel(memberships)
 
   const goHome = () => setSubScreen(null)
+  const handleSignOut = async () => {
+    await cleanupRegisteredPushToken(request).catch(() => undefined)
+    await signOut()
+  }
 
   switch (subScreen) {
     case 'gameplay':
@@ -96,7 +101,7 @@ export default function SettingsPage({
       return (
         <AccountSettingsScreen
           onBack={goHome}
-          onSignOut={() => void signOut()}
+          onSignOut={() => void handleSignOut()}
           organizationName={organizationName}
         />
       )
@@ -114,4 +119,3 @@ export default function SettingsPage({
       )
   }
 }
-

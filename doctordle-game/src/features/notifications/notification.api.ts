@@ -1,6 +1,7 @@
 import type { RequestJson } from '../../lib/api'
 import type {
   NotificationPreferencesResponse,
+  NotificationPreferenceUpdate,
   NotificationsResponse,
   UnreadCountResponse,
 } from './notification.types'
@@ -43,10 +44,34 @@ export function getNotificationPreferencesApi(request: RequestJson) {
 
 export function updateNotificationPreferencesApi(
   request: RequestJson,
-  preferences: NotificationPreferencesResponse['preferences'],
+  preferences: NotificationPreferenceUpdate[],
 ) {
   return request<NotificationPreferencesResponse>('/notifications/preferences', {
     method: 'PATCH',
     body: JSON.stringify({ preferences }),
   })
+}
+
+export function registerPushDeviceTokenApi(
+  request: RequestJson,
+  payload: {
+    token: string
+    platform: 'android' | 'ios' | 'web'
+    deviceId?: string
+    appVersion?: string
+  },
+) {
+  return request<{ token: unknown }>('/notifications/push-tokens', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deletePushDeviceTokenApi(request: RequestJson, token: string) {
+  return request<{ disabled: boolean }>(
+    `/notifications/push-tokens/${encodeURIComponent(token)}`,
+    {
+      method: 'DELETE',
+    },
+  )
 }

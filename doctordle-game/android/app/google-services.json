@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "965383781496",
+    "project_id": "wardle-9895a",
+    "storage_bucket": "wardle-9895a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:965383781496:android:d3611a37ce97bd739bc18d",
+        "android_client_info": {
+          "package_name": "app.wardle.medcase"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYOzzm26LtXbSMesKwO80ChvC-pAeP_V4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

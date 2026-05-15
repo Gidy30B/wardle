@@ -40,6 +40,13 @@ export type NotificationPreference = {
   emailEnabled: boolean
 }
 
+export type NotificationPreferenceUpdate = {
+  category: NotificationCategory
+  inAppEnabled?: boolean
+  pushEnabled?: boolean
+  emailEnabled?: boolean
+}
+
 export type NotificationPreferencesResponse = {
   preferences: NotificationPreference[]
 }
