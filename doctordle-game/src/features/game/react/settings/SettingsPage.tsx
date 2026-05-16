@@ -2,12 +2,12 @@ import { useAuth, useUser } from '@clerk/clerk-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useApi } from '../../../../lib/api'
-import { cleanupRegisteredPushToken } from '../../../notifications/pushRegistration'
 import {
   getBackendProfileApi,
   getUserSettingsApi,
   updateUserSettingsApi,
 } from '../../../profile/profile.api'
+import { cleanupRegisteredPushToken } from '../../../notifications/pushRegistration'
 import type { UserSettings } from '../../../profile/profile.types'
 import { DEFAULT_USER_SETTINGS } from './settings.constants'
 import type { SettingsPageProps, SettingsScreenId } from './settings.types'
