@@ -26,6 +26,7 @@
     "@capacitor/status-bar": "^6.0.0",
     "@clerk/clerk-react": "^5.61.4",
     "@tanstack/react-query": "^5.96.2",
+    "firebase": "^12.13.0",
     "framer-motion": "^12.38.0",
     "html-to-image": "^1.11.13",
     "lucide-react": "^1.7.0",

@@ -180,21 +180,29 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
     return Boolean(gameplay?.pushEnabled || streak?.pushEnabled)
   }, [notificationPreferencesQuery.data?.preferences])
   const pushSupported = pushCapability?.supported === true
+  const pushPermissionDenied =
+    pushSupported && pushCapability.permission === 'denied'
   const pushEnabled =
     pushSupported && hasLocalPushToken && wardlePushPreferenceEnabled
   const pushDisabled =
-    pushCapability === null || pushCapability.supported === false
+    pushCapability === null ||
+    pushCapability.supported === false ||
+    pushPermissionDenied
   const pushSublabel =
     pushStatusMessage ??
     (pushCapability === null
       ? 'Checking mobile support...'
-      : pushCapability.supported === false
-        ? pushCapability.reason === 'web'
-          ? 'Available in the mobile app'
-          : 'Not supported on this device'
+        : pushCapability.supported === false
+        ? 'Not supported on this device'
+        : pushPermissionDenied
+          ? pushCapability.platform === 'web'
+            ? 'Notifications are blocked in this browser'
+            : 'Notifications are blocked on this device'
         : pushEnabled
           ? 'Enabled on this device'
-          : 'Enable mobile alerts for daily cases and streaks')
+          : pushCapability.platform === 'web'
+            ? 'Enable browser alerts for daily cases and streaks'
+            : 'Enable mobile alerts for daily cases and streaks')
 
   const toggle = (key: keyof UpdateUserNotificationSettingsPayload) => {
     notificationSettingsMutation.mutate({ [key]: !notifications[key] })
@@ -213,7 +221,11 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
 
       await ensurePushDeviceRegistered(request)
       setHasLocalPushToken(true)
-      setPushCapability({ supported: true, permission: 'granted' })
+      setPushCapability((current) =>
+        current?.supported
+          ? { ...current, permission: 'granted' }
+          : { supported: true, permission: 'granted', platform: 'web' },
+      )
       await pushPreferencesMutation.mutateAsync(PUSH_CATEGORY_UPDATES)
     } catch (error) {
       setPushStatusMessage(

@@ -45,6 +45,20 @@ describe('PushDeviceTokensController', () => {
     expect(service.registerForUser).toHaveBeenCalledWith('user-1', body);
   });
 
+  it('registers web FCM tokens for the authenticated user', async () => {
+    const { controller, service } = createController();
+    const body = {
+      token: 'web-fcm-token',
+      platform: 'web' as const,
+      deviceId: 'chrome',
+      appVersion: 'web',
+    };
+
+    await controller.register(req, body);
+
+    expect(service.registerForUser).toHaveBeenCalledWith('user-1', body);
+  });
+
   it('disables token for the authenticated user', async () => {
     const { controller, service } = createController();
 
@@ -53,6 +67,17 @@ describe('PushDeviceTokensController', () => {
     expect(service.disableForUser).toHaveBeenCalledWith(
       'user-1',
       'ExponentPushToken[test]',
+    );
+  });
+
+  it('disables web token for the authenticated user', async () => {
+    const { controller, service } = createController();
+
+    await controller.disable(req, 'web-fcm-token');
+
+    expect(service.disableForUser).toHaveBeenCalledWith(
+      'user-1',
+      'web-fcm-token',
     );
   });
 

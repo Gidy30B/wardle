@@ -26,17 +26,16 @@ describe('PushNotificationsService', () => {
 
   function createService(input: {
     pushEnabled?: boolean;
-    tokens?: string[];
+    tokens?: Array<string | { token: string; platform: string }>;
     providerError?: Error;
     invalidTokens?: string[];
   } = {}) {
+    const tokenRows = (input.tokens ?? ['token-1']).map((entry) =>
+      typeof entry === 'string' ? { token: entry, platform: 'android' } : entry,
+    );
     const prisma = {
       pushDeviceToken: {
-        findMany: jest.fn().mockResolvedValue(
-          (input.tokens ?? ['token-1']).map((token) => ({
-            token,
-          })),
-        ),
+        findMany: jest.fn().mockResolvedValue(tokenRows),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
@@ -111,6 +110,7 @@ describe('PushNotificationsService', () => {
       },
       select: {
         token: true,
+        platform: true,
       },
     });
     expect(provider.sendMulticast).toHaveBeenCalledWith({
@@ -124,6 +124,33 @@ describe('PushNotificationsService', () => {
         metadata: JSON.stringify(notification.data),
       },
     });
+  });
+
+  it('sends all active FCM tokens regardless of platform', async () => {
+    const { service, prisma, provider } = createService({
+      tokens: [
+        { token: 'android-token', platform: 'android' },
+        { token: 'web-token', platform: 'web' },
+      ],
+    });
+
+    await service.sendForNotification(notification);
+
+    expect(prisma.pushDeviceToken.findMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        disabledAt: null,
+      },
+      select: {
+        token: true,
+        platform: true,
+      },
+    });
+    expect(provider.sendMulticast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tokens: ['android-token', 'web-token'],
+      }),
+    );
   });
 
   it('soft-disables invalid tokens reported by FCM', async () => {

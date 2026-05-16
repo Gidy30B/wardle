@@ -100,6 +100,40 @@ describe('PushDeviceTokensService', () => {
     );
   });
 
+  it('registers web FCM tokens using the existing token table', async () => {
+    const { service, prisma } = createService();
+
+    await service.registerForUser('user-1', {
+      token: 'web-fcm-token',
+      platform: 'web',
+      deviceId: 'chrome',
+      appVersion: 'web',
+    });
+
+    expect(prisma.pushDeviceToken.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          token: 'web-fcm-token',
+        },
+        create: expect.objectContaining({
+          userId: 'user-1',
+          token: 'web-fcm-token',
+          platform: 'web',
+          deviceId: 'chrome',
+          appVersion: 'web',
+          disabledAt: null,
+        }),
+        update: expect.objectContaining({
+          userId: 'user-1',
+          platform: 'web',
+          deviceId: 'chrome',
+          appVersion: 'web',
+          disabledAt: null,
+        }),
+      }),
+    );
+  });
+
   it('token cannot be deleted by another user', async () => {
     const { service, prisma } = createService();
     prisma.pushDeviceToken.updateMany.mockResolvedValueOnce({ count: 0 });
@@ -142,5 +176,24 @@ describe('PushDeviceTokensService', () => {
       },
     });
     expect(prisma.pushDeviceToken.delete).toBeUndefined();
+  });
+
+  it('delete disables web token without hard-delete', async () => {
+    const { service, prisma } = createService();
+
+    await expect(service.disableForUser('user-1', 'web-fcm-token')).resolves.toEqual({
+      disabled: true,
+    });
+
+    expect(prisma.pushDeviceToken.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        token: 'web-fcm-token',
+        disabledAt: null,
+      },
+      data: {
+        disabledAt: now,
+      },
+    });
   });
 });

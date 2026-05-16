@@ -64,6 +64,7 @@ export class PushNotificationsService {
       },
       select: {
         token: true,
+        platform: true,
       },
     });
 
@@ -74,6 +75,15 @@ export class PushNotificationsService {
         reason: 'no_active_tokens' as const,
       };
     }
+
+    this.logger.log(
+      JSON.stringify({
+        event: 'push.notification.tokens_loaded',
+        notificationId: notification.id,
+        userId: notification.userId,
+        platforms: this.countPlatforms(deviceTokens),
+      }),
+    );
 
     try {
       const result = await this.provider.sendMulticast({
@@ -123,5 +133,12 @@ export class PushNotificationsService {
         reason: 'provider_error' as const,
       };
     }
+  }
+
+  private countPlatforms(tokens: Array<{ platform: string }>) {
+    return tokens.reduce<Record<string, number>>((counts, token) => {
+      counts[token.platform] = (counts[token.platform] ?? 0) + 1;
+      return counts;
+    }, {});
   }
 }

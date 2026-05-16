@@ -9,12 +9,19 @@ import {
   deletePushDeviceTokenApi,
   registerPushDeviceTokenApi,
 } from './notification.api'
+import {
+  getWebPushCapability,
+  registerWebPushToken,
+} from './webPushRegistration'
 
-const PUSH_TOKEN_STORAGE_KEY = 'wardle.pushToken'
+const LEGACY_PUSH_TOKEN_STORAGE_KEY = 'wardle.pushToken'
+const PUSH_TOKEN_STORAGE_KEY_PREFIX = 'wardle.pushToken'
+
+type PushPlatform = 'android' | 'ios' | 'web'
 
 export type PushCapability =
-  | { supported: false; reason: 'web' | 'unsupported' }
-  | { supported: true; permission: string }
+  | { supported: false; reason: 'unsupported' }
+  | { supported: true; permission: string; platform: PushPlatform }
 
 export function getNativePushPlatform(): 'android' | 'ios' | null {
   const platform = Capacitor.getPlatform()
@@ -23,18 +30,16 @@ export function getNativePushPlatform(): 'android' | 'ios' | null {
 
 export async function getPushCapability(): Promise<PushCapability> {
   const platform = getNativePushPlatform()
-  if (!platform) {
+  if (platform) {
+    const permissions = await PushNotifications.checkPermissions()
     return {
-      supported: false,
-      reason: Capacitor.getPlatform() === 'web' ? 'web' : 'unsupported',
+      supported: true,
+      permission: permissions.receive,
+      platform,
     }
   }
 
-  const permissions = await PushNotifications.checkPermissions()
-  return {
-    supported: true,
-    permission: permissions.receive,
-  }
+  return getWebPushCapability()
 }
 
 export async function ensurePushDeviceRegistered(request: RequestJson) {
@@ -45,8 +50,7 @@ export async function ensurePushDeviceRegistered(request: RequestJson) {
   })
 
   if (!platform) {
-    console.warn('[push] native push unavailable on this platform')
-    throw new Error('Push notifications are available in the mobile app.')
+    return ensureWebPushRegistered(request)
   }
 
   console.log('[push] checking permissions')
@@ -68,7 +72,7 @@ export async function ensurePushDeviceRegistered(request: RequestJson) {
   const token = await registerNativePushToken()
   console.log('[push] native token received', describePushToken(token.value))
 
-  const existingToken = getStoredPushToken()
+  const existingToken = getStoredPushToken(platform)
   console.log('[push] stored token check', {
     hasStoredToken: Boolean(existingToken),
     sameToken: existingToken === token.value,
@@ -80,7 +84,11 @@ export async function ensurePushDeviceRegistered(request: RequestJson) {
   }
 
   const appInfo = await App.getInfo().catch(() => null)
-  const payload = {
+  const payload: {
+    token: string
+    platform: PushPlatform
+    appVersion?: string
+  } = {
     token: token.value,
     platform,
     ...(appInfo?.version ? { appVersion: appInfo.version } : {}),
@@ -99,33 +107,75 @@ export async function ensurePushDeviceRegistered(request: RequestJson) {
     throw error
   }
 
-  storePushToken(token.value)
+  storePushToken(platform, token.value)
   console.log('[push] token stored locally')
   return token.value
 }
 
 export async function cleanupRegisteredPushToken(request: RequestJson) {
-  const token = getStoredPushToken()
-  if (!token) {
+  const entries = getStoredPushTokenEntries()
+  if (entries.length === 0) {
     console.log('[push] cleanup skipped; no local token')
     return
   }
 
-  try {
-    console.log('[push] deleting token from backend', describePushToken(token))
-    await deletePushDeviceTokenApi(request, token)
-    console.log('[push] backend token delete succeeded')
-  } catch (error) {
-    console.error('[push] backend token delete failed', error)
-    throw error
-  } finally {
-    clearStoredPushToken()
-    console.log('[push] local token cleared')
+  for (const { key, token, platform } of entries) {
+    try {
+      console.log('[push] deleting token from backend', {
+        platform,
+        token: describePushToken(token),
+      })
+      await deletePushDeviceTokenApi(request, token)
+      console.log('[push] backend token delete succeeded', { platform })
+    } catch (error) {
+      console.error('[push] backend token delete failed', error)
+      throw error
+    } finally {
+      clearStoredPushToken(key)
+      console.log('[push] local token cleared', { platform })
+    }
   }
 }
 
 export function hasRegisteredPushToken() {
-  return Boolean(getStoredPushToken())
+  const platform = getCurrentPushPlatform()
+  return Boolean(platform ? getStoredPushToken(platform) : null)
+}
+
+async function ensureWebPushRegistered(request: RequestJson) {
+  console.log('[push] registering web push token')
+  const token = await registerWebPushToken()
+  console.log('[push] web token received', describePushToken(token))
+
+  const existingToken = getStoredPushToken('web')
+  console.log('[push] stored web token check', {
+    hasStoredToken: Boolean(existingToken),
+    sameToken: existingToken === token,
+  })
+
+  if (existingToken === token) {
+    console.log('[push] web token already registered locally; skipping POST')
+    return token
+  }
+
+  try {
+    console.log('[push] posting web token to backend', {
+      token: describePushToken(token),
+      platform: 'web',
+    })
+    await registerPushDeviceTokenApi(request, {
+      token,
+      platform: 'web',
+    })
+    console.log('[push] backend web token registration succeeded')
+  } catch (error) {
+    console.error('[push] backend web token registration failed', error)
+    throw error
+  }
+
+  storePushToken('web', token)
+  console.log('[push] web token stored locally')
+  return token
 }
 
 function registerNativePushToken(): Promise<Token> {
@@ -186,16 +236,53 @@ function registerNativePushToken(): Promise<Token> {
   })
 }
 
-function getStoredPushToken() {
-  return localStorage.getItem(PUSH_TOKEN_STORAGE_KEY)
+function getCurrentPushPlatform(): PushPlatform | null {
+  return getNativePushPlatform() ?? 'web'
 }
 
-function storePushToken(token: string) {
-  localStorage.setItem(PUSH_TOKEN_STORAGE_KEY, token)
+function getStoredPushToken(platform: PushPlatform) {
+  return (
+    localStorage.getItem(getPushTokenStorageKey(platform)) ??
+    (platform === getNativePushPlatform()
+      ? localStorage.getItem(LEGACY_PUSH_TOKEN_STORAGE_KEY)
+      : null)
+  )
 }
 
-function clearStoredPushToken() {
-  localStorage.removeItem(PUSH_TOKEN_STORAGE_KEY)
+function storePushToken(platform: PushPlatform, token: string) {
+  localStorage.setItem(getPushTokenStorageKey(platform), token)
+  if (platform === getNativePushPlatform()) {
+    localStorage.removeItem(LEGACY_PUSH_TOKEN_STORAGE_KEY)
+  }
+}
+
+function clearStoredPushToken(key: string) {
+  localStorage.removeItem(key)
+}
+
+function getPushTokenStorageKey(platform: PushPlatform) {
+  return `${PUSH_TOKEN_STORAGE_KEY_PREFIX}.${platform}`
+}
+
+function getStoredPushTokenEntries() {
+  const platforms: PushPlatform[] = ['android', 'ios', 'web']
+  const entries = platforms.flatMap((platform) => {
+    const key = getPushTokenStorageKey(platform)
+    const token = localStorage.getItem(key)
+    return token ? [{ key, platform, token }] : []
+  })
+  const legacyToken = localStorage.getItem(LEGACY_PUSH_TOKEN_STORAGE_KEY)
+
+  return legacyToken
+    ? [
+        ...entries,
+        {
+          key: LEGACY_PUSH_TOKEN_STORAGE_KEY,
+          platform: 'android' as const,
+          token: legacyToken,
+        },
+      ]
+    : entries
 }
 
 function describePushToken(token: string) {
