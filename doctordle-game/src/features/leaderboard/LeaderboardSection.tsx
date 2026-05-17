@@ -52,8 +52,11 @@ function getDisplayName(entry: LeaderboardEntry, currentUserId: string | null) {
   return `Player ${entry.userId.slice(0, 4)}`
 }
 
-function getInitials(name: string) {
+function getInitials(name: string | null | undefined) {
+  if (!name || typeof name !== 'string') return '?'
+
   const initials = name
+    .trim()
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)

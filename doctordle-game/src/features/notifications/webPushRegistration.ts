@@ -3,8 +3,16 @@ import { getMessaging, getToken, isSupported } from 'firebase/messaging'
 
 const FIREBASE_MESSAGING_SW_PATH = '/firebase-messaging-sw.js'
 
+export type WebPushUnsupportedReason =
+  | 'config_missing'
+  | 'browser_unsupported'
+  | 'service_worker_unavailable'
+  | 'firebase_unsupported'
+  | 'permission_denied'
+  | 'unsupported'
+
 type WebPushCapability =
-  | { supported: false; reason: 'unsupported' }
+  | { supported: false; reason: WebPushUnsupportedReason }
   | { supported: true; permission: NotificationPermission; platform: 'web' }
 
 type FirebaseWebConfig = {
@@ -13,24 +21,75 @@ type FirebaseWebConfig = {
   projectId: string
   messagingSenderId: string
   appId: string
-  vapidKey: string
+  vapidKey?: string
 }
 
 export async function getWebPushCapability(): Promise<WebPushCapability> {
+  devLog('support check started')
+  devLog('has Notification', hasNotificationApi())
+  devLog('has serviceWorker', hasServiceWorkerApi())
+  devLog('has PushManager', hasPushManagerApi())
+
   if (!canUseBrowserPush()) {
-    return { supported: false, reason: 'unsupported' }
+    const capability = {
+      supported: false,
+      reason: 'browser_unsupported',
+    } as const
+    devLog('final capability', capability)
+    return capability
+  }
+
+  const firebaseConfig = getFirebaseWebConfig()
+  devLog('firebase config present', Boolean(firebaseConfig))
+  if (!firebaseConfig) {
+    const capability = {
+      supported: false,
+      reason: 'config_missing',
+    } as const
+    devLog('final capability', capability)
+    return capability
+  }
+
+  const serviceWorkerReachable = await isServiceWorkerReachable()
+  devLog('service worker reachable', serviceWorkerReachable)
+  if (!serviceWorkerReachable) {
+    const capability = {
+      supported: false,
+      reason: 'service_worker_unavailable',
+    } as const
+    devLog('final capability', capability)
+    return capability
   }
 
   const supported = await isSupported().catch(() => false)
-  if (!supported || !getFirebaseWebConfig()) {
-    return { supported: false, reason: 'unsupported' }
+  devLog('firebase messaging isSupported result', supported)
+
+  if (!supported) {
+    const capability = {
+      supported: false,
+      reason: 'firebase_unsupported',
+    } as const
+    devLog('final capability', capability)
+    return capability
   }
 
-  return {
+  if (Notification.permission === 'denied') {
+    const capability = {
+      supported: false,
+      reason: 'permission_denied',
+    } as const
+    devLog('final capability', capability)
+    return capability
+  }
+
+  const capability = {
     supported: true,
     permission: Notification.permission,
     platform: 'web',
-  }
+  } as const
+  devLog('final capability', capability)
+
+  return capability
 }
 
 export async function registerWebPushToken(): Promise<string> {
@@ -63,7 +122,7 @@ export async function registerWebPushToken(): Promise<string> {
   const app = getFirebaseApp(firebaseConfig)
   const messaging = getMessaging(app)
   const token = await getToken(messaging, {
-    vapidKey: firebaseConfig.vapidKey,
+    ...(firebaseConfig.vapidKey ? { vapidKey: firebaseConfig.vapidKey } : {}),
     serviceWorkerRegistration,
   })
 
@@ -78,10 +137,54 @@ function canUseBrowserPush() {
   return (
     typeof window !== 'undefined' &&
     window.isSecureContext &&
-    'Notification' in window &&
-    'serviceWorker' in navigator &&
-    'PushManager' in window
+    hasNotificationApi() &&
+    hasServiceWorkerApi() &&
+    hasPushManagerApi()
   )
+}
+
+function hasNotificationApi() {
+  return typeof window !== 'undefined' && 'Notification' in window
+}
+
+function hasServiceWorkerApi() {
+  return typeof navigator !== 'undefined' && 'serviceWorker' in navigator
+}
+
+function hasPushManagerApi() {
+  return typeof window !== 'undefined' && 'PushManager' in window
+}
+
+async function isServiceWorkerReachable() {
+  try {
+    const headResponse = await fetch(FIREBASE_MESSAGING_SW_PATH, {
+      cache: 'no-store',
+      method: 'HEAD',
+    })
+    if (headResponse.ok) {
+      return true
+    }
+
+    const getResponse = await fetch(FIREBASE_MESSAGING_SW_PATH, {
+      cache: 'no-store',
+    })
+    return getResponse.ok
+  } catch (_) {
+    return false
+  }
+}
+
+function devLog(message: string, value?: unknown) {
+  if (!import.meta.env.DEV) {
+    return
+  }
+
+  if (arguments.length === 1) {
+    console.log(`[web-push] ${message}`)
+    return
+  }
+
+  console.log(`[web-push] ${message}`, value)
 }
 
 function getFirebaseApp(config: FirebaseWebConfig) {
@@ -108,5 +211,12 @@ function getFirebaseWebConfig(): FirebaseWebConfig | null {
     vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY?.trim() ?? '',
   }
 
-  return Object.values(config).every(Boolean) ? config : null
+  const { vapidKey, ...requiredConfig } = config
+
+  return Object.values(requiredConfig).every(Boolean)
+    ? {
+        ...requiredConfig,
+        ...(vapidKey ? { vapidKey } : {}),
+      }
+    : null
 }

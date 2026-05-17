@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, PublishTrack, Case as CaseModel } from '@prisma/client';
+import { Prisma, PublishTrack } from '@prisma/client';
 import { AIContentService } from '../ai/ai-content.service';
 import { RedisCacheService } from '../../core/cache/redis-cache.service';
 import { getEnv } from '../../core/config/env.validation';
@@ -22,6 +22,7 @@ import {
   formatDailyCaseTrackDisplayLabel,
 } from './daily-case-labels.js';
 import type {
+  GameplayDiagnosisReadModel,
   GameplayCaseExplanation,
   GameplayClinicalClue,
   SubmitGameGuessResponseDto,
@@ -59,7 +60,25 @@ type GameplayCaseView = {
   trackDisplayLabel?: string;
   difficulty: string;
   date: Date;
+  diagnosis: GameplayDiagnosisReadModel;
   clues: GameplayClinicalClue[];
+};
+
+type CaseDiagnosisSource = {
+  title?: string | null;
+  diagnosis?: {
+    id?: string | null;
+    name?: string | null;
+    system?: string | null;
+  } | null;
+  diagnosisRegistry?: {
+    id: string;
+    displayLabel: string;
+    canonicalName: string;
+    specialty?: string | null;
+    category?: string | null;
+    bodySystem?: string | null;
+  } | null;
 };
 
 type StartDailyGameResponse =
@@ -105,11 +124,14 @@ type CompletedLearningLibraryResponse = {
       displayLabel: string;
       trackDisplayLabel: string;
       title: string;
-      diagnosis: string;
       date: string;
       difficulty: string;
       clues: GameplayClinicalClue[];
       explanation: GameplayCaseExplanation | null;
+      specialty: string;
+      category: string | null;
+      bodySystem: string | null;
+      diagnosis: GameplayDiagnosisReadModel;
     };
   }>;
 };
@@ -186,7 +208,19 @@ export class SessionService {
           include: {
             diagnosis: {
               select: {
+                id: true,
                 name: true,
+                system: true,
+              },
+            },
+            diagnosisRegistry: {
+              select: {
+                id: true,
+                displayLabel: true,
+                canonicalName: true,
+                specialty: true,
+                category: true,
+                bodySystem: true,
               },
             },
           },
@@ -248,7 +282,10 @@ export class SessionService {
             displayLabel: responseCase.displayLabel,
             trackDisplayLabel: responseCase.trackDisplayLabel,
             title: session.case.title,
-            diagnosis: session.case.diagnosis.name,
+            diagnosis: responseCase.diagnosis,
+            specialty: responseCase.diagnosis.specialty,
+            category: responseCase.diagnosis.category,
+            bodySystem: responseCase.diagnosis.bodySystem,
             date: session.case.date.toISOString().slice(0, 10),
             difficulty: session.case.difficulty,
             clues: responseCase.clues,
@@ -405,11 +442,6 @@ export class SessionService {
       dailyCaseCaseId: result.dailyCase.caseId,
     });
 
-    const selectedCase: Pick<CaseModel, 'id' | 'difficulty' | 'date'> = {
-      id: result.dailyCase.case.id,
-      date: result.dailyCase.case.date,
-      difficulty: result.dailyCase.case.difficulty,
-    };
     const { dateKey } = this.getUtcDayRange(result.dailyCase.date);
 
     await this.cacheService.set(
@@ -528,7 +560,23 @@ export class SessionService {
           },
           case: {
             include: {
-              diagnosis: true,
+              diagnosis: {
+                select: {
+                  id: true,
+                  name: true,
+                  system: true,
+                },
+              },
+              diagnosisRegistry: {
+                select: {
+                  id: true,
+                  displayLabel: true,
+                  canonicalName: true,
+                  specialty: true,
+                  category: true,
+                  bodySystem: true,
+                },
+              },
             },
           },
           attempts: {
@@ -874,7 +922,23 @@ export class SessionService {
       include: {
         case: {
           include: {
-            diagnosis: true,
+            diagnosis: {
+              select: {
+                id: true,
+                name: true,
+                system: true,
+              },
+            },
+            diagnosisRegistry: {
+              select: {
+                id: true,
+                displayLabel: true,
+                canonicalName: true,
+                specialty: true,
+                category: true,
+                bodySystem: true,
+              },
+            },
           },
         },
         attempts: {
@@ -902,10 +966,7 @@ export class SessionService {
 
     const casePayload =
       session.status === 'completed'
-        ? {
-            ...responseCase,
-            diagnosis: session.case.diagnosis.name,
-          }
+        ? responseCase
         : responseCase;
     const explanation =
       session.status === 'completed'
@@ -936,7 +997,23 @@ export class SessionService {
       include: {
         case: {
           include: {
-            diagnosis: true,
+            diagnosis: {
+              select: {
+                id: true,
+                name: true,
+                system: true,
+              },
+            },
+            diagnosisRegistry: {
+              select: {
+                id: true,
+                displayLabel: true,
+                canonicalName: true,
+                specialty: true,
+                category: true,
+                bodySystem: true,
+              },
+            },
           },
         },
         attempts: {
@@ -967,10 +1044,7 @@ export class SessionService {
 
     return {
       ...responseCase,
-      diagnosis:
-        session.status === 'completed'
-          ? session.case.diagnosis.name
-          : undefined,
+      diagnosis: session.status === 'completed' ? responseCase.diagnosis : null,
     };
   }
 
@@ -1361,11 +1435,49 @@ export class SessionService {
     publicNumber?: number | null;
     difficulty: string;
     date: Date;
+    title?: string | null;
+    diagnosis?: CaseDiagnosisSource['diagnosis'];
+    diagnosisRegistry?: CaseDiagnosisSource['diagnosisRegistry'];
   }): Promise<GameplayCaseView> {
     return {
       ...selectedCase,
       publicNumber: selectedCase.publicNumber ?? null,
+      diagnosis: this.buildDiagnosisReadModel(selectedCase),
       clues: await this.getCaseClues(selectedCase.id),
+    };
+  }
+
+  private buildDiagnosisReadModel(
+    source: CaseDiagnosisSource,
+  ): GameplayDiagnosisReadModel {
+    const registry = source.diagnosisRegistry ?? null;
+    const legacy = source.diagnosis ?? null;
+    const legacyName = this.normalizeOptionalText(legacy?.name);
+    const title = this.normalizeOptionalText(source.title);
+    const displayLabel =
+      this.normalizeOptionalText(registry?.displayLabel) ??
+      this.normalizeOptionalText(registry?.canonicalName) ??
+      legacyName ??
+      title ??
+      'Unknown diagnosis';
+    const canonicalName =
+      this.normalizeOptionalText(registry?.canonicalName) ??
+      legacyName ??
+      null;
+    const specialty =
+      this.normalizeOptionalText(registry?.specialty) ??
+      this.normalizeOptionalText(registry?.category) ??
+      this.normalizeOptionalText(registry?.bodySystem) ??
+      this.normalizeOptionalText(legacy?.system) ??
+      'General Medicine';
+
+    return {
+      id: registry?.id ?? legacy?.id ?? null,
+      displayLabel,
+      canonicalName,
+      specialty,
+      category: this.normalizeOptionalText(registry?.category),
+      bodySystem: this.normalizeOptionalText(registry?.bodySystem),
     };
   }
 
@@ -1527,6 +1639,7 @@ export class SessionService {
           : `Daily Case ${selectedCase.date.toISOString().slice(0, 10)} #1`),
       difficulty: selectedCase.difficulty,
       date: selectedCase.date.toISOString().slice(0, 10),
+      diagnosis: selectedCase.diagnosis,
       clues,
     };
   }

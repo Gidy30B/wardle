@@ -14,11 +14,7 @@ export class CreateCaseDto {
   symptoms!: string[];
 
   @IsString()
-  diagnosisId!: string;
-
-  @IsOptional()
-  @IsString()
-  diagnosisRegistryId?: string;
+  diagnosisRegistryId!: string;
 
   @IsOptional()
   @IsString()

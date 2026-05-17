@@ -115,7 +115,7 @@ describe('DiagnosisRegistryEditorialService', () => {
     );
   });
 
-  it('creates a diagnosis deterministically and links it through the hardened ensure logic', async () => {
+  it('creates a registry diagnosis without creating legacy Diagnosis rows', async () => {
     const fixture = createFixture();
     (importDiagnosisRegistryRecords as jest.Mock).mockResolvedValue({
       totalRecords: 1,
@@ -167,15 +167,6 @@ describe('DiagnosisRegistryEditorialService', () => {
           },
         ],
       });
-    fixture.prisma.diagnosis.findFirst.mockResolvedValue(null);
-    fixture.prisma.diagnosis.create.mockResolvedValue({
-      id: 'diagnosis-1',
-    });
-    fixture.diagnosisRegistryLinkService.resolveForWrite.mockResolvedValue({
-      diagnosisId: 'diagnosis-1',
-      diagnosisRegistryId: 'registry-1',
-    });
-
     const result = await fixture.service.createDiagnosis({
       canonicalName: 'Myocardial Infarction',
       aliases: ['MI', ' Heart attack '],
@@ -196,21 +187,10 @@ describe('DiagnosisRegistryEditorialService', () => {
         }),
       ],
     );
-    expect(fixture.prisma.diagnosis.create).toHaveBeenCalledWith({
-      data: {
-        name: 'Myocardial Infarction',
-      },
-      select: {
-        id: true,
-      },
-    });
-    expect(fixture.diagnosisRegistryLinkService.resolveForWrite).toHaveBeenCalledWith(
-      {
-        diagnosisId: 'diagnosis-1',
-        diagnosisRegistryId: 'registry-1',
-      },
-      fixture.prisma,
-    );
+    expect(fixture.prisma.diagnosis.create).not.toHaveBeenCalled();
+    expect(
+      fixture.diagnosisRegistryLinkService.resolveForWrite,
+    ).not.toHaveBeenCalled();
     expect(result).toEqual({
       diagnosisId: 'diagnosis-1',
       diagnosisRegistryId: 'registry-1',

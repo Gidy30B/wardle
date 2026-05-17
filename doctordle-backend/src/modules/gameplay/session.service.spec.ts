@@ -127,8 +127,20 @@ function buildActiveSession(caseDiagnosisRegistryId: string | null) {
       id: 'case-1',
       diagnosisRegistryId: caseDiagnosisRegistryId,
       diagnosis: {
+        id: 'diagnosis-1',
         name: 'Asthma',
+        system: 'Pulmonology',
       },
+      diagnosisRegistry: caseDiagnosisRegistryId
+        ? {
+            id: caseDiagnosisRegistryId,
+            displayLabel: 'Asthma',
+            canonicalName: 'Asthma',
+            specialty: 'Pulmonology',
+            category: 'Obstructive Lung Disease',
+            bodySystem: 'Respiratory',
+          }
+        : null,
       difficulty: 'medium',
       date: new Date('2026-04-22T00:00:00.000Z'),
     },
@@ -189,7 +201,17 @@ describe('SessionService gameplay registry correctness', () => {
           },
           differentials: ['COPD'],
           diagnosis: {
+            id: 'diagnosis-1',
             name: 'Asthma',
+            system: 'Pulmonology',
+          },
+          diagnosisRegistry: {
+            id: 'registry-1',
+            displayLabel: 'Asthma',
+            canonicalName: 'Asthma',
+            specialty: 'Pulmonology',
+            category: 'Obstructive Lung Disease',
+            bodySystem: 'Respiratory',
           },
         },
         attempts: [{ result: 'wrong' }, { result: 'correct' }],
@@ -223,7 +245,17 @@ describe('SessionService gameplay registry correctness', () => {
         case: expect.objectContaining({
           id: 'case-1',
           title: 'Asthma',
-          diagnosis: 'Asthma',
+          diagnosis: {
+            id: 'registry-1',
+            displayLabel: 'Asthma',
+            canonicalName: 'Asthma',
+            specialty: 'Pulmonology',
+            category: 'Obstructive Lung Disease',
+            bodySystem: 'Respiratory',
+          },
+          specialty: 'Pulmonology',
+          category: 'Obstructive Lung Disease',
+          bodySystem: 'Respiratory',
           difficulty: 'medium',
           clues: [
             {

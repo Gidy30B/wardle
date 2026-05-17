@@ -82,6 +82,39 @@ enum DiagnosisRegistryStatus {
   DRAFT
 }
 
+enum DiagnosisDifficultyBand {
+  BASIC
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum DiagnosisRarityBand {
+  COMMON
+  UNCOMMON
+  RARE
+}
+
+enum DiagnosisClinicalSetting {
+  OUTPATIENT
+  EMERGENCY
+  INPATIENT
+  ICU
+  COMMUNITY
+}
+
+enum DiagnosisAgeGroup {
+  PEDIATRIC
+  ADULT
+  GERIATRIC
+  ANY
+}
+
+enum DiagnosisUrgencyLevel {
+  ROUTINE
+  URGENT
+  EMERGENT
+}
+
 enum DiagnosisMappingStatus {
   MATCHED
   REVIEW_REQUIRED
@@ -110,12 +143,12 @@ model Diagnosis {
 }
 
 model DiagnosisEmbedding {
-  id          String                  @id @default(uuid())
+  id          String                      @id @default(uuid())
   diagnosisId String
   vector      Unsupported("vector(1536)")
   type        String
-  createdAt   DateTime                @default(now())
-  diagnosis   Diagnosis               @relation(fields: [diagnosisId], references: [id], onDelete: Cascade)
+  createdAt   DateTime                    @default(now())
+  diagnosis   Diagnosis                   @relation(fields: [diagnosisId], references: [id], onDelete: Cascade)
 
   @@index([diagnosisId])
   @@index([type])
@@ -131,51 +164,97 @@ model Synonym {
 }
 
 model DiagnosisRegistry {
-  id                    String                  @id @default(uuid())
-  legacyDiagnosisId     String?                 @unique
+  id                    String                    @id @default(uuid())
+  legacyDiagnosisId     String?                   @unique
   canonicalName         String
-  canonicalNormalized   String                  @unique
+  canonicalNormalized   String                    @unique
   displayLabel          String
-  status                DiagnosisRegistryStatus @default(ACTIVE)
-  active                Boolean                 @default(true)
-  isDescriptive         Boolean                 @default(false)
-  isCompositional       Boolean                 @default(false)
-  searchPriority        Int                     @default(0)
+  status                DiagnosisRegistryStatus   @default(ACTIVE)
+  active                Boolean                   @default(true)
+  isDescriptive         Boolean                   @default(false)
+  isCompositional       Boolean                   @default(false)
+  searchPriority        Int                       @default(0)
   icd10Code             String?
   icd11Code             String?
+  /// Educational or disease grouping.
+  /// Examples: Neurodegenerative, Vascular, Infectious, Autoimmune, Metabolic, Neoplastic.
   category              String?
+  /// Broad clinical discipline responsible for the diagnosis.
+  /// Examples: Cardiology, Neurology, Endocrinology, Infectious Disease.
   specialty             String?
+  /// More specific branch inside the specialty.
+  /// Examples: Neuromuscular, Movement Disorders, Heart Failure, Electrophysiology.
+  subspecialty          String?
+  /// Broad physiological/body system.
+  /// Examples: Cardiovascular, Nervous System, Respiratory, Gastrointestinal.
+  bodySystem            String?
+  /// More granular organ/anatomic region if useful.
+  /// Examples: Brain, Spinal Cord, Peripheral Nerve, Myocardium, Liver, Kidney.
+  organSystem           String?
+  /// Approximate educational difficulty for gameplay and curriculum sequencing.
+  /// Examples: BASIC, INTERMEDIATE, ADVANCED.
+  difficultyBand        DiagnosisDifficultyBand?
+  /// Approximate prevalence/rarity for balancing common and rare diseases.
+  /// Examples: COMMON, UNCOMMON, RARE.
+  rarityBand            DiagnosisRarityBand?
+  /// Typical clinical setting where the diagnosis is commonly encountered.
+  /// Examples: OUTPATIENT, EMERGENCY, INPATIENT, ICU, COMMUNITY.
+  clinicalSetting       DiagnosisClinicalSetting?
+  /// Typical age group where the diagnosis is most relevant.
+  /// Examples: PEDIATRIC, ADULT, GERIATRIC, ANY.
+  ageGroup              DiagnosisAgeGroup?
+  /// Typical urgency level for case framing.
+  /// Examples: ROUTINE, URGENT, EMERGENT.
+  urgencyLevel          DiagnosisUrgencyLevel?
+  /// Whether this diagnosis can appear as a playable answer.
+  /// Some registry rows may exist only for aliases, mappings, or future use.
+  isPlayable            Boolean                   @default(true)
+  /// Whether the generator is allowed to create new cases for this diagnosis.
+  /// Some diagnoses may be playable manually but not suitable for automated generation.
+  isGeneratable         Boolean                   @default(true)
+  /// Optional clue-type guidance for generation.
+  /// Example: ["history", "exam", "labs", "imaging"].
+  preferredClueTypes    Json?
+  /// Optional clue types to avoid or de-emphasize for this diagnosis.
+  /// Example: ["imaging"] for diagnoses where imaging is not central.
+  excludedClueTypes     Json?
   notes                 String?
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
-  legacyDiagnosis       Diagnosis?              @relation("LegacyDiagnosisRegistry", fields: [legacyDiagnosisId], references: [id], onDelete: SetNull)
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  legacyDiagnosis       Diagnosis?                @relation("LegacyDiagnosisRegistry", fields: [legacyDiagnosisId], references: [id], onDelete: SetNull)
   aliases               DiagnosisAlias[]
-  cases                 Case[]                  @relation("CaseDiagnosisRegistry")
-  caseRevisions         CaseRevision[]          @relation("CaseRevisionDiagnosisRegistry")
-  selectedAttempts      Attempt[]               @relation("AttemptSelectedDiagnosisRegistry")
-  strictMatchedAttempts Attempt[]               @relation("AttemptStrictMatchedDiagnosisRegistry")
+  cases                 Case[]                    @relation("CaseDiagnosisRegistry")
+  caseRevisions         CaseRevision[]            @relation("CaseRevisionDiagnosisRegistry")
+  selectedAttempts      Attempt[]                 @relation("AttemptSelectedDiagnosisRegistry")
+  strictMatchedAttempts Attempt[]                 @relation("AttemptStrictMatchedDiagnosisRegistry")
 
   @@index([status])
   @@index([active])
   @@index([displayLabel])
   @@index([searchPriority])
+  @@index([specialty])
+  @@index([bodySystem])
+  @@index([category])
+  @@index([difficultyBand])
+  @@index([rarityBand])
+  @@index([clinicalSetting])
 }
 
 model DiagnosisAlias {
-  id                  String             @id @default(uuid())
-  diagnosisRegistryId String
-  term                String
-  normalizedTerm      String
-  kind                DiagnosisAliasKind
-  acceptedForMatch    Boolean            @default(false)
-  rank                Int                @default(0)
-  source              String?
-  active              Boolean            @default(true)
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
-  diagnosis           DiagnosisRegistry  @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
-  selectedAttempts    Attempt[]          @relation("AttemptSelectedAlias")
-  strictMatchedAttempts Attempt[]        @relation("AttemptStrictMatchedAlias")
+  id                    String             @id @default(uuid())
+  diagnosisRegistryId   String
+  term                  String
+  normalizedTerm        String
+  kind                  DiagnosisAliasKind
+  acceptedForMatch      Boolean            @default(false)
+  rank                  Int                @default(0)
+  source                String?
+  active                Boolean            @default(true)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  diagnosis             DiagnosisRegistry  @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  selectedAttempts      Attempt[]          @relation("AttemptSelectedAlias")
+  strictMatchedAttempts Attempt[]          @relation("AttemptStrictMatchedAlias")
 
   @@unique([diagnosisRegistryId, normalizedTerm])
   @@index([normalizedTerm, active])
@@ -198,14 +277,14 @@ model Case {
   approvedAt                 DateTime?
   approvedByUserId           String?
   currentRevisionId          String?                @unique
-  diagnosisId                String
+  diagnosisId                String?
   diagnosisRegistryId        String?
   proposedDiagnosisText      String
   diagnosisMappingStatus     DiagnosisMappingStatus
   diagnosisMappingMethod     DiagnosisMappingMethod
   diagnosisMappingConfidence Float?
   diagnosisEditorialNote     String?
-  diagnosis                  Diagnosis              @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
+  diagnosis                  Diagnosis?             @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
   diagnosisRegistry          DiagnosisRegistry?     @relation("CaseDiagnosisRegistry", fields: [diagnosisRegistryId], references: [id], onDelete: SetNull)
   approvedBy                 User?                  @relation("CaseApprovedByUser", fields: [approvedByUserId], references: [id], onDelete: SetNull)
   currentRevision            CaseRevision?          @relation("CaseCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
@@ -238,7 +317,7 @@ model CaseRevision {
   clues                      Json?
   explanation                Json?
   differentials              String[]               @default([])
-  diagnosisId                String
+  diagnosisId                String?
   diagnosisRegistryId        String?
   proposedDiagnosisText      String
   diagnosisMappingStatus     DiagnosisMappingStatus
@@ -248,7 +327,7 @@ model CaseRevision {
   createdByUserId            String?
   createdAt                  DateTime               @default(now())
   case                       Case                   @relation("CaseRevisions", fields: [caseId], references: [id], onDelete: Cascade)
-  diagnosis                  Diagnosis              @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
+  diagnosis                  Diagnosis?             @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
   diagnosisRegistry          DiagnosisRegistry?     @relation("CaseRevisionDiagnosisRegistry", fields: [diagnosisRegistryId], references: [id], onDelete: SetNull)
   createdBy                  User?                  @relation("CaseRevisionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
   currentForCase             Case?                  @relation("CaseCurrentRevision")
@@ -332,7 +411,7 @@ model ExplanationContent {
 }
 
 model GameSession {
-  id          String    @id @default(uuid())
+  id                     String    @id @default(uuid())
   caseId                 String
   userId                 String
   dailyCaseId            String
@@ -341,14 +420,15 @@ model GameSession {
   xpAwardedAt            DateTime?
   processingAt           DateTime?
   processedAt            DateTime?
-  startedAt              DateTime   @default(now())
+  startedAt              DateTime  @default(now())
   completedAt            DateTime?
   status                 String
-  case                   Case       @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  user                   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dailyCase              DailyCase  @relation(fields: [dailyCaseId], references: [id], onDelete: Cascade)
+  case                   Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyCase              DailyCase @relation(fields: [dailyCaseId], references: [id], onDelete: Cascade)
   attempts               Attempt[]
 
+  @@unique([userId, dailyCaseId])
   @@index([caseId])
   @@index([dailyCaseId])
   @@index([userId])
@@ -358,34 +438,33 @@ model GameSession {
   @@index([processedAt, processingAt])
   @@index([startedAt])
   @@index([userId, status, completedAt])
-  @@unique([userId, dailyCaseId])
 }
 
 model Attempt {
-  id               String   @id @default(uuid())
-  caseId           String
-  userId           String?
-  sessionId        String
-  guess            String
-  normalizedGuess  String
-  selectedDiagnosisId String?
-  selectedAliasId  String?
+  id                       String             @id @default(uuid())
+  caseId                   String
+  userId                   String?
+  sessionId                String
+  guess                    String
+  normalizedGuess          String
+  selectedDiagnosisId      String?
+  selectedAliasId          String?
   strictMatchedDiagnosisId String?
-  strictMatchedAliasId String?
-  strictMatchOutcome String?
-  score            Float
-  result           String
-  signals          Json
-  evaluatorVersion String
-  clueIndexAtAttempt Int?
-  createdAt        DateTime @default(now())
-  session          GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  case             Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  selectedDiagnosis DiagnosisRegistry? @relation("AttemptSelectedDiagnosisRegistry", fields: [selectedDiagnosisId], references: [id], onDelete: SetNull)
-  selectedAlias    DiagnosisAlias? @relation("AttemptSelectedAlias", fields: [selectedAliasId], references: [id], onDelete: SetNull)
-  strictMatchedDiagnosis DiagnosisRegistry? @relation("AttemptStrictMatchedDiagnosisRegistry", fields: [strictMatchedDiagnosisId], references: [id], onDelete: SetNull)
-  strictMatchedAlias DiagnosisAlias? @relation("AttemptStrictMatchedAlias", fields: [strictMatchedAliasId], references: [id], onDelete: SetNull)
+  strictMatchedAliasId     String?
+  strictMatchOutcome       String?
+  score                    Float
+  result                   String
+  signals                  Json
+  evaluatorVersion         String
+  clueIndexAtAttempt       Int?
+  createdAt                DateTime           @default(now())
+  session                  GameSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  case                     Case               @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  user                     User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  selectedDiagnosis        DiagnosisRegistry? @relation("AttemptSelectedDiagnosisRegistry", fields: [selectedDiagnosisId], references: [id], onDelete: SetNull)
+  selectedAlias            DiagnosisAlias?    @relation("AttemptSelectedAlias", fields: [selectedAliasId], references: [id], onDelete: SetNull)
+  strictMatchedDiagnosis   DiagnosisRegistry? @relation("AttemptStrictMatchedDiagnosisRegistry", fields: [strictMatchedDiagnosisId], references: [id], onDelete: SetNull)
+  strictMatchedAlias       DiagnosisAlias?    @relation("AttemptStrictMatchedAlias", fields: [strictMatchedAliasId], references: [id], onDelete: SetNull)
 
   @@index([sessionId])
   @@index([caseId])
@@ -400,30 +479,30 @@ model Attempt {
 }
 
 model User {
-  id                        String                  @id
-  clerkId                   String?                 @unique
-  email                     String?
-  displayName               String?
-  trainingLevel             String?
-  country                   String?
-  individualMode            Boolean                 @default(true)
-  role                      String                  @default("user")
-  subscriptionTier          String                  @default("free")
-  lastPlayedAt              DateTime?
-  sessions                  GameSession[]
-  attempts                  Attempt[]
-  stats                     UserStats?
-  progress                  UserProgress?
-  settings                  UserSettings?
-  notifications             Notification[]
-  notificationPreferences   NotificationPreference[]
-  pushDeviceTokens          PushDeviceToken[]
-  leaderboard               LeaderboardEntry[]
-  approvedCases             Case[]                  @relation("CaseApprovedByUser")
-  createdCaseRevisions      CaseRevision[]          @relation("CaseRevisionCreatedByUser")
-  triggeredCaseValidations  CaseValidationRun[]     @relation("CaseValidationRunTriggeredByUser")
-  caseReviews               CaseReview[]            @relation("CaseReviewReviewerUser")
-  organizations             UserOrganization[]
+  id                       String                   @id
+  clerkId                  String?                  @unique
+  email                    String?
+  displayName              String?
+  trainingLevel            String?
+  country                  String?
+  individualMode           Boolean                  @default(true)
+  role                     String                   @default("user")
+  subscriptionTier         String                   @default("free")
+  lastPlayedAt             DateTime?
+  sessions                 GameSession[]
+  attempts                 Attempt[]
+  stats                    UserStats?
+  progress                 UserProgress?
+  settings                 UserSettings?
+  notifications            Notification[]
+  notificationPreferences  NotificationPreference[]
+  pushDeviceTokens         PushDeviceToken[]
+  leaderboard              LeaderboardEntry[]
+  approvedCases            Case[]                   @relation("CaseApprovedByUser")
+  createdCaseRevisions     CaseRevision[]           @relation("CaseRevisionCreatedByUser")
+  triggeredCaseValidations CaseValidationRun[]      @relation("CaseValidationRunTriggeredByUser")
+  caseReviews              CaseReview[]             @relation("CaseReviewReviewerUser")
+  organizations            UserOrganization[]
 
   @@index([role])
   @@index([subscriptionTier])
@@ -514,17 +593,17 @@ model NotificationPreference {
 }
 
 model PushDeviceToken {
-  id          String    @id @default(uuid())
-  userId      String
-  token       String    @unique
-  platform    String
-  deviceId    String?
-  appVersion  String?
-  lastSeenAt  DateTime
-  disabledAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String    @id @default(uuid())
+  userId     String
+  token      String    @unique
+  platform   String
+  deviceId   String?
+  appVersion String?
+  lastSeenAt DateTime
+  disabledAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -543,23 +622,23 @@ model UserProgress {
 }
 
 model UserStats {
-  userId        String   @id
-  currentStreak Int      @default(0)
-  bestStreak    Int      @default(0)
+  userId         String    @id
+  currentStreak  Int       @default(0)
+  bestStreak     Int       @default(0)
   lastPlayedDate DateTime? @db.Date
-  updatedAt     DateTime @updatedAt
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt      DateTime  @updatedAt
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model DailyCase {
-  id        String   @id @default(uuid())
-  caseId    String
-  date      DateTime @db.Date
-  track     PublishTrack
-  sequenceIndex Int
-  createdAt DateTime @default(now())
-  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  sessions  GameSession[]
+  id                 String             @id @default(uuid())
+  caseId             String
+  date               DateTime           @db.Date
+  track              PublishTrack
+  sequenceIndex      Int
+  createdAt          DateTime           @default(now())
+  case               Case               @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  sessions           GameSession[]
   leaderboardEntries LeaderboardEntry[]
 
   @@unique([date, track, sequenceIndex])
@@ -568,18 +647,18 @@ model DailyCase {
 }
 
 model LeaderboardEntry {
-  id              String   @id @default(uuid())
-  userId          String
-  dailyCaseId     String
-  score           Int
-  attemptsCount   Int
-  timeToComplete  Int?
-  completedAt     DateTime
-  rankLegacy      Int?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dailyCase       DailyCase @relation(fields: [dailyCaseId], references: [id], onDelete: Cascade)
+  id             String    @id @default(uuid())
+  userId         String
+  dailyCaseId    String
+  score          Int
+  attemptsCount  Int
+  timeToComplete Int?
+  completedAt    DateTime
+  rankLegacy     Int?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyCase      DailyCase @relation(fields: [dailyCaseId], references: [id], onDelete: Cascade)
 
   @@unique([dailyCaseId, userId])
   @@index([dailyCaseId, score(sort: Desc), attemptsCount(sort: Asc), timeToComplete(sort: Asc), completedAt(sort: Asc)])

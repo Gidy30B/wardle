@@ -27,7 +27,9 @@ import { UpdateCaseDiagnosisDto } from './dto/update-case-diagnosis.dto';
 type GenerateCasesBody = {
   count?: number;
   track?: string;
+  bodySystem?: string;
   difficulty?: string;
+  registryFirst?: boolean;
 };
 
 @Controller('admin')
@@ -190,7 +192,9 @@ export class AdminController {
     return this.caseGenerator.generateBatch({
       count,
       track: body.track,
+      bodySystem: body.bodySystem,
       difficulty: body.difficulty,
+      registryFirst: body.registryFirst !== false,
     });
   }
 }

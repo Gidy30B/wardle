@@ -17,6 +17,13 @@ type StoreCase = {
   date: Date;
   difficulty: string;
   diagnosisId: string | null;
+  diagnosisRegistryId: string | null;
+  diagnosisMappingStatus: string;
+  diagnosisRegistry: {
+    id: string;
+    active: boolean;
+    isPlayable: boolean;
+  } | null;
   clues: unknown;
   explanation: unknown;
   editorialStatus: CaseEditorialStatus;
@@ -131,6 +138,9 @@ function createDailyCasesFixture(options?: { forceCreateRace?: boolean }) {
               id: item.id,
               title: item.title,
               diagnosisId: item.diagnosisId,
+              diagnosisRegistryId: item.diagnosisRegistryId,
+              diagnosisMappingStatus: item.diagnosisMappingStatus,
+              diagnosisRegistry: item.diagnosisRegistry,
               clues: item.clues,
               explanation: item.explanation,
               editorialStatus: item.editorialStatus,
@@ -167,6 +177,9 @@ function createDailyCasesFixture(options?: { forceCreateRace?: boolean }) {
             date: item.date,
             difficulty: item.difficulty,
             diagnosisId: item.diagnosisId,
+            diagnosisRegistryId: item.diagnosisRegistryId,
+            diagnosisMappingStatus: item.diagnosisMappingStatus,
+            diagnosisRegistry: item.diagnosisRegistry,
             clues: item.clues,
             explanation: item.explanation,
             editorialStatus: item.editorialStatus,
@@ -418,6 +431,18 @@ function addScheduleCase(
     diagnosisId: hasOverride('diagnosisId')
       ? (overrides.diagnosisId ?? null)
       : `diagnosis-${overrides.id}`,
+    diagnosisRegistryId: hasOverride('diagnosisRegistryId')
+      ? (overrides.diagnosisRegistryId ?? null)
+      : `registry-${overrides.id}`,
+    diagnosisMappingStatus: overrides.diagnosisMappingStatus ?? 'MATCHED',
+    diagnosisRegistry:
+      overrides.diagnosisRegistry === undefined
+        ? {
+            id: `registry-${overrides.id}`,
+            active: true,
+            isPlayable: true,
+          }
+        : overrides.diagnosisRegistry,
     clues: overrides.clues ?? [{ value: `clue ${overrides.id}` }],
     explanation: hasOverride('explanation')
       ? (overrides.explanation ?? null)
@@ -494,7 +519,11 @@ describe('DailyCasesService', () => {
     const scheduleDate = normalizeDailyDate('2099-02-03');
     addScheduleCase(store, { id: 'case-valid' });
     addScheduleCase(store, { id: 'case-invalid-clues', clues: [] });
-    addScheduleCase(store, { id: 'case-missing-diagnosis', diagnosisId: null });
+    addScheduleCase(store, {
+      id: 'case-missing-diagnosis',
+      diagnosisRegistryId: null,
+      diagnosisRegistry: null,
+    });
     addScheduleCase(store, {
       id: 'case-missing-explanation',
       explanation: null,

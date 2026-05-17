@@ -18,6 +18,7 @@ import {
   formatArchiveCaseLabel,
   formatAverageClues,
   formatPercent,
+  getCaseDiagnosisLabel,
   getCaseSpecialty,
   getTotalActiveFilterCount,
   groupLearnCasesBySpecialty,
@@ -521,7 +522,7 @@ export function MobileCaseCard({
   onSelect: () => void;
 }) {
   const solved = item.playerResult.solved;
-  const diagnosis = item.case.diagnosis || item.case.title;
+  const diagnosis = getCaseDiagnosisLabel(item);
   const caseLabel = formatArchiveCaseLabel(item);
   const specialty = getCaseSpecialty(item);
   const icon = getMobileSpecialtyIcon(specialty.key);
@@ -991,7 +992,7 @@ export function CaseLibraryCard({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const diagnosis = item.case.diagnosis || item.case.title;
+  const diagnosis = getCaseDiagnosisLabel(item);
   const specialty = getCaseSpecialty(item);
   const solved = item.playerResult.solved;
 

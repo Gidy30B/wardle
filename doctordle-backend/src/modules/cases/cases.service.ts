@@ -13,11 +13,7 @@ import {
   formatDailyCaseTrackDisplayLabel,
 } from '../gameplay/daily-case-labels.js';
 import { AIContentService } from '../ai/ai-content.service';
-import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
-import {
-  buildMatchedDiagnosisMappingFields,
-  determineDiagnosisWriteMappingMethod,
-} from '../diagnosis-registry/diagnosis-mapping-fields.js';
+import { buildMatchedDiagnosisMappingFields } from '../diagnosis-registry/diagnosis-mapping-fields.js';
 import { CreateCaseDto } from './dto/create-case.dto';
 
 export type DiagnosisCatalogItem = {
@@ -76,24 +72,19 @@ export class CasesService {
     private readonly prisma: PrismaService,
     private readonly aiContentService: AIContentService,
     private readonly editorialMetrics: EditorialMetricsService,
-    private readonly diagnosisRegistryLinkService: DiagnosisRegistryLinkService,
   ) {}
 
   async createCase(dto: CreateCaseDto): Promise<CreatedCaseRecord> {
     const now = new Date();
     const date = dto.date ? this.parseDailyDate(dto.date) : now;
 
-    const resolvedDiagnosisLink =
-      await this.diagnosisRegistryLinkService.resolveForWrite({
-        diagnosisId: dto.diagnosisId,
-        diagnosisRegistryId: dto.diagnosisRegistryId,
-      });
+    const diagnosisRegistry = await this.getManualCaseDiagnosisRegistry(
+      dto.diagnosisRegistryId,
+    );
     const diagnosisMappingFields = buildMatchedDiagnosisMappingFields({
-      diagnosisName: resolvedDiagnosisLink.diagnosisName,
+      diagnosisName: diagnosisRegistry.displayLabel,
       proposedDiagnosisText: dto.proposedDiagnosisText,
-      method: determineDiagnosisWriteMappingMethod({
-        diagnosisRegistryId: dto.diagnosisRegistryId,
-      }),
+      method: 'EDITOR_SELECTED',
     });
 
     const created = await this.withPublicNumberRetry(async () => {
@@ -106,8 +97,8 @@ export class CasesService {
               title: dto.title,
               history: dto.history,
               symptoms: dto.symptoms,
-              diagnosisId: resolvedDiagnosisLink.diagnosisId,
-              diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+              diagnosisId: diagnosisRegistry.legacyDiagnosisId,
+              diagnosisRegistryId: diagnosisRegistry.id,
               ...diagnosisMappingFields,
             },
             create: {
@@ -117,12 +108,13 @@ export class CasesService {
               difficulty: 'medium',
               history: dto.history,
               symptoms: dto.symptoms,
-              diagnosisId: resolvedDiagnosisLink.diagnosisId,
-              diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+              diagnosisId: diagnosisRegistry.legacyDiagnosisId,
+              diagnosisRegistryId: diagnosisRegistry.id,
               ...diagnosisMappingFields,
             },
             include: {
               diagnosis: true,
+              diagnosisRegistry: true,
             },
           })
         : this.prisma.case.create({
@@ -133,12 +125,13 @@ export class CasesService {
               difficulty: 'medium',
               history: dto.history,
               symptoms: dto.symptoms,
-              diagnosisId: resolvedDiagnosisLink.diagnosisId,
-              diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+              diagnosisId: diagnosisRegistry.legacyDiagnosisId,
+              diagnosisRegistryId: diagnosisRegistry.id,
               ...diagnosisMappingFields,
             },
             include: {
               diagnosis: true,
+              diagnosisRegistry: true,
             },
           });
     });
@@ -150,7 +143,7 @@ export class CasesService {
         title: created.title,
         date: created.date.toISOString(),
         diagnosisId: created.diagnosisId,
-        diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+        diagnosisRegistryId: diagnosisRegistry.id,
       }),
     );
 
@@ -187,6 +180,7 @@ export class CasesService {
         case: {
           include: {
             diagnosis: true,
+            diagnosisRegistry: true,
             currentRevision: {
               select: {
                 id: true,
@@ -272,6 +266,7 @@ export class CasesService {
         case: {
           include: {
             diagnosis: true,
+            diagnosisRegistry: true,
           },
         },
       },
@@ -289,6 +284,7 @@ export class CasesService {
       where: { id },
       include: {
         diagnosis: true,
+        diagnosisRegistry: true,
       },
     });
 
@@ -303,6 +299,7 @@ export class CasesService {
     const cases = await this.prisma.case.findMany({
       include: {
         diagnosis: true,
+        diagnosisRegistry: true,
       },
       orderBy: {
         id: 'asc',
@@ -357,6 +354,35 @@ export class CasesService {
     };
   }
 
+  private async getManualCaseDiagnosisRegistry(diagnosisRegistryId: string) {
+    const registry = await this.prisma.diagnosisRegistry.findUnique({
+      where: {
+        id: diagnosisRegistryId,
+      },
+      select: {
+        id: true,
+        legacyDiagnosisId: true,
+        displayLabel: true,
+        active: true,
+        isPlayable: true,
+      },
+    });
+
+    if (!registry) {
+      throw new NotFoundException(
+        `Diagnosis registry entry not found: ${diagnosisRegistryId}`,
+      );
+    }
+
+    if (!registry.active || !registry.isPlayable) {
+      throw new BadRequestException(
+        'Manual cases require an active playable diagnosis registry entry',
+      );
+    }
+
+    return registry;
+  }
+
   private mapCaseRecord(found: {
     id: string;
     title: string;
@@ -364,7 +390,11 @@ export class CasesService {
     difficulty: string;
     history: string;
     symptoms: string[];
-    diagnosis: { name: string };
+    diagnosis: { name: string } | null;
+    diagnosisRegistry?: {
+      displayLabel: string;
+      canonicalName: string;
+    } | null;
   }): CaseRecord {
     return {
       id: found.id,
@@ -373,7 +403,11 @@ export class CasesService {
       difficulty: found.difficulty as 'easy' | 'medium' | 'hard',
       history: found.history,
       symptoms: found.symptoms,
-      diagnosis: found.diagnosis.name,
+      diagnosis:
+        found.diagnosisRegistry?.displayLabel ??
+        found.diagnosisRegistry?.canonicalName ??
+        found.diagnosis?.name ??
+        found.title,
     };
   }
 

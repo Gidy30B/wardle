@@ -85,16 +85,6 @@ export function runStructureValidator(
     });
   }
 
-  if (!isNonEmptyString(snapshot.diagnosisId)) {
-    issues.push({
-      validator: 'structure',
-      severity: 'error' as const,
-      code: 'DIAGNOSIS_ID_MISSING',
-      message: 'Diagnosis id is required for revision snapshots',
-      path: 'diagnosisId',
-    });
-  }
-
   if (!isNonEmptyString(snapshot.diagnosisRegistryId)) {
     issues.push({
       validator: 'structure',
@@ -102,6 +92,16 @@ export function runStructureValidator(
       code: 'DIAGNOSIS_REGISTRY_ID_MISSING',
       message: 'Diagnosis registry id is required for revision snapshots',
       path: 'diagnosisRegistryId',
+    });
+  }
+
+  if (snapshot.diagnosisMappingStatus !== 'MATCHED') {
+    issues.push({
+      validator: 'structure',
+      severity: 'error' as const,
+      code: 'DIAGNOSIS_MAPPING_NOT_MATCHED',
+      message: 'Diagnosis registry mapping must be matched for playable cases',
+      path: 'diagnosisMappingStatus',
     });
   }
 

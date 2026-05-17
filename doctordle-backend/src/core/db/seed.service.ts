@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { DiagnosisRegistryStatus } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import { CasesService } from '../../modules/cases/cases.service';
+import { normalizeDiagnosisTerm } from '../../modules/diagnosis-registry/diagnosis-term-normalizer';
 
 @Injectable()
 export class SeedService {
@@ -28,7 +30,7 @@ export class SeedService {
       },
     ];
 
-    const diagnosisMap: { [key: string]: string } = {};
+    const diagnosisRegistryMap: { [key: string]: string } = {};
     for (const diagnosisData of diagnoses) {
       let diagnosis = await this.prisma.diagnosis.findUnique({
         where: { name: diagnosisData.name },
@@ -43,10 +45,37 @@ export class SeedService {
         this.logger.debug(`Diagnosis already exists: ${diagnosis.name}`);
       }
 
-      diagnosisMap[diagnosisData.name] = diagnosis.id;
+      const canonicalNormalized = normalizeDiagnosisTerm(diagnosis.name);
+      const registry = await this.prisma.diagnosisRegistry.upsert({
+        where: {
+          canonicalNormalized,
+        },
+        update: {
+          legacyDiagnosisId: diagnosis.id,
+          canonicalName: diagnosis.name,
+          displayLabel: diagnosis.name,
+          status: DiagnosisRegistryStatus.ACTIVE,
+          active: true,
+          isPlayable: true,
+        },
+        create: {
+          legacyDiagnosisId: diagnosis.id,
+          canonicalName: diagnosis.name,
+          canonicalNormalized,
+          displayLabel: diagnosis.name,
+          status: DiagnosisRegistryStatus.ACTIVE,
+          active: true,
+          isPlayable: true,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      diagnosisRegistryMap[diagnosisData.name] = registry.id;
     }
 
-    // Then seed cases with diagnosis IDs
+    // Then seed cases against registry diagnoses
     const cases = [
       {
         title: 'Myocardial infarction case',
@@ -75,7 +104,7 @@ export class SeedService {
         title: caseData.title,
         history: caseData.history,
         symptoms: caseData.symptoms,
-        diagnosisId: diagnosisMap[caseData.diagnosis],
+        diagnosisRegistryId: diagnosisRegistryMap[caseData.diagnosis],
         date: caseData.date.toISOString().slice(0, 10),
       });
 

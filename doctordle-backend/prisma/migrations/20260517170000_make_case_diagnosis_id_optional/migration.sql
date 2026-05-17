@@ -1,0 +1,2 @@
+ALTER TABLE "Case" ALTER COLUMN "diagnosisId" DROP NOT NULL;
+ALTER TABLE "CaseRevision" ALTER COLUMN "diagnosisId" DROP NOT NULL;

@@ -101,9 +101,16 @@ export class ExplanationService {
         difficulty: true,
         history: true,
         symptoms: true,
+        title: true,
         diagnosis: {
           select: {
             name: true,
+          },
+        },
+        diagnosisRegistry: {
+          select: {
+            displayLabel: true,
+            canonicalName: true,
           },
         },
       },
@@ -118,7 +125,12 @@ export class ExplanationService {
       : 'No symptoms available';
 
     return [
-      `The most likely diagnosis is ${foundCase.diagnosis.name}.`,
+      `The most likely diagnosis is ${
+        foundCase.diagnosisRegistry?.displayLabel ??
+        foundCase.diagnosisRegistry?.canonicalName ??
+        foundCase.diagnosis?.name ??
+        foundCase.title
+      }.`,
       `Difficulty: ${foundCase.difficulty}.`,
       `History: ${foundCase.history}`,
       `Key symptoms: ${symptoms}.`,

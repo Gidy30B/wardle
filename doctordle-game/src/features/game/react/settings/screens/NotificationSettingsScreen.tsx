@@ -193,7 +193,7 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
     (pushCapability === null
       ? 'Checking mobile support...'
         : pushCapability.supported === false
-        ? 'Not supported on this device'
+        ? getPushUnsupportedSublabel(pushCapability.reason)
         : pushPermissionDenied
           ? pushCapability.platform === 'web'
             ? 'Notifications are blocked in this browser'
@@ -318,4 +318,23 @@ function mergePushPreferencePatches(
   }
 
   return Array.from(byCategory.values())
+}
+
+function getPushUnsupportedSublabel(
+  reason: Extract<PushCapability, { supported: false }>['reason'],
+) {
+  switch (reason) {
+    case 'config_missing':
+      return 'Notifications are not configured for this build.'
+    case 'browser_unsupported':
+    case 'firebase_unsupported':
+      return 'Push notifications are not supported in this browser.'
+    case 'service_worker_unavailable':
+      return 'Notification worker is unavailable in this build.'
+    case 'permission_denied':
+      return 'Notifications are blocked in this browser'
+    case 'unsupported':
+    default:
+      return 'Not supported on this device'
+  }
 }

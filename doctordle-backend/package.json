@@ -21,6 +21,8 @@
     "embed:diagnoses": "ts-node ./scripts/embed-diagnoses.ts",
     "backfill:daily-case": "ts-node ./scripts/backfill-daily-case.ts",
     "backfill:diagnosis-registry": "ts-node ./scripts/backfill-diagnosis-registry.ts",
+    "backfill:registry-taxonomy": "ts-node ./scripts/backfill-registry-taxonomy-from-legacy.ts",
+    "import:diagnosis-registry-csv": "ts-node ./scripts/import-diagnosis-registry-csv.ts",
     "seed:diagnosis-registry": "ts-node ./scripts/seed-diagnosis-registry.ts",
     "generate:cases": "ts-node src/scripts/generate-cases.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",

@@ -60,7 +60,7 @@ export function buildRecallAnswerOptions(
 ): RecallAnswerOption[] {
   const options = new Map<string, RecallAnswerOption>();
   const add = (item: LearnLibraryCase) => {
-    const label = item.case.diagnosis || item.case.title;
+    const label = getCaseDiagnosisLabel(item);
     const id = getRecallDiagnosisOptionId(item);
     if (!label.trim() || options.has(id)) return;
     options.set(id, { id, label, aliases: buildRecallAliases(label) });
@@ -94,7 +94,7 @@ export function buildRecallAliases(label: string) {
 }
 
 export function getRecallDiagnosisOptionId(item: LearnLibraryCase) {
-  return normalizeRegistrySearchTerm(item.case.diagnosis || item.case.title);
+  return normalizeRegistrySearchTerm(getCaseDiagnosisLabel(item));
 }
 
 export function isRecallTextMatch(answer: string, item: LearnLibraryCase) {
@@ -494,11 +494,18 @@ export function getCaseSpecialty(item: LearnLibraryCase) {
   const caseRecord = item.case as LearnLibraryCase["case"] &
     Record<string, unknown>;
   const itemRecord = item as LearnLibraryCase & Record<string, unknown>;
+  const diagnosisRecord =
+    asRecord(caseRecord.diagnosis) ?? asRecord(itemRecord.diagnosis);
   const rawLabel =
+    getStringValue(diagnosisRecord?.specialty) ??
+    getStringValue(diagnosisRecord?.category) ??
+    getStringValue(diagnosisRecord?.bodySystem) ??
     getStringValue(caseRecord.specialty) ??
     getStringValue(caseRecord.category) ??
+    getStringValue(caseRecord.bodySystem) ??
     getStringValue(itemRecord.specialty) ??
     getStringValue(itemRecord.category) ??
+    getStringValue(itemRecord.bodySystem) ??
     "General Medicine";
   const rawKey =
     getStringValue(caseRecord.specialtyKey) ??
@@ -507,6 +514,19 @@ export function getCaseSpecialty(item: LearnLibraryCase) {
     getStringValue(itemRecord.categoryKey) ??
     rawLabel;
   return { key: normalizeFilterKey(rawKey), label: rawLabel };
+}
+
+export function getCaseDiagnosisLabel(item: LearnLibraryCase) {
+  const diagnosis = item.case.diagnosis;
+  if (typeof diagnosis === "string") {
+    return diagnosis || item.case.title;
+  }
+
+  return (
+    getStringValue(diagnosis?.displayLabel) ??
+    getStringValue(diagnosis?.canonicalName) ??
+    item.case.title
+  );
 }
 
 export function getCaseDifficultyKey(item: LearnLibraryCase) {
@@ -613,7 +633,7 @@ export function mergeLatestPlayedCase({
       trackDisplayLabel:
         latestCase.trackDisplayLabel ?? roundViewModel.caseTrackDisplayLabel,
       title: roundViewModel.caseId ?? "Completed case",
-      diagnosis: "Completed case",
+      diagnosis: latestCase.diagnosis ?? "Completed case",
       date: "",
       difficulty: "",
       clues: latestCase.clues,

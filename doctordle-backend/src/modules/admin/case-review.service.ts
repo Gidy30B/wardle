@@ -1,4 +1,9 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   CaseEditorialStatus,
   CaseSource,
@@ -12,9 +17,7 @@ import {
 import { PrismaService } from '../../core/db/prisma.service.js';
 import { CaseRevisionService } from '../case-validation/case-revision.service.js';
 import { CaseValidationService } from '../case-validation/case-validation.service.js';
-import {
-  DiagnosisRegistryEditorialService,
-} from '../diagnosis-registry/diagnosis-registry-editorial.service.js';
+import { DiagnosisRegistryEditorialService } from '../diagnosis-registry/diagnosis-registry-editorial.service.js';
 import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
 import { normalizeDiagnosisTerm } from '../diagnosis-registry/diagnosis-term-normalizer.js';
 import { EditorialMetricsService } from '../editorial/editorial-metrics.service.js';
@@ -66,10 +69,12 @@ const EDITORIAL_CASE_LIST_SELECT: Prisma.CaseSelect = {
   diagnosisRegistry: {
     select: {
       id: true,
+      displayLabel: true,
       canonicalName: true,
       status: true,
       category: true,
       specialty: true,
+      bodySystem: true,
     },
   },
   currentRevision: {
@@ -148,10 +153,12 @@ const EDITORIAL_CASE_DETAIL_SELECT: Prisma.CaseSelect = {
   diagnosisRegistry: {
     select: {
       id: true,
+      displayLabel: true,
       canonicalName: true,
       status: true,
       category: true,
       specialty: true,
+      bodySystem: true,
     },
   },
   currentRevision: {
@@ -263,7 +270,9 @@ export class CaseReviewService {
       hasMore: page * pageSize < total,
       filters: {
         status: query.status ?? null,
-        queue: (query.status ? 'all' : query.queue ?? 'all') as EditorialQueueFilter,
+        queue: (query.status
+          ? 'all'
+          : (query.queue ?? 'all')) as EditorialQueueFilter,
       },
     };
   }
@@ -290,6 +299,18 @@ export class CaseReviewService {
               aliases: input.aliases,
               category: input.category,
               specialty: input.specialty,
+              subspecialty: input.subspecialty,
+              bodySystem: input.bodySystem,
+              organSystem: input.organSystem,
+              difficultyBand: input.difficultyBand,
+              rarityBand: input.rarityBand,
+              clinicalSetting: input.clinicalSetting,
+              ageGroup: input.ageGroup,
+              urgencyLevel: input.urgencyLevel,
+              isPlayable: input.isPlayable,
+              isGeneratable: input.isGeneratable,
+              preferredClueTypes: input.preferredClueTypes,
+              excludedClueTypes: input.excludedClueTypes,
               isDescriptive: input.isDescriptive,
               isCompositional: input.isCompositional,
               notes: input.notes,
@@ -383,122 +404,24 @@ export class CaseReviewService {
     const result = await this.withSerializableRetry(() =>
       this.prisma.$transaction(
         async (tx) => {
-          const caseRecord = await tx.case.findUnique({
-            where: { id: caseId },
-            select: {
-              id: true,
-              editorialStatus: true,
-              diagnosisId: true,
-              diagnosisRegistryId: true,
-              diagnosisMappingStatus: true,
-              diagnosisMappingMethod: true,
-              diagnosisMappingConfidence: true,
-              diagnosisEditorialNote: true,
-            },
-          });
-
-          if (!caseRecord) {
-            throw new NotFoundException(`Case not found: ${caseId}`);
-          }
-
-          if (caseRecord.editorialStatus === CaseEditorialStatus.PUBLISHED) {
-            throw new BadRequestException(
-              'Published cases cannot be edited through the editorial diagnosis workflow',
-            );
-          }
-
-          const diagnosis = await this.findOrCreateDiagnosisInTransaction(
-            tx,
-            canonicalDiagnosis,
-          );
-          const currentRegistry =
-            caseRecord.diagnosisRegistryId
-              ? await tx.diagnosisRegistry.findUnique({
-                  where: { id: caseRecord.diagnosisRegistryId },
-                  select: {
-                    id: true,
-                    legacyDiagnosisId: true,
-                  },
-                })
-              : null;
-          const keepCurrentRegistry =
-            currentRegistry?.legacyDiagnosisId === diagnosis.id;
-
-          await tx.case.update({
-            where: { id: caseId },
-            data: {
-              diagnosisId: diagnosis.id,
-              diagnosisRegistryId: keepCurrentRegistry ? currentRegistry.id : null,
-              proposedDiagnosisText: canonicalDiagnosis,
-              diagnosisMappingStatus: keepCurrentRegistry
-                ? caseRecord.diagnosisMappingStatus
-                : DiagnosisMappingStatus.REVIEW_REQUIRED,
-              diagnosisMappingMethod: keepCurrentRegistry
-                ? caseRecord.diagnosisMappingMethod
-                : DiagnosisMappingMethod.NONE,
-              diagnosisMappingConfidence: keepCurrentRegistry
-                ? caseRecord.diagnosisMappingConfidence
-                : null,
-              diagnosisEditorialNote: caseRecord.diagnosisEditorialNote,
-              ...getApprovalResetFields(),
-            },
-          });
-
-          const snapshot =
-            await this.caseRevisionService.getCurrentCaseSnapshotInTransaction(
-              tx,
-              caseId,
-            );
-          const revision =
-            await this.caseRevisionService.createRevisionFromSnapshotInTransaction(
-              tx,
+          const createdDiagnosis =
+            await this.diagnosisRegistryEditorialService.createDiagnosis(
               {
-                caseId,
-                snapshot,
-                source: CaseSource.ADMIN_EDIT,
-                createdByUserId,
+                canonicalName: canonicalDiagnosis,
               },
+              tx,
             );
-          const validationRun = await this.createValidationRunForSnapshot(tx, {
+          const linkResult = await this.applyDiagnosisLinkInTransaction(tx, {
             caseId,
-            revisionId: revision.revisionId,
-            source: CaseSource.ADMIN_EDIT,
-            triggeredByUserId: createdByUserId,
-            snapshot,
+            createdByUserId,
+            diagnosisRegistryId: createdDiagnosis.diagnosisRegistryId,
+            mappingMethod: DiagnosisMappingMethod.MANUAL_CREATED,
+            eventName: 'admin.case.diagnosis_update.completed',
           });
-
-          await tx.case.update({
-            where: { id: caseId },
-            data: {
-              editorialStatus:
-                validationRun.outcome === ValidationOutcome.PASSED
-                  ? CaseEditorialStatus.VALIDATED
-                  : CaseEditorialStatus.NEEDS_EDIT,
-            },
-            select: {
-              id: true,
-            },
-          });
-
-          const detail = await this.getCaseDetailRecord(tx, caseId);
-
-          this.logger.log(
-            JSON.stringify({
-              event: 'admin.case.diagnosis_update.completed',
-              caseId,
-              revisionId: revision.revisionId,
-              revisionNumber: revision.revisionNumber,
-              diagnosisId: diagnosis.id,
-              diagnosisRegistryId: detail.diagnosisRegistryId,
-              validationOutcome: validationRun.outcome,
-              editorialStatus: detail.editorialStatus,
-              createdByUserId,
-            }),
-          );
 
           return {
-            case: detail,
-            validationRun,
+            case: linkResult.case,
+            validationRun: linkResult.validationRun,
           };
         },
         {
@@ -539,6 +462,18 @@ export class CaseReviewService {
                 aliases: input.aliases,
                 category: input.category,
                 specialty: input.specialty,
+                subspecialty: input.subspecialty,
+                bodySystem: input.bodySystem,
+                organSystem: input.organSystem,
+                difficultyBand: input.difficultyBand,
+                rarityBand: input.rarityBand,
+                clinicalSetting: input.clinicalSetting,
+                ageGroup: input.ageGroup,
+                urgencyLevel: input.urgencyLevel,
+                isPlayable: input.isPlayable,
+                isGeneratable: input.isGeneratable,
+                preferredClueTypes: input.preferredClueTypes,
+                excludedClueTypes: input.excludedClueTypes,
                 isDescriptive: input.isDescriptive,
                 isCompositional: input.isCompositional,
                 notes: input.notes,
@@ -612,7 +547,9 @@ export class CaseReviewService {
           }
 
           const persistencePayload =
-            this.caseValidationService.buildPersistencePayload(validationReport);
+            this.caseValidationService.buildPersistencePayload(
+              validationReport,
+            );
 
           const validationRun = await tx.caseValidationRun.create({
             data: {
@@ -643,11 +580,12 @@ export class CaseReviewService {
             currentStatus: caseRecord.editorialStatus,
             outcome: validationReport.outcome,
           });
-          const caseUpdate: Prisma.CaseUncheckedUpdateInput = nextEditorialStatus
-            ? {
-                editorialStatus: nextEditorialStatus,
-              }
-            : {};
+          const caseUpdate: Prisma.CaseUncheckedUpdateInput =
+            nextEditorialStatus
+              ? {
+                  editorialStatus: nextEditorialStatus,
+                }
+              : {};
 
           if (validationReport.outcome !== ValidationOutcome.PASSED) {
             Object.assign(caseUpdate, getApprovalResetFields());
@@ -745,41 +683,40 @@ export class CaseReviewService {
             },
           });
 
-          const review =
-            existingOpenReview
-              ? await tx.caseReview.update({
-                  where: {
-                    id: existingOpenReview.id,
-                  },
-                  data: {
-                    reviewerUserId,
-                  },
-                  select: {
-                    id: true,
-                    revisionId: true,
-                    reviewerUserId: true,
-                    decision: true,
-                    notes: true,
-                    createdAt: true,
-                    decidedAt: true,
-                  },
-                })
-              : await tx.caseReview.create({
-                  data: {
-                    caseId,
-                    revisionId: caseRecord.currentRevisionId,
-                    reviewerUserId,
-                  },
-                  select: {
-                    id: true,
-                    revisionId: true,
-                    reviewerUserId: true,
-                    decision: true,
-                    notes: true,
-                    createdAt: true,
-                    decidedAt: true,
-                  },
-                });
+          const review = existingOpenReview
+            ? await tx.caseReview.update({
+                where: {
+                  id: existingOpenReview.id,
+                },
+                data: {
+                  reviewerUserId,
+                },
+                select: {
+                  id: true,
+                  revisionId: true,
+                  reviewerUserId: true,
+                  decision: true,
+                  notes: true,
+                  createdAt: true,
+                  decidedAt: true,
+                },
+              })
+            : await tx.caseReview.create({
+                data: {
+                  caseId,
+                  revisionId: caseRecord.currentRevisionId,
+                  reviewerUserId,
+                },
+                select: {
+                  id: true,
+                  revisionId: true,
+                  reviewerUserId: true,
+                  decision: true,
+                  notes: true,
+                  createdAt: true,
+                  decidedAt: true,
+                },
+              });
 
           const updatedCase = await tx.case.update({
             where: { id: caseId },
@@ -1139,7 +1076,9 @@ export class CaseReviewService {
           }
 
           const persistencePayload =
-            this.caseValidationService.buildPersistencePayload(validationReport);
+            this.caseValidationService.buildPersistencePayload(
+              validationReport,
+            );
 
           const validationRun = await tx.caseValidationRun.create({
             data: {
@@ -1264,7 +1203,8 @@ export class CaseReviewService {
           const diagnosisPublishReadiness = getCaseDiagnosisPublishReadiness({
             diagnosisRegistryId: caseRecord.diagnosisRegistryId,
             diagnosisMappingStatus: caseRecord.diagnosisMappingStatus,
-            diagnosisRegistryStatus: caseRecord.diagnosisRegistry?.status ?? null,
+            diagnosisRegistryStatus:
+              caseRecord.diagnosisRegistry?.status ?? null,
           });
 
           if (!diagnosisPublishReadiness.ready) {
@@ -1335,8 +1275,7 @@ export class CaseReviewService {
       counts,
       nullStatusCount,
       totalCases:
-        nullStatusCount +
-        statusCounts.reduce((sum, count) => sum + count, 0),
+        nullStatusCount + statusCounts.reduce((sum, count) => sum + count, 0),
     };
   }
 
@@ -1368,18 +1307,20 @@ export class CaseReviewService {
   }
 
   async getPublishAssignmentSummary() {
-    const [approvedCases, readyToPublishCases] = await this.prisma.$transaction([
-      this.prisma.case.count({
-        where: {
-          editorialStatus: CaseEditorialStatus.APPROVED,
-        },
-      }),
-      this.prisma.case.count({
-        where: {
-          editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
-        },
-      }),
-    ]);
+    const [approvedCases, readyToPublishCases] = await this.prisma.$transaction(
+      [
+        this.prisma.case.count({
+          where: {
+            editorialStatus: CaseEditorialStatus.APPROVED,
+          },
+        }),
+        this.prisma.case.count({
+          where: {
+            editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
+          },
+        }),
+      ],
+    );
 
     return {
       currentEligiblePool: {
@@ -1449,17 +1390,21 @@ export class CaseReviewService {
       },
     });
 
-    const snapshot = await this.caseRevisionService.getCurrentCaseSnapshotInTransaction(
-      tx,
-      input.caseId,
-    );
+    const snapshot =
+      await this.caseRevisionService.getCurrentCaseSnapshotInTransaction(
+        tx,
+        input.caseId,
+      );
     const revision =
-      await this.caseRevisionService.createRevisionFromSnapshotInTransaction(tx, {
-        caseId: input.caseId,
-        snapshot,
-        source: CaseSource.ADMIN_EDIT,
-        createdByUserId: input.createdByUserId,
-      });
+      await this.caseRevisionService.createRevisionFromSnapshotInTransaction(
+        tx,
+        {
+          caseId: input.caseId,
+          snapshot,
+          source: CaseSource.ADMIN_EDIT,
+          createdByUserId: input.createdByUserId,
+        },
+      );
     const validationRun = await this.createValidationRunForSnapshot(tx, {
       caseId: input.caseId,
       revisionId: revision.revisionId,
@@ -1523,8 +1468,9 @@ export class CaseReviewService {
   ) {
     let validationReport;
     try {
-      validationReport =
-        this.caseValidationService.validateSnapshot(input.snapshot);
+      validationReport = this.caseValidationService.validateSnapshot(
+        input.snapshot,
+      );
     } catch (error) {
       validationReport =
         this.caseValidationService.buildExecutionErrorReport(error);
@@ -1575,35 +1521,41 @@ export class CaseReviewService {
     return this.attachDiagnosisEditorialSummary(caseRecord);
   }
 
-  private attachDiagnosisEditorialSummary<T extends {
-    diagnosisRegistryId: string | null;
-    diagnosisMappingStatus: DiagnosisMappingStatus;
-    diagnosisMappingMethod: DiagnosisMappingMethod;
-    diagnosisMappingConfidence: number | null;
-    diagnosisEditorialNote: string | null;
-    proposedDiagnosisText: string;
-    diagnosisRegistry?: {
-      id: string;
-      canonicalName: string;
-      status: unknown;
-      category: string | null;
-      specialty: string | null;
-    } | null;
-    currentRevision?: {
-      diagnosisRegistryId?: string | null;
-      diagnosisMappingStatus?: DiagnosisMappingStatus;
-      diagnosisMappingMethod?: DiagnosisMappingMethod;
-      diagnosisMappingConfidence?: number | null;
-      diagnosisEditorialNote?: string | null;
-      proposedDiagnosisText?: string;
-    } | null;
-  }>(caseRecord: T) {
+  private attachDiagnosisEditorialSummary<
+    T extends {
+      diagnosisRegistryId: string | null;
+      diagnosisMappingStatus: DiagnosisMappingStatus;
+      diagnosisMappingMethod: DiagnosisMappingMethod;
+      diagnosisMappingConfidence: number | null;
+      diagnosisEditorialNote: string | null;
+      proposedDiagnosisText: string;
+      diagnosisRegistry?: {
+        id: string;
+        displayLabel: string;
+        canonicalName: string;
+        status: unknown;
+        category: string | null;
+        specialty: string | null;
+        bodySystem: string | null;
+      } | null;
+      currentRevision?: {
+        diagnosisRegistryId?: string | null;
+        diagnosisMappingStatus?: DiagnosisMappingStatus;
+        diagnosisMappingMethod?: DiagnosisMappingMethod;
+        diagnosisMappingConfidence?: number | null;
+        diagnosisEditorialNote?: string | null;
+        proposedDiagnosisText?: string;
+      } | null;
+    },
+  >(caseRecord: T) {
     const diagnosisPublishReadiness = getCaseDiagnosisPublishReadiness({
       diagnosisRegistryId: caseRecord.diagnosisRegistryId,
       diagnosisMappingStatus: caseRecord.diagnosisMappingStatus,
       diagnosisRegistryStatus:
         (caseRecord.diagnosisRegistry?.status as
-          | Parameters<typeof getCaseDiagnosisPublishReadiness>[0]['diagnosisRegistryStatus']
+          | Parameters<
+              typeof getCaseDiagnosisPublishReadiness
+            >[0]['diagnosisRegistryStatus']
           | undefined) ?? null,
     });
 
@@ -1612,10 +1564,12 @@ export class CaseReviewService {
       diagnosisRegistrySummary: caseRecord.diagnosisRegistry
         ? {
             id: caseRecord.diagnosisRegistry.id,
+            displayLabel: caseRecord.diagnosisRegistry.displayLabel,
             canonicalName: caseRecord.diagnosisRegistry.canonicalName,
             status: caseRecord.diagnosisRegistry.status,
             category: caseRecord.diagnosisRegistry.category,
             specialty: caseRecord.diagnosisRegistry.specialty,
+            bodySystem: caseRecord.diagnosisRegistry.bodySystem,
           }
         : null,
       diagnosisPublishReadiness,
@@ -1655,64 +1609,6 @@ export class CaseReviewService {
     }
 
     return canonicalDiagnosis;
-  }
-
-  private async findOrCreateDiagnosisInTransaction(
-    tx: ReviewTransactionClient,
-    canonicalDiagnosis: string,
-  ) {
-    const existing = await tx.diagnosis.findFirst({
-      where: {
-        name: {
-          equals: canonicalDiagnosis,
-          mode: 'insensitive',
-        },
-      },
-      select: {
-        id: true,
-        name: true,
-      },
-    });
-
-    if (existing) {
-      return existing;
-    }
-
-    try {
-      return await tx.diagnosis.create({
-        data: {
-          name: canonicalDiagnosis,
-        },
-        select: {
-          id: true,
-          name: true,
-        },
-      });
-    } catch (error) {
-      const maybePrismaError = error as { code?: string };
-      if (maybePrismaError.code !== 'P2002') {
-        throw error;
-      }
-
-      const recovered = await tx.diagnosis.findFirst({
-        where: {
-          name: {
-            equals: canonicalDiagnosis,
-            mode: 'insensitive',
-          },
-        },
-        select: {
-          id: true,
-          name: true,
-        },
-      });
-
-      if (!recovered) {
-        throw error;
-      }
-
-      return recovered;
-    }
   }
 
   private toNullableJsonValue(

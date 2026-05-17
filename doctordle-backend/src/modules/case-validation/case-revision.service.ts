@@ -62,27 +62,29 @@ export class CaseRevisionService {
       throw new NotFoundException(`Generated case not found: ${caseId}`);
     }
 
-    const resolvedDiagnosisLink =
-      await this.diagnosisRegistryLinkService.resolveForWrite(
-        {
-          diagnosisId: caseRecord.diagnosisId,
-          diagnosisRegistryId: caseRecord.diagnosisRegistryId,
-        },
-        tx,
-      );
+    const resolvedDiagnosisRegistryId =
+      caseRecord.diagnosisRegistryId ??
+      (
+        await this.diagnosisRegistryLinkService.resolveForWrite(
+          {
+            diagnosisId: caseRecord.diagnosisId,
+          },
+          tx,
+        )
+      ).diagnosisRegistryId;
 
-    if (caseRecord.diagnosisRegistryId !== resolvedDiagnosisLink.diagnosisRegistryId) {
+    if (caseRecord.diagnosisRegistryId !== resolvedDiagnosisRegistryId) {
       await tx.case.update({
         where: { id: caseId },
         data: {
-          diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+          diagnosisRegistryId: resolvedDiagnosisRegistryId,
         },
       });
     }
 
     return this.toSnapshot({
       ...caseRecord,
-      diagnosisRegistryId: resolvedDiagnosisLink.diagnosisRegistryId,
+      diagnosisRegistryId: resolvedDiagnosisRegistryId,
     });
   }
 
@@ -174,7 +176,7 @@ export class CaseRevisionService {
     clues: Prisma.JsonValue | null;
     explanation: Prisma.JsonValue | null;
     differentials: string[];
-    diagnosisId: string;
+    diagnosisId: string | null;
     diagnosisRegistryId: string;
     proposedDiagnosisText: string;
     diagnosisMappingStatus: CaseRevisionSnapshot['diagnosisMappingStatus'];

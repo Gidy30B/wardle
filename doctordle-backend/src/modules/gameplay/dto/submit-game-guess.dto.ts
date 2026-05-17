@@ -26,6 +26,15 @@ export type GameplayCaseExplanation = {
   differentials?: string[] | null;
 };
 
+export type GameplayDiagnosisReadModel = {
+  id: string | null;
+  displayLabel: string;
+  canonicalName: string | null;
+  specialty: string;
+  category: string | null;
+  bodySystem: string | null;
+};
+
 export type SubmitGameGuessResponseDto = {
   result: 'correct' | 'close' | 'wrong';
   score: number;
@@ -43,6 +52,7 @@ export type SubmitGameGuessResponseDto = {
     trackDisplayLabel: string;
     difficulty: string;
     date: string;
+    diagnosis: GameplayDiagnosisReadModel;
     clues: GameplayClinicalClue[];
   };
   gameOver?: boolean;

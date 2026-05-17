@@ -21,6 +21,7 @@ import {
   getDifferentialReason,
   getDifferentialTitle,
   getExplanationDifferentials,
+  getCaseDiagnosisLabel,
   getLearnReviewCaseKey,
   getRecallDiagnosisOptionId,
   getCaseSpecialty,
@@ -136,9 +137,9 @@ export function DiagnosisRecallSurface({
     () =>
       findExactDiagnosisSelection(
         diagnosisIndex,
-        item.case.diagnosis || item.case.title,
+        getCaseDiagnosisLabel(item),
       )?.diagnosisRegistryId,
-    [diagnosisIndex, item.case.diagnosis, item.case.title],
+    [diagnosisIndex, item],
   );
   const fallbackCorrectDiagnosisId = getRecallDiagnosisOptionId(item);
   const wasCorrect = committedAnswerId
@@ -870,7 +871,7 @@ export function RecallAnswerCard({
           Diagnosis
         </p>
         <h2 className="mt-2 break-words text-2xl font-black leading-tight tracking-tight text-[var(--wardle-color-mint)]">
-          {item.case.diagnosis || item.case.title}
+          {getCaseDiagnosisLabel(item)}
         </h2>
         {explanation?.summary && (
           <p className="mt-3 border-t border-white/[0.06] pt-3 text-sm leading-6 text-white/56">

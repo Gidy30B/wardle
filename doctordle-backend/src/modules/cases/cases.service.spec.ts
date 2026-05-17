@@ -12,7 +12,7 @@ describe('CasesService', () => {
     root?: Record<string, unknown>;
     case?: Record<string, unknown>;
     dailyCase?: Record<string, unknown>;
-    diagnosisRegistryLinkService?: Record<string, unknown>;
+    diagnosisRegistry?: Record<string, unknown>;
   }) {
     const prisma = {
       $transaction: jest
@@ -41,6 +41,16 @@ describe('CasesService', () => {
         upsert: jest.fn(),
         ...(overrides?.dailyCase ?? {}),
       },
+      diagnosisRegistry: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'registry-1',
+          legacyDiagnosisId: null,
+          displayLabel: 'Asthma',
+          active: true,
+          isPlayable: true,
+        }),
+        ...(overrides?.diagnosisRegistry ?? {}),
+      },
       gameSession: {
         count: jest.fn().mockResolvedValue(0),
       },
@@ -60,25 +70,14 @@ describe('CasesService', () => {
       recordLazyNoEligibleCaseMiss: jest.fn(),
     };
 
-    const diagnosisRegistryLinkService = {
-      resolveForWrite: jest.fn().mockResolvedValue({
-        diagnosisId: 'diagnosis-1',
-        diagnosisName: 'Asthma',
-        diagnosisRegistryId: 'registry-1',
-      }),
-      ...(overrides?.diagnosisRegistryLinkService ?? {}),
-    };
-
     return {
       prisma,
       aiContentService,
       editorialMetrics,
-      diagnosisRegistryLinkService,
       service: new CasesService(
         prisma as never,
         aiContentService as never,
         editorialMetrics as never,
-        diagnosisRegistryLinkService as never,
       ),
     };
   }
@@ -146,7 +145,7 @@ describe('CasesService', () => {
     expect(fixture.prisma.dailyCase.delete).not.toHaveBeenCalled();
   });
 
-  it('writes diagnosisRegistryId during manual case creation', async () => {
+  it('writes diagnosisRegistryId during manual case creation without requiring legacy diagnosisId', async () => {
     const create = jest.fn().mockResolvedValue({
       id: 'case-2',
       title: 'Reactive airway disease',
@@ -154,9 +153,13 @@ describe('CasesService', () => {
       difficulty: 'medium',
       history: 'Wheezing after exercise',
       symptoms: ['wheezing'],
-      diagnosisId: 'diagnosis-1',
+      diagnosisId: null,
       publicNumber: 238,
-      diagnosis: { name: 'Asthma' },
+      diagnosis: null,
+      diagnosisRegistry: {
+        displayLabel: 'Asthma',
+        canonicalName: 'asthma',
+      },
     });
     const fixture = createServiceFixture({
       case: {
@@ -168,23 +171,29 @@ describe('CasesService', () => {
       title: 'Reactive airway disease',
       history: 'Wheezing after exercise',
       symptoms: ['wheezing'],
-      diagnosisId: 'diagnosis-1',
+      diagnosisRegistryId: 'registry-1',
     });
 
-    expect(
-      fixture.diagnosisRegistryLinkService.resolveForWrite,
-    ).toHaveBeenCalledWith({
-      diagnosisId: 'diagnosis-1',
-      diagnosisRegistryId: undefined,
+    expect(fixture.prisma.diagnosisRegistry.findUnique).toHaveBeenCalledWith({
+      where: {
+        id: 'registry-1',
+      },
+      select: {
+        id: true,
+        legacyDiagnosisId: true,
+        displayLabel: true,
+        active: true,
+        isPlayable: true,
+      },
     });
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          diagnosisId: 'diagnosis-1',
+          diagnosisId: null,
           diagnosisRegistryId: 'registry-1',
           proposedDiagnosisText: 'Asthma',
           diagnosisMappingStatus: 'MATCHED',
-          diagnosisMappingMethod: 'LEGACY_BACKFILL',
+          diagnosisMappingMethod: 'EDITOR_SELECTED',
           diagnosisMappingConfidence: 1,
           publicNumber: 238,
         }),
@@ -214,7 +223,7 @@ describe('CasesService', () => {
       title: 'Reactive airway disease',
       history: 'Wheezing after exercise',
       symptoms: ['wheezing'],
-      diagnosisId: 'diagnosis-1',
+      diagnosisRegistryId: 'registry-1',
     });
 
     expect(fixture.prisma.case.findFirst).toHaveBeenCalledWith(

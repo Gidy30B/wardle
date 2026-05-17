@@ -19,6 +19,7 @@ import {
   formatDailyCaseTrackDisplayLabel,
 } from './daily-case-labels.js';
 import { DailyLimitService } from './daily-limit.service';
+import type { GameplayDiagnosisReadModel } from './dto/submit-game-guess.dto';
 
 type SupportedSubscriptionTier = 'free' | 'premium' | 'practice';
 
@@ -37,7 +38,8 @@ type TodayCasePayload = {
     title: string;
     date: string;
     difficulty: string;
-    diagnosisId: string;
+    diagnosisId: string | null;
+    diagnosis: GameplayDiagnosisReadModel;
     clues: Prisma.JsonValue | null;
     explanation: Prisma.JsonValue | null;
   };
@@ -53,6 +55,23 @@ const dailyCaseWithCaseArgs = {
         date: true,
         difficulty: true,
         diagnosisId: true,
+        diagnosis: {
+          select: {
+            id: true,
+            name: true,
+            system: true,
+          },
+        },
+        diagnosisRegistry: {
+          select: {
+            id: true,
+            displayLabel: true,
+            canonicalName: true,
+            specialty: true,
+            category: true,
+            bodySystem: true,
+          },
+        },
         clues: true,
         explanation: true,
         editorialStatus: true,
@@ -291,6 +310,8 @@ export class DailyCasesService {
               id: true,
               title: true,
               diagnosisId: true,
+              diagnosisRegistryId: true,
+              diagnosisMappingStatus: true,
               clues: true,
               explanation: true,
               editorialStatus: true,
@@ -530,6 +551,15 @@ export class DailyCasesService {
             date: true,
             difficulty: true,
             diagnosisId: true,
+            diagnosisRegistryId: true,
+            diagnosisMappingStatus: true,
+            diagnosisRegistry: {
+              select: {
+                id: true,
+                active: true,
+                isPlayable: true,
+              },
+            },
             clues: true,
             explanation: true,
             editorialStatus: true,
@@ -1009,10 +1039,66 @@ export class DailyCasesService {
         date: dailyCase.case.date.toISOString().slice(0, 10),
         difficulty: dailyCase.case.difficulty,
         diagnosisId: dailyCase.case.diagnosisId,
+        diagnosis: this.buildDiagnosisReadModel(dailyCase.case),
         clues: dailyCase.case.clues,
         explanation: dailyCase.case.explanation,
       },
     };
+  }
+
+  private buildDiagnosisReadModel(source: {
+    title?: string | null;
+    diagnosis?: {
+      id?: string | null;
+      name?: string | null;
+      system?: string | null;
+    } | null;
+    diagnosisRegistry?: {
+      id: string;
+      displayLabel: string;
+      canonicalName: string;
+      specialty?: string | null;
+      category?: string | null;
+      bodySystem?: string | null;
+    } | null;
+  }): GameplayDiagnosisReadModel {
+    const registry = source.diagnosisRegistry ?? null;
+    const legacy = source.diagnosis ?? null;
+    const legacyName = this.normalizeOptionalText(legacy?.name);
+    const displayLabel =
+      this.normalizeOptionalText(registry?.displayLabel) ??
+      this.normalizeOptionalText(registry?.canonicalName) ??
+      legacyName ??
+      this.normalizeOptionalText(source.title) ??
+      'Unknown diagnosis';
+    const canonicalName =
+      this.normalizeOptionalText(registry?.canonicalName) ??
+      legacyName ??
+      null;
+    const specialty =
+      this.normalizeOptionalText(registry?.specialty) ??
+      this.normalizeOptionalText(registry?.category) ??
+      this.normalizeOptionalText(registry?.bodySystem) ??
+      this.normalizeOptionalText(legacy?.system) ??
+      'General Medicine';
+
+    return {
+      id: registry?.id ?? legacy?.id ?? null,
+      displayLabel,
+      canonicalName,
+      specialty,
+      category: this.normalizeOptionalText(registry?.category),
+      bodySystem: this.normalizeOptionalText(registry?.bodySystem),
+    };
+  }
+
+  private normalizeOptionalText(value: unknown): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
   }
 
   private hasPlayableClueArray(value: unknown): boolean {
@@ -1063,6 +1149,13 @@ export class DailyCasesService {
     caseRecord: {
       id: string;
       diagnosisId: string | null;
+      diagnosisRegistryId: string | null;
+      diagnosisMappingStatus: string;
+      diagnosisRegistry?: {
+        id: string;
+        active: boolean;
+        isPlayable: boolean;
+      } | null;
       clues: Prisma.JsonValue | null;
       explanation: Prisma.JsonValue | null;
       editorialStatus: CaseEditorialStatusLike;
@@ -1085,7 +1178,12 @@ export class DailyCasesService {
       return 'invalid_clues';
     }
 
-    if (!caseRecord.diagnosisId?.trim()) {
+    if (
+      !caseRecord.diagnosisRegistryId?.trim() ||
+      caseRecord.diagnosisMappingStatus !== 'MATCHED' ||
+      caseRecord.diagnosisRegistry?.active !== true ||
+      caseRecord.diagnosisRegistry?.isPlayable !== true
+    ) {
       return 'missing_diagnosis';
     }
 

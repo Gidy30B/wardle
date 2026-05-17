@@ -68,7 +68,7 @@ export type CaseRevisionSnapshot = {
   clues: Prisma.JsonValue | null;
   explanation: Prisma.JsonValue | null;
   differentials: string[];
-  diagnosisId: string;
+  diagnosisId: string | null;
   diagnosisRegistryId: string;
   proposedDiagnosisText: string;
   diagnosisMappingStatus: DiagnosisMappingStatus;

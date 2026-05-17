@@ -108,7 +108,20 @@ describe('CaseReviewService', () => {
     };
     const diagnosisRegistryEditorialService = {
       search: jest.fn(),
-      createDiagnosis: jest.fn(),
+      createDiagnosis: jest.fn().mockResolvedValue({
+        diagnosisId: null,
+        diagnosisRegistryId: 'registry-new',
+        mappingMethod: DiagnosisMappingMethod.MANUAL_CREATED,
+        registry: {
+          id: 'registry-new',
+          canonicalName: 'Granulomatosis with polyangiitis',
+          status: 'ACTIVE',
+          category: null,
+          specialty: null,
+          searchPriority: 0,
+          aliasPreview: [],
+        },
+      }),
       addAlias: jest.fn(),
       getLinkableDiagnosisRegistry: jest.fn().mockResolvedValue({
         diagnosisId: 'diagnosis-1',
@@ -456,22 +469,18 @@ describe('CaseReviewService', () => {
         clues: [],
         explanation: {},
         differentials: [],
-        diagnosisId: 'diagnosis-new',
+        diagnosisId: null,
         diagnosisRegistryId: 'registry-new',
         proposedDiagnosisText: 'Granulomatosis with polyangiitis',
-        diagnosisMappingStatus: DiagnosisMappingStatus.REVIEW_REQUIRED,
-        diagnosisMappingMethod: DiagnosisMappingMethod.NONE,
-        diagnosisMappingConfidence: null,
+        diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
+        diagnosisMappingMethod: DiagnosisMappingMethod.MANUAL_CREATED,
+        diagnosisMappingConfidence: 1,
         diagnosisEditorialNote: 'Needs canonical cleanup',
         editorialStatus: CaseEditorialStatus.VALIDATED,
         approvedAt: null,
         approvedByUserId: null,
         currentRevisionId: 'revision-new',
-        diagnosis: {
-          id: 'diagnosis-new',
-          name: 'Granulomatosis with polyangiitis',
-          system: null,
-        },
+        diagnosis: null,
         diagnosisRegistry: {
           id: 'registry-new',
           canonicalName: 'Granulomatosis with polyangiitis',
@@ -483,14 +492,6 @@ describe('CaseReviewService', () => {
         validationRuns: [],
         reviews: [],
       });
-    fixture.prisma.diagnosis.findFirst.mockResolvedValue({
-      id: 'diagnosis-new',
-      name: 'Granulomatosis with polyangiitis',
-    });
-    fixture.prisma.diagnosisRegistry.findUnique.mockResolvedValue({
-      id: 'registry-old',
-      legacyDiagnosisId: 'diagnosis-old',
-    });
     fixture.prisma.case.update
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({ id: 'case-1' });
@@ -504,6 +505,21 @@ describe('CaseReviewService', () => {
       startedAt: new Date('2026-04-20T00:00:00.000Z'),
       completedAt: new Date('2026-04-20T00:00:01.000Z'),
     });
+    fixture.diagnosisRegistryEditorialService.getLinkableDiagnosisRegistry.mockResolvedValueOnce(
+      {
+        diagnosisId: null,
+        diagnosisRegistryId: 'registry-new',
+        registry: {
+          id: 'registry-new',
+          canonicalName: 'Granulomatosis with polyangiitis',
+          status: 'ACTIVE',
+          category: null,
+          specialty: null,
+          searchPriority: 0,
+          aliasPreview: [],
+        },
+      },
+    );
 
     const result = await fixture.service.updateCaseDiagnosis(
       'case-1',
@@ -513,17 +529,24 @@ describe('CaseReviewService', () => {
       },
     );
 
+    expect(
+      fixture.diagnosisRegistryEditorialService.createDiagnosis,
+    ).toHaveBeenCalledWith(
+      {
+        canonicalName: 'Granulomatosis with polyangiitis',
+      },
+      fixture.prisma,
+    );
     expect(fixture.prisma.case.update).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         where: { id: 'case-1' },
         data: expect.objectContaining({
-          diagnosisId: 'diagnosis-new',
-          diagnosisRegistryId: null,
-          proposedDiagnosisText: 'Granulomatosis with polyangiitis',
-          diagnosisMappingStatus: DiagnosisMappingStatus.REVIEW_REQUIRED,
-          diagnosisMappingMethod: DiagnosisMappingMethod.NONE,
-          diagnosisMappingConfidence: null,
+          diagnosisId: null,
+          diagnosisRegistryId: 'registry-new',
+          diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
+          diagnosisMappingMethod: DiagnosisMappingMethod.MANUAL_CREATED,
+          diagnosisMappingConfidence: 1,
         }),
       }),
     );
@@ -538,7 +561,8 @@ describe('CaseReviewService', () => {
     );
     expect(result).toEqual(
       expect.objectContaining({
-        diagnosisId: 'diagnosis-new',
+        diagnosisId: null,
+        diagnosisRegistryId: 'registry-new',
         proposedDiagnosisText: 'Granulomatosis with polyangiitis',
       }),
     );

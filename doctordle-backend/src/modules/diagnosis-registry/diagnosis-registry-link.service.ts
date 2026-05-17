@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   CaseEditorialStatus,
   DiagnosisRegistryStatus,
@@ -6,10 +10,10 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service.js';
-import {
-  buildDiagnosisRegistryStatusPatch,
-} from './diagnosis-registry-status.js';
+import { buildDiagnosisRegistryStatusPatch } from './diagnosis-registry-status.js';
 import { normalizeDiagnosisTerm } from './diagnosis-term-normalizer.js';
+import { mapLegacySystemToRegistryTaxonomy } from './taxonomy/legacy-system-mapper.js';
+import { buildNullOnlyTaxonomyPatch } from './taxonomy/registry-taxonomy-backfill.js';
 
 type DiagnosisRegistryLinkClient =
   | PrismaService
@@ -55,12 +59,17 @@ type CollisionRow = {
 type DiagnosisRecord = {
   id: string;
   name: string;
+  system: string | null;
 };
 
 type DiagnosisRegistryRecord = {
   id: string;
   legacyDiagnosisId: string | null;
   status: DiagnosisRegistryStatus;
+  specialty: string | null;
+  subspecialty: string | null;
+  bodySystem: string | null;
+  category: string | null;
 };
 
 export async function ensureDiagnosisRegistryLink(
@@ -86,6 +95,7 @@ export async function ensureDiagnosisRegistryLink(
       select: {
         id: true,
         name: true,
+        system: true,
       },
     })) as DiagnosisRecord | null;
 
@@ -129,6 +139,7 @@ export async function ensureDiagnosisRegistryLink(
       select: {
         id: true,
         name: true,
+        system: true,
       },
     })) as DiagnosisRecord | null;
 
@@ -277,6 +288,10 @@ async function upsertRegistryForDiagnosis(
     id: true,
     legacyDiagnosisId: true,
     status: true,
+    specialty: true,
+    subspecialty: true,
+    bodySystem: true,
+    category: true,
   } as const;
 
   let registry = (await prisma.diagnosisRegistry.findUnique({
@@ -309,6 +324,7 @@ async function upsertRegistryForDiagnosis(
         canonicalNormalized,
         displayLabel: diagnosis.name,
         ...activeStatusPatch,
+        ...buildLegacyTaxonomyPatch(registry, diagnosis),
       },
       select: selectRegistryRecord,
     })) as DiagnosisRegistryRecord;
@@ -340,6 +356,7 @@ async function upsertRegistryForDiagnosis(
           canonicalNormalized,
           displayLabel: diagnosis.name,
           ...activeStatusPatch,
+          ...buildLegacyTaxonomyPatch(existingByCanonical, diagnosis),
         },
         select: selectRegistryRecord,
       })) as DiagnosisRegistryRecord;
@@ -395,6 +412,10 @@ async function createDiagnosisRegistryRecord(input: {
     id: true;
     legacyDiagnosisId: true;
     status: true;
+    specialty: true;
+    subspecialty: true;
+    bodySystem: true;
+    category: true;
   };
 }): Promise<DiagnosisRegistryRecord> {
   try {
@@ -405,6 +426,7 @@ async function createDiagnosisRegistryRecord(input: {
         canonicalNormalized: input.canonicalNormalized,
         displayLabel: input.diagnosis.name,
         ...input.statusPatch,
+        ...buildLegacyTaxonomyPatch(null, input.diagnosis),
       },
       select: input.selectRegistryRecord,
     })) as DiagnosisRegistryRecord;
@@ -444,10 +466,34 @@ async function createDiagnosisRegistryRecord(input: {
         canonicalNormalized: input.canonicalNormalized,
         displayLabel: input.diagnosis.name,
         ...input.statusPatch,
+        ...buildLegacyTaxonomyPatch(recovered, input.diagnosis),
       },
       select: input.selectRegistryRecord,
     })) as DiagnosisRegistryRecord;
   }
+}
+
+function buildLegacyTaxonomyPatch(
+  registry: Pick<
+    DiagnosisRegistryRecord,
+    'specialty' | 'subspecialty' | 'bodySystem' | 'category'
+  > | null,
+  diagnosis: DiagnosisRecord,
+) {
+  const mapping = mapLegacySystemToRegistryTaxonomy(diagnosis.system);
+  if (!mapping.mapped) {
+    return {};
+  }
+
+  return buildNullOnlyTaxonomyPatch(
+    registry ?? {
+      specialty: null,
+      subspecialty: null,
+      bodySystem: null,
+      category: null,
+    },
+    mapping.taxonomy,
+  );
 }
 
 function toNumber(value: bigint | number | null | undefined): number {

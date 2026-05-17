@@ -59,7 +59,6 @@ describe('CaseRevisionService', () => {
     expect(fixture.diagnosisRegistryLinkService.resolveForWrite).toHaveBeenCalledWith(
       {
         diagnosisId: 'diagnosis-1',
-        diagnosisRegistryId: null,
       },
       tx,
     );

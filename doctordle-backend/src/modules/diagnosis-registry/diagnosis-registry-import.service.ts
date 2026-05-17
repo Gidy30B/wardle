@@ -7,6 +7,14 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service.js';
 import { buildDiagnosisRegistryStatusPatch } from './diagnosis-registry-status.js';
+import type {
+  DiagnosisAgeGroupValue,
+  DiagnosisClinicalSettingValue,
+  DiagnosisClueTypeValue,
+  DiagnosisDifficultyBandValue,
+  DiagnosisRarityBandValue,
+  DiagnosisUrgencyLevelValue,
+} from './diagnosis-registry-taxonomy.js';
 import { normalizeDiagnosisTerm } from './diagnosis-term-normalizer.js';
 
 type DiagnosisRegistryImportClient =
@@ -28,6 +36,18 @@ type ExistingRegistryRecord = {
   icd11Code: string | null;
   category: string | null;
   specialty: string | null;
+  subspecialty: string | null;
+  bodySystem: string | null;
+  organSystem: string | null;
+  difficultyBand: DiagnosisDifficultyBandValue | null;
+  rarityBand: DiagnosisRarityBandValue | null;
+  clinicalSetting: DiagnosisClinicalSettingValue | null;
+  ageGroup: DiagnosisAgeGroupValue | null;
+  urgencyLevel: DiagnosisUrgencyLevelValue | null;
+  isPlayable: boolean;
+  isGeneratable: boolean;
+  preferredClueTypes: DiagnosisClueTypeValue[] | null;
+  excludedClueTypes: DiagnosisClueTypeValue[] | null;
   notes: string | null;
 };
 
@@ -56,6 +76,18 @@ type RegistryMutationInput = {
   icd11Code: string | null;
   category: string | null;
   specialty: string | null;
+  subspecialty: string | null;
+  bodySystem: string | null;
+  organSystem: string | null;
+  difficultyBand: DiagnosisDifficultyBandValue | null;
+  rarityBand: DiagnosisRarityBandValue | null;
+  clinicalSetting: DiagnosisClinicalSettingValue | null;
+  ageGroup: DiagnosisAgeGroupValue | null;
+  urgencyLevel: DiagnosisUrgencyLevelValue | null;
+  isPlayable: boolean;
+  isGeneratable: boolean;
+  preferredClueTypes: DiagnosisClueTypeValue[] | null;
+  excludedClueTypes: DiagnosisClueTypeValue[] | null;
   notes: string | null;
 };
 
@@ -95,6 +127,18 @@ export type ImportedDiagnosisRecord = {
   icd11Code?: string | null;
   category?: string | null;
   specialty?: string | null;
+  subspecialty?: string | null;
+  bodySystem?: string | null;
+  organSystem?: string | null;
+  difficultyBand?: DiagnosisDifficultyBandValue | null;
+  rarityBand?: DiagnosisRarityBandValue | null;
+  clinicalSetting?: DiagnosisClinicalSettingValue | null;
+  ageGroup?: DiagnosisAgeGroupValue | null;
+  urgencyLevel?: DiagnosisUrgencyLevelValue | null;
+  isPlayable?: boolean;
+  isGeneratable?: boolean;
+  preferredClueTypes?: DiagnosisClueTypeValue[] | null;
+  excludedClueTypes?: DiagnosisClueTypeValue[] | null;
   notes?: string | null;
 };
 
@@ -123,6 +167,18 @@ const REGISTRY_SELECT = {
   icd11Code: true,
   category: true,
   specialty: true,
+  subspecialty: true,
+  bodySystem: true,
+  organSystem: true,
+  difficultyBand: true,
+  rarityBand: true,
+  clinicalSetting: true,
+  ageGroup: true,
+  urgencyLevel: true,
+  isPlayable: true,
+  isGeneratable: true,
+  preferredClueTypes: true,
+  excludedClueTypes: true,
   notes: true,
 } as const;
 
@@ -233,7 +289,12 @@ async function importDiagnosisRegistryRecord(
   const registryCreated = existingRegistry === null && ensuredRegistry.created;
   const diagnosisUpdated = ensuredRegistry.updated;
 
-  await ensureCanonicalAlias(prisma, ensuredRegistry.record.id, canonicalName, canonicalNormalized);
+  await ensureCanonicalAlias(
+    prisma,
+    ensuredRegistry.record.id,
+    canonicalName,
+    canonicalNormalized,
+  );
 
   const aliasResult = await importAliasesForRegistry(
     prisma,
@@ -258,7 +319,8 @@ function buildRegistryMutationInput(
   canonicalName: string,
   canonicalNormalized: string,
 ): RegistryMutationInput {
-  const status = record.status ?? existing?.status ?? DiagnosisRegistryStatus.ACTIVE;
+  const status =
+    record.status ?? existing?.status ?? DiagnosisRegistryStatus.ACTIVE;
 
   return {
     canonicalName,
@@ -272,11 +334,79 @@ function buildRegistryMutationInput(
       typeof record.searchPriority === 'number' &&
       Number.isFinite(record.searchPriority)
         ? Math.trunc(record.searchPriority)
-        : existing?.searchPriority ?? 0,
-    icd10Code: resolveNullableString(record, 'icd10Code', existing?.icd10Code ?? null),
-    icd11Code: resolveNullableString(record, 'icd11Code', existing?.icd11Code ?? null),
-    category: resolveNullableString(record, 'category', existing?.category ?? null),
-    specialty: resolveNullableString(record, 'specialty', existing?.specialty ?? null),
+        : (existing?.searchPriority ?? 0),
+    icd10Code: resolveNullableString(
+      record,
+      'icd10Code',
+      existing?.icd10Code ?? null,
+    ),
+    icd11Code: resolveNullableString(
+      record,
+      'icd11Code',
+      existing?.icd11Code ?? null,
+    ),
+    category: resolveNullableString(
+      record,
+      'category',
+      existing?.category ?? null,
+    ),
+    specialty: resolveNullableString(
+      record,
+      'specialty',
+      existing?.specialty ?? null,
+    ),
+    subspecialty: resolveNullableString(
+      record,
+      'subspecialty',
+      existing?.subspecialty ?? null,
+    ),
+    bodySystem: resolveNullableString(
+      record,
+      'bodySystem',
+      existing?.bodySystem ?? null,
+    ),
+    organSystem: resolveNullableString(
+      record,
+      'organSystem',
+      existing?.organSystem ?? null,
+    ),
+    difficultyBand: resolveNullableEnum(
+      record,
+      'difficultyBand',
+      existing?.difficultyBand ?? null,
+    ),
+    rarityBand: resolveNullableEnum(
+      record,
+      'rarityBand',
+      existing?.rarityBand ?? null,
+    ),
+    clinicalSetting: resolveNullableEnum(
+      record,
+      'clinicalSetting',
+      existing?.clinicalSetting ?? null,
+    ),
+    ageGroup: resolveNullableEnum(
+      record,
+      'ageGroup',
+      existing?.ageGroup ?? null,
+    ),
+    urgencyLevel: resolveNullableEnum(
+      record,
+      'urgencyLevel',
+      existing?.urgencyLevel ?? null,
+    ),
+    isPlayable: record.isPlayable ?? existing?.isPlayable ?? true,
+    isGeneratable: record.isGeneratable ?? existing?.isGeneratable ?? true,
+    preferredClueTypes: resolveNullableStringArray(
+      record,
+      'preferredClueTypes',
+      existing?.preferredClueTypes ?? null,
+    ),
+    excludedClueTypes: resolveNullableStringArray(
+      record,
+      'excludedClueTypes',
+      existing?.excludedClueTypes ?? null,
+    ),
     notes: resolveNullableString(record, 'notes', existing?.notes ?? null),
   };
 }
@@ -375,6 +505,24 @@ function hasRegistryChanges(
     existing.icd11Code !== mutation.icd11Code ||
     existing.category !== mutation.category ||
     existing.specialty !== mutation.specialty ||
+    (existing.subspecialty ?? null) !== mutation.subspecialty ||
+    (existing.bodySystem ?? null) !== mutation.bodySystem ||
+    (existing.organSystem ?? null) !== mutation.organSystem ||
+    (existing.difficultyBand ?? null) !== mutation.difficultyBand ||
+    (existing.rarityBand ?? null) !== mutation.rarityBand ||
+    (existing.clinicalSetting ?? null) !== mutation.clinicalSetting ||
+    (existing.ageGroup ?? null) !== mutation.ageGroup ||
+    (existing.urgencyLevel ?? null) !== mutation.urgencyLevel ||
+    (existing.isPlayable ?? true) !== mutation.isPlayable ||
+    (existing.isGeneratable ?? true) !== mutation.isGeneratable ||
+    !sameNullableStringArray(
+      existing.preferredClueTypes ?? null,
+      mutation.preferredClueTypes,
+    ) ||
+    !sameNullableStringArray(
+      existing.excludedClueTypes ?? null,
+      mutation.excludedClueTypes,
+    ) ||
     existing.notes !== mutation.notes
   );
 }
@@ -452,7 +600,11 @@ async function importAliasesForRegistry(
     }
     seenNormalizedTerms.add(normalizedTerm);
 
-    const mutation = buildAliasMutationInput(aliasRecord, aliasTerm, normalizedTerm);
+    const mutation = buildAliasMutationInput(
+      aliasRecord,
+      aliasTerm,
+      normalizedTerm,
+    );
     const existingAlias = (await prisma.diagnosisAlias.findUnique({
       where: {
         diagnosisRegistryId_normalizedTerm: {
@@ -526,7 +678,7 @@ function buildAliasMutationInput(
   const acceptedForMatch =
     kind === DiagnosisAliasKind.SEARCH_ONLY
       ? false
-      : aliasRecord.isAcceptedForGameplay ?? true;
+      : (aliasRecord.isAcceptedForGameplay ?? true);
 
   return {
     term: aliasTerm,
@@ -586,6 +738,53 @@ function resolveNullableString<T extends object>(
 
   const normalized = sanitizeTerm(value);
   return normalized.length > 0 ? normalized : null;
+}
+
+function resolveNullableEnum<T extends object, V extends string>(
+  source: T,
+  key: keyof T,
+  fallback: V | null,
+): V | null {
+  if (!Object.prototype.hasOwnProperty.call(source, key)) {
+    return fallback;
+  }
+
+  const value = source[key];
+  return typeof value === 'string' && value.length > 0 ? (value as V) : null;
+}
+
+function resolveNullableStringArray<T extends object, V extends string>(
+  source: T,
+  key: keyof T,
+  fallback: V[] | null,
+): V[] | null {
+  if (!Object.prototype.hasOwnProperty.call(source, key)) {
+    return fallback;
+  }
+
+  const value = source[key];
+  if (!Array.isArray(value)) {
+    return value == null ? null : fallback;
+  }
+
+  const items = value.filter(
+    (item): item is V => typeof item === 'string' && item.length > 0,
+  );
+  return items.length > 0 ? items : null;
+}
+
+function sameNullableStringArray(
+  left: string[] | null,
+  right: string[] | null,
+): boolean {
+  if (left === null || right === null) {
+    return left === right;
+  }
+
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 function getImportErrorMessage(error: unknown): string {

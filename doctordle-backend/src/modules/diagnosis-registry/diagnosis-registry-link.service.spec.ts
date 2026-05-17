@@ -12,6 +12,7 @@ describe('DiagnosisRegistryLinkService helpers', () => {
         findUnique: jest.fn().mockResolvedValue({
           id: 'diagnosis-1',
           name: 'Myocardial Infarction',
+          system: 'Cardiology',
         }),
       },
       diagnosisRegistry: {
@@ -63,6 +64,8 @@ describe('DiagnosisRegistryLinkService helpers', () => {
           canonicalNormalized: 'myocardial infarction',
           status: 'ACTIVE',
           active: true,
+          specialty: 'Cardiology',
+          bodySystem: 'Cardiovascular',
         }),
       }),
     );
@@ -82,6 +85,7 @@ describe('DiagnosisRegistryLinkService helpers', () => {
         findUnique: jest.fn().mockResolvedValue({
           id: 'diagnosis-1',
           name: '  Myocardial   infarction ',
+          system: 'Cardiology',
         }),
       },
       diagnosisRegistry: {
@@ -92,6 +96,10 @@ describe('DiagnosisRegistryLinkService helpers', () => {
             id: 'registry-1',
             legacyDiagnosisId: null,
             status: 'DRAFT',
+            specialty: 'Emergency Medicine',
+            subspecialty: null,
+            bodySystem: null,
+            category: null,
           }),
         update: jest.fn().mockResolvedValue({
           id: 'registry-1',
@@ -123,6 +131,7 @@ describe('DiagnosisRegistryLinkService helpers', () => {
           canonicalNormalized: 'myocardial infarction',
           status: 'ACTIVE',
           active: true,
+          bodySystem: 'Cardiovascular',
         }),
       }),
     );
@@ -222,9 +231,7 @@ describe('DiagnosisRegistryLinkService helpers', () => {
       .fn()
       .mockResolvedValueOnce([{ count: BigInt(2) }])
       .mockResolvedValueOnce([{ count: BigInt(1) }])
-      .mockResolvedValueOnce([
-        { normalizedTerm: 'mi', ownerCount: BigInt(2) },
-      ]);
+      .mockResolvedValueOnce([{ normalizedTerm: 'mi', ownerCount: BigInt(2) }]);
     const prisma: any = {
       diagnosis: {
         count: jest.fn().mockResolvedValue(3),
@@ -233,10 +240,7 @@ describe('DiagnosisRegistryLinkService helpers', () => {
         count: jest.fn().mockResolvedValue(1),
       },
       case: {
-        count: jest
-          .fn()
-          .mockResolvedValueOnce(4)
-          .mockResolvedValueOnce(2),
+        count: jest.fn().mockResolvedValueOnce(4).mockResolvedValueOnce(2),
       },
       caseRevision: {
         count: jest.fn().mockResolvedValue(5),

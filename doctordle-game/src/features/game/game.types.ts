@@ -22,11 +22,21 @@ export type ClinicalClue = {
   order: number
 }
 
+export type CaseDiagnosisReadModel = {
+  id: string | null
+  displayLabel: string
+  canonicalName: string | null
+  specialty: string
+  category: string | null
+  bodySystem: string | null
+}
+
 export type GameCase = {
   id: string
   casePublicNumber?: number | null
   displayLabel?: string
   trackDisplayLabel?: string
+  diagnosis?: CaseDiagnosisReadModel | null
   clues: ClinicalClue[]
   clueIndex: number
 }
@@ -135,6 +145,7 @@ export type TodayCase = {
     date: string
     difficulty: string
     diagnosisId: string
+    diagnosis?: CaseDiagnosisReadModel
     clues?: unknown
     explanation?: unknown
   }
@@ -167,7 +178,10 @@ export type LearnLibraryCase = {
     displayLabel?: string
     trackDisplayLabel?: string
     title: string
-    diagnosis: string
+    diagnosis: string | CaseDiagnosisReadModel
+    specialty?: string | null
+    category?: string | null
+    bodySystem?: string | null
     date: string
     difficulty: string
     clues: ClinicalClue[]

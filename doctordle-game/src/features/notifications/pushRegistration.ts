@@ -12,6 +12,7 @@ import {
 import {
   getWebPushCapability,
   registerWebPushToken,
+  type WebPushUnsupportedReason,
 } from './webPushRegistration'
 
 const LEGACY_PUSH_TOKEN_STORAGE_KEY = 'wardle.pushToken'
@@ -20,7 +21,7 @@ const PUSH_TOKEN_STORAGE_KEY_PREFIX = 'wardle.pushToken'
 type PushPlatform = 'android' | 'ios' | 'web'
 
 export type PushCapability =
-  | { supported: false; reason: 'unsupported' }
+  | { supported: false; reason: WebPushUnsupportedReason }
   | { supported: true; permission: string; platform: PushPlatform }
 
 export function getNativePushPlatform(): 'android' | 'ios' | null {

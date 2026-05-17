@@ -8,6 +8,7 @@ import {
   buildAttemptPips,
   formatArchiveCaseLabel,
   formatStudyTime,
+  getCaseDiagnosisLabel,
   splitReasoning,
 } from "../domain/learnDomain";
 import { DifficultyBadge, TrackBadge, InlineNotice } from "../archive/shared";
@@ -25,7 +26,7 @@ export function MobileCaseDetail({
   onBack: () => void;
 }) {
   const explanation = coerceStructuredExplanation(item.case.explanation ?? {});
-  const diagnosis = item.case.diagnosis || item.case.title;
+  const diagnosis = getCaseDiagnosisLabel(item);
 
   useEffect(() => {
     onChangeTab("breakdown");
@@ -156,7 +157,7 @@ export function CaseDetail({
               </span>
             </div>
             <h2 className="mt-3 break-words text-xl font-black leading-snug tracking-tight text-[var(--wardle-color-mint)]">
-              {item.case.diagnosis || item.case.title}
+              {getCaseDiagnosisLabel(item)}
             </h2>
             <p className="mt-1 font-brand-mono text-[11px] text-white/30">
               {item.case.clues.length} clues ·{" "}

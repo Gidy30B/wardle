@@ -11,11 +11,20 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service.js';
-import { importDiagnosisRegistryRecords } from './diagnosis-registry-import.service.js';
-import { DiagnosisRegistryLinkService } from './diagnosis-registry-link.service.js';
 import {
-  isDiagnosisRegistryUsableStatus,
-} from './diagnosis-registry-status.js';
+  importDiagnosisRegistryRecords,
+  type ImportedDiagnosisRecord,
+} from './diagnosis-registry-import.service.js';
+import { DiagnosisRegistryLinkService } from './diagnosis-registry-link.service.js';
+import { isDiagnosisRegistryUsableStatus } from './diagnosis-registry-status.js';
+import type {
+  DiagnosisAgeGroupValue,
+  DiagnosisClinicalSettingValue,
+  DiagnosisClueTypeValue,
+  DiagnosisDifficultyBandValue,
+  DiagnosisRarityBandValue,
+  DiagnosisUrgencyLevelValue,
+} from './diagnosis-registry-taxonomy.js';
 import { normalizeDiagnosisTerm } from './diagnosis-term-normalizer.js';
 
 type DiagnosisRegistryEditorialClient =
@@ -39,6 +48,18 @@ type DiagnosisRegistryRow = {
   status: DiagnosisRegistryStatus;
   category: string | null;
   specialty: string | null;
+  subspecialty: string | null;
+  bodySystem: string | null;
+  organSystem: string | null;
+  difficultyBand: DiagnosisDifficultyBandValue | null;
+  rarityBand: DiagnosisRarityBandValue | null;
+  clinicalSetting: DiagnosisClinicalSettingValue | null;
+  ageGroup: DiagnosisAgeGroupValue | null;
+  urgencyLevel: DiagnosisUrgencyLevelValue | null;
+  isPlayable: boolean;
+  isGeneratable: boolean;
+  preferredClueTypes: DiagnosisClueTypeValue[] | null;
+  excludedClueTypes: DiagnosisClueTypeValue[] | null;
   searchPriority: number;
   isDescriptive: boolean;
   isCompositional: boolean;
@@ -58,6 +79,18 @@ const REGISTRY_EDITORIAL_SELECT: Prisma.DiagnosisRegistrySelect = {
   status: true,
   category: true,
   specialty: true,
+  subspecialty: true,
+  bodySystem: true,
+  organSystem: true,
+  difficultyBand: true,
+  rarityBand: true,
+  clinicalSetting: true,
+  ageGroup: true,
+  urgencyLevel: true,
+  isPlayable: true,
+  isGeneratable: true,
+  preferredClueTypes: true,
+  excludedClueTypes: true,
   searchPriority: true,
   isDescriptive: true,
   isCompositional: true,
@@ -85,6 +118,18 @@ export type AdminDiagnosisRegistrySummary = {
   status: DiagnosisRegistryStatus;
   category: string | null;
   specialty: string | null;
+  subspecialty: string | null;
+  bodySystem: string | null;
+  organSystem: string | null;
+  difficultyBand: DiagnosisDifficultyBandValue | null;
+  rarityBand: DiagnosisRarityBandValue | null;
+  clinicalSetting: DiagnosisClinicalSettingValue | null;
+  ageGroup: DiagnosisAgeGroupValue | null;
+  urgencyLevel: DiagnosisUrgencyLevelValue | null;
+  isPlayable: boolean;
+  isGeneratable: boolean;
+  preferredClueTypes: DiagnosisClueTypeValue[] | null;
+  excludedClueTypes: DiagnosisClueTypeValue[] | null;
   searchPriority: number;
   isDescriptive: boolean;
   isCompositional: boolean;
@@ -98,6 +143,18 @@ export type AdminDiagnosisRegistrySearchItem = {
   status: DiagnosisRegistryStatus;
   category: string | null;
   specialty: string | null;
+  subspecialty: string | null;
+  bodySystem: string | null;
+  organSystem: string | null;
+  difficultyBand: DiagnosisDifficultyBandValue | null;
+  rarityBand: DiagnosisRarityBandValue | null;
+  clinicalSetting: DiagnosisClinicalSettingValue | null;
+  ageGroup: DiagnosisAgeGroupValue | null;
+  urgencyLevel: DiagnosisUrgencyLevelValue | null;
+  isPlayable: boolean;
+  isGeneratable: boolean;
+  preferredClueTypes: DiagnosisClueTypeValue[] | null;
+  excludedClueTypes: DiagnosisClueTypeValue[] | null;
   searchPriority: number;
   aliasPreview: string[];
   matchSource: 'canonical' | 'accepted_alias' | 'abbreviation' | 'search_only';
@@ -108,6 +165,18 @@ export type CreateEditorialDiagnosisInput = {
   aliases?: string[];
   category?: string | null;
   specialty?: string | null;
+  subspecialty?: string | null;
+  bodySystem?: string | null;
+  organSystem?: string | null;
+  difficultyBand?: DiagnosisDifficultyBandValue | null;
+  rarityBand?: DiagnosisRarityBandValue | null;
+  clinicalSetting?: DiagnosisClinicalSettingValue | null;
+  ageGroup?: DiagnosisAgeGroupValue | null;
+  urgencyLevel?: DiagnosisUrgencyLevelValue | null;
+  isPlayable?: boolean;
+  isGeneratable?: boolean;
+  preferredClueTypes?: DiagnosisClueTypeValue[] | null;
+  excludedClueTypes?: DiagnosisClueTypeValue[] | null;
   isDescriptive?: boolean;
   isCompositional?: boolean;
   notes?: string | null;
@@ -115,7 +184,7 @@ export type CreateEditorialDiagnosisInput = {
 };
 
 export type CreateEditorialDiagnosisResult = {
-  diagnosisId: string;
+  diagnosisId: string | null;
   diagnosisRegistryId: string;
   mappingMethod: 'MANUAL_CREATED';
   registry: AdminDiagnosisRegistrySummary;
@@ -128,7 +197,7 @@ export type CreateDiagnosisAliasInput = {
 };
 
 export type DiagnosisRegistryLinkableResult = {
-  diagnosisId: string;
+  diagnosisId: string | null;
   diagnosisRegistryId: string;
   registry: AdminDiagnosisRegistrySummary;
 };
@@ -189,6 +258,18 @@ export class DiagnosisRegistryEditorialService {
         status: row.status,
         category: row.category,
         specialty: row.specialty,
+        subspecialty: row.subspecialty,
+        bodySystem: row.bodySystem,
+        organSystem: row.organSystem,
+        difficultyBand: row.difficultyBand,
+        rarityBand: row.rarityBand,
+        clinicalSetting: row.clinicalSetting,
+        ageGroup: row.ageGroup,
+        urgencyLevel: row.urgencyLevel,
+        isPlayable: row.isPlayable,
+        isGeneratable: row.isGeneratable,
+        preferredClueTypes: row.preferredClueTypes,
+        excludedClueTypes: row.excludedClueTypes,
         searchPriority: row.searchPriority,
         aliasPreview: this.buildAliasPreview(row.aliases),
         matchSource: 'canonical',
@@ -225,22 +306,10 @@ export class DiagnosisRegistryEditorialService {
       );
     }
 
-    const resolvedLink = await this.diagnosisRegistryLinkService.resolveForWrite(
-      {
-        diagnosisRegistryId: registry.id,
-      },
-      client,
-    );
-
-    const refreshedRegistry = await this.getRegistryById(
-      resolvedLink.diagnosisRegistryId,
-      client,
-    );
-
     return {
-      diagnosisId: resolvedLink.diagnosisId,
-      diagnosisRegistryId: resolvedLink.diagnosisRegistryId,
-      registry: this.toRegistrySummary(refreshedRegistry),
+      diagnosisId: registry.legacyDiagnosisId,
+      diagnosisRegistryId: registry.id,
+      registry: this.toRegistrySummary(registry),
     };
   }
 
@@ -250,24 +319,67 @@ export class DiagnosisRegistryEditorialService {
   ): Promise<CreateEditorialDiagnosisResult> {
     const canonicalName = this.requireCanonicalName(input.canonicalName);
     const canonicalNormalized = normalizeDiagnosisTerm(canonicalName);
-    const aliases = this.normalizeAliasTerms(input.aliases ?? [], canonicalNormalized);
+    const aliases = this.normalizeAliasTerms(
+      input.aliases ?? [],
+      canonicalNormalized,
+    );
     const prisma = client as PrismaService;
+    const registryRecord: ImportedDiagnosisRecord = {
+      canonicalName,
+      aliases: aliases.map((alias) => ({
+        alias,
+      })),
+      status: DiagnosisRegistryStatus.ACTIVE,
+      isDescriptive: input.isDescriptive ?? false,
+      isCompositional: input.isCompositional ?? false,
+      notes: this.normalizeOptionalString(input.notes) ?? null,
+      searchPriority: this.normalizeSearchPriority(input.searchPriority),
+    };
 
-    await importDiagnosisRegistryRecords(prisma, [
-      {
-        canonicalName,
-        aliases: aliases.map((alias) => ({
-          alias,
-        })),
-        status: DiagnosisRegistryStatus.ACTIVE,
-        category: this.normalizeOptionalString(input.category) ?? null,
-        specialty: this.normalizeOptionalString(input.specialty) ?? null,
-        isDescriptive: input.isDescriptive ?? false,
-        isCompositional: input.isCompositional ?? false,
-        notes: this.normalizeOptionalString(input.notes) ?? null,
-        searchPriority: this.normalizeSearchPriority(input.searchPriority),
-      },
-    ]);
+    this.assignNullableString(registryRecord, 'category', input.category);
+    this.assignNullableString(registryRecord, 'specialty', input.specialty);
+    this.assignNullableString(
+      registryRecord,
+      'subspecialty',
+      input.subspecialty,
+    );
+    this.assignNullableString(registryRecord, 'bodySystem', input.bodySystem);
+    this.assignNullableString(registryRecord, 'organSystem', input.organSystem);
+    this.assignOptionalValue(
+      registryRecord,
+      'difficultyBand',
+      input.difficultyBand,
+    );
+    this.assignOptionalValue(registryRecord, 'rarityBand', input.rarityBand);
+    this.assignOptionalValue(
+      registryRecord,
+      'clinicalSetting',
+      input.clinicalSetting,
+    );
+    this.assignOptionalValue(registryRecord, 'ageGroup', input.ageGroup);
+    this.assignOptionalValue(
+      registryRecord,
+      'urgencyLevel',
+      input.urgencyLevel,
+    );
+    this.assignOptionalValue(registryRecord, 'isPlayable', input.isPlayable);
+    this.assignOptionalValue(
+      registryRecord,
+      'isGeneratable',
+      input.isGeneratable,
+    );
+    this.assignOptionalValue(
+      registryRecord,
+      'preferredClueTypes',
+      input.preferredClueTypes,
+    );
+    this.assignOptionalValue(
+      registryRecord,
+      'excludedClueTypes',
+      input.excludedClueTypes,
+    );
+
+    await importDiagnosisRegistryRecords(prisma, [registryRecord]);
 
     const importedRegistry = await prisma.diagnosisRegistry.findUnique({
       where: {
@@ -282,50 +394,11 @@ export class DiagnosisRegistryEditorialService {
       );
     }
 
-    let diagnosisId = importedRegistry.legacyDiagnosisId;
-    if (!diagnosisId) {
-      const existingDiagnosis = await prisma.diagnosis.findFirst({
-        where: {
-          name: {
-            equals: canonicalName,
-            mode: 'insensitive',
-          },
-        },
-        select: {
-          id: true,
-        },
-      });
-
-      const diagnosis =
-        existingDiagnosis ??
-        (await prisma.diagnosis.create({
-          data: {
-            name: canonicalName,
-          },
-          select: {
-            id: true,
-          },
-        }));
-
-      diagnosisId = diagnosis.id;
-    }
-
-    const resolvedLink = await this.diagnosisRegistryLinkService.resolveForWrite(
-      {
-        diagnosisId,
-        diagnosisRegistryId: importedRegistry.id,
-      },
-      client,
-    );
-
-    const registry = await this.getRegistryById(
-      resolvedLink.diagnosisRegistryId,
-      client,
-    );
+    const registry = await this.getRegistryById(importedRegistry.id, client);
 
     return {
-      diagnosisId: resolvedLink.diagnosisId,
-      diagnosisRegistryId: resolvedLink.diagnosisRegistryId,
+      diagnosisId: registry.legacyDiagnosisId,
+      diagnosisRegistryId: registry.id,
       mappingMethod: DiagnosisMappingMethod.MANUAL_CREATED,
       registry: this.toRegistrySummary(registry),
     };
@@ -350,7 +423,7 @@ export class DiagnosisRegistryEditorialService {
     const acceptedForMatch =
       kind === DiagnosisAliasKind.SEARCH_ONLY
         ? false
-        : input.acceptedForMatch ?? true;
+        : (input.acceptedForMatch ?? true);
     const prisma = client as PrismaService;
 
     if (acceptedForMatch) {
@@ -424,7 +497,9 @@ export class DiagnosisRegistryEditorialService {
     diagnosisRegistryId: string,
     client: DiagnosisRegistryEditorialClient,
   ): Promise<DiagnosisRegistryRow> {
-    const registry = (await (client as PrismaService).diagnosisRegistry.findUnique({
+    const registry = (await (
+      client as PrismaService
+    ).diagnosisRegistry.findUnique({
       where: {
         id: diagnosisRegistryId,
       },
@@ -485,6 +560,18 @@ export class DiagnosisRegistryEditorialService {
         status: row.status,
         category: row.category,
         specialty: row.specialty,
+        subspecialty: row.subspecialty,
+        bodySystem: row.bodySystem,
+        organSystem: row.organSystem,
+        difficultyBand: row.difficultyBand,
+        rarityBand: row.rarityBand,
+        clinicalSetting: row.clinicalSetting,
+        ageGroup: row.ageGroup,
+        urgencyLevel: row.urgencyLevel,
+        isPlayable: row.isPlayable,
+        isGeneratable: row.isGeneratable,
+        preferredClueTypes: row.preferredClueTypes,
+        excludedClueTypes: row.excludedClueTypes,
         searchPriority: row.searchPriority,
         aliasPreview: this.buildAliasPreview(row.aliases),
         matchSource: 'canonical',
@@ -498,6 +585,18 @@ export class DiagnosisRegistryEditorialService {
       status: row.status,
       category: row.category,
       specialty: row.specialty,
+      subspecialty: row.subspecialty,
+      bodySystem: row.bodySystem,
+      organSystem: row.organSystem,
+      difficultyBand: row.difficultyBand,
+      rarityBand: row.rarityBand,
+      clinicalSetting: row.clinicalSetting,
+      ageGroup: row.ageGroup,
+      urgencyLevel: row.urgencyLevel,
+      isPlayable: row.isPlayable,
+      isGeneratable: row.isGeneratable,
+      preferredClueTypes: row.preferredClueTypes,
+      excludedClueTypes: row.excludedClueTypes,
       searchPriority: row.searchPriority,
       aliasPreview: this.buildAliasPreview(row.aliases),
       matchSource: this.mapAliasMatchSource(aliasCandidate!.alias.kind),
@@ -577,6 +676,18 @@ export class DiagnosisRegistryEditorialService {
       status: registry.status,
       category: registry.category,
       specialty: registry.specialty,
+      subspecialty: registry.subspecialty,
+      bodySystem: registry.bodySystem,
+      organSystem: registry.organSystem,
+      difficultyBand: registry.difficultyBand,
+      rarityBand: registry.rarityBand,
+      clinicalSetting: registry.clinicalSetting,
+      ageGroup: registry.ageGroup,
+      urgencyLevel: registry.urgencyLevel,
+      isPlayable: registry.isPlayable,
+      isGeneratable: registry.isGeneratable,
+      preferredClueTypes: registry.preferredClueTypes,
+      excludedClueTypes: registry.excludedClueTypes,
       searchPriority: registry.searchPriority,
       isDescriptive: registry.isDescriptive,
       isCompositional: registry.isCompositional,
@@ -638,7 +749,11 @@ export class DiagnosisRegistryEditorialService {
       }
 
       const normalized = normalizeDiagnosisTerm(alias);
-      if (!normalized || normalized === canonicalNormalized || seen.has(normalized)) {
+      if (
+        !normalized ||
+        normalized === canonicalNormalized ||
+        seen.has(normalized)
+      ) {
         continue;
       }
 
@@ -655,6 +770,29 @@ export class DiagnosisRegistryEditorialService {
     }
 
     return Math.trunc(value);
+  }
+
+  private assignNullableString<K extends keyof ImportedDiagnosisRecord>(
+    record: ImportedDiagnosisRecord,
+    key: K,
+    value: ImportedDiagnosisRecord[K],
+  ): void {
+    if (value === undefined) {
+      return;
+    }
+
+    record[key] = (this.normalizeOptionalString(value as string | null) ??
+      null) as ImportedDiagnosisRecord[K];
+  }
+
+  private assignOptionalValue<K extends keyof ImportedDiagnosisRecord>(
+    record: ImportedDiagnosisRecord,
+    key: K,
+    value: ImportedDiagnosisRecord[K],
+  ): void {
+    if (value !== undefined) {
+      record[key] = value;
+    }
   }
 
   private getDefaultAliasRank(kind: DiagnosisAliasKind): number {

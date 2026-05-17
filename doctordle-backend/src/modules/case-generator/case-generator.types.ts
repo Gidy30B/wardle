@@ -46,8 +46,56 @@ export type SaveGeneratedCaseOptions = {
 export type GenerateBatchOptions = {
   count: number;
   track?: string;
+  bodySystem?: string;
   difficulty?: string;
   concurrency?: number;
+  registryFirst?: boolean;
+};
+
+export type PlannedGenerationDiagnosis = {
+  diagnosisRegistryId: string;
+  legacyDiagnosisId: string | null;
+  displayLabel: string;
+  canonicalName: string;
+  acceptedAliases: string[];
+  specialty: string | null;
+  category: string | null;
+  bodySystem: string | null;
+  difficultyBand: string | null;
+  existingCaseCount: number;
+  lastGeneratedAt: Date | null;
+  recentUsePenaltyApplied: boolean;
+};
+
+export type PlannerDiagnosisComparison = {
+  aiAnswer: string | null;
+  normalizedAiAnswer: string | null;
+  normalizedPlannerDiagnosis: string;
+  matchesPlanner: boolean | null;
+};
+
+export type PlannerSelectionDiagnostics = {
+  candidateCount: number;
+  unusedCandidateCount: number;
+  repeatedCandidateCount: number;
+  selectedUnusedCount: number;
+  selectedRepeatCount: number;
+  repeatReason: string | null;
+  existingCaseCountByDiagnosis: Record<string, number>;
+  recentUsePenaltyApplied: boolean;
+};
+
+export type PlannedGenerationSlot = {
+  batchId: string;
+  index: number;
+  diagnosis: PlannedGenerationDiagnosis | null;
+  duplicatePrevented: boolean;
+  selectionStatus: 'selected' | 'unavailable';
+  repeatReason: string | null;
+  existingCaseCount: number | null;
+  recentUsePenaltyApplied: boolean;
+  diagnostics: PlannerSelectionDiagnostics;
+  comparison?: PlannerDiagnosisComparison;
 };
 
 export type BatchGeneratedCaseResult =
@@ -62,6 +110,7 @@ export type BatchGeneratedCaseResult =
       status: 'skipped';
       reason:
         | 'duplicate_answer'
+        | 'duplicate_scenario'
         | 'low_quality'
         | 'specialty_cluster'
         | 'difficulty_balance';
@@ -83,6 +132,7 @@ export type GenerateBatchResult = {
   skipped: number;
   failed: number;
   averageQualityScore: number | null;
+  plannerDiagnostics: PlannedGenerationSlot[];
   results: BatchGeneratedCaseResult[];
 };
 
