@@ -5,6 +5,7 @@ import type { ShareCardData } from './shareCard.types'
 import { shareScoreCard } from './share.service'
 import type { ShareImageResult } from './shareImage'
 import { buildDesignerShareBlocks, buildShareText } from './shareText'
+import { getPublicShareHostLabel } from './shareUrl'
 
 type DesignedShareCardProps = {
   data: ShareCardData
@@ -26,6 +27,7 @@ forwardedRef,
   const [actionState, setActionState] = useState<ShareImageResult>('idle')
   const shareText = useMemo(() => buildShareText(data), [data])
   const blocks = useMemo(() => buildDesignerShareBlocks(data), [data])
+  const shareHostLabel = useMemo(() => getPublicShareHostLabel(), [])
   const resultTitle =
     data.result === 'correct'
       ? data.cluesUsed <= 2
@@ -120,7 +122,7 @@ forwardedRef,
           <div className="mt-5 border-t border-white/[0.06] pt-4">
             <p className="text-xs italic text-white/45">Diagnose. Learn. Win.</p>
             <p className="mt-1 font-brand-mono text-xs font-semibold uppercase tracking-[0.18em] text-[var(--wardle-color-teal)]">
-              wardle.app
+              {shareHostLabel}
             </p>
           </div>
         </div>

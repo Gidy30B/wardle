@@ -3,12 +3,13 @@ import type { ShareCardData } from './shareCard.types'
 import { shareCardImage, type ShareImageResult } from './shareImage'
 import {
   buildShareGrid,
+  buildSharePayload,
   buildShareText as buildDesignedShareText,
   getShareUrl,
   shareScoreText,
 } from './shareText'
 
-export { buildShareGrid, getShareUrl }
+export { buildShareGrid, buildSharePayload, getShareUrl }
 
 export async function shareScoreCard(
   data: ShareCardData,
