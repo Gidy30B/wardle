@@ -135,6 +135,7 @@ export default function WardleAuthForm() {
           signUp: signUpState.signUp,
           setActive: signUpState.setActive,
           email: normalizedEmail,
+          displayName,
         })
         if (signUpResult === 'needs_email_verification') {
           setPendingEmailCode({ kind: 'signup', email: normalizedEmail })
@@ -356,13 +357,27 @@ async function startSignUpEmailCode({
   signUp,
   setActive,
   email,
+  displayName,
 }: {
   signUp: NonNullable<ReturnType<typeof useSignUp>['signUp']>
   setActive: NonNullable<ReturnType<typeof useSignUp>['setActive']>
   email: string
+  displayName: string
 }) {
+  const normalizedUsername = displayName
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .replace(/^_+|_+$/g, '')
+
+  if (!normalizedUsername) {
+    throw new Error('Enter a display name with at least one letter or number.')
+  }
+
   const signUpResult = await signUp.create({
     emailAddress: email.trim(),
+    username: normalizedUsername,
   })
   throwIfClerkResultError(signUpResult)
 
@@ -396,12 +411,20 @@ async function activateCompletedAttempt(
   setActive: (params: { session: string }) => Promise<void>,
   latestResult: unknown,
 ) {
-  if (await tryActivateCompletedAttempt(resource, setActive, latestResult)) {
-    return
-  }
-
   const status =
     getStringProperty(latestResult, 'status') ?? getStringProperty(resource, 'status')
+
+  if (status === 'complete') {
+    if (await tryActivateCompletedAttempt(resource, setActive, latestResult)) {
+      return
+    }
+
+    throw new Error('Clerk completed verification but did not return a session.')
+  }
+
+  if (status) {
+    logIncompleteClerkAttempt(latestResult, resource)
+  }
 
   // TODO(auth-blocker): the custom Clerk sign-in UI does not yet implement
   // MFA second-factor flows. Add a dedicated second-factor step before enabling
@@ -413,9 +436,7 @@ async function activateCompletedAttempt(
   }
 
   if (status && status !== 'complete') {
-    throw new Error(
-      'Clerk needs one more verification step before this account can start a session.',
-    )
+    throw new Error(getIncompleteClerkAttemptMessage(latestResult, resource))
   }
 
   throw new Error('Clerk did not return an active session.')
@@ -426,6 +447,12 @@ async function tryActivateCompletedAttempt(
   setActive: (params: { session: string }) => Promise<void>,
   latestResult: unknown,
 ) {
+  const status =
+    getStringProperty(latestResult, 'status') ?? getStringProperty(resource, 'status')
+  if (status !== 'complete') {
+    return false
+  }
+
   const sessionId =
     getStringProperty(latestResult, 'createdSessionId') ??
     getStringProperty(latestResult, 'created_session_id') ??
@@ -454,6 +481,76 @@ async function tryActivateCompletedAttempt(
   }
 
   return false
+}
+
+function logIncompleteClerkAttempt(latestResult: unknown, resource: unknown) {
+  if (!import.meta.env.DEV) {
+    return
+  }
+
+  console.warn('[auth] Clerk verification incomplete', {
+    status: getStringProperty(latestResult, 'status') ?? getStringProperty(resource, 'status'),
+    missingFields: getStringArrayProperty(latestResult, 'missingFields') ??
+      getStringArrayProperty(latestResult, 'missing_fields') ??
+      getStringArrayProperty(resource, 'missingFields') ??
+      getStringArrayProperty(resource, 'missing_fields') ??
+      [],
+    unverifiedFields: getStringArrayProperty(latestResult, 'unverifiedFields') ??
+      getStringArrayProperty(latestResult, 'unverified_fields') ??
+      getStringArrayProperty(resource, 'unverifiedFields') ??
+      getStringArrayProperty(resource, 'unverified_fields') ??
+      [],
+  })
+}
+
+function getIncompleteClerkAttemptMessage(latestResult: unknown, resource: unknown) {
+  const missingFields =
+    getStringArrayProperty(latestResult, 'missingFields') ??
+    getStringArrayProperty(latestResult, 'missing_fields') ??
+    getStringArrayProperty(resource, 'missingFields') ??
+    getStringArrayProperty(resource, 'missing_fields') ??
+    []
+  const unverifiedFields =
+    getStringArrayProperty(latestResult, 'unverifiedFields') ??
+    getStringArrayProperty(latestResult, 'unverified_fields') ??
+    getStringArrayProperty(resource, 'unverifiedFields') ??
+    getStringArrayProperty(resource, 'unverified_fields') ??
+    []
+
+  if (missingFields.some(isPasswordField)) {
+    return 'This account still needs a password. Disable required passwords in Clerk or add a password field to Wardle signup.'
+  }
+
+  if (missingFields.some(isNameField)) {
+    return 'This account still needs a required name field. Relax Clerk name requirements or submit the required name fields during signup.'
+  }
+
+  if (missingFields.some(isPhoneField)) {
+    return 'This account still needs a phone number. Disable required phone signup in Clerk or add phone verification to Wardle signup.'
+  }
+
+  if (unverifiedFields.some(isEmailField)) {
+    return 'This email address is not verified yet. Check the code and try again.'
+  }
+
+  return 'Clerk requires another signup field before this account can start a session. Check the Clerk signup requirements for this application.'
+}
+
+function isPasswordField(field: string) {
+  return field.toLowerCase().includes('password')
+}
+
+function isNameField(field: string) {
+  const normalized = field.toLowerCase()
+  return normalized.includes('name') || normalized.includes('username')
+}
+
+function isPhoneField(field: string) {
+  return field.toLowerCase().includes('phone')
+}
+
+function isEmailField(field: string) {
+  return field.toLowerCase().includes('email')
 }
 
 function throwIfClerkResultError(result: unknown) {
@@ -488,6 +585,13 @@ function getArrayProperty(value: unknown, key: string): unknown[] {
 
   const property = (value as Record<string, unknown>)[key]
   return Array.isArray(property) ? property : []
+}
+
+function getStringArrayProperty(value: unknown, key: string): string[] | null {
+  const property = getArrayProperty(value, key)
+  const strings = property.filter((item): item is string => typeof item === 'string')
+
+  return strings.length > 0 ? strings : null
 }
 
 function getEmailCodeFirstFactor(value: unknown): { emailAddressId: string } | null {

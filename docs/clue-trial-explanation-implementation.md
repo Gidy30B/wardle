@@ -1,5 +1,7 @@
 # Doctordle Clue + Trial-End + Explanation Implementation Summary
 
+> Archival note: this implementation summary uses the former Doctordle project name.
+
 ## Scope Delivered
 
 - Reveal clues one symptom at a time on explicit user action (`Show clue` button).

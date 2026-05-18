@@ -1,9 +1,9 @@
-import { forwardRef, useCallback, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import WardleLogo from '../../components/brand/WardleLogo'
 import Button from '../../components/ui/Button'
 import type { ShareCardData } from './shareCard.types'
 import { shareScoreCard } from './share.service'
-import type { ShareImageResult } from './shareImage'
+import { prepareShareCardImage, type ShareImageResult } from './shareImage'
 import { buildDesignerShareBlocks, buildShareText } from './shareText'
 import { getPublicShareHostLabel } from './shareUrl'
 
@@ -65,6 +65,14 @@ forwardedRef,
   const handleShare = async () => {
     setActionState(await shareScoreCard(data, cardRef.current))
   }
+
+  useEffect(() => {
+    if (!cardRef.current) {
+      return
+    }
+
+    void prepareShareCardImage(cardRef.current, data)
+  }, [data])
 
   return (
     <section className={['min-w-0 max-w-full', className ?? ''].filter(Boolean).join(' ')}>

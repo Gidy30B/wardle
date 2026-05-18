@@ -1,4 +1,4 @@
-# Doctordle – Current Game System (As Implemented)
+# Wardle – Current Game System (As Implemented)
 
 ## 1. Core Playable Flow
 

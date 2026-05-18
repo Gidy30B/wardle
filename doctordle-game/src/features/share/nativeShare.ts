@@ -5,6 +5,7 @@ type NativeShareOptions = {
   title: string
   text: string
   url?: string
+  files?: string[]
   dialogTitle?: string
 }
 
@@ -12,6 +13,7 @@ export async function shareNatively({
   title,
   text,
   url,
+  files,
   dialogTitle,
 }: NativeShareOptions) {
   if (!Capacitor.isNativePlatform()) {
@@ -28,6 +30,7 @@ export async function shareNatively({
       title,
       text,
       url,
+      files,
       dialogTitle,
     })
     return true
