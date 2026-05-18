@@ -1,6 +1,7 @@
 import type { ShareAttemptLabel, ShareCardData } from './shareCard.types'
 import { shareNatively } from './nativeShare'
 import { buildShareUrl } from './shareUrl'
+import { getVisibleStreak } from '../user-progress/streakVisibility'
 
 const emojiByAttempt: Record<ShareAttemptLabel, string> = {
   correct: '🟩',
@@ -54,7 +55,8 @@ function buildShareTextLines(
     data.result === 'correct'
       ? `Solved in ${data.cluesUsed}/${data.totalClues} clues`
       : 'Not solved today'
-  const streakLine = data.streak != null ? `🔥 ${data.streak}-day streak` : null
+  const visibleStreak = getVisibleStreak(data.streak)
+  const streakLine = visibleStreak != null ? `🔥 ${visibleStreak}-day streak` : null
   const xpLine = data.xpTotal != null ? `${data.xpTotal} XP` : null
   const blocks = buildDesignerShareBlocks(data).join('')
 

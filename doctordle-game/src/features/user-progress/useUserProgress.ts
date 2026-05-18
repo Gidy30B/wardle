@@ -2,20 +2,21 @@ import { useAuth } from '@clerk/clerk-react'
 import { useQuery } from '@tanstack/react-query'
 import { getUserProgressApi } from '../game/game.api'
 import { useApi } from '../../lib/api'
+import { getVisibleStreak } from './streakVisibility'
 
 export function useUserProgress() {
-  const { isLoaded, isSignedIn } = useAuth()
+  const { isLoaded, isSignedIn, userId } = useAuth()
   const { request } = useApi()
 
   const query = useQuery({
-    queryKey: ['progress'],
+    queryKey: ['progress', userId],
     queryFn: async () => getUserProgressApi(request),
-    enabled: isLoaded && isSignedIn,
+    enabled: isLoaded && isSignedIn && Boolean(userId),
     placeholderData: (previousData) => previousData,
   })
 
   const progressSummary = {
-    streak: query.data?.currentStreak ?? 0,
+    streak: getVisibleStreak(query.data?.currentStreak),
     level: query.data?.level ?? 1,
     rank: query.data?.rank ?? 'Rookie',
     xpTotal: query.data?.xpTotal ?? 0,

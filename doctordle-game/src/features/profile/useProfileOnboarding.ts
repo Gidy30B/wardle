@@ -38,8 +38,22 @@ export function useProfileOnboarding() {
     )
     if (consumedProfile) {
       setRevision((value) => value + 1)
+      void updateBackendProfileApi(request, {
+        displayName: consumedProfile.displayName.trim(),
+        individualMode: true,
+        organizationId: null,
+      })
+        .then(async () => {
+          await queryClient.invalidateQueries({ queryKey: ['profile', 'me'] })
+          await queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
+        })
+        .catch((error: unknown) => {
+          if (import.meta.env.DEV) {
+            console.warn('[auth] Failed to sync pending signup profile', error)
+          }
+        })
     }
-  }, [user?.primaryEmailAddress?.emailAddress, userId])
+  }, [queryClient, request, user?.primaryEmailAddress?.emailAddress, userId])
 
   const localProfile = useMemo(() => {
     if (!userId) {

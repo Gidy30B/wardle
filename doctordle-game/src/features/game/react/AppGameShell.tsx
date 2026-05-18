@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import AppBottomNav, { appNavItems, type AppGameTab } from './AppBottomNav'
 import { APP_ICONS } from '../../../theme/icons'
 import WardleLogo from '../../../components/brand/WardleLogo'
+import { getVisibleStreak } from '../../user-progress/streakVisibility'
 
 type AppGameShellProps = {
   activeTab: AppGameTab
@@ -22,6 +23,8 @@ export default function AppGameShell({
   xpTotal,
   organizationName,
 }: AppGameShellProps) {
+  const visibleStreak = getVisibleStreak(streak)
+
   return (
     <div className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[var(--wardle-color-charcoal)] text-[var(--wardle-color-mint)]">
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -57,18 +60,20 @@ export default function AppGameShell({
             })}
           </nav>
 
-          {(streak != null || xpTotal != null || organizationName) ? (
+          {(visibleStreak != null || xpTotal != null || organizationName) ? (
             <div className="mt-auto rounded-[20px] border border-[rgba(244,162,97,0.24)] bg-[rgba(244,162,97,0.08)] p-4">
               <p className="font-brand-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--wardle-color-amber)]">
                 Progress
               </p>
               <div className="mt-3 grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-lg font-black text-[var(--wardle-color-mint)]">
-                    {streak != null ? streak : '--'}
-                  </p>
-                  <p className="text-[10px] text-white/45">{APP_ICONS.streak} Streak</p>
-                </div>
+                {visibleStreak != null ? (
+                  <div>
+                    <p className="text-lg font-black text-[var(--wardle-color-mint)]">
+                      {visibleStreak}
+                    </p>
+                    <p className="text-[10px] text-white/45">{APP_ICONS.streak} Streak</p>
+                  </div>
+                ) : null}
                 <div>
                   <p className="text-lg font-black text-[var(--wardle-color-mint)]">
                     {xpTotal != null ? xpTotal : '--'}

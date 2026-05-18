@@ -35,6 +35,7 @@ import {
   mergeLatestPlayedCase,
   titleCase,
 } from "./domain/learnDomain";
+import { ALL_FILTERS } from "./learn.constants";
 // ─── Root page ────────────────────────────────────────────────────────────────
 
 export default function LearnTabPage({
@@ -45,6 +46,7 @@ export default function LearnTabPage({
   learnLibrary,
   libraryLoading,
   libraryError,
+  onRetryLibrary,
   roundViewModel,
 }: LearnTabPageProps) {
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
@@ -248,6 +250,9 @@ export default function LearnTabPage({
               onSelectSpecialty={setSelectedMobileSpecialty}
               onStartDueReviewQueue={startDueReviewQueue}
               loading={libraryLoading}
+              error={libraryError}
+              onRetry={onRetryLibrary}
+              onClearFilters={() => updateFilters(ALL_FILTERS)}
             />
           </>
         ) : (
@@ -269,7 +274,7 @@ export default function LearnTabPage({
             <InlineNotice tone="error" copy="Unable to load completed cases." />
           ) : null}
           {libraryLoading ? (
-            <InlineNotice tone="muted" copy="Loading completed cases..." />
+            <InlineNotice tone="muted" copy="Loading your completed cases..." />
           ) : null}
 
           <ArchiveControls
@@ -300,6 +305,9 @@ export default function LearnTabPage({
             <ArchiveEmptyState
               completedCount={completedCases.length}
               loading={libraryLoading}
+              error={libraryError}
+              onRetry={onRetryLibrary}
+              onClearFilters={() => updateFilters(ALL_FILTERS)}
             />
           )}
         </div>

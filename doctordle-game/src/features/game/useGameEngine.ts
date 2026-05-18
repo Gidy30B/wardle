@@ -559,6 +559,8 @@ export function useGameEngine() {
         if (hasDisplayableExplanation(response.explanation)) {
           setLatestPlayedLearningResult(response)
         }
+        void queryClient.invalidateQueries({ queryKey: ['game', 'learn'] })
+        void queryClient.invalidateQueries({ queryKey: ['progress'] })
 
         await delay(FINAL_TRANSITION_DELAY_MS)
 

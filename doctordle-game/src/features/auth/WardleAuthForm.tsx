@@ -2,6 +2,7 @@ import { useSignIn, useSignUp } from '@clerk/clerk-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import Button from '../../components/ui/Button'
 import { savePendingAuthProfile } from './authProfileSync'
+import { getClerkOAuthRedirects, isNativeRuntime } from './authRedirects'
 
 type AuthMode = 'signin' | 'signup'
 type PendingEmailCode =
@@ -33,6 +34,7 @@ export default function WardleAuthForm() {
   const [loading, setLoading] = useState(false)
 
   const clerkReady = signInState.isLoaded && signUpState.isLoaded
+  const showGoogleOAuth = !isNativeRuntime()
   const submitLabel = useMemo(() => {
     if (loading) {
       if (pendingEmailCode) {
@@ -46,8 +48,31 @@ export default function WardleAuthForm() {
       return 'Verify and Continue'
     }
 
-    return mode === 'signin' ? 'Send Sign-In Code' : 'Send Verification Code'
+    return mode === 'signin' ? 'Send Sign-In Code' : 'Create Account'
   }, [loading, mode, pendingEmailCode])
+
+  const handleGoogleOAuth = async () => {
+    setError('')
+
+    if (!clerkReady) {
+      setError('Authentication is still loading. Try again in a moment.')
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const { redirectUrl, redirectUrlComplete } = getClerkOAuthRedirects()
+      await signInState.signIn.authenticateWithRedirect({
+        strategy: 'oauth_google',
+        redirectUrl,
+        redirectUrlComplete,
+      })
+    } catch (exception) {
+      setError(getClerkErrorMessage(exception))
+      setLoading(false)
+    }
+  }
 
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode)
@@ -247,6 +272,28 @@ export default function WardleAuthForm() {
         <Button type="submit" disabled={loading || !clerkReady}>
           {submitLabel}
         </Button>
+
+        {showGoogleOAuth && !pendingEmailCode ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-white/10" />
+              <span className="text-xs font-bold uppercase tracking-[0.14em] text-white/36">
+                OR
+              </span>
+              <div className="h-px flex-1 bg-white/10" />
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={loading || !clerkReady}
+              onClick={() => {
+                void handleGoogleOAuth()
+              }}
+            >
+              Continue with Google
+            </Button>
+          </div>
+        ) : null}
 
         {pendingEmailCode ? (
           <button

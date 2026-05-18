@@ -129,6 +129,9 @@ export default function GamePage() {
           learnLibrary={learnLibrary.library}
           libraryLoading={learnLibrary.loading}
           libraryError={learnLibrary.error}
+          onRetryLibrary={() => {
+            void learnLibrary.refetch()
+          }}
           roundViewModel={game.roundViewModel}
         />
       ) : null}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GameEvent } from './events/game.events'
 import { useGameEvents } from './events/useGameEvents'
+import { getVisibleStreak } from '../user-progress/streakVisibility'
 
 type FloatingRewardState = {
   id: number
@@ -80,11 +81,12 @@ export function FloatingReward() {
 
   if (!activeReward || !visible || activeReward.xp <= 0) return null
 
-  const secondaryLabel = activeReward.streak !== undefined ? `Streak ${activeReward.streak}` : 'Correct'
+  const visibleStreak = getVisibleStreak(activeReward.streak)
+  const secondaryLabel = visibleStreak != null ? `Streak ${visibleStreak}` : 'Correct'
   const scaleClass =
-    activeReward?.streak && activeReward.streak >= 5
+    visibleStreak != null && visibleStreak >= 5
       ? 'scale-125'
-      : activeReward?.streak && activeReward.streak >= 3
+      : visibleStreak != null && visibleStreak >= 3
       ? 'scale-110'
       : ''
 

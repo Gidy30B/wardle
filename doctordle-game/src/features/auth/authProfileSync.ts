@@ -63,7 +63,11 @@ export function consumePendingAuthProfile(userId: string, email: string | null |
     })
 
     window.sessionStorage.removeItem(key)
-    return pending
+    return {
+      ...pending,
+      displayName: pending.displayName.trim(),
+      university: pending.university.trim(),
+    }
   } catch {
     window.sessionStorage.removeItem(key)
     return null

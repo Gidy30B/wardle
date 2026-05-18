@@ -5,6 +5,7 @@ import { SettingsChevronValue } from '../components/SettingsActionRow'
 import { SettingsRow } from '../components/SettingsRow'
 import { SettingsSection, SettingsSectionLabel } from '../components/SettingsSection'
 import { SettingsShell } from '../components/SettingsShell'
+import { getVisibleStreak } from '../../../../user-progress/streakVisibility'
 
 const MENU_ITEMS: Array<{
   id: SettingsScreenId
@@ -63,6 +64,8 @@ export function SettingsHomeScreen({
   currentStreak: number | null
   onSelectScreen: (screen: SettingsScreenId) => void
 }) {
+  const visibleStreak = getVisibleStreak(currentStreak)
+
   return (
     <SettingsShell
       contentStyle={{
@@ -119,7 +122,7 @@ export function SettingsHomeScreen({
             flexShrink: 0,
             background:
               'linear-gradient(135deg, var(--wardle-color-teal), var(--wardle-color-navy))',
-            display: 'flex',
+          display: visibleStreak != null ? 'flex' : 'none',
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: 20,
@@ -189,7 +192,7 @@ export function SettingsHomeScreen({
           border: '1px solid rgba(244,162,97,0.22)',
           borderRadius: 13,
           padding: '10px 13px',
-          display: 'flex',
+          display: visibleStreak != null ? 'flex' : 'none',
           alignItems: 'center',
           gap: 10,
         }}
@@ -203,7 +206,7 @@ export function SettingsHomeScreen({
               color: 'var(--wardle-color-amber)',
             }}
           >
-            {currentStreak ?? 0}-day streak
+            {visibleStreak}-day streak
           </div>
           <div style={{ fontSize: 11, color: 'var(--wardle-color-gray)' }}>
             Keep it going!
@@ -329,4 +332,3 @@ export function SettingsHomeScreen({
     </SettingsShell>
   )
 }
-

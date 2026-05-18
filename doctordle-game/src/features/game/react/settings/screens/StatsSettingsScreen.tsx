@@ -6,6 +6,7 @@ import {
   SettingsSubHero,
 } from '../components/SettingsSection'
 import { SettingsShell } from '../components/SettingsShell'
+import { getVisibleStreak } from '../../../../user-progress/streakVisibility'
 
 export function StatsSettingsScreen({
   onBack,
@@ -16,18 +17,21 @@ export function StatsSettingsScreen({
   currentStreak: number | null
   xpTotal: number | null
 }) {
+  const visibleStreak = getVisibleStreak(currentStreak)
   const stats = [
     {
       v: xpTotal != null ? String(xpTotal) : '--',
       l: 'Total XP',
       color: 'var(--wardle-color-teal)',
     },
-    {
-      v: `🔥 ${currentStreak ?? 0}`,
-      l: 'Day streak',
-      color: 'var(--wardle-color-amber)',
-    },
-  ]
+    visibleStreak != null
+      ? {
+          v: `🔥 ${visibleStreak}`,
+          l: 'Day streak',
+          color: 'var(--wardle-color-amber)',
+        }
+      : null,
+  ].filter((stat): stat is { v: string; l: string; color: string } => stat != null)
 
   return (
     <SettingsShell>
@@ -101,4 +105,3 @@ export function StatsSettingsScreen({
     </SettingsShell>
   )
 }
-

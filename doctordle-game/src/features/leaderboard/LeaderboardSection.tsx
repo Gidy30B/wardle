@@ -7,6 +7,7 @@ import type {
   UserLeaderboardPosition,
 } from './leaderboard.types'
 import type { AppIconSet } from '../../theme/icons'
+import { getVisibleStreak } from '../user-progress/streakVisibility'
 
 type LeaderboardSectionProps = {
   iconSet: AppIconSet
@@ -83,6 +84,7 @@ function LeaderboardSection({
   onPlay,
 }: LeaderboardSectionProps) {
   const safeLeaderboard = Array.isArray(leaderboard) ? leaderboard : []
+  const visibleCurrentStreak = getVisibleStreak(currentStreak)
   const maxScore = Math.max(
     ...safeLeaderboard.map((entry) => entry.score),
     currentUserPosition?.score ?? 0,
@@ -249,7 +251,9 @@ function LeaderboardSection({
           </div>
           <div className="grid grid-cols-4 gap-2 text-center">
             <RankStat label={`${iconSet.rank} Rank`} value={currentUserPosition ? `#${currentUserPosition.rank}` : '--'} />
-            <RankStat label={`${iconSet.streak} Streak`} value={currentStreak != null ? String(currentStreak) : '--'} />
+            {visibleCurrentStreak != null ? (
+              <RankStat label={`${iconSet.streak} Streak`} value={String(visibleCurrentStreak)} />
+            ) : null}
             <RankStat
               label={`${iconSet.time} Points`}
               value={
@@ -451,7 +455,9 @@ function getEntryMeta({
 
   const publicOrganizationName =
     entry.organizationName ?? (entry.userId === currentUserId ? organizationName : null)
-  const publicStreak = entry.streak ?? (entry.userId === currentUserId ? currentStreak : null)
+  const publicStreak = getVisibleStreak(
+    entry.streak ?? (entry.userId === currentUserId ? currentStreak : null),
+  )
 
   if (publicOrganizationName) {
     parts.push(publicOrganizationName)

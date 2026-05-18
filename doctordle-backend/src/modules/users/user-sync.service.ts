@@ -5,12 +5,14 @@ import { PrismaService } from '../../core/db/prisma.service';
 export type ClerkPrincipal = {
   clerkId: string;
   email?: string | null;
+  displayName?: string | null;
 };
 
 export type SyncedUser = {
   id: string;
   clerkId: string | null;
   email: string | null;
+  displayName: string | null;
   subscriptionTier: string;
   lastPlayedAt: Date | null;
   role: string;
@@ -33,6 +35,9 @@ export class UserSyncService {
         where: { id: existingByClerkId.id },
         data: {
           email: principal.email ?? undefined,
+          ...(existingByClerkId.displayName?.trim() || !principal.displayName?.trim()
+            ? {}
+            : { displayName: principal.displayName.trim() }),
         },
       });
 
@@ -49,6 +54,9 @@ export class UserSyncService {
         data: {
           clerkId: principal.clerkId,
           email: principal.email ?? undefined,
+          ...(existingById.displayName?.trim() || !principal.displayName?.trim()
+            ? {}
+            : { displayName: principal.displayName.trim() }),
         },
       });
 
@@ -60,6 +68,7 @@ export class UserSyncService {
         id: randomUUID(),
         clerkId: principal.clerkId,
         email: principal.email ?? undefined,
+        displayName: principal.displayName?.trim() || undefined,
         subscriptionTier: 'free',
       },
     });
@@ -74,6 +83,7 @@ export class UserSyncService {
           "id",
           "clerkId",
           "email",
+          "displayName",
           "subscriptionTier",
           "lastPlayedAt",
           "role"

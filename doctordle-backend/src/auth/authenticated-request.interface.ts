@@ -4,6 +4,7 @@ export type RequestUser = {
   id: string;
   clerkId: string;
   email?: string;
+  displayName?: string;
   role: string;
 };
 

@@ -6,6 +6,7 @@ import { shareScoreCard } from './share.service'
 import { prepareShareCardImage, type ShareImageResult } from './shareImage'
 import { buildDesignerShareBlocks, buildShareText } from './shareText'
 import { getPublicShareHostLabel } from './shareUrl'
+import { getVisibleStreak } from '../user-progress/streakVisibility'
 
 type DesignedShareCardProps = {
   data: ShareCardData
@@ -24,6 +25,7 @@ const DesignedShareCard = forwardRef<HTMLDivElement, DesignedShareCardProps>(fun
 forwardedRef,
 ) {
   const cardRef = useRef<HTMLDivElement | null>(null)
+  const visibleStreak = getVisibleStreak(data.streak)
   const [actionState, setActionState] = useState<ShareImageResult>('idle')
   const shareText = useMemo(() => buildShareText(data), [data])
   const blocks = useMemo(() => buildDesignerShareBlocks(data), [data])
@@ -113,11 +115,9 @@ forwardedRef,
               tone="teal"
             />
             <ShareStat label="Score" value={String(data.score)} tone="mint" />
-            <ShareStat
-              label="Day Streak"
-              value={data.streak != null ? `🔥${data.streak}` : '--'}
-              tone="amber"
-            />
+            {visibleStreak != null ? (
+              <ShareStat label="Day Streak" value={`🔥${visibleStreak}`} tone="amber" />
+            ) : null}
           </div>
 
           {data.school ? (

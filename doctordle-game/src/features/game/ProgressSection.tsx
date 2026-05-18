@@ -1,4 +1,5 @@
 import type { UserProgress } from './game.types'
+import { getVisibleStreak } from '../user-progress/streakVisibility'
 import { Trophy, Star } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -42,7 +43,7 @@ export default function ProgressSection({ progress, loading, onOpenLeaderboard }
 
   const xp = progress.xpTotal ?? 0
   const level = progress.level ?? 1
-  const streak = progress.currentStreak ?? 0
+  const streak = getVisibleStreak(progress.currentStreak)
   const currentRank = progress.rank ?? 'Intern'
   const currentRankIndex = Math.max(
     0,
@@ -75,8 +76,12 @@ export default function ProgressSection({ progress, loading, onOpenLeaderboard }
         </div>
 
         <div className="text-right">
-          <p className="text-sm font-semibold text-orange-400">Streak {streak}</p>
-          <p className="text-xs text-white/60">Current streak</p>
+          {streak != null ? (
+            <>
+              <p className="text-sm font-semibold text-orange-400">Streak {streak}</p>
+              <p className="text-xs text-white/60">Current streak</p>
+            </>
+          ) : null}
         </div>
       </div>
 

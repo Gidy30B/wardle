@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core'
+
 export const CLERK_OAUTH_CALLBACK_PATH = '/sso-callback'
 export const NATIVE_AUTH_CUSTOM_SCHEME = 'app.wardle.medcase'
 export const NATIVE_AUTH_CALLBACK_HOST = 'sso-callback'
@@ -33,11 +35,7 @@ export function getClerkFallbackRedirectUrl() {
 }
 
 export function isNativeRuntime() {
-  return Boolean(
-    typeof window !== 'undefined' &&
-      (window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
-        ?.isNativePlatform?.(),
-  )
+  return Capacitor.isNativePlatform()
 }
 
 export function mapNativeAuthUrlToInternalPath(appUrl: string): string | null {

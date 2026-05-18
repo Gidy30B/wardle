@@ -6,6 +6,7 @@ import type { GameExplanation } from '../features/game/game.types'
 import WardleLogo from '../components/brand/WardleLogo'
 import Button from '../components/ui/Button'
 import SurfaceCard from '../components/ui/SurfaceCard'
+import { getVisibleStreak } from '../features/user-progress/streakVisibility'
 
 type ExplanationPageProps = {
   explanation: GameExplanation
@@ -27,6 +28,7 @@ export default function ExplanationPage({
 }: ExplanationPageProps) {
   const structuredExplanation = coerceStructuredExplanation(explanation)
   const displayText = getExplanationDisplayText(explanation)
+  const visibleStreak = getVisibleStreak(resultSummary?.streak)
 
   return (
     <main className="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col gap-4 px-1 pb-24 pt-1 sm:px-2">
@@ -46,7 +48,9 @@ export default function ExplanationPage({
               <ResultPill label="Attempts" value={resultSummary.attempts != null ? `${resultSummary.attempts}/6` : '--'} />
               <ResultPill label="Score" value={resultSummary.score != null ? String(resultSummary.score) : '--'} />
               <ResultPill label="XP" value={resultSummary.xp != null ? `+${resultSummary.xp}` : '--'} />
-              <ResultPill label="Streak" value={resultSummary.streak != null ? `🔥${resultSummary.streak}` : '--'} />
+              {visibleStreak != null ? (
+                <ResultPill label="Streak" value={`🔥${visibleStreak}`} />
+              ) : null}
             </div>
             {resultSummary.diagnosis ? (
               <p className="mt-5 font-brand-mono text-xs uppercase tracking-[0.24em] text-[var(--wardle-color-teal)]">

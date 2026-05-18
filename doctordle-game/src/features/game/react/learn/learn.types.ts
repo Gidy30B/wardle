@@ -13,6 +13,7 @@ export type LearnTabPageProps = {
   learnLibrary: LearnLibraryResponse | null;
   libraryLoading: boolean;
   libraryError: string | null;
+  onRetryLibrary: () => void;
   roundViewModel: RoundViewModel;
 };
 

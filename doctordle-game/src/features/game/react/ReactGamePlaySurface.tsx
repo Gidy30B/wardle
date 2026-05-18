@@ -7,6 +7,7 @@ import ReactClueCard from './ReactClueCard'
 import ReactGameProgress from './ReactGameProgress'
 import ReactGuessInput from './ReactGuessInput'
 import NotificationBell from '../../notifications/NotificationBell'
+import { getVisibleStreak } from '../../user-progress/streakVisibility'
 import type { RoundViewModel } from '../round.types'
 import type { AppIconSet } from '../../../theme/icons'
 
@@ -52,7 +53,7 @@ export default function ReactGamePlaySurface({
       ? Math.max(0, resultCluesUsed - 1)
       : Math.max(0, roundViewModel.revealedClueCount - 1)
   const attemptsRemaining = Math.max(0, visualSlotCount - roundViewModel.attemptsCount)
-  const streakValue = currentStreak
+  const streakValue = getVisibleStreak(currentStreak)
   const caseCode = roundViewModel.caseTrackDisplayLabel.toUpperCase()
   const isInteractive =
     roundViewModel.mode === 'PLAYING' || roundViewModel.mode === 'SUBMITTING'

@@ -22,10 +22,14 @@ describe('UsersService settings', () => {
         upsert: jest.fn().mockResolvedValue(defaultSettings),
       },
     };
+    const cache = {
+      deleteByPrefix: jest.fn().mockResolvedValue(0),
+    };
 
     return {
-      service: new UsersService(prisma as never),
+      service: new UsersService(prisma as never, cache as never),
       prisma,
+      cache,
     };
   }
 

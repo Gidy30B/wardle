@@ -4,13 +4,13 @@ import { useApi } from '../../lib/api'
 import { getLearnLibraryApi } from './game.api'
 
 export function useLearnLibrary() {
-  const { isLoaded, isSignedIn } = useAuth()
+  const { isLoaded, isSignedIn, userId } = useAuth()
   const { request } = useApi()
 
   const query = useQuery({
-    queryKey: ['game', 'learn'],
+    queryKey: ['game', 'learn', userId],
     queryFn: async () => getLearnLibraryApi(request),
-    enabled: isLoaded && isSignedIn,
+    enabled: isLoaded && isSignedIn && Boolean(userId),
     placeholderData: (previousData) => previousData,
   })
 
@@ -18,5 +18,6 @@ export function useLearnLibrary() {
     library: query.data ?? null,
     loading: query.isPending && !query.data,
     error: query.error instanceof Error ? query.error.message : null,
+    refetch: query.refetch,
   }
 }

@@ -5158,7 +5158,7 @@ export class RoundScene extends Phaser.Scene implements RoundLayerHost {
       return
     }
 
-    const bonus = reward.streak ? `Streak ${reward.streak}` : 'Correct'
+    const bonus = reward.streak && reward.streak > 0 ? `Streak ${reward.streak}` : 'Correct'
     this.rewardToast.label.setText(`+${reward.xp} XP`)
     this.rewardToast.sublabel.setText(bonus)
     this.rewardToast.container.setVisible(true)

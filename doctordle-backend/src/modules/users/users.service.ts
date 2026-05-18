@@ -5,12 +5,16 @@ import {
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
+import { RedisCacheService } from '../../core/cache/redis-cache.service';
 import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { UpdateMySettingsDto } from './dto/update-my-settings.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: RedisCacheService,
+  ) {}
 
   async getMyProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
@@ -108,6 +112,11 @@ export class UsersService {
         });
       }
     });
+
+    if (payload.displayName?.trim()) {
+      await this.cache.deleteByPrefix('leaderboard:daily:');
+      await this.cache.deleteByPrefix('leaderboard:weekly:');
+    }
 
     return this.getMyProfile(userId);
   }

@@ -1,5 +1,6 @@
 import type { GameResult } from '../game/game.types'
 import type { RoundViewModel } from '../game/round.types'
+import { getVisibleStreak } from '../user-progress/streakVisibility'
 import type { ShareAttemptLabel, ShareCardData } from './shareCard.types'
 
 type ShareCardDataOverrides = {
@@ -24,14 +25,15 @@ export function buildShareCardDataFromRound(
     roundViewModel.resultWasCorrect === true ||
     result?.gameOverReason === 'correct' ||
     result?.label === 'correct'
-  const hasStreakOverride = Object.prototype.hasOwnProperty.call(overrides, 'streak')
-  const streak = hasStreakOverride
-    ? overrides.streak ?? null
-    : typeof roundViewModel.reward?.streak === 'number'
+  const rawStreak =
+    typeof roundViewModel.reward?.streak === 'number'
       ? roundViewModel.reward.streak
       : typeof result?.streakAfter === 'number'
         ? result.streakAfter
-        : null
+        : typeof overrides.streak === 'number'
+          ? overrides.streak
+          : null
+  const streak = getVisibleStreak(rawStreak)
 
   return {
     caseId: roundViewModel.caseId,
@@ -69,12 +71,13 @@ export function buildShareCardDataFromResult(
     cluesUsed: Math.min(attemptsUsed, totalClues),
     totalClues,
     score: result.score,
-    streak:
+    streak: getVisibleStreak(
       typeof fallback.reward?.streak === 'number'
         ? fallback.reward.streak
         : typeof result.streakAfter === 'number'
           ? result.streakAfter
           : null,
+    ),
     xpTotal: typeof fallback.hud.xpTotal === 'number' ? fallback.hud.xpTotal : null,
     school: null,
     attemptLabels:

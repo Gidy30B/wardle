@@ -150,6 +150,9 @@ export function MobileCaseArchive({
   onSelectSpecialty,
   onStartDueReviewQueue,
   loading,
+  error,
+  onRetry,
+  onClearFilters,
 }: {
   cases: LearnLibraryCase[];
   completedCount: number;
@@ -160,6 +163,9 @@ export function MobileCaseArchive({
   onSelectSpecialty: (specialtyKey: string) => void;
   onStartDueReviewQueue: () => void;
   loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+  onClearFilters: () => void;
 }) {
   return (
     <section className="space-y-5 px-4 pt-4">
@@ -210,6 +216,9 @@ export function MobileCaseArchive({
         <ArchiveEmptyState
           completedCount={completedCount}
           loading={loading}
+          error={error}
+          onRetry={onRetry}
+          onClearFilters={onClearFilters}
           mobile
         />
       )}
@@ -1039,20 +1048,51 @@ export function CaseLibraryCard({
 export function ArchiveEmptyState({
   completedCount,
   loading,
+  error,
+  onRetry,
+  onClearFilters,
   mobile = false,
 }: {
   completedCount: number;
   loading: boolean;
+  error?: string | null;
+  onRetry?: () => void;
+  onClearFilters?: () => void;
   mobile?: boolean;
 }) {
-  if (loading) return null;
+  const title = error
+    ? "Unable to load cases"
+    : loading
+      ? "Loading your completed cases..."
+      : completedCount > 0
+        ? "No matching cases"
+        : "No explanations yet";
+  const copy = error
+    ? "Something interrupted your learning archive. Try loading it again."
+    : loading
+      ? "Fetching your solved and missed cases from Wardle."
+      : completedCount > 0
+        ? "No matching cases. Clear filters to bring cases back into view."
+        : "Complete a case to build your learning archive.";
 
-  const title =
-    completedCount > 0 ? "No matching cases" : "No explanations yet";
-  const copy =
-    completedCount > 0
-      ? "Adjust your filters to bring cases back into view."
-      : "Complete a case to add its explanation, clues, and differentials to this library.";
+  const retryButton = error && onRetry ? (
+    <button
+      type="button"
+      onClick={onRetry}
+      className="mt-4 rounded-full border border-[rgba(0,180,166,0.24)] bg-[rgba(0,180,166,0.1)] px-4 py-2 font-brand-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--wardle-color-teal)] transition hover:bg-[rgba(0,180,166,0.16)]"
+    >
+      Retry
+    </button>
+  ) : null;
+  const clearFiltersButton = !error && !loading && completedCount > 0 && onClearFilters ? (
+    <button
+      type="button"
+      onClick={onClearFilters}
+      className="mt-4 rounded-full border border-white/[0.1] bg-white/[0.04] px-4 py-2 font-brand-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white/56 transition hover:bg-white/[0.08] hover:text-white/76"
+    >
+      Clear filters
+    </button>
+  ) : null;
 
   if (mobile) {
     return (
@@ -1061,6 +1101,8 @@ export function ArchiveEmptyState({
           {title}
         </p>
         <p className="mt-2 text-sm leading-6 text-white/40">{copy}</p>
+        {retryButton}
+        {clearFiltersButton}
       </div>
     );
   }
@@ -1072,6 +1114,8 @@ export function ArchiveEmptyState({
       className="min-w-0 max-w-full overflow-hidden"
     >
       <p className="max-w-2xl text-sm leading-6 text-white/54">{copy}</p>
+      {retryButton}
+      {clearFiltersButton}
     </SurfaceCard>
   );
 }

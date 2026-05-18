@@ -18,6 +18,7 @@ export class AuthController {
 
     return {
       clerkId: req.user.clerkId,
+      displayName: req.user.displayName,
       email: req.user.email,
       role: req.user.role,
       userId: req.user.id,
@@ -31,12 +32,14 @@ export class AuthController {
     const user = await this.userSyncService.syncUser({
       clerkId: req.user.clerkId,
       email: req.user.email,
+      displayName: req.user.displayName,
     });
 
     const progress = await this.userProgressService.syncProgress(user.id);
 
     return {
       clerkId: user.clerkId,
+      displayName: user.displayName ?? undefined,
       email: user.email ?? undefined,
       role: user.role,
       userId: user.id,
