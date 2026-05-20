@@ -1,6 +1,6 @@
-export const CANONICAL_PUBLIC_SHARE_BASE_URL = 'https://wardle-nu.vercel.app'
+export const CANONICAL_PUBLIC_SHARE_BASE_URL = 'https://www.wardle.it.com'
 
-const CANONICAL_PUBLIC_SHARE_HOST = 'wardle-nu.vercel.app'
+const CANONICAL_PUBLIC_SHARE_HOST = 'www.wardle.it.com'
 const PLACEHOLDER_HOSTS = new Set(['your-app.vercel.app', 'example.com'])
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0'])
 const PREVIEW_HOST_SUFFIXES = [

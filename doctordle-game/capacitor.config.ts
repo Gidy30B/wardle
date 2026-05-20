@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: "Wardle",
   webDir: "dist",
   server: {
-    hostname: "wardle-nu.vercel.app",
+    hostname: "www.wardle.it.com",
     androidScheme: "https",
     iosScheme: "https",
   },

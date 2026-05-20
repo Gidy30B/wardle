@@ -5,7 +5,7 @@ export const NATIVE_AUTH_CUSTOM_SCHEME = 'app.wardle.medcase'
 export const NATIVE_AUTH_CALLBACK_HOST = 'sso-callback'
 export const NATIVE_AUTH_COMPLETE_HOST = 'oauth-complete'
 export const ROOT_PATH = '/'
-export const PRODUCTION_WEB_ORIGIN = 'https://wardle-nu.vercel.app'
+export const PRODUCTION_WEB_ORIGIN = 'https://www.wardle.it.com'
 const NATIVE_CALLBACK_MARKER = 'native'
 
 type ClerkOAuthRedirects = {

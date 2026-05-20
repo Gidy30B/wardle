@@ -50,6 +50,8 @@ function isAllowedOrigin(origin: string, configuredAllowedOrigins: ReadonlyArray
 export function createCorsOptions(): CorsOptions {
   const env = getEnv();
   const configuredAllowedOrigins = [
+    'https://www.wardle.it.com',
+    'https://wardle.it.com',
     'https://wardle-nu.vercel.app',
     'https://wardle-7xey.vercel.app',
     'http://localhost:5173',
