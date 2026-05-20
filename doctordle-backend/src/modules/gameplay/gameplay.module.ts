@@ -73,6 +73,7 @@ import { XpService } from './xp.service';
     StreakService,
     LeaderboardService,
     XpService,
+    RankService,
   ],
 })
 export class GameplayModule {}

@@ -192,6 +192,18 @@ export type LearnLibraryCase = {
 export type LearnLibraryResponse = {
   generatedAt: string
   cases: LearnLibraryCase[]
+  performanceSummary?: {
+    accuracyPct: number | null
+    casesDone: number
+    averageCluesUsed: number | null
+    averageTimeSecs: number | null
+    specialties: Array<{
+      key: string
+      label: string
+      casesDone: number
+      accuracyPct: number | null
+    }>
+  }
 }
 
 export type LeaderboardEntry = {

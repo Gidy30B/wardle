@@ -10,7 +10,34 @@ import LearnTabPage from '../features/game/react/LearnTabPage'
 import RankTabPage from '../features/game/react/RankTabPage'
 import SettingsPage from '../features/game/pages/SettingsPage'
 import { useUserOrganizations } from '../features/organizations/useUserOrganizations'
+import { useUserStats } from '../features/user-stats/useUserStats'
+import type { UserStatsReport } from '../features/user-stats/userStats.types'
 import { APP_ICONS } from '../theme/icons'
+
+function buildLearnLibraryWithStats<T extends { performanceSummary?: unknown }>(
+  learnLibrary: T | null,
+  statsReport: UserStatsReport | null,
+): T | null {
+  if (!statsReport) {
+    return learnLibrary
+  }
+
+  return {
+    ...(learnLibrary ?? { generatedAt: new Date().toISOString(), cases: [] }),
+    performanceSummary: {
+      accuracyPct: statsReport.totals.accuracyPct,
+      casesDone: statsReport.totals.casesCompleted,
+      averageCluesUsed: statsReport.totals.averageCluesUsed,
+      averageTimeSecs: statsReport.totals.averageTimeSecs,
+      specialties: statsReport.bySpecialty.map((specialty) => ({
+        key: specialty.key,
+        label: specialty.label,
+        casesDone: specialty.casesCompleted,
+        accuracyPct: specialty.accuracyPct,
+      })),
+    },
+  } as T
+}
 
 export default function GamePage() {
   const [activeTab, setActiveTab] = useState<AppGameTab>('play')
@@ -21,7 +48,9 @@ export default function GamePage() {
   const leaderboard = useLeaderboard(leaderboardMode)
   const learnLibrary = useLearnLibrary()
   const organizations = useUserOrganizations()
+  const userStats = useUserStats()
   const currentStreak = game.progress?.currentStreak ?? null
+  const bestStreak = game.progress?.longestStreak ?? null
   const organizationName = organizations.primaryOrganization?.name ?? null
   const shellXpTotal =
     typeof game.roundViewModel.hud.xpTotal === 'number'
@@ -77,6 +106,11 @@ export default function GamePage() {
     leaderboardMode,
   ])
 
+  const learnLibraryWithStats = useMemo(
+    () => buildLearnLibraryWithStats(learnLibrary.library, userStats.report),
+    [learnLibrary.library, userStats.report],
+  )
+
   return (
     <AppGameShell
       activeTab={activeTab}
@@ -126,7 +160,7 @@ export default function GamePage() {
           latestResult={game.latestResult}
           latestPlayedExplanation={game.latestPlayedExplanation}
           latestPlayedResult={game.latestPlayedLearningResult}
-          learnLibrary={learnLibrary.library}
+          learnLibrary={learnLibraryWithStats}
           libraryLoading={learnLibrary.loading}
           libraryError={learnLibrary.error}
           onRetryLibrary={() => {
@@ -156,9 +190,16 @@ export default function GamePage() {
       {activeTab === 'settings' ? (
         <SettingsPage
           currentStreak={currentStreak}
+          bestStreak={bestStreak}
           xpTotal={shellXpTotal}
           organizationName={organizationName}
           memberships={organizations.memberships}
+          statsReport={userStats.report}
+          statsLoading={userStats.loading}
+          statsError={userStats.error}
+          onRetryStats={() => {
+            void userStats.refetch()
+          }}
         />
       ) : null}
     </AppGameShell>

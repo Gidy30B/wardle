@@ -15,6 +15,7 @@ import { QueueModule } from './modules/queue/queue.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { StatsModule } from './modules/stats/stats.module';
 
 @Module({
   controllers: [HealthController],
@@ -34,6 +35,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     RealtimeModule,
     OrganizationsModule,
     NotificationsModule,
+    StatsModule,
   ],
 })
 export class AppModule {}

@@ -26,9 +26,14 @@ import { StatsSettingsScreen } from './screens/StatsSettingsScreen'
 
 export default function SettingsPage({
   currentStreak,
+  bestStreak,
   xpTotal,
   organizationName,
   memberships,
+  statsReport,
+  statsLoading,
+  statsError,
+  onRetryStats,
 }: SettingsPageProps) {
   const { isLoaded, isSignedIn, signOut, userId } = useAuth()
   const { user } = useUser()
@@ -94,7 +99,12 @@ export default function SettingsPage({
         <StatsSettingsScreen
           onBack={goHome}
           currentStreak={currentStreak}
+          bestStreak={bestStreak}
           xpTotal={xpTotal}
+          statsReport={statsReport}
+          loading={statsLoading}
+          error={statsError}
+          onRetry={onRetryStats}
         />
       )
     case 'account':

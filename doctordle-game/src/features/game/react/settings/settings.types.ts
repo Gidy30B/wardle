@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
 import type { UserOrganizationMembership } from '../../../organizations/organization.types'
+import type { UserStatsReport } from '../../../user-stats/userStats.types'
 import type {
   DifficultyPreference,
   UserSettings,
@@ -7,9 +8,14 @@ import type {
 
 export type SettingsPageProps = {
   currentStreak: number | null
+  bestStreak: number | null
   xpTotal: number | null
   organizationName: string | null
   memberships: UserOrganizationMembership[]
+  statsReport: UserStatsReport | null
+  statsLoading: boolean
+  statsError: string | null
+  onRetryStats: () => void
 }
 
 export type SettingsScreenId =
