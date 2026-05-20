@@ -1,4 +1,4 @@
-import { SignIn } from '@clerk/clerk-react';
+import { AuthenticateWithRedirectCallback, SignIn } from '@clerk/clerk-react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import AnalyticsPage from '../features/analytics/AnalyticsPage';
 import CasesPage from '../features/cases/CasesPage';
@@ -120,6 +120,10 @@ function AdminShell() {
 export default function AppRoutes() {
   return (
     <Routes>
+      <Route
+        path="/sso-callback"
+        element={<AuthenticateWithRedirectCallback redirectUrl="/" />}
+      />
       <Route element={<AdminShell />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/dashboard" element={<Navigate to="/" replace />} />

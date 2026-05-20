@@ -306,19 +306,6 @@ textarea {
   }
 }
 
-@keyframes wardle-learn-empty-icon {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-    box-shadow: 0 0 24px rgba(244, 162, 97, 0.08);
-  }
-
-  50% {
-    transform: translateY(-2px) scale(1.015);
-    box-shadow: 0 0 30px rgba(244, 162, 97, 0.14);
-  }
-}
-
 .wardle-learn-slide-up {
   animation: wardle-learn-slide-up 220ms ease-out both;
 }
@@ -327,17 +314,12 @@ textarea {
   animation: wardle-learn-fade 180ms ease-out both;
 }
 
-.wardle-learn-empty-icon {
-  animation: wardle-learn-empty-icon 3.2s ease-in-out infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .learn-card-enter,
   .learn-card-flip-enter,
   .learn-clue-enter,
   .wardle-learn-slide-up,
-  .wardle-learn-fade,
-  .wardle-learn-empty-icon {
+  .wardle-learn-fade {
     animation: none;
   }
 }

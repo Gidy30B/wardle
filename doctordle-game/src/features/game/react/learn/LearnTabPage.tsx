@@ -211,11 +211,11 @@ function DesktopArchiveEmptyState({
 
 function MobileNeverPlayedState() {
   return (
-    <div className="wardle-learn-slide-up mx-4 mt-3 overflow-hidden rounded-[22px] border border-[rgba(244,162,97,0.18)] bg-[var(--wardle-color-charcoal)] shadow-[0_18px_46px_rgba(0,0,0,0.26)]">
+    <div className="wardle-learn-slide-up mx-4 mt-3 overflow-hidden rounded-[22px] border border-white/[0.08] bg-white/[0.025] shadow-[0_18px_46px_rgba(0,0,0,0.22)]">
       <div className="p-5">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <div className="mb-2 inline-flex rounded-full border border-[var(--wardle-color-amber)]/24 bg-[var(--wardle-color-amber)]/10 px-3 py-1 font-brand-mono text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--wardle-color-amber)]">
+            <div className="mb-2 inline-flex rounded-full border border-[var(--wardle-color-teal)]/20 bg-[var(--wardle-color-teal)]/10 px-3 py-1 font-brand-mono text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--wardle-color-teal)]">
               Learning archive
             </div>
             <h3 className="text-[20px] font-black leading-tight tracking-[-0.03em] text-[var(--wardle-color-light)]">
@@ -223,7 +223,7 @@ function MobileNeverPlayedState() {
             </h3>
           </div>
 
-          <div className="wardle-learn-empty-icon flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl border border-[var(--wardle-color-amber)]/28 bg-[var(--wardle-color-amber)]/12 text-[var(--wardle-color-amber)] shadow-[0_0_24px_rgba(244,162,97,0.08)]">
+          <div className="flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl border border-[var(--wardle-color-amber)]/24 bg-[var(--wardle-color-amber)]/10 text-[var(--wardle-color-amber)]">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -257,7 +257,7 @@ function MobileNeverPlayedState() {
               key={title}
               className="flex gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.035] p-3.5"
             >
-              <div className="font-brand-mono text-[11px] font-bold text-[var(--wardle-color-amber)]/82">
+              <div className="font-brand-mono text-[11px] font-bold text-[var(--wardle-color-teal)]/72">
                 {n}
               </div>
               <div>
