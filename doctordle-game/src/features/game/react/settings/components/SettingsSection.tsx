@@ -38,7 +38,7 @@ export function SettingsSubHero({
   title,
   desc,
 }: {
-  icon: string
+  icon: ReactNode
   title: string
   desc: string
 }) {
@@ -67,4 +67,3 @@ export function SettingsSubHero({
     </div>
   )
 }
-

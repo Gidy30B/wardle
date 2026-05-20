@@ -1,5 +1,9 @@
 import WardleLogo from '../../../../../components/brand/WardleLogo'
 import { SETTINGS_VERSION_LABEL } from '../settings.constants'
+import {
+  LEARNING_STATS_SETTINGS_ICON,
+  LEARNING_STATS_SETTINGS_ICON_BG,
+} from '../settings.icons'
 import type { SettingsScreenId } from '../settings.types'
 import { SettingsChevronValue } from '../components/SettingsActionRow'
 import { SettingsRow } from '../components/SettingsRow'
@@ -37,8 +41,8 @@ const MENU_ITEMS: Array<{
   },
   {
     id: 'stats',
-    icon: '📊',
-    bg: 'rgba(140,100,210,0.15)',
+    icon: LEARNING_STATS_SETTINGS_ICON,
+    bg: LEARNING_STATS_SETTINGS_ICON_BG,
     label: 'Learning & Stats',
     sub: 'Performance, badges, history',
   },

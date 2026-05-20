@@ -1,0 +1,2 @@
+export const LEARNING_STATS_SETTINGS_ICON = '📊'
+export const LEARNING_STATS_SETTINGS_ICON_BG = 'rgba(140,100,210,0.15)'

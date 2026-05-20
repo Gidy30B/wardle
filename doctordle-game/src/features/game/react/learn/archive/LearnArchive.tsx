@@ -1062,11 +1062,11 @@ export function ArchiveEmptyState({
 }) {
   const title = error
     ? "Unable to load cases"
-    : loading
-      ? "Loading your completed cases..."
+      : loading
+        ? "Loading your completed cases..."
       : completedCount > 0
         ? "No matching cases"
-        : "No explanations yet";
+        : "No completed cases yet";
   const copy = error
     ? "Something interrupted your learning archive. Try loading it again."
     : loading
