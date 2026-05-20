@@ -1,4 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
+import { UserOnboardingStatus } from '@prisma/client';
 import { UsersService } from './users.service';
 
 describe('UsersService settings', () => {
@@ -74,5 +75,156 @@ describe('UsersService settings', () => {
     const { service } = createService(null);
 
     await expect(service.getMySettings(user.id)).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('UsersService onboarding', () => {
+  const profileUser = {
+    id: 'user-1',
+    clerkId: 'clerk-1',
+    email: 'ada@example.com',
+    displayName: 'Ada Lovelace',
+    trainingLevel: null,
+    country: null,
+    individualMode: false,
+    onboardingStatus: UserOnboardingStatus.ORGANIZATION_REQUIRED,
+    onboardingCompletedAt: null,
+    primaryOrganizationId: null,
+    role: 'user',
+    primaryOrganization: null,
+    organizations: [],
+  };
+
+  function createService(prismaOverrides: Record<string, unknown> = {}) {
+    const prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue(profileUser),
+        update: jest.fn().mockResolvedValue(profileUser),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          displayName: 'Ada Lovelace',
+          individualMode: false,
+          primaryOrganizationId: null,
+          onboardingCompletedAt: null,
+        }),
+      },
+      organization: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'org-1' }),
+      },
+      userOrganization: {
+        upsert: jest.fn().mockResolvedValue({}),
+      },
+      $transaction: jest.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback(prisma),
+      ),
+      ...prismaOverrides,
+    };
+    const cache = {
+      deleteByPrefix: jest.fn().mockResolvedValue(0),
+    };
+
+    return {
+      service: new UsersService(prisma as never, cache as never),
+      prisma,
+      cache,
+    };
+  }
+
+  it('saves profile and moves the user to organization choice', async () => {
+    const { service, prisma, cache } = createService();
+
+    await service.saveOnboardingProfile('user-1', {
+      displayName: 'Ada Lovelace',
+    });
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: { displayName: 'Ada Lovelace' },
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: {
+        individualMode: false,
+        onboardingStatus: UserOnboardingStatus.ORGANIZATION_REQUIRED,
+        onboardingCompletedAt: null,
+      },
+    });
+    expect(cache.deleteByPrefix).toHaveBeenCalledWith('leaderboard:daily:');
+  });
+
+  it('completes onboarding as an individual without touching memberships', async () => {
+    const { service, prisma } = createService({
+      user: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValueOnce({ displayName: 'Ada Lovelace' })
+          .mockResolvedValueOnce({
+            ...profileUser,
+            individualMode: true,
+            onboardingStatus: UserOnboardingStatus.COMPLETE,
+          }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    });
+
+    await service.completeOnboardingAsIndividual('user-1');
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: {
+        individualMode: true,
+        primaryOrganizationId: null,
+        onboardingStatus: UserOnboardingStatus.COMPLETE,
+        onboardingCompletedAt: expect.any(Date),
+      },
+    });
+  });
+
+  it('sets a primary organization without suspending other memberships', async () => {
+    const { service, prisma } = createService({
+      user: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValueOnce({ displayName: 'Ada Lovelace' })
+          .mockResolvedValueOnce({
+            ...profileUser,
+            individualMode: false,
+            onboardingStatus: UserOnboardingStatus.COMPLETE,
+            primaryOrganizationId: 'org-1',
+          }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    });
+
+    await service.completeOnboardingWithOrganization('user-1', {
+      organizationId: 'org-1',
+    });
+
+    expect(prisma.userOrganization.upsert).toHaveBeenCalledWith({
+      where: {
+        userId_organizationId: {
+          userId: 'user-1',
+          organizationId: 'org-1',
+        },
+      },
+      create: {
+        userId: 'user-1',
+        organizationId: 'org-1',
+        role: 'MEMBER',
+        status: 'ACTIVE',
+      },
+      update: {
+        status: 'ACTIVE',
+      },
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: {
+        individualMode: false,
+        primaryOrganizationId: 'org-1',
+        onboardingStatus: UserOnboardingStatus.COMPLETE,
+        onboardingCompletedAt: expect.any(Date),
+      },
+    });
+    expect(prisma.userOrganization).not.toHaveProperty('updateMany');
   });
 });

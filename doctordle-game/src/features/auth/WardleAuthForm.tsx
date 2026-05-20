@@ -10,23 +10,11 @@ type PendingEmailCode =
   | { kind: 'signup'; email: string }
   | null
 
-const UNIVERSITIES = [
-  'University of Nairobi',
-  'Moi University',
-  'Kenyatta University',
-  'JKUAT',
-  'Aga Khan University',
-  'Egerton University',
-  'Maseno University',
-  'Other',
-]
-
 export default function WardleAuthForm() {
   const signInState = useSignIn()
   const signUpState = useSignUp()
   const [mode, setMode] = useState<AuthMode>('signin')
   const [displayName, setDisplayName] = useState('')
-  const [university, setUniversity] = useState('')
   const [email, setEmail] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
   const [pendingEmailCode, setPendingEmailCode] = useState<PendingEmailCode>(null)
@@ -125,11 +113,6 @@ export default function WardleAuthForm() {
       return
     }
 
-    if (mode === 'signup' && !university.trim()) {
-      setError('Choose your university or medical school.')
-      return
-    }
-
     if (!normalizedEmail.includes('@')) {
       setError("That email doesn't look right.")
       return
@@ -153,7 +136,6 @@ export default function WardleAuthForm() {
         savePendingAuthProfile({
           email: normalizedEmail,
           displayName,
-          university,
         })
 
         const signUpResult = await startSignUpEmailCode({
@@ -221,20 +203,6 @@ export default function WardleAuthForm() {
                 className={inputClassName}
                 autoComplete="name"
               />
-            </Field>
-            <Field label="Medical school">
-              <select
-                value={university}
-                onChange={(event) => setUniversity(event.target.value)}
-                className={inputClassName}
-              >
-                <option value="">Select your school</option>
-                {UNIVERSITIES.map((school) => (
-                  <option key={school} value={school}>
-                    {school}
-                  </option>
-                ))}
-              </select>
             </Field>
           </>
         ) : null}
@@ -424,7 +392,7 @@ async function startSignUpEmailCode({
 
   const signUpResult = await signUp.create({
     emailAddress: email.trim(),
-    username: normalizedUsername,
+    username: `${normalizedUsername}_${Math.random().toString(36).slice(2, 8)}`,
   })
   throwIfClerkResultError(signUpResult)
 

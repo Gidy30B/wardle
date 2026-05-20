@@ -1,5 +1,7 @@
-import { Body, Controller, Get, Patch, Req } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Req } from '@nestjs/common';
 import type { AuthenticatedRequest } from '../../auth/authenticated-request.interface';
+import { OnboardingOrganizationDto } from './dto/onboarding-organization.dto';
+import { OnboardingProfileDto } from './dto/onboarding-profile.dto';
 import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { UpdateMySettingsDto } from './dto/update-my-settings.dto';
 import { UsersService } from './users.service';
@@ -19,6 +21,32 @@ export class UsersController {
     @Body() body: UpdateMyProfileDto,
   ) {
     return this.usersService.updateMyProfile(req.user.id, body);
+  }
+
+  @Get('me/onboarding')
+  async getMyOnboarding(@Req() req: AuthenticatedRequest) {
+    return this.usersService.getMyOnboarding(req.user.id);
+  }
+
+  @Post('me/onboarding/profile')
+  async updateMyOnboardingProfile(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: OnboardingProfileDto,
+  ) {
+    return this.usersService.saveOnboardingProfile(req.user.id, body);
+  }
+
+  @Post('me/onboarding/individual')
+  async completeMyOnboardingAsIndividual(@Req() req: AuthenticatedRequest) {
+    return this.usersService.completeOnboardingAsIndividual(req.user.id);
+  }
+
+  @Post('me/onboarding/organization')
+  async completeMyOnboardingWithOrganization(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: OnboardingOrganizationDto,
+  ) {
+    return this.usersService.completeOnboardingWithOrganization(req.user.id, body);
   }
 
   @Get('me/settings')

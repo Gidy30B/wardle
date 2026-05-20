@@ -4,13 +4,13 @@ import { useApi } from '../../lib/api'
 import { getMyOrganizationsApi } from './organization.api'
 
 export function useUserOrganizations() {
-  const { isLoaded, isSignedIn } = useAuth()
+  const { isLoaded, isSignedIn, userId } = useAuth()
   const { request } = useApi()
 
   const query = useQuery({
-    queryKey: ['organizations', 'me'],
+    queryKey: ['organizations', 'me', userId],
     queryFn: async () => getMyOrganizationsApi(request),
-    enabled: isLoaded && isSignedIn,
+    enabled: isLoaded && isSignedIn && Boolean(userId),
     placeholderData: (previousData) => previousData,
   })
 

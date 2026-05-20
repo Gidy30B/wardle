@@ -22,6 +22,9 @@ type LeaderboardRow = {
     stats: {
       currentStreak: number;
     } | null;
+    primaryOrganization: {
+      name: string;
+    } | null;
     organizations: Array<{
       organization: {
         name: string;
@@ -384,6 +387,11 @@ export class LeaderboardService {
             currentStreak: true,
           },
         },
+        primaryOrganization: {
+          select: {
+            name: true,
+          },
+        },
         organizations: {
           where: {
             status: 'ACTIVE' as const,
@@ -485,7 +493,9 @@ export class LeaderboardService {
   ): LeaderboardEntryDto {
     const displayName = row.user.displayName?.trim() || undefined;
     const organizationName =
-      row.user.organizations[0]?.organization.name.trim() || undefined;
+      row.user.primaryOrganization?.name.trim() ||
+      row.user.organizations[0]?.organization.name.trim() ||
+      undefined;
     const streak = row.user.stats?.currentStreak;
     const aggregate = row as Partial<LeaderboardAggregate>;
 

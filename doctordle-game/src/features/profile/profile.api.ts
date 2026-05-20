@@ -1,5 +1,10 @@
 import type { RequestJson } from '../../lib/api'
-import type { BackendProfile, UserSettings, UserSettingsUpdate } from './profile.types'
+import type {
+  BackendProfile,
+  UserOnboardingState,
+  UserSettings,
+  UserSettingsUpdate,
+} from './profile.types'
 
 export async function getBackendProfileApi(request: RequestJson): Promise<BackendProfile> {
   return request<BackendProfile>('/users/me/profile')
@@ -17,6 +22,40 @@ export async function updateBackendProfileApi(
 ): Promise<BackendProfile> {
   return request<BackendProfile>('/users/me/profile', {
     method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function getUserOnboardingApi(
+  request: RequestJson,
+): Promise<UserOnboardingState> {
+  return request<UserOnboardingState>('/users/me/onboarding')
+}
+
+export async function saveOnboardingProfileApi(
+  request: RequestJson,
+  payload: { displayName: string },
+): Promise<UserOnboardingState> {
+  return request<UserOnboardingState>('/users/me/onboarding/profile', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function completeOnboardingIndividualApi(
+  request: RequestJson,
+): Promise<UserOnboardingState> {
+  return request<UserOnboardingState>('/users/me/onboarding/individual', {
+    method: 'POST',
+  })
+}
+
+export async function completeOnboardingOrganizationApi(
+  request: RequestJson,
+  payload: { organizationId: string },
+): Promise<UserOnboardingState> {
+  return request<UserOnboardingState>('/users/me/onboarding/organization', {
+    method: 'POST',
     body: JSON.stringify(payload),
   })
 }

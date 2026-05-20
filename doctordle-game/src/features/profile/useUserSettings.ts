@@ -4,13 +4,13 @@ import { useApi } from '../../lib/api'
 import { getUserSettingsApi } from './profile.api'
 
 export function useUserSettings() {
-  const { isLoaded, isSignedIn } = useAuth()
+  const { isLoaded, isSignedIn, userId } = useAuth()
   const { request } = useApi()
 
   return useQuery({
-    queryKey: ['settings', 'me'],
+    queryKey: ['settings', 'me', userId],
     queryFn: async () => getUserSettingsApi(request),
-    enabled: isLoaded && isSignedIn,
+    enabled: isLoaded && isSignedIn && Boolean(userId),
     placeholderData: (previousData) => previousData,
   })
 }

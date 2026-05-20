@@ -68,6 +68,12 @@ enum OrganizationMemberStatus {
   SUSPENDED
 }
 
+enum UserOnboardingStatus {
+  PROFILE_REQUIRED
+  ORGANIZATION_REQUIRED
+  COMPLETE
+}
+
 enum DiagnosisAliasKind {
   CANONICAL
   ACCEPTED
@@ -486,9 +492,14 @@ model User {
   trainingLevel            String?
   country                  String?
   individualMode           Boolean                  @default(true)
+  onboardingStatus         UserOnboardingStatus     @default(PROFILE_REQUIRED)
+  onboardingCompletedAt    DateTime?
+  primaryOrganizationId    String?
   role                     String                   @default("user")
   subscriptionTier         String                   @default("free")
   lastPlayedAt             DateTime?
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
   sessions                 GameSession[]
   attempts                 Attempt[]
   stats                    UserStats?
@@ -502,10 +513,13 @@ model User {
   createdCaseRevisions     CaseRevision[]           @relation("CaseRevisionCreatedByUser")
   triggeredCaseValidations CaseValidationRun[]      @relation("CaseValidationRunTriggeredByUser")
   caseReviews              CaseReview[]             @relation("CaseReviewReviewerUser")
+  primaryOrganization      Organization?            @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
   organizations            UserOrganization[]
 
   @@index([role])
   @@index([subscriptionTier])
+  @@index([onboardingStatus])
+  @@index([primaryOrganizationId])
 }
 
 model Organization {
@@ -519,6 +533,7 @@ model Organization {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   members        UserOrganization[]
+  primaryUsers   User[]             @relation("UserPrimaryOrganization")
 
   @@index([type])
   @@index([name])

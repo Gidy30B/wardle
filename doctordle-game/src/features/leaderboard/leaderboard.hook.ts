@@ -21,9 +21,9 @@ export function useLeaderboard(mode: LeaderboardMode, options: UseLeaderboardOpt
   })
 
   const currentUserPositionQuery = useQuery({
-    queryKey: ['leaderboard', 'me', mode],
+    queryKey: ['leaderboard', 'me', userId, mode],
     queryFn: async () => getCurrentUserLeaderboardPositionApi(request, mode),
-    enabled: enabled && isLoaded && isSignedIn,
+    enabled: enabled && isLoaded && isSignedIn && Boolean(userId),
     placeholderData: (previousData) => previousData,
   })
 

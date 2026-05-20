@@ -14,9 +14,36 @@ export type BackendProfile = {
   trainingLevel?: string | null
   country?: string | null
   individualMode?: boolean
+  onboardingStatus?: UserOnboardingStatus
+  onboardingCompletedAt?: string | null
+  primaryOrganizationId?: string | null
+  primaryOrganization?: Organization | null
   activeOrganization?: Organization | null
   memberships?: UserOrganizationMembership[]
   progress?: UserProgress | null
+}
+
+export type UserOnboardingStatus =
+  | 'PROFILE_REQUIRED'
+  | 'ORGANIZATION_REQUIRED'
+  | 'COMPLETE'
+
+export type UserOnboardingState = {
+  userId: string
+  email: string | null
+  displayName: string | null
+  onboardingStatus: UserOnboardingStatus
+  individualMode: boolean
+  primaryOrganizationId: string | null
+  primaryOrganization: Pick<Organization, 'id' | 'name' | 'slug' | 'type'> | null
+  memberships: Array<{
+    organizationId: string
+    name: string
+    slug: string | null
+    type: OrganizationType
+    role: string
+    status: string
+  }>
 }
 
 export type DifficultyPreference = 'BEGINNER' | 'STANDARD' | 'HARD' | 'EXPERT'

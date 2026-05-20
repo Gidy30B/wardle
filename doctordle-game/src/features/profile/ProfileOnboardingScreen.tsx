@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@clerk/clerk-react'
 import WardleLogo from '../../components/brand/WardleLogo'
 import Button from '../../components/ui/Button'
 import { useApi } from '../../lib/api'
@@ -12,12 +13,15 @@ import type {
   Organization,
   OrganizationType,
 } from '../organizations/organization.types'
-import type { WardleProfileCompletionPayload } from './profile.types'
+import type {
+  UserOnboardingStatus,
+  WardleProfileCompletionPayload,
+} from './profile.types'
 
 type ProfileOnboardingScreenProps = {
   suggestedDisplayName: string
+  onboardingStatus: UserOnboardingStatus
   onComplete: (profile: WardleProfileCompletionPayload) => void | Promise<void>
-  onSkip: () => void
 }
 
 type OrganizationMode = 'individual' | 'join' | 'create'
@@ -31,9 +35,10 @@ const ORGANIZATION_TYPES: Array<{ value: OrganizationType; label: string }> = [
 
 export default function ProfileOnboardingScreen({
   suggestedDisplayName,
+  onboardingStatus,
   onComplete,
-  onSkip,
 }: ProfileOnboardingScreenProps) {
+  const { userId } = useAuth()
   const { request } = useApi()
   const queryClient = useQueryClient()
   const [displayName, setDisplayName] = useState(suggestedDisplayName)
@@ -137,7 +142,7 @@ export default function ProfileOnboardingScreen({
         organization = membership.organization
       }
 
-      await queryClient.invalidateQueries({ queryKey: ['organizations', 'me'] })
+      await queryClient.invalidateQueries({ queryKey: ['organizations', 'me', userId] })
 
       await onComplete({
         displayName,
@@ -188,7 +193,9 @@ export default function ProfileOnboardingScreen({
               Set up your Wardle profile
             </h1>
             <p className="mt-2 text-sm leading-6 text-white/62">
-              Add a display name, then optionally connect your institution for future class and team features.
+              {onboardingStatus === 'PROFILE_REQUIRED'
+                ? 'Add a display name, then choose whether to connect an institution.'
+                : 'Choose whether to continue individually or connect your institution.'}
             </p>
           </div>
 
@@ -323,9 +330,6 @@ export default function ProfileOnboardingScreen({
                   : mode === 'join'
                     ? 'Join and continue'
                     : 'Create and continue'}
-            </Button>
-            <Button type="button" variant="ghost" onClick={onSkip} disabled={submitting}>
-              Skip for now
             </Button>
           </div>
 

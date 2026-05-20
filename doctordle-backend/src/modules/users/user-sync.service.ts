@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { UserOnboardingStatus } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 
 export type ClerkPrincipal = {
@@ -31,13 +32,20 @@ export class UserSyncService {
   async syncUser(principal: ClerkPrincipal): Promise<SyncedUser> {
     const existingByClerkId = await this.findByClerkId(principal.clerkId);
     if (existingByClerkId) {
+      const shouldFillDisplayName =
+        !existingByClerkId.displayName?.trim() && principal.displayName?.trim();
       await this.prisma.user.update({
         where: { id: existingByClerkId.id },
         data: {
           email: principal.email ?? undefined,
-          ...(existingByClerkId.displayName?.trim() || !principal.displayName?.trim()
-            ? {}
-            : { displayName: principal.displayName.trim() }),
+          ...(shouldFillDisplayName
+            ? {
+                displayName: principal.displayName!.trim(),
+                individualMode: false,
+                onboardingStatus: UserOnboardingStatus.ORGANIZATION_REQUIRED,
+                onboardingCompletedAt: null,
+              }
+            : {}),
         },
       });
 
@@ -49,26 +57,38 @@ export class UserSyncService {
     });
 
     if (existingById && !existingById.clerkId) {
+      const shouldFillDisplayName =
+        !existingById.displayName?.trim() && principal.displayName?.trim();
       await this.prisma.user.update({
         where: { id: existingById.id },
         data: {
           clerkId: principal.clerkId,
           email: principal.email ?? undefined,
-          ...(existingById.displayName?.trim() || !principal.displayName?.trim()
-            ? {}
-            : { displayName: principal.displayName.trim() }),
+          ...(shouldFillDisplayName
+            ? {
+                displayName: principal.displayName!.trim(),
+                individualMode: false,
+                onboardingStatus: UserOnboardingStatus.ORGANIZATION_REQUIRED,
+                onboardingCompletedAt: null,
+              }
+            : {}),
         },
       });
 
       return this.loadSyncedUser(existingById.id);
     }
 
+    const displayName = principal.displayName?.trim() || undefined;
     const createdUser = await this.prisma.user.create({
       data: {
         id: randomUUID(),
         clerkId: principal.clerkId,
         email: principal.email ?? undefined,
-        displayName: principal.displayName?.trim() || undefined,
+        displayName,
+        individualMode: false,
+        onboardingStatus: displayName
+          ? UserOnboardingStatus.ORGANIZATION_REQUIRED
+          : UserOnboardingStatus.PROFILE_REQUIRED,
         subscriptionTier: 'free',
       },
     });

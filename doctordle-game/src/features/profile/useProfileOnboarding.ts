@@ -19,11 +19,16 @@ export function useProfileOnboarding() {
   const { request } = useApi()
   const queryClient = useQueryClient()
   const [revision, setRevision] = useState(0)
+  const profileQueryKey = useMemo(() => ['profile', 'me', userId], [userId])
+  const organizationQueryKey = useMemo(
+    () => ['organizations', 'me', userId],
+    [userId],
+  )
 
   const backendProfileQuery = useQuery({
-    queryKey: ['profile', 'me'],
+    queryKey: profileQueryKey,
     queryFn: async () => getBackendProfileApi(request),
-    enabled: isLoaded && isSignedIn,
+    enabled: isLoaded && isSignedIn && Boolean(userId),
     retry: 1,
   })
 
@@ -44,7 +49,7 @@ export function useProfileOnboarding() {
         organizationId: null,
       })
         .then(async () => {
-          await queryClient.invalidateQueries({ queryKey: ['profile', 'me'] })
+          await queryClient.invalidateQueries({ queryKey: profileQueryKey })
           await queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
         })
         .catch((error: unknown) => {
@@ -53,7 +58,7 @@ export function useProfileOnboarding() {
           }
         })
     }
-  }, [queryClient, request, user?.primaryEmailAddress?.emailAddress, userId])
+  }, [profileQueryKey, queryClient, request, user?.primaryEmailAddress?.emailAddress, userId])
 
   const localProfile = useMemo(() => {
     if (!userId) {
@@ -95,10 +100,10 @@ export function useProfileOnboarding() {
       writeProfileOnboarding(userId, nextProfile)
       setRevision((value) => value + 1)
 
-      await queryClient.invalidateQueries({ queryKey: ['profile', 'me'] })
-      await queryClient.invalidateQueries({ queryKey: ['organizations', 'me'] })
+      await queryClient.invalidateQueries({ queryKey: profileQueryKey })
+      await queryClient.invalidateQueries({ queryKey: organizationQueryKey })
     },
-    [queryClient, request, userId],
+    [organizationQueryKey, profileQueryKey, queryClient, request, userId],
   )
 
   const skipProfile = useCallback(() => {

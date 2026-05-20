@@ -7,7 +7,7 @@ import WardleLoadingScreen from './components/WardleLoadingScreen'
 import AnimatedScreen from './components/AnimatedScreen'
 import { disconnectSocket, initSocket } from '../game/ws-client'
 import ProfileOnboardingScreen from '../features/profile/ProfileOnboardingScreen'
-import { useProfileOnboarding } from '../features/profile/useProfileOnboarding'
+import { useUserOnboarding } from '../features/profile/useUserOnboarding'
 import {
   ROOT_PATH,
   getNativeOAuthCallbackUrl,
@@ -19,7 +19,7 @@ type EntryScreen = 'loading' | 'profile-onboarding' | 'signed-in' | 'signed-out'
 
 export default function App() {
   const { getToken, isLoaded, isSignedIn, userId } = useAuth()
-  const profileOnboarding = useProfileOnboarding()
+  const userOnboarding = useUserOnboarding()
   const isOAuthCallback = isClerkOAuthCallbackPath(window.location.pathname)
   const shouldBounceToNative = shouldBounceOAuthCallbackToNativeApp()
 
@@ -74,11 +74,11 @@ export default function App() {
 
   const screen: EntryScreen = !isLoaded
     ? 'loading'
-    : isSignedIn !== true
-      ? 'signed-out'
-      : profileOnboarding.loading
+      : isSignedIn !== true
+        ? 'signed-out'
+      : userOnboarding.loading
         ? 'loading'
-        : profileOnboarding.shouldShowOnboarding
+        : userOnboarding.shouldShowOnboarding
           ? 'profile-onboarding'
           : 'signed-in'
 
@@ -113,9 +113,9 @@ export default function App() {
       ) : screen === 'profile-onboarding' ? (
         <AnimatedScreen screenKey="profile-onboarding">
           <ProfileOnboardingScreen
-            suggestedDisplayName={profileOnboarding.suggestedDisplayName}
-            onComplete={profileOnboarding.saveProfile}
-            onSkip={profileOnboarding.skipProfile}
+            suggestedDisplayName={userOnboarding.suggestedDisplayName}
+            onboardingStatus={userOnboarding.onboarding?.onboardingStatus ?? 'PROFILE_REQUIRED'}
+            onComplete={userOnboarding.saveProfile}
           />
         </AnimatedScreen>
       ) : (

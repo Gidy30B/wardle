@@ -30,23 +30,23 @@ export default function SettingsPage({
   organizationName,
   memberships,
 }: SettingsPageProps) {
-  const { isLoaded, isSignedIn, signOut } = useAuth()
+  const { isLoaded, isSignedIn, signOut, userId } = useAuth()
   const { user } = useUser()
   const { request } = useApi()
   const queryClient = useQueryClient()
   const [subScreen, setSubScreen] = useState<SettingsScreenId | null>(null)
 
   const profileQuery = useQuery({
-    queryKey: ['profile', 'me'],
+    queryKey: ['profile', 'me', userId],
     queryFn: async () => getBackendProfileApi(request),
-    enabled: isLoaded && isSignedIn,
+    enabled: isLoaded && isSignedIn && Boolean(userId),
     placeholderData: (previousData) => previousData,
   })
 
   const settingsQuery = useQuery({
-    queryKey: ['settings', 'me'],
+    queryKey: ['settings', 'me', userId],
     queryFn: async () => getUserSettingsApi(request),
-    enabled: isLoaded && isSignedIn,
+    enabled: isLoaded && isSignedIn && Boolean(userId),
     placeholderData: (previousData) => previousData,
   })
 
@@ -54,7 +54,7 @@ export default function SettingsPage({
     mutationFn: async (payload: Partial<UserSettings>) =>
       updateUserSettingsApi(request, payload),
     onSuccess: (settings) => {
-      queryClient.setQueryData(['settings', 'me'], settings)
+      queryClient.setQueryData(['settings', 'me', userId], settings)
     },
   })
 
