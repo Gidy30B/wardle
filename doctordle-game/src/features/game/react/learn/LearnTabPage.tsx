@@ -209,6 +209,73 @@ function DesktopArchiveEmptyState({
   return <DesktopFilteredEmptyState onClearFilters={onClearFilters} />;
 }
 
+function MobileNeverPlayedState() {
+  return (
+    <div className="wardle-learn-slide-up mx-4 mt-3 overflow-hidden rounded-[22px] border border-[rgba(244,162,97,0.18)] bg-[var(--wardle-color-charcoal)] shadow-[0_18px_46px_rgba(0,0,0,0.26)]">
+      <div className="p-5">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <div className="mb-2 inline-flex rounded-full border border-[var(--wardle-color-amber)]/24 bg-[var(--wardle-color-amber)]/10 px-3 py-1 font-brand-mono text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--wardle-color-amber)]">
+              Learning archive
+            </div>
+            <h3 className="text-[20px] font-black leading-tight tracking-[-0.03em] text-[var(--wardle-color-light)]">
+              Your case library is waiting
+            </h3>
+          </div>
+
+          <div className="wardle-learn-empty-icon flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl border border-[var(--wardle-color-amber)]/28 bg-[var(--wardle-color-amber)]/12 text-[var(--wardle-color-amber)] shadow-[0_0_24px_rgba(244,162,97,0.08)]">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-7 w-7"
+              aria-hidden="true"
+            >
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+              <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z" />
+              <path d="M8 7h8" />
+              <path d="M8 11h6" />
+            </svg>
+          </div>
+        </div>
+
+        <p className="text-[13px] leading-[1.7] text-white/56">
+          Complete your first case to unlock explanations, specialty shelves,
+          quick stats, and recall prompts.
+        </p>
+
+        <div className="mt-5 space-y-2.5">
+          {[
+            ["01", "Finish a case", "Solved and missed cases are saved here."],
+            ["02", "Review the reasoning", "Revisit explanations and key findings."],
+            ["03", "Build recall", "Use review prompts to reinforce weak spots."],
+          ].map(([n, title, body]) => (
+            <div
+              key={title}
+              className="flex gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.035] p-3.5"
+            >
+              <div className="font-brand-mono text-[11px] font-bold text-[var(--wardle-color-amber)]/82">
+                {n}
+              </div>
+              <div>
+                <div className="text-[13px] font-bold text-white/88">
+                  {title}
+                </div>
+                <div className="mt-1 text-[12px] leading-[1.45] text-white/42">
+                  {body}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Root page ────────────────────────────────────────────────────────────────
 
 export default function LearnTabPage({
@@ -436,16 +503,22 @@ export default function LearnTabPage({
                 />
               </>
             ) : (
-              <div className="px-4 pt-4">
-                <ArchiveEmptyState
-                  completedCount={0}
-                  loading={libraryLoading}
-                  error={libraryError}
-                  onRetry={onRetryLibrary}
-                  onClearFilters={() => updateFilters(ALL_FILTERS)}
-                  mobile
-                />
-              </div>
+              <>
+                {!libraryLoading && !libraryError ? (
+                  <MobileNeverPlayedState />
+                ) : (
+                  <div className="px-4 pt-4">
+                    <ArchiveEmptyState
+                      completedCount={0}
+                      loading={libraryLoading}
+                      error={libraryError}
+                      onRetry={onRetryLibrary}
+                      onClearFilters={() => updateFilters(ALL_FILTERS)}
+                      mobile
+                    />
+                  </div>
+                )}
+              </>
             )}
           </>
         ) : (

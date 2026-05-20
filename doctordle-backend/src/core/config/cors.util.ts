@@ -34,14 +34,29 @@ function isLanIp(hostname: string): boolean {
   return secondOctet >= 16 && secondOctet <= 31;
 }
 
-function isAllowedOrigin(origin: string, configuredAllowedOrigins: ReadonlyArray<string>): boolean {
+function isWardleProductionOrigin(parsed: URL): boolean {
+  return (
+    parsed.protocol === 'https:' &&
+    (parsed.hostname === 'wardle.it.com' ||
+      parsed.hostname.endsWith('.wardle.it.com'))
+  );
+}
+
+function isAllowedOrigin(
+  origin: string,
+  configuredAllowedOrigins: ReadonlyArray<string>,
+): boolean {
   if (configuredAllowedOrigins.includes(origin)) {
     return true;
   }
 
   try {
     const parsed = new URL(origin);
-    return isLocalhost(parsed.hostname) || isLanIp(parsed.hostname);
+    return (
+      isWardleProductionOrigin(parsed) ||
+      isLocalhost(parsed.hostname) ||
+      isLanIp(parsed.hostname)
+    );
   } catch {
     return false;
   }
