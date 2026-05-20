@@ -451,6 +451,12 @@ export default function CaseDetail({
     );
   }
 
+  const diagnosisName =
+    detail.diagnosisRegistrySummary?.canonicalName ??
+    detail.proposedDiagnosisText ??
+    detail.diagnosis?.name ??
+    'Diagnosis not linked';
+
   return (
     <>
       <div className="space-y-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100 xl:p-5">
@@ -467,7 +473,7 @@ export default function CaseDetail({
             <div>
               <h2 className="text-lg font-semibold text-slate-900">{detail.title}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                {detail.diagnosis.name} - {detail.difficulty} - {detail.date}
+                {diagnosisName} - {detail.difficulty} - {detail.date}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -482,7 +488,7 @@ export default function CaseDetail({
           </div>
 
           <dl className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-6">
-            <SummaryStat label="Diagnosis" value={detail.diagnosis.name} />
+            <SummaryStat label="Diagnosis" value={diagnosisName} />
             <SummaryStat label="Difficulty" value={detail.difficulty} />
             <SummaryStat
               label="Editorial status"

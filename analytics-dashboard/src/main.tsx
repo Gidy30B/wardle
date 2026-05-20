@@ -11,9 +11,16 @@ if (!clerkPublishableKey) {
   throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY')
 }
 
+const adminHomeUrl = new URL('/', window.location.origin).toString()
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ClerkProvider publishableKey={clerkPublishableKey}>
+    <ClerkProvider
+      publishableKey={clerkPublishableKey}
+      signInFallbackRedirectUrl={adminHomeUrl}
+      signUpFallbackRedirectUrl={adminHomeUrl}
+      afterSignOutUrl={adminHomeUrl}
+    >
       <BrowserRouter>
         <App />
       </BrowserRouter>

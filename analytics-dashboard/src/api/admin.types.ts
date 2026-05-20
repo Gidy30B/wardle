@@ -48,34 +48,104 @@ export type AdminViewer = {
 export type GenerateCasesPayload = {
   count: number;
   track?: string;
+  bodySystem?: string;
   difficulty?: string;
+  registryFirst?: boolean;
 };
+
+export type GenerationMode = 'registry_balanced' | 'diagnosis_targeted';
+
+export type GenerationResultTab =
+  | 'all'
+  | 'created'
+  | 'skipped'
+  | 'failed'
+  | 'planner';
+
+export type GenerateCaseSkipReason =
+  | 'duplicate_answer'
+  | 'duplicate_scenario'
+  | 'low_quality'
+  | 'specialty_cluster'
+  | 'difficulty_balance';
+
+export type PlannedGenerationDiagnosis = {
+  diagnosisRegistryId: string;
+  legacyDiagnosisId: string | null;
+  displayLabel: string;
+  canonicalName: string;
+  acceptedAliases: string[];
+  specialty: string | null;
+  category: string | null;
+  bodySystem: string | null;
+  difficultyBand: string | null;
+  existingCaseCount: number;
+  lastGeneratedAt: string | null;
+  recentUsePenaltyApplied: boolean;
+};
+
+export type PlannerDiagnosisComparison = {
+  aiAnswer: string | null;
+  normalizedAiAnswer: string | null;
+  normalizedPlannerDiagnosis: string;
+  matchesPlanner: boolean | null;
+};
+
+export type PlannerSelectionDiagnostics = {
+  candidateCount: number;
+  unusedCandidateCount: number;
+  repeatedCandidateCount: number;
+  selectedUnusedCount: number;
+  selectedRepeatCount: number;
+  repeatReason: string | null;
+  existingCaseCountByDiagnosis: Record<string, number>;
+  recentUsePenaltyApplied: boolean;
+};
+
+export type PlannedGenerationSlot = {
+  batchId: string;
+  index: number;
+  diagnosis: PlannedGenerationDiagnosis | null;
+  duplicatePrevented: boolean;
+  selectionStatus: 'selected' | 'unavailable';
+  repeatReason: string | null;
+  existingCaseCount: number | null;
+  recentUsePenaltyApplied: boolean;
+  diagnostics: PlannerSelectionDiagnostics;
+  comparison?: PlannerDiagnosisComparison;
+};
+
+export type GenerateCaseResultItem =
+  | {
+      index: number;
+      status: 'created';
+      caseId: string;
+      answer: string;
+    }
+  | {
+      index: number;
+      status: 'skipped';
+      reason: GenerateCaseSkipReason;
+      answer: string;
+    }
+  | {
+      index: number;
+      status: 'failed';
+      error: string;
+    };
 
 export type GenerateCasesResult = {
   batchId: string;
   requested: number;
+  generated: number;
+  accepted: number;
+  rejected: number;
   created: number;
   skipped: number;
   failed: number;
-  results: Array<
-    | {
-        index: number;
-        status: 'created';
-        caseId: string;
-        answer: string;
-      }
-    | {
-        index: number;
-        status: 'skipped';
-        reason: 'duplicate_answer';
-        answer: string;
-      }
-    | {
-        index: number;
-        status: 'failed';
-        error: string;
-      }
-  >;
+  averageQualityScore: number | null;
+  plannerDiagnostics: PlannedGenerationSlot[];
+  results: GenerateCaseResultItem[];
 };
 
 export type CaseEditorialStatus =
@@ -100,6 +170,8 @@ export type PublishTrack = 'DAILY' | 'PREMIUM' | 'PRACTICE';
 export type EditorialQueueFilter = 'all' | 'review' | 'publish';
 
 export type DiagnosisRegistryStatus = 'ACTIVE' | 'HIDDEN' | 'DEPRECATED' | 'DRAFT';
+
+export type DiagnosisDifficultyBand = 'BASIC' | 'INTERMEDIATE' | 'ADVANCED';
 
 export type DiagnosisMappingStatus =
   | 'MATCHED'
@@ -160,6 +232,16 @@ export type EditorialDiagnosisRegistrySummary = {
   status: DiagnosisRegistryStatus;
   category: string | null;
   specialty: string | null;
+  subspecialty?: string | null;
+  bodySystem?: string | null;
+  organSystem?: string | null;
+  difficultyBand?: DiagnosisDifficultyBand | null;
+  rarityBand?: string | null;
+  clinicalSetting?: string | null;
+  ageGroup?: string | null;
+  urgencyLevel?: string | null;
+  isPlayable?: boolean;
+  isGeneratable?: boolean;
   searchPriority?: number;
   isDescriptive?: boolean;
   isCompositional?: boolean;
@@ -239,7 +321,7 @@ export type EditorialCaseListItem = {
   diagnosisEditorialNote: string | null;
   diagnosisRegistrySummary: EditorialDiagnosisRegistrySummary | null;
   diagnosisPublishReadiness: EditorialDiagnosisPublishReadiness;
-  diagnosis: EditorialDiagnosis;
+  diagnosis: EditorialDiagnosis | null;
   currentRevision: EditorialCurrentRevision | null;
   validationRuns: EditorialCaseValidationRun[];
   reviews: EditorialCaseReview[];
@@ -288,7 +370,7 @@ export type EditorialCaseDetail = {
   approvedAt: string | null;
   approvedByUserId: string | null;
   currentRevisionId: string | null;
-  diagnosis: EditorialDiagnosis;
+  diagnosis: EditorialDiagnosis | null;
   currentRevision: EditorialCurrentRevision | null;
   validationRuns: EditorialCaseValidationRun[];
   reviews: EditorialCaseReview[];
@@ -384,6 +466,18 @@ export type DiagnosisRegistrySearchItem = {
   status: DiagnosisRegistryStatus;
   category: string | null;
   specialty: string | null;
+  subspecialty?: string | null;
+  bodySystem?: string | null;
+  organSystem?: string | null;
+  difficultyBand?: DiagnosisDifficultyBand | null;
+  rarityBand?: string | null;
+  clinicalSetting?: string | null;
+  ageGroup?: string | null;
+  urgencyLevel?: string | null;
+  isPlayable?: boolean;
+  isGeneratable?: boolean;
+  preferredClueTypes?: string[] | null;
+  excludedClueTypes?: string[] | null;
   searchPriority: number;
   aliasPreview: string[];
   matchSource: 'canonical' | 'accepted_alias' | 'abbreviation' | 'search_only';

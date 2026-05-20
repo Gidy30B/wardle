@@ -40,10 +40,17 @@ function SignInScreen({
 }: {
   path: '/' | '/cases' | '/generate' | '/analytics' | '/publish';
 }) {
+  const redirectUrl = new URL(path, window.location.origin).toString();
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
-        <SignIn routing="path" path={path} />
+        <SignIn
+          routing="path"
+          path={path}
+          fallbackRedirectUrl={redirectUrl}
+          forceRedirectUrl={redirectUrl}
+        />
       </div>
     </div>
   );
@@ -122,7 +129,11 @@ export default function AppRoutes() {
     <Routes>
       <Route
         path="/sso-callback"
-        element={<AuthenticateWithRedirectCallback redirectUrl="/" />}
+        element={
+          <AuthenticateWithRedirectCallback
+            redirectUrl={new URL('/', window.location.origin).toString()}
+          />
+        }
       />
       <Route element={<AdminShell />}>
         <Route path="/" element={<DashboardPage />} />

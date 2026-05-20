@@ -40,6 +40,11 @@ export default function CaseTable({
             const nextStep = getQueueFocusedNextStep(row.editorialStatus, queue);
             const publishReady = isPublishReadyStatus(row.editorialStatus);
             const diagnosisSummary = getDiagnosisWorkflowSummary(row);
+            const diagnosisName =
+              row.diagnosisRegistrySummary?.canonicalName ??
+              row.proposedDiagnosisText ??
+              row.diagnosis?.name ??
+              'Diagnosis not linked';
             const rowClassName = publishReady
               ? isActive
                 ? 'bg-emerald-100'
@@ -73,7 +78,7 @@ export default function CaseTable({
                       ) : null}
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
-                      {row.diagnosis.name} - {row.difficulty} - {row.date}
+                      {diagnosisName} - {row.difficulty} - {row.date}
                     </p>
                   </div>
                 </td>
@@ -84,7 +89,7 @@ export default function CaseTable({
                   <div className="space-y-1">
                     <StatusBadge status={diagnosisSummary.label} tone={diagnosisSummary.tone} />
                     <p className="text-xs text-slate-500">
-                      {row.diagnosisRegistrySummary?.canonicalName ?? row.proposedDiagnosisText}
+                      {diagnosisName}
                     </p>
                   </div>
                 </td>

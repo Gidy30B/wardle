@@ -57,7 +57,10 @@ export default function CaseDiagnosisSection({
 
   useEffect(() => {
     const canonicalDiagnosis =
-      detail.proposedDiagnosisText || detail.diagnosis.name || '';
+      detail.proposedDiagnosisText ||
+      detail.diagnosisRegistrySummary?.canonicalName ||
+      detail.diagnosis?.name ||
+      '';
     setSearchQuery(canonicalDiagnosis);
     setCaseCanonicalDiagnosis(canonicalDiagnosis);
     setLinkEditorialNote(detail.diagnosisEditorialNote ?? '');
@@ -72,7 +75,10 @@ export default function CaseDiagnosisSection({
   }, [detail]);
 
   const persistedCanonicalDiagnosis =
-    detail.proposedDiagnosisText || detail.diagnosis.name || '';
+    detail.proposedDiagnosisText ||
+    detail.diagnosisRegistrySummary?.canonicalName ||
+    detail.diagnosis?.name ||
+    '';
   const canonicalDiagnosisDirty =
     caseCanonicalDiagnosis.trim() !== persistedCanonicalDiagnosis.trim();
 
