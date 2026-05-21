@@ -142,8 +142,8 @@ export function MobileKoiStat({
 
 export function MobileCaseArchive({
   cases,
+  archiveSpecialties,
   completedCount,
-  summary,
   missedCount,
   dueReviewCount,
   dueReviewCases,
@@ -155,8 +155,8 @@ export function MobileCaseArchive({
   onClearFilters,
 }: {
   cases: LearnLibraryCase[];
+  archiveSpecialties: LearnPerformanceSummary["specialties"];
   completedCount: number;
-  summary: LearnPerformanceSummary;
   missedCount: number;
   dueReviewCount: number;
   dueReviewCases: LearnLibraryCase[];
@@ -194,9 +194,9 @@ export function MobileCaseArchive({
         )}
       </div>
 
-      {summary.specialties.length > 0 ? (
+      {archiveSpecialties.length > 0 ? (
         <div className="space-y-2.5">
-          {summary.specialties.map((specialty) => (
+          {archiveSpecialties.map((specialty) => (
             <MobileSpecialtyCard
               key={specialty.key}
               specialty={specialty}

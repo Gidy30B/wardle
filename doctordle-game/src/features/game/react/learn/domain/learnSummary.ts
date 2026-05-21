@@ -1,5 +1,6 @@
 export {
   buildLearnFilterOptions,
+  deriveSpecialtySummaries,
   deriveLearnPerformanceSummary,
   getLearnPerformanceSummary,
   hasActiveFilters,

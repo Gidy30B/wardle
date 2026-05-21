@@ -3,6 +3,7 @@ import type { LearnLibraryCase, LearnLibraryResponse } from "../../../game.types
 import type { LearnFilters } from "../learn.types";
 import {
   buildLearnFilterOptions,
+  deriveSpecialtySummaries,
   deriveLearnPerformanceSummary,
   getLearnPerformanceSummary,
   hasActiveFilters,
@@ -23,6 +24,10 @@ export function useLearnSummary({
     () => buildLearnFilterOptions(completedCases),
     [completedCases],
   );
+  const archiveSpecialties = useMemo(
+    () => deriveSpecialtySummaries(completedCases),
+    [completedCases],
+  );
   const unfilteredSummary = useMemo(
     () => getLearnPerformanceSummary(learnLibrary, completedCases),
     [completedCases, learnLibrary],
@@ -35,5 +40,10 @@ export function useLearnSummary({
     [filteredCases, filters, unfilteredSummary],
   );
 
-  return { displayedSummary, filterOptions, unfilteredSummary };
+  return {
+    archiveSpecialties,
+    displayedSummary,
+    filterOptions,
+    unfilteredSummary,
+  };
 }

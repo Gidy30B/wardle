@@ -337,12 +337,13 @@ export default function LearnTabPage({
     [completedCases, filters],
   );
 
-  const { displayedSummary, filterOptions } = useLearnSummary({
-    completedCases,
-    filteredCases,
-    filters,
-    learnLibrary,
-  });
+  const { archiveSpecialties, displayedSummary, filterOptions } =
+    useLearnSummary({
+      completedCases,
+      filteredCases,
+      filters,
+      learnLibrary,
+    });
   const archiveCaseCount = completedCases.length;
   const statsCaseCount = displayedSummary.casesDone;
   const hasAnyCompletedCases = archiveCaseCount > 0 || statsCaseCount > 0;
@@ -368,7 +369,7 @@ export default function LearnTabPage({
   );
 
   const selectedMobileSpecialtySummary = selectedMobileSpecialty
-    ? (displayedSummary.specialties.find(
+    ? (archiveSpecialties.find(
         (specialty) => specialty.key === selectedMobileSpecialty,
       ) ?? null)
     : null;
@@ -489,8 +490,8 @@ export default function LearnTabPage({
                 />
                 <MobileCaseArchive
                   cases={completedCases}
+                  archiveSpecialties={archiveSpecialties}
                   completedCount={archiveCaseCount}
-                  summary={displayedSummary}
                   missedCount={missedCases.length}
                   dueReviewCount={dueReviewCases.length}
                   dueReviewCases={dueReviewCases}
