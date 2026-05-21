@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   CaseEditorialStatus,
@@ -14,6 +15,11 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { ASSIGNABLE_EDITORIAL_STATUSES } from '../editorial/policies/publish-policy.js';
+import {
+  AssignmentBlockedReason,
+  AssignmentResult,
+  CaseAssignmentService,
+} from './case-assignment.service.js';
 import {
   formatDailyCaseDisplayLabel,
   formatDailyCaseTrackDisplayLabel,
@@ -103,6 +109,7 @@ type ActiveSessionResult = {
 };
 
 type DailyCaseScheduleExcludedReason =
+  | AssignmentBlockedReason
   | 'already_scheduled'
   | 'invalid_clues'
   | 'missing_diagnosis'
@@ -117,7 +124,7 @@ type DailyCaseScheduleWindowSlot = {
   sequenceIndex: number;
 };
 
-export type DailyCaseScheduleWindowResult = {
+export type DailyCaseScheduleWindowResult = AssignmentResult & {
   startDate: string;
   days: number;
   createdCount: number;
@@ -125,6 +132,8 @@ export type DailyCaseScheduleWindowResult = {
   missingDates: string[];
   createdSlots: DailyCaseScheduleWindowSlot[];
   existingSlots: DailyCaseScheduleWindowSlot[];
+  blockedCases: AssignmentResult['blockedCases'];
+  skippedSlots: AssignmentResult['skippedSlots'];
   excludedCases: Array<{
     caseId: string;
     reason: DailyCaseScheduleExcludedReason;
@@ -215,6 +224,8 @@ export class DailyCasesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly dailyLimitService: DailyLimitService,
+    @Optional()
+    private caseAssignmentService?: CaseAssignmentService,
   ) {}
 
   async ensureScheduleWindow(
@@ -222,502 +233,33 @@ export class DailyCasesService {
     days = 7,
     source = 'daily_scheduler',
   ): Promise<DailyCaseScheduleWindowResult> {
-    if (!Number.isInteger(days) || days < 1 || days > 31) {
-      throw new BadRequestException(
-        'Schedule window days must be an integer between 1 and 31',
-      );
-    }
-
-    const normalizedStart = normalizeDailyDate(startDate);
-    const windowDates = Array.from({ length: days }, (_, index) => {
-      const date = new Date(normalizedStart);
-      date.setUTCDate(date.getUTCDate() + index);
-      return date;
-    });
-    const windowEnd = new Date(normalizedStart);
-    windowEnd.setUTCDate(windowEnd.getUTCDate() + days);
-    const lastWindowDate = windowDates[windowDates.length - 1];
-    const today = normalizeDailyDate(new Date());
-
-    this.logger.log(
-      JSON.stringify({
-        event: 'daily_case.schedule.window.started',
-        source,
-        startDate: normalizedStart.toISOString(),
+    return this.toScheduleWindowResult(
+      await this.getAssignmentService().ensureWindow({
+        startDate,
         days,
-        endDateExclusive: windowEnd.toISOString(),
-        track: PublishTrack.DAILY,
-        sequenceIndex: 1,
+        source,
       }),
     );
+  }
 
-    return this.withSerializableRetry(() =>
-      this.prisma.$transaction(
-        async (tx) => {
-          await this.acquireScheduleWindowLock(tx);
-
-          const existingWindowSlots = await tx.dailyCase.findMany({
-            where: {
-              date: {
-                gte: normalizedStart,
-                lte: lastWindowDate,
-              },
-              track: PublishTrack.DAILY,
-              sequenceIndex: 1,
-            },
-            orderBy: [{ date: 'asc' }],
-            ...dailyCaseWithCaseArgs,
-          });
-          const existingWindowDateKeys = new Set(
-            existingWindowSlots.map((slot) => this.toDateKey(slot.date)),
-          );
-
-          for (const dailyCase of existingWindowSlots) {
-            this.logger.log(
-              JSON.stringify({
-                event: 'daily_case.schedule.slot.exists',
-                source,
-                date: dailyCase.date.toISOString(),
-                dailyCaseId: dailyCase.id,
-                caseId: dailyCase.caseId,
-                track: dailyCase.track,
-                sequenceIndex: dailyCase.sequenceIndex,
-              }),
-            );
-          }
-
-          const scheduledAssignments = await tx.dailyCase.findMany({
-            orderBy: [
-              { date: 'asc' },
-              { track: 'asc' },
-              { sequenceIndex: 'asc' },
-            ],
-            select: {
-              id: true,
-              caseId: true,
-              date: true,
-              track: true,
-              sequenceIndex: true,
-            },
-          });
-          const scheduledCaseIds = new Set(
-            scheduledAssignments.map((assignment) => assignment.caseId),
-          );
-
-          const inventoryCases = await tx.case.findMany({
-            orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
-            select: {
-              id: true,
-              title: true,
-              diagnosisId: true,
-              diagnosisRegistryId: true,
-              diagnosisMappingStatus: true,
-              clues: true,
-              explanation: true,
-              editorialStatus: true,
-              approvedAt: true,
-            },
-          });
-
-          const eligibleCases: typeof inventoryCases = [];
-          const excludedCases: DailyCaseScheduleWindowResult['excludedCases'] =
-            [];
-
-          for (const caseRecord of inventoryCases) {
-            const reason = this.getScheduleExclusionReason(
-              caseRecord,
-              scheduledCaseIds,
-            );
-
-            if (reason) {
-              excludedCases.push({ caseId: caseRecord.id, reason });
-              this.logger.log(
-                JSON.stringify({
-                  event: 'daily_case.schedule.case.excluded',
-                  source,
-                  caseId: caseRecord.id,
-                  caseTitle: caseRecord.title,
-                  editorialStatus: caseRecord.editorialStatus ?? null,
-                  reason,
-                }),
-              );
-              continue;
-            }
-
-            eligibleCases.push(caseRecord);
-          }
-
-          this.logger.log(
-            JSON.stringify({
-              event: 'daily_case.schedule.inventory.loaded',
-              source,
-              inventoryCount: inventoryCases.length,
-              eligibleCount: eligibleCases.length,
-              excludedCount: excludedCases.length,
-              alreadyScheduledCaseCount: scheduledCaseIds.size,
-              existingWindowSlotCount: existingWindowSlots.length,
-            }),
-          );
-
-          const usedCaseIds = new Set(scheduledCaseIds);
-          const createRows: Array<{
-            date: Date;
-            caseId: string;
-            track: PublishTrack;
-            sequenceIndex: number;
-          }> = [];
-          const missingDates: string[] = [];
-
-          for (const date of windowDates) {
-            const dateKey = this.toDateKey(date);
-
-            if (existingWindowDateKeys.has(dateKey)) {
-              continue;
-            }
-
-            if (date.getTime() < today.getTime()) {
-              missingDates.push(dateKey);
-              this.logger.warn(
-                JSON.stringify({
-                  event: 'daily_case.schedule.slot.missing_no_inventory',
-                  source,
-                  date: date.toISOString(),
-                  track: PublishTrack.DAILY,
-                  sequenceIndex: 1,
-                  reason: 'past_date_immutable',
-                }),
-              );
-              continue;
-            }
-
-            const caseRecord = eligibleCases.find(
-              (candidate) => !usedCaseIds.has(candidate.id),
-            );
-
-            if (!caseRecord) {
-              missingDates.push(dateKey);
-              this.logger.warn(
-                JSON.stringify({
-                  event: 'daily_case.schedule.slot.missing_no_inventory',
-                  source,
-                  date: date.toISOString(),
-                  track: PublishTrack.DAILY,
-                  sequenceIndex: 1,
-                  remainingEligibleCaseCount: eligibleCases.filter(
-                    (candidate) => !usedCaseIds.has(candidate.id),
-                  ).length,
-                }),
-              );
-              continue;
-            }
-
-            createRows.push({
-              date,
-              caseId: caseRecord.id,
-              track: PublishTrack.DAILY,
-              sequenceIndex: 1,
-            });
-            usedCaseIds.add(caseRecord.id);
-          }
-
-          const createResult =
-            createRows.length > 0
-              ? await tx.dailyCase.createMany({
-                  data: createRows,
-                  skipDuplicates: true,
-                })
-              : { count: 0 };
-
-          const finalWindowSlots = await tx.dailyCase.findMany({
-            where: {
-              date: {
-                gte: normalizedStart,
-                lte: lastWindowDate,
-              },
-              track: PublishTrack.DAILY,
-              sequenceIndex: 1,
-            },
-            orderBy: [{ date: 'asc' }],
-            ...dailyCaseWithCaseArgs,
-          });
-          const finalSlotByDate = new Map(
-            finalWindowSlots.map((slot) => [this.toDateKey(slot.date), slot]),
-          );
-          const createRowByDate = new Map(
-            createRows.map((row) => [this.toDateKey(row.date), row]),
-          );
-          const createdSlots: DailyCaseScheduleWindowSlot[] = [];
-
-          for (const [dateKey, row] of createRowByDate.entries()) {
-            const dailyCase = finalSlotByDate.get(dateKey);
-            if (!dailyCase || dailyCase.caseId !== row.caseId) {
-              continue;
-            }
-
-            const slot = this.toScheduleWindowSlot(dailyCase);
-            createdSlots.push(slot);
-            this.logger.log(
-              JSON.stringify({
-                event: 'daily_case.schedule.slot.created',
-                source,
-                date: dailyCase.date.toISOString(),
-                dailyCaseId: dailyCase.id,
-                caseId: dailyCase.caseId,
-                track: dailyCase.track,
-                sequenceIndex: dailyCase.sequenceIndex,
-              }),
-            );
-          }
-
-          const result: DailyCaseScheduleWindowResult = {
-            startDate: this.toDateKey(normalizedStart),
-            days,
-            createdCount: createResult.count,
-            existingCount: existingWindowSlots.length,
-            missingDates,
-            createdSlots,
-            existingSlots: existingWindowSlots.map((slot) =>
-              this.toScheduleWindowSlot(slot),
-            ),
-            excludedCases,
-          };
-
-          this.logger.log(
-            JSON.stringify({
-              event: 'daily_case.schedule.window.completed',
-              source,
-              startDate: normalizedStart.toISOString(),
-              days,
-              createdCount: result.createdCount,
-              existingCount: result.existingCount,
-              missingDates: result.missingDates,
-              excludedCount: result.excludedCases.length,
-            }),
-          );
-
-          return result;
-        },
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        },
-      ),
-    );
+  async assignDailyCasesForDate(date: Date | string) {
+    return this.getAssignmentService().assignDate({
+      date,
+      source: 'daily_publisher',
+    });
   }
 
   async publishDailyCasesForDate(date: Date | string) {
     const normalizedDate = normalizeDailyDate(date);
-    const nextDate = new Date(normalizedDate);
-    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    await this.assignDailyCasesForDate(normalizedDate);
 
-    return this.prisma.$transaction(
-      async (tx) => {
-        const existing = await tx.dailyCase.findMany({
-          where: {
-            date: normalizedDate,
-          },
-          orderBy: [{ track: 'asc' }, { sequenceIndex: 'asc' }],
-          ...dailyCaseWithCaseArgs,
-        });
-
-        this.logger.log(
-          JSON.stringify({
-            event: 'daily_case.publish.started',
-            source: 'daily_publisher',
-            normalizedDate: normalizedDate.toISOString(),
-            existingSlotCount: existing.length,
-          }),
-        );
-
-        const publishableCases = await tx.case.findMany({
-          where: {
-            // TODO(diagnosis-phase-7): Apply diagnosis publish readiness here when
-            // publish gating moves beyond editorial status alone.
-            editorialStatus: {
-              in: [...ASSIGNABLE_EDITORIAL_STATUSES],
-            },
-            currentRevision: {
-              is: {
-                date: {
-                  gte: normalizedDate,
-                  lt: nextDate,
-                },
-              },
-            },
-          },
-          orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
-          select: {
-            id: true,
-            title: true,
-            date: true,
-            difficulty: true,
-            diagnosisId: true,
-            diagnosisRegistryId: true,
-            diagnosisMappingStatus: true,
-            diagnosisRegistry: {
-              select: {
-                id: true,
-                active: true,
-                isPlayable: true,
-              },
-            },
-            clues: true,
-            explanation: true,
-            editorialStatus: true,
-            currentRevisionId: true,
-            currentRevision: {
-              select: {
-                id: true,
-                date: true,
-                publishTrack: true,
-              },
-            },
-          },
-        });
-
-        const groupedByTrack = new Map<PublishTrack, typeof publishableCases>();
-        const usedCaseIds = new Set(
-          existing.map((dailyCase) => dailyCase.caseId),
-        );
-        const existingSlotKeys = new Set(
-          existing.map((dailyCase) =>
-            this.getDailyCaseSlotKey(dailyCase.track, dailyCase.sequenceIndex),
-          ),
-        );
-
-        this.logSuspiciousExistingAssignments(existing, normalizedDate);
-        await this.logRecentDuplicateCaseAssignments(tx, normalizedDate);
-        this.logPreservedSlots(existing, normalizedDate);
-
-        for (const caseRecord of publishableCases) {
-          if (!this.hasPlayableClueArray(caseRecord.clues)) {
-            continue;
-          }
-
-          const track =
-            caseRecord.currentRevision?.publishTrack ?? PublishTrack.DAILY;
-          const group = groupedByTrack.get(track) ?? [];
-          group.push(caseRecord);
-          groupedByTrack.set(track, group);
-        }
-
-        const createRows = Array.from(groupedByTrack.entries())
-          .sort(
-            ([leftTrack], [rightTrack]) =>
-              getTrackPriority(leftTrack) - getTrackPriority(rightTrack),
-          )
-          .flatMap(([track, cases]) => {
-            const rows: Array<{
-              date: Date;
-              caseId: string;
-              track: PublishTrack;
-              sequenceIndex: number;
-            }> = [];
-
-            const sortedCases = [...cases].sort((left, right) =>
-              left.id.localeCompare(right.id),
-            );
-
-            for (
-              let sequenceIndex = 1;
-              sequenceIndex <= sortedCases.length;
-              sequenceIndex += 1
-            ) {
-              const slotKey = this.getDailyCaseSlotKey(track, sequenceIndex);
-
-              if (existingSlotKeys.has(slotKey)) {
-                continue;
-              }
-
-              const caseRecord = sortedCases.find(
-                (candidate) => !usedCaseIds.has(candidate.id),
-              );
-
-              if (!caseRecord) {
-                this.logger.warn(
-                  JSON.stringify({
-                    event: 'daily_case.publish.insufficient_unused_candidates',
-                    source: 'daily_publisher',
-                    normalizedDate: normalizedDate.toISOString(),
-                    track,
-                    sequenceIndex,
-                    requiredSlotMissing: true,
-                    candidateCount: sortedCases.length,
-                    existingSlotCount: sortedCases.filter((candidate) =>
-                      usedCaseIds.has(candidate.id),
-                    ).length,
-                  }),
-                );
-                break;
-              }
-
-              rows.push({
-                date: normalizedDate,
-                caseId: caseRecord.id,
-                track,
-                sequenceIndex,
-              });
-              usedCaseIds.add(caseRecord.id);
-            }
-
-            return rows;
-          });
-
-        if (createRows.length === 0) {
-          if (existing.length === 0) {
-            this.logger.warn(
-              JSON.stringify({
-                event: 'daily_case.publish.no_slots_created',
-                source: 'daily_publisher',
-                normalizedDate: normalizedDate.toISOString(),
-                eligibleCandidateCount: publishableCases.length,
-                playableTrackCount: groupedByTrack.size,
-              }),
-            );
-          }
-
-          this.logMissingRequiredSlots(existing, normalizedDate);
-
-          return existing;
-        }
-
-        const caseById = new Map(
-          publishableCases.map((caseRecord) => [caseRecord.id, caseRecord]),
-        );
-        this.logCreateRequestedSlots(createRows, normalizedDate, caseById);
-
-        const createResult = await tx.dailyCase.createMany({
-          data: createRows,
-          skipDuplicates: true,
-        });
-
-        this.logger.log(
-          JSON.stringify({
-            event: 'daily_case.publish.create_many.completed',
-            source: 'daily_publisher',
-            normalizedDate: normalizedDate.toISOString(),
-            requestedCreateCount: createRows.length,
-            createdCount: createResult.count,
-            skippedDuplicateCount: createRows.length - createResult.count,
-          }),
-        );
-
-        const finalRows = await tx.dailyCase.findMany({
-          where: {
-            date: normalizedDate,
-          },
-          orderBy: [{ track: 'asc' }, { sequenceIndex: 'asc' }],
-          ...dailyCaseWithCaseArgs,
-        });
-
-        this.logMissingRequiredSlots(finalRows, normalizedDate);
-        this.logCreatedSlots(createRows, finalRows, normalizedDate);
-
-        return finalRows;
+    return this.prisma.dailyCase.findMany({
+      where: {
+        date: normalizedDate,
       },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      },
-    );
+      orderBy: [{ track: 'asc' }, { sequenceIndex: 'asc' }],
+      ...dailyCaseWithCaseArgs,
+    });
   }
 
   async listAvailableDailyCasesForTier(
@@ -1119,7 +661,7 @@ export class DailyCasesService {
   private assertDailyCasePlayableForStart(dailyCase: DailyCaseWithCase): void {
     const isAssignable = ASSIGNABLE_EDITORIAL_STATUSES.some(
       (status) => status === dailyCase.case.editorialStatus,
-    );
+    ) || dailyCase.case.editorialStatus === CaseEditorialStatus.PUBLISHED;
 
     if (!isAssignable) {
       throw new BadRequestException(
@@ -1130,6 +672,24 @@ export class DailyCasesService {
     if (!this.hasPlayableClueArray(dailyCase.case.clues)) {
       throw new BadRequestException('Daily case has no playable clues');
     }
+  }
+
+  private getAssignmentService(): CaseAssignmentService {
+    this.caseAssignmentService ??= new CaseAssignmentService(this.prisma);
+    return this.caseAssignmentService;
+  }
+
+  private toScheduleWindowResult(
+    result: AssignmentResult,
+  ): DailyCaseScheduleWindowResult {
+    return {
+      ...result,
+      days: result.days ?? 1,
+      excludedCases: result.blockedCases.map((item) => ({
+        caseId: item.caseId,
+        reason: item.reason,
+      })),
+    };
   }
 
   private getDailyCaseSlotKey(

@@ -281,6 +281,7 @@ model Case {
   differentials              String[]               @default([])
   editorialStatus            CaseEditorialStatus?
   approvedAt                 DateTime?
+  publishedAt                DateTime?
   approvedByUserId           String?
   currentRevisionId          String?                @unique
   diagnosisId                String?

@@ -1,0 +1,1 @@
+ALTER TABLE "Case" ADD COLUMN "publishedAt" TIMESTAMP(3);

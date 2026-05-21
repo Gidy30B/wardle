@@ -21,6 +21,8 @@ type StoreCase = {
   diagnosisMappingStatus: string;
   diagnosisRegistry: {
     id: string;
+    displayLabel?: string | null;
+    canonicalName?: string | null;
     active: boolean;
     isPlayable: boolean;
   } | null;
@@ -28,6 +30,7 @@ type StoreCase = {
   explanation: unknown;
   editorialStatus: CaseEditorialStatus;
   approvedAt: Date | null;
+  publishedAt?: Date | null;
   currentRevision: {
     id?: string;
     publishTrack: PublishTrack | null;
@@ -85,6 +88,31 @@ function createDailyCasesFixture(options?: { forceCreateRace?: boolean }) {
   let leaderboardCounter = 1;
   let sessionUniqueLookupCount = 0;
 
+  const normalizeCaseForAssignment = (item: Partial<StoreCase> & StoreCase) => {
+    const diagnosisRegistryId =
+      item.diagnosisRegistryId === undefined
+        ? `registry-${item.id}`
+        : item.diagnosisRegistryId;
+    const diagnosisRegistry =
+      item.diagnosisRegistry === undefined
+        ? diagnosisRegistryId
+          ? {
+              id: diagnosisRegistryId,
+              displayLabel: item.title,
+              canonicalName: item.title,
+              active: true,
+              isPlayable: true,
+            }
+          : null
+        : item.diagnosisRegistry;
+
+    return {
+      diagnosisRegistryId,
+      diagnosisMappingStatus: item.diagnosisMappingStatus ?? 'MATCHED',
+      diagnosisRegistry,
+    };
+  };
+
   const attachCase = (dailyCase: StoreDailyCase) => ({
     ...dailyCase,
     case: store.cases.find((item) => item.id === dailyCase.caseId)!,
@@ -135,14 +163,16 @@ function createDailyCasesFixture(options?: { forceCreateRace?: boolean }) {
                 : left.id.localeCompare(right.id);
             })
             .map((item) => ({
+              ...normalizeCaseForAssignment(item),
               id: item.id,
               title: item.title,
               diagnosisId: item.diagnosisId,
-              diagnosisRegistryId: item.diagnosisRegistryId,
-              diagnosisMappingStatus: item.diagnosisMappingStatus,
-              diagnosisRegistry: item.diagnosisRegistry,
               clues: item.clues,
-              explanation: item.explanation,
+              explanation:
+                item.explanation ??
+                (item.id === 'case-missing-explanation'
+                  ? null
+                  : { summary: `summary ${item.id}` }),
               editorialStatus: item.editorialStatus,
               approvedAt: item.approvedAt,
             }));
@@ -172,16 +202,18 @@ function createDailyCasesFixture(options?: { forceCreateRace?: boolean }) {
               : left.id.localeCompare(right.id);
           })
           .map((item) => ({
+            ...normalizeCaseForAssignment(item),
             id: item.id,
             title: item.title,
             date: item.date,
             difficulty: item.difficulty,
             diagnosisId: item.diagnosisId,
-            diagnosisRegistryId: item.diagnosisRegistryId,
-            diagnosisMappingStatus: item.diagnosisMappingStatus,
-            diagnosisRegistry: item.diagnosisRegistry,
             clues: item.clues,
-            explanation: item.explanation,
+            explanation:
+              item.explanation ??
+              (item.id === 'case-missing-explanation'
+                ? null
+                : { summary: `summary ${item.id}` }),
             editorialStatus: item.editorialStatus,
             currentRevisionId: item.currentRevision?.id ?? null,
             currentRevision: item.currentRevision
@@ -192,6 +224,28 @@ function createDailyCasesFixture(options?: { forceCreateRace?: boolean }) {
                 }
               : null,
           }));
+      }),
+      updateMany: jest.fn(async (args: any) => {
+        const ids = new Set((args.where?.id?.in ?? []) as string[]);
+        let count = 0;
+
+        for (const item of store.cases) {
+          if (ids.size > 0 && !ids.has(item.id)) {
+            continue;
+          }
+
+          if (
+            args.where?.editorialStatus &&
+            item.editorialStatus !== args.where.editorialStatus
+          ) {
+            continue;
+          }
+
+          Object.assign(item, args.data);
+          count += 1;
+        }
+
+        return { count };
       }),
     },
     dailyCase: {
@@ -439,6 +493,8 @@ function addScheduleCase(
       overrides.diagnosisRegistry === undefined
         ? {
             id: `registry-${overrides.id}`,
+            displayLabel: overrides.title ?? overrides.id,
+            canonicalName: overrides.title ?? overrides.id,
             active: true,
             isPlayable: true,
           }
@@ -450,6 +506,7 @@ function addScheduleCase(
     editorialStatus:
       overrides.editorialStatus ?? CaseEditorialStatus.READY_TO_PUBLISH,
     approvedAt: overrides.approvedAt ?? new Date('2026-01-01T00:00:00.000Z'),
+    publishedAt: overrides.publishedAt ?? null,
     currentRevision:
       overrides.currentRevision === undefined
         ? {
@@ -490,9 +547,15 @@ describe('DailyCasesService', () => {
         sequenceIndex: 1,
       },
     ]);
+    expect(store.cases.find((item) => item.id === 'case-ready')).toMatchObject({
+      editorialStatus: CaseEditorialStatus.PUBLISHED,
+    });
+    expect(
+      store.cases.find((item) => item.id === 'case-ready')?.publishedAt,
+    ).toBeInstanceOf(Date);
   });
 
-  it('schedules an APPROVED inventory case', async () => {
+  it('excludes APPROVED inventory until it is ready to publish', async () => {
     const { service, store } = createDailyCasesFixture();
     const scheduleDate = normalizeDailyDate('2099-02-02');
     addScheduleCase(store, {
@@ -502,15 +565,19 @@ describe('DailyCasesService', () => {
 
     const result = await service.ensureScheduleWindow(scheduleDate, 1);
 
-    expect(result.createdSlots).toEqual([
+    expect(result.createdSlots).toEqual([]);
+    expect(result.blockedCases).toContainEqual({
+      caseId: 'case-approved',
+      diagnosis: 'case-approved',
+      editorialStatus: CaseEditorialStatus.APPROVED,
+      reason: 'invalid_status',
+    });
+    expect(store.cases.find((item) => item.id === 'case-approved')).toMatchObject(
       {
-        date: '2099-02-02',
-        dailyCaseId: 'dc-1',
-        caseId: 'case-approved',
-        track: PublishTrack.DAILY,
-        sequenceIndex: 1,
+        editorialStatus: CaseEditorialStatus.APPROVED,
+        publishedAt: null,
       },
-    ]);
+    );
   });
 
   it('excludes invalid inventory with scheduling diagnostics', async () => {
@@ -547,7 +614,44 @@ describe('DailyCasesService', () => {
     expect(logSpy).toHaveBeenCalledWith(
       expect.stringContaining('daily_case.schedule.case.excluded'),
     );
+    for (const caseId of [
+      'case-invalid-clues',
+      'case-missing-diagnosis',
+      'case-missing-explanation',
+      'case-draft',
+    ]) {
+      expect(store.cases.find((item) => item.id === caseId)?.publishedAt).toBe(
+        null,
+      );
+    }
     logSpy.mockRestore();
+  });
+
+  it('does not assign PUBLISHED cases again', async () => {
+    const { service, store } = createDailyCasesFixture();
+    const scheduleDate = normalizeDailyDate('2099-02-05');
+    addScheduleCase(store, {
+      id: 'case-published',
+      editorialStatus: CaseEditorialStatus.PUBLISHED,
+      publishedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    const result = await service.ensureScheduleWindow(scheduleDate, 1);
+
+    expect(result.createdCount).toBe(0);
+    expect(result.blockedCases).toContainEqual({
+      caseId: 'case-published',
+      diagnosis: 'case-published',
+      editorialStatus: CaseEditorialStatus.PUBLISHED,
+      reason: 'invalid_status',
+    });
+    expect(store.dailyCases).toEqual([]);
+    expect(store.cases.find((item) => item.id === 'case-published')).toMatchObject(
+      {
+        editorialStatus: CaseEditorialStatus.PUBLISHED,
+        publishedAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    );
   });
 
   it('excludes already scheduled cases from the explicit schedule window', async () => {
@@ -672,17 +776,19 @@ describe('DailyCasesService', () => {
   });
 
   it('can run the explicit scheduler repeatedly without duplicating slots', async () => {
-    const { service, store } = createDailyCasesFixture();
+    const { service, store, prisma } = createDailyCasesFixture();
     const scheduleDate = normalizeDailyDate('2099-06-01');
     addScheduleCase(store, { id: 'case-repeat-1' });
     addScheduleCase(store, { id: 'case-repeat-2' });
 
     const first = await service.ensureScheduleWindow(scheduleDate, 2);
+    (prisma.case.updateMany as jest.Mock).mockClear();
     const second = await service.ensureScheduleWindow(scheduleDate, 2);
 
     expect(first.createdCount).toBe(2);
     expect(second.createdCount).toBe(0);
     expect(second.existingCount).toBe(2);
+    expect(prisma.case.updateMany).not.toHaveBeenCalled();
     expect(store.dailyCases).toHaveLength(2);
     expect(
       new Set(
@@ -1391,8 +1497,7 @@ describe('DailyCasesService', () => {
     ).toBe('case-premium-b');
   });
 
-  it('returns existing rows and warns when no unused candidates can fill missing slots', async () => {
-    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+  it('returns diagnostics when no unused candidates can fill missing slots', async () => {
     const { service, store, prisma } = createDailyCasesFixture();
     const date = normalizeDailyDate('2026-04-18');
     store.dailyCases.push({
@@ -1416,15 +1521,17 @@ describe('DailyCasesService', () => {
       currentRevision: { publishTrack: PublishTrack.PREMIUM, date },
     });
 
-    const result = await service.publishDailyCasesForDate(date);
+    const result = await service.assignDailyCasesForDate(date);
 
-    expect(result.map((item) => item.id)).toEqual(['dc-legacy']);
+    expect(result.existingSlots.map((item) => item.dailyCaseId)).toEqual([
+      'dc-legacy',
+    ]);
+    expect(result.blockedCases).toContainEqual({
+      caseId: 'case-premium-a',
+      diagnosis: 'Premium A',
+      editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
+      reason: 'already_scheduled',
+    });
     expect(prisma.dailyCase.createMany).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'daily_case.publish.insufficient_unused_candidates',
-      ),
-    );
-    warnSpy.mockRestore();
   });
 });

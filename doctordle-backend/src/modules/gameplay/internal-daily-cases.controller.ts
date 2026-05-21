@@ -22,6 +22,7 @@ import { InternalApiGuard } from '../../auth/internal-api.guard';
 import { PrismaService } from '../../core/db/prisma.service';
 import { DevOnlyGuard } from '../cases/guards/dev-only.guard';
 import { DailyCaseSchedulerService } from './daily-case-scheduler.service';
+import { DailyCasesService } from './daily-cases.service';
 
 class EnsureDailyCaseWindowDto {
   @IsOptional()
@@ -42,6 +43,11 @@ class CleanupDailyCaseAssignmentsDto {
   caseIds!: string[];
 }
 
+class PublishDailyCaseDateDto {
+  @IsDateString()
+  date!: string;
+}
+
 @Controller('internal/daily-cases')
 @Public()
 @UseGuards(InternalApiGuard)
@@ -50,6 +56,7 @@ export class InternalDailyCasesController {
 
   constructor(
     private readonly dailyCaseSchedulerService: DailyCaseSchedulerService,
+    private readonly dailyCasesService: DailyCasesService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -73,6 +80,23 @@ export class InternalDailyCasesController {
           event: 'daily_case.schedule.api.ensure_window.failed',
           startDate: body.startDate ?? null,
           days: body.days ?? 7,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
+  }
+
+  @Post('publish-date')
+  async publishDate(@Body() body: PublishDailyCaseDateDto) {
+    try {
+      return await this.dailyCasesService.assignDailyCasesForDate(body.date);
+    } catch (error) {
+      this.logger.error(
+        JSON.stringify({
+          event: 'daily_case.schedule.api.publish_date.failed',
+          date: body.date,
           error: error instanceof Error ? error.message : String(error),
         }),
         error instanceof Error ? error.stack : undefined,
