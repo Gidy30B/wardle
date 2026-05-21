@@ -51,11 +51,17 @@ export default function WardleAuthForm() {
 
     try {
       const { redirectUrl, redirectUrlComplete } = getClerkOAuthRedirects()
-      await signInState.signIn.authenticateWithRedirect({
-        strategy: 'oauth_google',
+      const oauthParams = {
+        strategy: 'oauth_google' as const,
         redirectUrl,
         redirectUrlComplete,
-      })
+      }
+
+      if (mode === 'signup') {
+        await signUpState.signUp.authenticateWithRedirect(oauthParams)
+      } else {
+        await signInState.signIn.authenticateWithRedirect(oauthParams)
+      }
     } catch (exception) {
       setError(getClerkErrorMessage(exception))
       setLoading(false)
