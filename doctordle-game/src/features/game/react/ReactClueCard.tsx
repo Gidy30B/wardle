@@ -24,17 +24,19 @@ export default function ReactClueCard({
 }: ReactClueCardProps) {
   if (state === 'locked' || !clue) {
     return (
-      <article className="rounded-[18px] border border-dashed border-white/8 bg-[rgba(26,60,94,0.12)] px-4 py-4 opacity-80">
+      <article className="rounded-[18px] border border-dashed border-white/10 bg-white/[0.025] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white/5 text-xs font-bold text-white/22">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.06] bg-white/[0.035] text-xs font-bold text-white/24">
             {index + 1}
           </div>
-          <div className="flex-1">
-            <div className="h-2.5 w-24 rounded-full bg-white/6" />
-            <div className="mt-3 h-2.5 w-full rounded-full bg-white/5" />
-            <div className="mt-2 h-2.5 w-3/4 rounded-full bg-white/5" />
+          <div className="min-w-0 flex-1">
+            <div className="h-2.5 w-24 rounded-full bg-white/[0.055]" />
+            <div className="mt-3 h-2.5 w-full rounded-full bg-white/[0.045]" />
+            <div className="mt-2 h-2.5 w-3/4 rounded-full bg-white/[0.04]" />
           </div>
-          <span className="text-sm text-white/20">LOCK</span>
+          <span className="shrink-0 text-xs text-white/[0.15]" aria-hidden="true">
+            🔒
+          </span>
         </div>
       </article>
     )

@@ -14,7 +14,18 @@ export type LearnTabPageProps = {
   libraryLoading: boolean;
   libraryError: string | null;
   onRetryLibrary: () => void;
+  openIntent?: LearnOpenIntent | null;
+  onOpenIntentConsumed?: (intentId: string) => void;
   roundViewModel: RoundViewModel;
+};
+
+export type LearnOpenIntent = {
+  intentId: string;
+  source: "result-modal";
+  sessionId?: string;
+  caseId?: string;
+  dailyCaseId?: string;
+  openLatestPlayedCase: boolean;
 };
 
 export type DetailTab = "breakdown" | "differentials" | "clues";

@@ -8,6 +8,7 @@ import type {
   LearnLibraryResponse,
   TodayCasesResponse,
   UserLeaderboardPosition,
+  GameExplanation,
   GameResult,
   GuessApiResponse,
   GuessPayload,
@@ -64,6 +65,30 @@ export async function startGameApi(request: RequestJson): Promise<StartGameRespo
         nextCaseAt: string
       }
     | {
+        state: 'completed'
+        sessionId: string
+        dailyCaseId: string
+        casePublicNumber?: number | null
+        displayLabel?: string
+        trackDisplayLabel?: string
+        startedAt: string
+        completedAt: string
+        clueIndex: number
+        attemptsCount: number
+        attempts: Array<{
+          guess: string
+          result: 'correct' | 'close' | 'wrong'
+          score: number
+          clueIndexAtAttempt?: number | null
+        }>
+        score: number
+        gameOver: true
+        gameOverReason: 'correct' | 'clues_exhausted'
+        explanation?: GameExplanation | null
+        nextCaseAt: string
+        case: Omit<GameCase, 'clueIndex'>
+      }
+    | {
         state?: 'ready'
         sessionId: string
         dailyCaseId: string
@@ -83,6 +108,28 @@ export async function startGameApi(request: RequestJson): Promise<StartGameRespo
     return {
       state: 'waiting',
       nextCaseAt: response.nextCaseAt ?? new Date().toISOString(),
+    }
+  }
+
+  if (response.state === 'completed') {
+    return {
+      state: 'completed',
+      sessionId: response.sessionId,
+      dailyCaseId: response.dailyCaseId,
+      casePublicNumber: response.casePublicNumber ?? response.case.casePublicNumber ?? null,
+      displayLabel: response.displayLabel ?? response.case.displayLabel,
+      trackDisplayLabel: response.trackDisplayLabel ?? response.case.trackDisplayLabel,
+      startedAt: response.startedAt,
+      completedAt: response.completedAt,
+      clueIndex: response.clueIndex,
+      attemptsCount: response.attemptsCount,
+      attempts: response.attempts,
+      score: response.score,
+      gameOver: true,
+      gameOverReason: response.gameOverReason,
+      explanation: response.explanation ?? null,
+      nextCaseAt: response.nextCaseAt,
+      case: attachClueIndex(response.case, response.clueIndex),
     }
   }
 

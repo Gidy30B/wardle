@@ -52,6 +52,10 @@ export default function ReactGamePlaySurface({
     roundViewModel.mode === 'FINAL_FEEDBACK'
       ? Math.max(0, resultCluesUsed - 1)
       : Math.max(0, roundViewModel.revealedClueCount - 1)
+  const clueCardCount =
+    roundViewModel.mode === 'FINAL_FEEDBACK'
+      ? roundViewModel.visibleClues.length
+      : visualSlotCount
   const attemptsRemaining = Math.max(0, visualSlotCount - roundViewModel.attemptsCount)
   const streakValue = getVisibleStreak(currentStreak)
   const caseCode = roundViewModel.caseTrackDisplayLabel.toUpperCase()
@@ -192,10 +196,10 @@ export default function ReactGamePlaySurface({
           ) : null}
 
           <section className="space-y-3">
-            {Array.from({ length: visualSlotCount }, (_, index) => {
+            {Array.from({ length: clueCardCount }, (_, index) => {
               const clue = roundViewModel.visibleClues[index]
 
-              if (!clue) {
+              if (!clue && roundViewModel.mode !== 'FINAL_FEEDBACK') {
                 return (
                   <ReactClueCard
                     key={`locked-${index}`}
@@ -204,6 +208,8 @@ export default function ReactGamePlaySurface({
                   />
                 )
               }
+
+              if (!clue) return null
 
               if (roundViewModel.mode === 'FINAL_FEEDBACK') {
                 const state =
@@ -270,6 +276,29 @@ export default function ReactGamePlaySurface({
           {shareCardData ? (
             <section className="pt-1">
               <DesignedShareCard data={shareCardData} />
+            </section>
+          ) : null}
+
+          {roundViewModel.mode === 'FINAL_FEEDBACK' && roundViewModel.nextCaseAction.kind !== 'none' ? (
+            <section className="rounded-[18px] border border-white/[0.07] bg-white/[0.03] px-4 py-4">
+              <p className="font-brand-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--wardle-color-teal)]/72">
+                Next case
+              </p>
+              {roundViewModel.nextCaseAction.kind === 'countdown' ? (
+                <p className="mt-2 text-sm leading-6 text-white/62">
+                  New case unlocks in{' '}
+                  <span className="font-brand-mono font-bold text-[var(--wardle-color-mint)]">
+                    {roundViewModel.nextCaseAction.countdownText}
+                  </span>
+                  .
+                </p>
+              ) : (
+                <div className="mt-3">
+                  <Button type="button" onClick={onReload}>
+                    {roundViewModel.nextCaseAction.label}
+                  </Button>
+                </div>
+              )}
             </section>
           ) : null}
         </div>

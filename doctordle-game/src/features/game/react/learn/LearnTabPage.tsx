@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { LearnLibraryCase } from "../../game.types";
 import type {
   DetailTab,
@@ -287,6 +287,8 @@ export default function LearnTabPage({
   libraryLoading,
   libraryError,
   onRetryLibrary,
+  openIntent,
+  onOpenIntentConsumed,
   roundViewModel,
 }: LearnTabPageProps) {
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
@@ -300,6 +302,7 @@ export default function LearnTabPage({
   const [selectedMobileSpecialty, setSelectedMobileSpecialty] = useState<
     string | null
   >(null);
+  const consumedOpenIntentIdRef = useRef<string | null>(null);
 
   const resetLearnSelection = () => {
     setSelectedCaseId(null);
@@ -336,6 +339,38 @@ export default function LearnTabPage({
     () => filterLearnCases(completedCases, filters),
     [completedCases, filters],
   );
+
+  useEffect(() => {
+    if (!openIntent?.openLatestPlayedCase) return;
+    if (consumedOpenIntentIdRef.current === openIntent.intentId) return;
+
+    const latest = latestPlayedResult ?? latestResult;
+    const targetCaseId = openIntent.caseId ?? latest?.case?.id ?? null;
+    const targetDailyCaseId = openIntent.dailyCaseId ?? null;
+    const targetCase = completedCases.find(
+      (item) =>
+        (targetCaseId && item.case.id === targetCaseId) ||
+        (targetDailyCaseId && item.dailyCaseId === targetDailyCaseId),
+    );
+
+    if (!targetCase) return;
+
+    consumedOpenIntentIdRef.current = openIntent.intentId;
+    updateFilters(ALL_FILTERS);
+    setStudyQueueCaseIds(null);
+    setStudyQueueIndex(0);
+    setSelectedMobileSpecialty(null);
+    setSelectedCaseId(targetCase.case.id);
+    setActiveTab("breakdown");
+    onOpenIntentConsumed?.(openIntent.intentId);
+  }, [
+    completedCases,
+    latestPlayedResult,
+    latestResult,
+    onOpenIntentConsumed,
+    openIntent,
+    updateFilters,
+  ]);
 
   const { archiveSpecialties, displayedSummary, filterOptions } =
     useLearnSummary({

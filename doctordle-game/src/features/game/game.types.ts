@@ -66,6 +66,32 @@ export type StartGameResponse =
       case: GameCase
     }
   | {
+      state: 'completed'
+      sessionId: string
+      dailyCaseId: string
+      casePublicNumber?: number | null
+      displayLabel?: string
+      trackDisplayLabel?: string
+      dailyCaseDisplayLabel?: string
+      dailyCaseTrackDisplayLabel?: string
+      startedAt: string
+      completedAt: string
+      clueIndex: number
+      attemptsCount: number
+      attempts: Array<{
+        guess: string
+        result: 'correct' | 'close' | 'wrong'
+        score: number
+        clueIndexAtAttempt?: number | null
+      }>
+      score: number
+      gameOver: true
+      gameOverReason: 'correct' | 'clues_exhausted'
+      explanation?: GameExplanation | null
+      nextCaseAt: string
+      case: GameCase
+    }
+  | {
       state: 'waiting'
       nextCaseAt: string
     }

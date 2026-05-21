@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { LearnLibraryCase } from "../../../game.types";
 import type { DetailTab } from "../learn.types";
 
@@ -19,11 +19,15 @@ export function useSelectedLearnCase({
   setStudyQueueCaseIds: (ids: string[] | null) => void;
   setStudyQueueIndex: (index: number) => void;
 }) {
+  const matchesSelectedCase = useCallback(
+    (item: LearnLibraryCase) =>
+      item.dailyCaseId === selectedCaseId || item.case.id === selectedCaseId,
+    [selectedCaseId],
+  );
+
   const selectedCase = useMemo(
-    () =>
-      completedCases.find((item) => item.dailyCaseId === selectedCaseId) ??
-      null,
-    [completedCases, selectedCaseId],
+    () => completedCases.find(matchesSelectedCase) ?? null,
+    [completedCases, matchesSelectedCase],
   );
   const activeCase = selectedCase ?? filteredCases[0] ?? null;
 
@@ -36,13 +40,14 @@ export function useSelectedLearnCase({
     }
     if (
       selectedCaseId &&
-      !filteredCases.some((item) => item.dailyCaseId === selectedCaseId)
+      !filteredCases.some(matchesSelectedCase)
     ) {
       setSelectedCaseId(null);
       setActiveTab("breakdown");
     }
   }, [
     filteredCases,
+    matchesSelectedCase,
     selectedCaseId,
     setActiveTab,
     setSelectedCaseId,

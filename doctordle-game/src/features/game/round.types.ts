@@ -45,6 +45,11 @@ export type RoundDiagnosisSuggestion = {
 
 export type RoundSuggestionsStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error'
 
+export type NextCaseAction =
+  | { kind: 'countdown'; nextCaseAt: string; countdownText: string }
+  | { kind: 'start_next'; label: string; track?: string; sequenceIndex?: number }
+  | { kind: 'none' }
+
 export type RoundDiagnosisStatusTone =
   | 'neutral'
   | 'selected'
@@ -89,6 +94,7 @@ export type RoundViewModel = {
   elapsedSeconds: number | null
   elapsedTimeText: string | null
   waitingCountdownText: string | null
+  nextCaseAction: NextCaseAction
   unavailableReason: string | null
   canRetry: boolean
   canOpenExplanation: boolean

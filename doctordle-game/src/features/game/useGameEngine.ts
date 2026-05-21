@@ -49,6 +49,8 @@ export type GameRewardState = {
   receivedAt: number
 } | null
 
+export type FinalFeedbackSource = 'live_finish' | 'hydrated_completed'
+
 type SessionTimingState = {
   startedAt: string
   completedAt: string | null
@@ -58,7 +60,12 @@ export type GameEngineMode =
   | { type: 'LOADING' }
   | { type: 'PLAYING' }
   | { type: 'SUBMITTING' }
-  | { type: 'FINAL_FEEDBACK'; result: GameResult }
+  | {
+      type: 'FINAL_FEEDBACK'
+      result: GameResult
+      source: FinalFeedbackSource
+      nextCaseAt?: Date
+    }
   | { type: 'WAITING'; nextCaseAt: Date }
   | { type: 'BLOCKED'; reason: string | null }
 
@@ -95,6 +102,12 @@ function formatElapsedTime(seconds: number) {
   const remainingSeconds = safeSeconds % 60
 
   return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`
+}
+
+function getDefaultNextCaseAt(now = new Date()) {
+  const next = new Date(now)
+  next.setUTCHours(24, 0, 0, 0)
+  return next
 }
 
 function delay(ms: number): Promise<void> {
@@ -277,6 +290,53 @@ export function useGameEngine() {
           return
         }
 
+        if (session.state === 'completed') {
+          const completedResult: GameResult = {
+            score: session.score,
+            attemptsCount: session.attemptsCount,
+            label: session.gameOverReason === 'correct' ? 'correct' : 'wrong',
+            isTerminalCorrect: session.gameOverReason === 'correct',
+            clueIndex: session.clueIndex,
+            startedAt: session.startedAt,
+            completedAt: session.completedAt,
+            gameOver: true,
+            gameOverReason: session.gameOverReason,
+            explanation: session.explanation ?? null,
+            case: session.case,
+          }
+
+          setSessionId(session.sessionId)
+          setSessionTiming({
+            startedAt: session.startedAt,
+            completedAt: session.completedAt,
+          })
+          setCaseData(session.case)
+          setClueIndex(session.clueIndex)
+          setGuess('')
+          setSelectedDiagnosis(null)
+          setStaleSelection(null)
+          setSuggestions([])
+          setHighlightedSuggestionIndex(0)
+          setLatestResult(completedResult)
+          setAttempts(
+            session.attempts.map((attempt) => ({
+              guess: attempt.guess,
+              label: attempt.result,
+            })),
+          )
+          if (hasDisplayableExplanation(completedResult.explanation)) {
+            setLatestPlayedLearningResult(completedResult)
+          }
+          setError(null)
+          setMode({
+            type: 'FINAL_FEEDBACK',
+            result: completedResult,
+            source: 'hydrated_completed',
+            nextCaseAt: new Date(session.nextCaseAt),
+          })
+          return
+        }
+
         setSessionId(session.sessionId)
         setSessionTiming(
           session.startedAt
@@ -365,6 +425,7 @@ export function useGameEngine() {
 
   const shouldTick =
     mode.type === 'WAITING' ||
+    Boolean(mode.type === 'FINAL_FEEDBACK' && mode.nextCaseAt) ||
     Boolean(showTimer && sessionTiming?.startedAt && !sessionTiming.completedAt)
 
   useEffect(() => {
@@ -568,7 +629,12 @@ export function useGameEngine() {
           return response
         }
 
-        setMode({ type: 'FINAL_FEEDBACK', result: response })
+        setMode({
+          type: 'FINAL_FEEDBACK',
+          result: response,
+          source: 'live_finish',
+          nextCaseAt: getDefaultNextCaseAt(),
+        })
         return response
       }
 
@@ -706,12 +772,24 @@ export function useGameEngine() {
   ])
 
   const waitingCountdownText = useMemo(() => {
-    if (mode.type !== 'WAITING') {
-      return null
-    }
+    const nextCaseAt =
+      mode.type === 'WAITING'
+        ? mode.nextCaseAt
+        : mode.type === 'FINAL_FEEDBACK'
+          ? mode.nextCaseAt
+          : null
 
-    return formatCountdown(mode.nextCaseAt, nowMs)
+    if (!nextCaseAt) return null
+
+    return formatCountdown(nextCaseAt, nowMs)
   }, [mode, nowMs])
+
+  const nextCaseAtIso =
+    mode.type === 'WAITING'
+      ? mode.nextCaseAt.toISOString()
+      : mode.type === 'FINAL_FEEDBACK' && mode.nextCaseAt
+        ? mode.nextCaseAt.toISOString()
+        : null
 
   const elapsedSeconds = useMemo(() => {
     if (!sessionTiming?.startedAt) {
@@ -749,6 +827,8 @@ export function useGameEngine() {
   const waitingMsRemaining =
     mode.type === 'WAITING' ? Math.max(0, mode.nextCaseAt.getTime() - nowMs) : null
   const finalResult = mode.type === 'FINAL_FEEDBACK' ? mode.result : null
+  const finalFeedbackSource =
+    mode.type === 'FINAL_FEEDBACK' ? mode.source : null
   const canOpenExplanation = hasDisplayableExplanation(latestResult?.explanation)
   const canSubmit =
     isPlaying &&
@@ -780,6 +860,7 @@ export function useGameEngine() {
         isLoadingCase,
         error,
         waitingCountdownText,
+        nextCaseAt: nextCaseAtIso,
         unavailableReason,
         progress,
         canRetry: Boolean(error),
@@ -807,6 +888,7 @@ export function useGameEngine() {
       isSubmitting,
       latestResult,
       mode,
+      nextCaseAtIso,
       progress,
       reward,
       selectedDiagnosis,
@@ -828,6 +910,7 @@ export function useGameEngine() {
     latestResult,
     latestPlayedLearningResult,
     finalResult,
+    finalFeedbackSource,
     explanation: latestResult?.explanation ?? null,
     latestPlayedExplanation: latestPlayedLearningResult?.explanation ?? null,
     progress,

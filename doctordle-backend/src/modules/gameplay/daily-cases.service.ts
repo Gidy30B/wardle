@@ -48,6 +48,7 @@ type TodayCasePayload = {
     diagnosis: GameplayDiagnosisReadModel;
     clues: Prisma.JsonValue | null;
     explanation: Prisma.JsonValue | null;
+    differentials: Prisma.JsonValue | null;
   };
 };
 
@@ -80,6 +81,7 @@ const dailyCaseWithCaseArgs = {
         },
         clues: true,
         explanation: true,
+        differentials: true,
         editorialStatus: true,
         currentRevisionId: true,
         currentRevision: {
@@ -102,7 +104,12 @@ type CaseEditorialStatusLike = CaseEditorialStatus | null;
 
 type ActiveSessionResult = {
   session: GameSession & {
-    attempts: Array<{ result: string }>;
+    attempts: Array<{
+      guess: string;
+      result: string;
+      score: number;
+      clueIndexAtAttempt: number | null;
+    }>;
   };
   dailyCase: DailyCaseWithCase;
   user: User;
@@ -213,7 +220,10 @@ export class DailyCasesService {
   private readonly sessionInclude = {
     attempts: {
       select: {
+        guess: true,
         result: true,
+        score: true,
+        clueIndexAtAttempt: true,
       },
       orderBy: {
         createdAt: 'asc',
@@ -584,6 +594,7 @@ export class DailyCasesService {
         diagnosis: this.buildDiagnosisReadModel(dailyCase.case),
         clues: dailyCase.case.clues,
         explanation: dailyCase.case.explanation,
+        differentials: dailyCase.case.differentials,
       },
     };
   }

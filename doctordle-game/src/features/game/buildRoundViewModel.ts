@@ -43,6 +43,7 @@ type BuildRoundViewModelInput = {
   isLoadingCase: boolean
   error: string | null
   waitingCountdownText: string | null
+  nextCaseAt: string | null
   unavailableReason: string | null
   progress: UserProgress | null
   canRetry: boolean
@@ -245,6 +246,7 @@ export function buildRoundViewModel({
   isLoadingCase,
   error,
   waitingCountdownText,
+  nextCaseAt,
   unavailableReason,
   progress,
   canRetry,
@@ -257,10 +259,9 @@ export function buildRoundViewModel({
   const gameplayVisibleClues = gameplayClues.filter((clue) => clue.order <= clueIndex)
   const totalClues = latestResult?.case?.clues.length ?? caseData?.clues.length ?? 0
   const attemptsCount = latestResult?.attemptsCount ?? attempts.length
-  const reviewClues =
-    mode.type === 'FINAL_FEEDBACK'
-      ? latestResult?.case?.clues ?? gameplayClues
-      : gameplayVisibleClues
+  const isTerminal = mode.type === 'FINAL_FEEDBACK' || latestResult?.gameOver === true
+  const allClues = latestResult?.case?.clues ?? gameplayClues
+  const reviewClues = isTerminal ? allClues : gameplayVisibleClues
   const visibleClues = reviewClues.map((clue, _index, array) => ({
     id: clue.id,
     type: clue.type,
@@ -279,7 +280,7 @@ export function buildRoundViewModel({
         ? Math.max(1, gameplayVisibleClues.length || attemptsCount || 1)
         : Math.max(1, totalClues || gameplayVisibleClues.length || attemptsCount || 1)
       : null
-  const revealedClueCount = resultCluesUsed ?? gameplayVisibleClues.length
+  const revealedClueCount = isTerminal ? totalClues : gameplayVisibleClues.length
   const cluesRemaining = Math.max(0, totalClues - revealedClueCount)
   const viabilityRemaining = getViabilityRemaining({
     totalClues,
@@ -316,6 +317,10 @@ export function buildRoundViewModel({
   const explanationAvailable = finalExplanation !== null
   const resolvedUnavailableReason =
     mode.type === 'BLOCKED' ? error ?? unavailableReason ?? 'No case available right now.' : null
+  const nextCaseAction =
+    waitingCountdownText && nextCaseAt
+      ? ({ kind: 'countdown', nextCaseAt, countdownText: waitingCountdownText } as const)
+      : ({ kind: 'none' } as const)
 
   return {
     mode: mode.type,
@@ -364,7 +369,11 @@ export function buildRoundViewModel({
     reward,
     elapsedSeconds,
     elapsedTimeText,
-    waitingCountdownText: mode.type === 'WAITING' ? waitingCountdownText ?? '00:00:00' : null,
+    waitingCountdownText:
+      mode.type === 'WAITING' || mode.type === 'FINAL_FEEDBACK'
+        ? waitingCountdownText
+        : null,
+    nextCaseAction,
     unavailableReason: resolvedUnavailableReason,
     canRetry: mode.type === 'BLOCKED' && canRetry,
     canOpenExplanation,

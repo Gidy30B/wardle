@@ -98,6 +98,32 @@ type StartDailyGameResponse =
       case: ReturnType<SessionService['buildCasePayload']>;
     }
   | {
+      state: 'completed';
+      sessionId: string;
+      dailyCaseId: string;
+      casePublicNumber: number | null;
+      displayLabel: string;
+      trackDisplayLabel: string;
+      dailyCaseDisplayLabel: string;
+      dailyCaseTrackDisplayLabel: string;
+      clueIndex: number;
+      attemptsCount: number;
+      attempts: Array<{
+        guess: string;
+        result: 'correct' | 'close' | 'wrong';
+        score: number;
+        clueIndexAtAttempt: number | null;
+      }>;
+      score: number;
+      startedAt: string;
+      completedAt: string;
+      gameOver: true;
+      gameOverReason: 'correct' | 'clues_exhausted';
+      explanation: GameplayCaseExplanation | null;
+      nextCaseAt: string;
+      case: ReturnType<SessionService['buildCasePayload']>;
+    }
+  | {
       state: 'waiting';
       nextCaseAt: string;
     };
@@ -370,6 +396,13 @@ export class SessionService {
         ));
 
     if (!selectedDailyCaseId && !replayMode) {
+      selectedDailyCaseId = await this.findMostRecentTodaySessionDailyCaseId(
+        input.userId,
+        todayCases.cases.map((entry) => entry.dailyCaseId),
+      );
+    }
+
+    if (!selectedDailyCaseId && !replayMode) {
       this.logEvent('daily.start.dev_replay.auto_lookup', {
         userId: input.userId,
         todayCaseIds: todayCases.cases.map((entry) => entry.dailyCaseId),
@@ -454,6 +487,10 @@ export class SessionService {
       this.cacheTtlSeconds,
     );
 
+    if (result.session.status === 'completed' && result.session.completedAt) {
+      return await this.buildCompletedStartResponse(result);
+    }
+
     if (result.session.status !== 'active') {
       this.logWarnEvent('daily.start.waiting.non_active_session', {
         userId: input.userId,
@@ -521,6 +558,66 @@ export class SessionService {
         : null,
       case: responseCase,
     };
+  }
+
+  private async buildCompletedStartResponse(input: Awaited<
+    ReturnType<DailyCasesService['getOrCreateGameSessionForDailyCase']>
+  >): Promise<Extract<StartDailyGameResponse, { state: 'completed' }>> {
+    if (!input.session.completedAt) {
+      throw new BadRequestException('Completed session is missing completedAt');
+    }
+
+    const gameplayCase = await this.hydrateGameplayCase(input.dailyCase.case);
+    const maxClues = this.getTotalClues(gameplayCase);
+    const displayLabel = formatDailyCaseDisplayLabel(input.dailyCase);
+    const trackDisplayLabel = formatDailyCaseTrackDisplayLabel(input.dailyCase);
+    const responseCase = {
+      ...this.buildCasePayload(gameplayCase),
+      displayLabel,
+      trackDisplayLabel,
+    };
+    const attempts = input.session.attempts.map((attempt) => ({
+      guess: attempt.guess,
+      result: this.normalizeAttemptResult(attempt.result),
+      score: attempt.score,
+      clueIndexAtAttempt: attempt.clueIndexAtAttempt,
+    }));
+    const latestAttempt = attempts.at(-1);
+    const gameOverReason =
+      latestAttempt?.result === 'correct' ? 'correct' : 'clues_exhausted';
+    const clueIndex =
+      gameOverReason === 'correct'
+        ? (latestAttempt?.clueIndexAtAttempt ?? maxClues)
+        : maxClues;
+
+    return {
+      state: 'completed',
+      sessionId: input.session.id,
+      dailyCaseId: input.dailyCase.id,
+      casePublicNumber: input.dailyCase.case.publicNumber ?? null,
+      displayLabel,
+      trackDisplayLabel,
+      dailyCaseDisplayLabel: displayLabel,
+      dailyCaseTrackDisplayLabel: trackDisplayLabel,
+      clueIndex,
+      attemptsCount: attempts.length,
+      attempts,
+      score: latestAttempt?.score ?? 0,
+      startedAt: input.session.startedAt.toISOString(),
+      completedAt: input.session.completedAt.toISOString(),
+      gameOver: true,
+      gameOverReason,
+      explanation: this.buildGameplayExplanation({
+        explanation: input.dailyCase.case.explanation,
+        differentials: input.dailyCase.case.differentials,
+      }),
+      nextCaseAt: this.getDefaultNextCaseAt().toISOString(),
+      case: responseCase,
+    };
+  }
+
+  private normalizeAttemptResult(value: string): 'correct' | 'close' | 'wrong' {
+    return value === 'correct' || value === 'close' ? value : 'wrong';
   }
 
   async submitDailyGuess(input: {

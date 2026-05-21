@@ -7,6 +7,7 @@ import AppGameShell from '../features/game/react/AppGameShell'
 import type { AppGameTab } from '../features/game/react/AppBottomNav'
 import PlayTabPage from '../features/game/react/PlayTabPage'
 import LearnTabPage from '../features/game/react/LearnTabPage'
+import type { LearnOpenIntent } from '../features/game/react/learn/learn.types'
 import RankTabPage from '../features/game/react/RankTabPage'
 import SettingsPage from '../features/game/pages/SettingsPage'
 import { useUserOrganizations } from '../features/organizations/useUserOrganizations'
@@ -43,7 +44,9 @@ export default function GamePage() {
   const [activeTab, setActiveTab] = useState<AppGameTab>('play')
   const [leaderboardMode, setLeaderboardMode] = useState<LeaderboardMode>('daily')
   const [isResultModalOpen, setIsResultModalOpen] = useState(false)
+  const [learnOpenIntent, setLearnOpenIntent] = useState<LearnOpenIntent | null>(null)
   const lastResultModalKeyRef = useRef<string | null>(null)
+  const learnOpenIntentCounterRef = useRef(0)
   const game = useGameEngine()
   const leaderboard = useLeaderboard(leaderboardMode)
   const learnLibrary = useLearnLibrary()
@@ -58,7 +61,11 @@ export default function GamePage() {
       : null
 
   const resultModalKey = useMemo(() => {
-    if (!game.isFinalFeedback || !game.latestResult) {
+    if (
+      !game.isFinalFeedback ||
+      game.finalFeedbackSource !== 'live_finish' ||
+      !game.latestResult
+    ) {
       return null
     }
 
@@ -67,7 +74,12 @@ export default function GamePage() {
       game.latestResult.attemptsCount ?? game.attempts.length,
       game.latestResult.score,
     ].join(':')
-  }, [game.attempts.length, game.isFinalFeedback, game.latestResult])
+  }, [
+    game.attempts.length,
+    game.finalFeedbackSource,
+    game.isFinalFeedback,
+    game.latestResult,
+  ])
 
   useEffect(() => {
     if (!resultModalKey) {
@@ -148,8 +160,18 @@ export default function GamePage() {
           onReload={game.reloadSession}
           onCloseResultModal={() => setIsResultModalOpen(false)}
           onReviewLearning={() => {
+            learnOpenIntentCounterRef.current += 1
+            const latestPlayedResult = game.latestPlayedLearningResult ?? game.latestResult
+            setLearnOpenIntent({
+              intentId: `result-modal:${learnOpenIntentCounterRef.current}`,
+              source: 'result-modal',
+              sessionId: game.roundViewModel.sessionId ?? undefined,
+              caseId: latestPlayedResult?.case?.id ?? game.roundViewModel.caseId ?? undefined,
+              openLatestPlayedCase: true,
+            })
             setIsResultModalOpen(false)
             setActiveTab('learn')
+            void learnLibrary.refetch()
           }}
         />
       ) : null}
@@ -165,6 +187,12 @@ export default function GamePage() {
           libraryError={learnLibrary.error}
           onRetryLibrary={() => {
             void learnLibrary.refetch()
+          }}
+          openIntent={learnOpenIntent}
+          onOpenIntentConsumed={(intentId) => {
+            setLearnOpenIntent((current) =>
+              current?.intentId === intentId ? null : current,
+            )
           }}
           roundViewModel={game.roundViewModel}
         />
