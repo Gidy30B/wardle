@@ -7,6 +7,16 @@ import type { ShareImageResult } from '../../share/shareImage'
 import type { RoundViewModel } from '../round.types'
 import type { AppIconSet } from '../../../theme/icons'
 
+type ShareUiState =
+  | 'idle'
+  | 'preparing'
+  | 'sharing'
+  | 'shared'
+  | 'text-shared'
+  | 'copied'
+  | 'downloaded'
+  | 'error'
+
 type ReactResultModalProps = {
   iconSet: AppIconSet
   isOpen: boolean
@@ -29,7 +39,7 @@ export default function ReactResultModal({
   onContinue,
 }: ReactResultModalProps) {
   const shareCardRef = useRef<HTMLDivElement | null>(null)
-  const [shareState, setShareState] = useState<ShareImageResult>('idle')
+  const [shareState, setShareState] = useState<ShareUiState>('idle')
 
   if (!isOpen) {
     return null
@@ -41,12 +51,25 @@ export default function ReactResultModal({
   })
 
   const handleShare = async () => {
-    if (!shareCardData) {
+    if (!shareCardData || shareState === 'preparing' || shareState === 'sharing') {
       return
     }
 
-    setShareState(await shareScoreCard(shareCardData, shareCardRef.current))
+    setShareState('preparing')
+
+    try {
+      const result: ShareImageResult = await shareScoreCard(
+        shareCardData,
+        shareCardRef.current,
+      )
+      setShareState(result === 'idle' ? 'error' : result)
+    } catch {
+      setShareState('error')
+    }
   }
+
+  const shareButtonDisabled =
+    !shareCardData || shareState === 'preparing' || shareState === 'sharing'
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(2,6,12,0.78)] p-3 backdrop-blur-sm sm:items-center sm:p-6">
@@ -69,13 +92,21 @@ export default function ReactResultModal({
           <Button type="button" variant="secondary" onClick={onContinue}>
             {iconSet.play} Continue
           </Button>
-          <Button type="button" onClick={handleShare} disabled={!shareCardData}>
+          <Button type="button" onClick={handleShare} disabled={shareButtonDisabled}>
             {shareState === 'shared'
               ? `${iconSet.rank} Shared`
+              : shareState === 'text-shared'
+                ? `${iconSet.rank} Shared as text`
               : shareState === 'copied'
                 ? `${iconSet.rank} Image copied`
                 : shareState === 'downloaded'
                   ? `${iconSet.rank} Image downloaded`
+                  : shareState === 'preparing'
+                    ? `${iconSet.rank} Preparing image...`
+                    : shareState === 'sharing'
+                      ? `${iconSet.rank} Opening share sheet...`
+                      : shareState === 'error'
+                        ? `${iconSet.rank} Share failed`
                 : `${iconSet.rank} Share`}
           </Button>
           <Button

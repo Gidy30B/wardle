@@ -15,6 +15,8 @@ type DesignedShareCardProps = {
   className?: string
 }
 
+type ShareActionState = ShareImageResult | 'preparing'
+
 const DesignedShareCard = forwardRef<HTMLDivElement, DesignedShareCardProps>(function DesignedShareCard(
 {
   data,
@@ -26,18 +28,12 @@ forwardedRef,
 ) {
   const cardRef = useRef<HTMLDivElement | null>(null)
   const visibleStreak = getVisibleStreak(data.streak)
-  const [actionState, setActionState] = useState<ShareImageResult>('idle')
+  const [actionState, setActionState] = useState<ShareActionState>('idle')
   const shareText = useMemo(() => buildShareText(data), [data])
   const blocks = useMemo(() => buildDesignerShareBlocks(data), [data])
   const shareHostLabel = useMemo(() => getPublicShareHostLabel(), [])
-  const resultTitle =
-    data.result === 'correct'
-      ? data.cluesUsed <= 2
-        ? 'Brilliant Diagnosis!'
-        : data.cluesUsed <= 4
-          ? 'Solid Clinical Thinking'
-          : 'Squeaked Through!'
-      : "Missed Today's Case"
+  const resultTitle = getResultTitle(data)
+  const isShareBusy = actionState === 'preparing'
 
   const handleCopy = async () => {
     try {
@@ -65,6 +61,11 @@ forwardedRef,
   )
 
   const handleShare = async () => {
+    if (isShareBusy) {
+      return
+    }
+
+    setActionState('preparing')
     setActionState(await shareScoreCard(data, cardRef.current))
   }
 
@@ -102,7 +103,7 @@ forwardedRef,
               : 'The case is ready for review in Learning Notes'}
           </p>
 
-          <div className="mt-5 flex flex-wrap justify-center gap-2 text-3xl leading-none">
+          <div className="mt-5 flex justify-center gap-2 text-3xl leading-none">
             {blocks.map((block, index) => (
               <span key={`${block}-${index}`}>{block}</span>
             ))}
@@ -128,8 +129,8 @@ forwardedRef,
           ) : null}
 
           <div className="mt-5 border-t border-white/[0.06] pt-4">
-            <p className="text-xs italic text-white/45">Diagnose. Learn. Win.</p>
-            <p className="mt-1 font-brand-mono text-xs font-semibold uppercase tracking-[0.18em] text-[var(--wardle-color-teal)]">
+            <p className="text-xs italic text-white/50">Can you diagnose it?</p>
+            <p className="mt-1 font-brand-mono text-xs font-semibold tracking-[0.08em] text-[var(--wardle-color-teal)]">
               {shareHostLabel}
             </p>
           </div>
@@ -138,13 +139,17 @@ forwardedRef,
 
       {showActions ? (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <Button type="button" onClick={handleShare}>
+          <Button type="button" onClick={handleShare} disabled={isShareBusy}>
             {actionState === 'shared'
               ? 'Shared'
+              : actionState === 'text-shared'
+                ? 'Shared as text'
               : actionState === 'copied'
                 ? 'Image copied'
                 : actionState === 'downloaded'
                   ? 'Image downloaded'
+                  : actionState === 'preparing'
+                    ? 'Preparing image...'
                   : 'Share image'}
           </Button>
           <Button type="button" variant="secondary" onClick={handleCopy}>
@@ -165,6 +170,26 @@ forwardedRef,
 })
 
 export default DesignedShareCard
+
+function getResultTitle(data: ShareCardData) {
+  if (data.result !== 'correct') {
+    return 'Learning Case'
+  }
+
+  if (data.cluesUsed <= 1) {
+    return 'One-Clue Wonder'
+  }
+
+  if (data.cluesUsed === 2) {
+    return 'Sharp Clinical Eye'
+  }
+
+  if (data.cluesUsed <= 4) {
+    return 'Diagnosis Secured'
+  }
+
+  return 'Case Closed'
+}
 
 function ShareStat({
   label,

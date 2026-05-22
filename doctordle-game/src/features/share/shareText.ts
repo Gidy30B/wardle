@@ -1,12 +1,11 @@
 import type { ShareAttemptLabel, ShareCardData } from './shareCard.types'
 import { shareNatively } from './nativeShare'
 import { buildShareUrl } from './shareUrl'
-import { getVisibleStreak } from '../user-progress/streakVisibility'
 
 const emojiByAttempt: Record<ShareAttemptLabel, string> = {
-  correct: '🟩',
-  close: '🟨',
-  wrong: '🟦',
+  correct: '\uD83D\uDFE9',
+  close: '\uD83D\uDFE8',
+  wrong: '\uD83D\uDFE6',
 }
 
 export function buildShareGrid(attemptLabels: ShareAttemptLabel[]): string {
@@ -24,21 +23,21 @@ export function buildDesignerShareBlocks(data: ShareCardData): string[] {
     const label = data.attemptLabels[index]
 
     if (!label) {
-      return '⬜'
+      return '\u2B1C'
     }
 
     if (label === 'correct') {
-      return '🟩'
+      return '\uD83D\uDFE9'
     }
 
     if (label === 'close') {
-      return '🟨'
+      return '\uD83D\uDFE8'
     }
 
     const isTerminalMiss =
       data.result === 'failed' && index === Math.min(data.attemptLabels.length, totalSlots) - 1
 
-    return isTerminalMiss ? '🟥' : '🟦'
+    return isTerminalMiss ? '\uD83D\uDFE5' : '\uD83D\uDFE6'
   })
 }
 
@@ -50,26 +49,22 @@ function buildShareTextLines(
   data: ShareCardData,
   { includeUrl }: { includeUrl: boolean },
 ) {
-  const caseLabel = data.caseLabel ?? 'Daily Diagnosis'
-  const resultLine =
+  const clueText = data.cluesUsed === 1 ? '1 clue' : `${data.cluesUsed} clues`
+  const hook =
     data.result === 'correct'
-      ? `Solved in ${data.cluesUsed}/${data.totalClues} clues`
-      : 'Not solved today'
-  const visibleStreak = getVisibleStreak(data.streak)
-  const streakLine = visibleStreak != null ? `🔥 ${visibleStreak}-day streak` : null
-  const xpLine = data.xpTotal != null ? `${data.xpTotal} XP` : null
-  const blocks = buildDesignerShareBlocks(data).join('')
+      ? data.cluesUsed === 1
+        ? 'Only 1 clue needed.'
+        : `I solved today's Wardle case in ${clueText}.`
+      : 'This Wardle case got me.'
+  const challenge =
+    data.result === 'correct' && data.cluesUsed > 1
+      ? 'Could you?'
+      : 'Can you diagnose it?'
 
   return [
-    'WARDLE',
-    caseLabel,
-    resultLine,
+    hook,
     '',
-    blocks,
-    '',
-    `Score: ${data.score}`,
-    streakLine,
-    xpLine,
+    challenge,
     includeUrl ? '' : null,
     includeUrl ? getShareUrl() : null,
   ]
@@ -89,11 +84,11 @@ export function buildSharePayload(data: ShareCardData) {
   const url = getShareUrl()
 
   return {
-    title: 'Wardle score',
+    title: 'Wardle result',
     text: buildShareTextForShareSheet(data),
     url,
     clipboardText: buildShareText(data),
-    dialogTitle: 'Share Wardle score',
+    dialogTitle: 'Share Wardle result',
   }
 }
 

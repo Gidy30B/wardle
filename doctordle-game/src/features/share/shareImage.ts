@@ -5,7 +5,12 @@ import type { ShareCardData } from './shareCard.types'
 import { shareNatively } from './nativeShare'
 import { buildSharePayload } from './shareText'
 
-export type ShareImageResult = 'shared' | 'copied' | 'downloaded' | 'idle'
+export type ShareImageResult =
+  | 'shared'
+  | 'text-shared'
+  | 'copied'
+  | 'downloaded'
+  | 'idle'
 
 type PreparedShareImage = {
   blob: Blob
@@ -34,11 +39,6 @@ export async function shareCardImage(
 ): Promise<ShareImageResult> {
   const payload = buildSharePayload(data)
   const preparedImageEntry = getOrPrepareShareCardImage(cardElement, data)
-
-  if (Capacitor.isNativePlatform() && preparedImageEntry.status === 'pending') {
-    return shareTextFallback(payload, { nativeOnly: true })
-  }
-
   const preparedImage = await preparedImageEntry.promise
 
   if (Capacitor.isNativePlatform()) {
@@ -52,6 +52,14 @@ export async function shareCardImage(
       })) {
         return 'shared'
       }
+
+      warnShareImage('native file share failed; falling back to text')
+    } else {
+      warnShareImage(
+        preparedImage
+          ? 'native share image has no file URI; falling back to text'
+          : 'native share image preparation failed; falling back to text',
+      )
     }
 
     return shareTextFallback(payload, { nativeOnly: true })
@@ -121,8 +129,9 @@ function getOrPrepareShareCardImage(
       entry.status = image ? 'ready' : 'failed'
       return image
     })
-    .catch(() => {
+    .catch((error) => {
       entry.status = 'failed'
+      warnShareImage('image preparation failed', error)
       return null
     })
 
@@ -146,7 +155,10 @@ async function renderShareCardImage(
 
   const file = new File([blob], getShareImageFilename(data), { type: 'image/png' })
   const nativeUri = Capacitor.isNativePlatform()
-    ? await writeNativeShareImage(blob, file.name).catch(() => null)
+    ? await writeNativeShareImage(blob, file.name).catch((error) => {
+        warnShareImage('native cache write failed', error)
+        return null
+      })
     : null
 
   return {
@@ -160,13 +172,15 @@ async function shareTextFallback(
   payload: ReturnType<typeof buildSharePayload>,
   options: { nativeOnly?: boolean } = {},
 ): Promise<ShareImageResult> {
+  warnShareImage('using text fallback')
+
   if (await shareNatively({
     title: payload.title,
     text: payload.text,
     url: payload.url,
     dialogTitle: payload.dialogTitle,
   })) {
-    return 'shared'
+    return 'text-shared'
   }
 
   if (options.nativeOnly) {
@@ -180,7 +194,7 @@ async function shareTextFallback(
         text: payload.text,
         url: payload.url,
       })
-      return 'shared'
+      return 'text-shared'
     }
   } catch {
     // Share cancellation should fall through to copy.
@@ -243,6 +257,12 @@ function getShareImageCacheKey(data: ShareCardData) {
     school: data.school,
     attemptLabels: data.attemptLabels,
   })
+}
+
+function warnShareImage(message: string, error?: unknown) {
+  if (import.meta.env.DEV) {
+    console.warn('[share-image]', message, error)
+  }
 }
 
 function downloadBlob(blob: Blob, filename: string) {
