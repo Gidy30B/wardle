@@ -31,9 +31,20 @@ export async function submitGuessApi(
   request: RequestJson,
   payload: GuessPayload,
 ): Promise<GameResult> {
+  if (import.meta.env.DEV) {
+    performance.mark?.('game-guess:start')
+    console.debug('[game-guess] submit start')
+  }
+
   const response = await request<GuessApiResponse>('/game/guess', {
     method: 'POST',
     body: JSON.stringify(payload),
+  }).finally(() => {
+    if (import.meta.env.DEV) {
+      performance.mark?.('game-guess:end')
+      performance.measure?.('game-guess', 'game-guess:start', 'game-guess:end')
+      console.debug('[game-guess] submit end')
+    }
   })
 
   return {

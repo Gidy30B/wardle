@@ -82,6 +82,8 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
     queryFn: async () => getUserNotificationSettingsApi(request),
     enabled: isLoaded && isSignedIn,
     placeholderData: (previousData) => previousData,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   const notificationPreferencesQuery = useQuery({
@@ -89,6 +91,8 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
     queryFn: async () => getNotificationPreferencesApi(request),
     enabled: isLoaded && isSignedIn,
     placeholderData: (previousData) => previousData,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   const notificationSettingsMutation = useMutation({

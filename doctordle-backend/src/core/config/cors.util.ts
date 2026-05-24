@@ -91,5 +91,6 @@ export function createCorsOptions(): CorsOptions {
     },
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
+    maxAge: 600,
   };
 }

@@ -61,6 +61,7 @@ export default function App() {
 
     return () => {
       active = false
+      disconnectSocket()
     }
   }, [getToken, isLoaded, isSignedIn, userId])
 
