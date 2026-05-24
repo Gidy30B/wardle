@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './app/App'
 import AppErrorBoundary from './app/components/AppErrorBoundary'
+import { ApiRequestError } from './lib/api'
 import {
   getClerkFallbackRedirectUrl,
   mapNativeAuthUrlToInternalPath,
@@ -84,7 +85,13 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 60_000,
       refetchOnWindowFocus: false,
-      retry: 1,
+      retry: (failureCount, error) => {
+        if (error instanceof ApiRequestError && [401, 403, 404].includes(error.status)) {
+          return false
+        }
+
+        return failureCount < 1
+      },
     },
   },
 })

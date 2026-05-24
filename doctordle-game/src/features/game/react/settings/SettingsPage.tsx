@@ -39,6 +39,8 @@ export default function SettingsPage({
     queryFn: async () => getBackendProfileApi(request),
     enabled: isLoaded && isSignedIn && Boolean(userId),
     placeholderData: (previousData) => previousData,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   const backendProfile = profileQuery.data

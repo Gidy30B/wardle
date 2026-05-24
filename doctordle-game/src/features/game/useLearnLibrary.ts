@@ -12,6 +12,8 @@ export function useLearnLibrary() {
     queryFn: async () => getLearnLibraryApi(request),
     enabled: isLoaded && isSignedIn && Boolean(userId),
     placeholderData: (previousData) => previousData,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   return {

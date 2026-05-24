@@ -11,6 +11,16 @@ if (!clerkJwtAudience) {
 
 type RequestJson = <T>(path: string, init?: RequestInit) => Promise<T>
 
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message)
+    this.name = 'ApiRequestError'
+  }
+}
+
 export function useApi() {
   const { getToken } = useAuth()
 
@@ -23,7 +33,7 @@ export function useApi() {
 
     const headers = new Headers(init.headers)
     headers.set('Authorization', `Bearer ${token}`)
-    if (!headers.has('Content-Type')) {
+    if (init.body && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json')
     }
 
@@ -39,11 +49,14 @@ export function useApi() {
 
     if (!response.ok) {
       if (response.status === 401) {
-        throw new Error('Unauthorized')
+        throw new ApiRequestError('Unauthorized', response.status)
       }
 
       if (typeof payload === 'string') {
-        throw new Error(payload || `Request failed: ${response.status}`)
+        throw new ApiRequestError(
+          payload || `Request failed: ${response.status}`,
+          response.status,
+        )
       }
 
       const message =
@@ -51,7 +64,10 @@ export function useApi() {
           ? String((payload as { message?: unknown }).message ?? '')
           : ''
 
-      throw new Error(message || `Request failed: ${response.status}`)
+      throw new ApiRequestError(
+        message || `Request failed: ${response.status}`,
+        response.status,
+      )
     }
 
     return payload as T

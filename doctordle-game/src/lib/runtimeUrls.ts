@@ -1,7 +1,5 @@
 import { Capacitor } from '@capacitor/core'
 
-const DEFAULT_DEV_SOCKET_URL = 'http://localhost:3000'
-
 export function getApiBaseUrl() {
   const webApiUrl = import.meta.env.VITE_API_URL?.trim()
   const nativeApiUrl =
@@ -22,10 +20,10 @@ export function getApiBaseUrl() {
   }
 
   if (!webApiUrl) {
-    throw new Error('Missing VITE_API_URL')
+    return '/api'
   }
 
-  return withoutTrailingSlash(webApiUrl)
+  return normalizeWebApiBaseUrl(webApiUrl)
 }
 
 export function getSocketServerUrl() {
@@ -49,7 +47,26 @@ export function getSocketServerUrl() {
     return withoutTrailingSlash(webSocketUrl)
   }
 
-  return import.meta.env.DEV ? DEFAULT_DEV_SOCKET_URL : ''
+  return ''
+}
+
+function normalizeWebApiBaseUrl(apiUrl: string) {
+  if (apiUrl.startsWith('/')) {
+    return withoutTrailingSlash(apiUrl)
+  }
+
+  if (typeof window !== 'undefined' && /^https?:\/\//i.test(apiUrl)) {
+    try {
+      const parsed = new URL(apiUrl)
+      if (parsed.origin === window.location.origin) {
+        return withoutTrailingSlash(parsed.pathname || '/api')
+      }
+    } catch {
+      return withoutTrailingSlash(apiUrl)
+    }
+  }
+
+  return withoutTrailingSlash(apiUrl)
 }
 
 function apiUrlToOrigin(apiUrl: string) {

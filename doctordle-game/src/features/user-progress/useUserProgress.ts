@@ -13,6 +13,8 @@ export function useUserProgress() {
     queryFn: async () => getUserProgressApi(request),
     enabled: isLoaded && isSignedIn && Boolean(userId),
     placeholderData: (previousData) => previousData,
+    staleTime: 2 * 60_000,
+    gcTime: 15 * 60_000,
   })
 
   const progressSummary = {

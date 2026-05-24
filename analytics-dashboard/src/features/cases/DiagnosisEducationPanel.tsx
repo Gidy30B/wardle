@@ -78,6 +78,8 @@ export default function DiagnosisEducationPanel({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [form, setForm] = useState<EducationFormState>(emptyForm);
+  const [qualityWarnings, setQualityWarnings] = useState<string[]>([]);
+  const [publishBlockers, setPublishBlockers] = useState<string[]>([]);
   const generateInFlightRef = useRef(false);
   const { feedback, clear, showError, showPending, showSuccess } =
     useActionFeedback();
@@ -92,6 +94,8 @@ export default function DiagnosisEducationPanel({
       setLoadError(null);
       setLoading(false);
       setForm({ ...emptyForm, title: diagnosisLabel });
+      setQualityWarnings([]);
+      setPublishBlockers([]);
       setEditorOpen(false);
       return;
     }
@@ -112,6 +116,8 @@ export default function DiagnosisEducationPanel({
         }
 
         setEducation(response.education);
+        setQualityWarnings(response.qualityWarnings ?? []);
+        setPublishBlockers(response.publishBlockers ?? []);
         setForm(toFormState(response.education, response.diagnosisRegistry.canonicalName));
         setEditorOpen(!response.education);
       } catch (error) {
@@ -126,6 +132,8 @@ export default function DiagnosisEducationPanel({
         ) {
           setEducation(null);
           setForm({ ...emptyForm, title: diagnosisLabel });
+          setQualityWarnings([]);
+          setPublishBlockers([]);
           setEditorOpen(true);
           return;
         }
@@ -161,6 +169,8 @@ export default function DiagnosisEducationPanel({
       diagnosisRegistryId,
     );
     setEducation(response.education);
+    setQualityWarnings(response.qualityWarnings ?? []);
+    setPublishBlockers(response.publishBlockers ?? []);
     setForm(toFormState(response.education, response.diagnosisRegistry.canonicalName));
     setEditorOpen(!response.education);
   }
@@ -265,20 +275,38 @@ export default function DiagnosisEducationPanel({
           definition: state.definition.trim(),
           highYieldTakeaway: state.highYieldTakeaway.trim() || undefined,
         },
-        clinicalPattern: parseLines(state.clinicalPatternText),
+        clinicalPattern: preserveStructuredArray(
+          education?.clinicalPattern,
+          parseLines(state.clinicalPatternText),
+        ),
         examPearls: state.examPearls
           .map((pearl) => ({
             label: pearl.label.trim(),
             explanation: pearl.explanation.trim(),
+            ...(pearl.whyItMatters?.trim()
+              ? { whyItMatters: pearl.whyItMatters.trim() }
+              : {}),
           }))
           .filter((pearl) => pearl.label && pearl.explanation),
         differentials: state.differentials
           .map((item) => ({
             diagnosis: item.diagnosis.trim(),
+            ...(item.whyConfused?.trim()
+              ? { whyConfused: item.whyConfused.trim() }
+              : {}),
             distinguishingPoint: item.distinguishingPoint.trim(),
+            ...(item.keySeparator?.trim()
+              ? { keySeparator: item.keySeparator.trim() }
+              : {}),
+            ...(item.classicTrap?.trim()
+              ? { classicTrap: item.classicTrap.trim() }
+              : {}),
           }))
           .filter((item) => item.diagnosis && item.distinguishingPoint),
-        pitfalls: parseLines(state.pitfallsText),
+        pitfalls: preserveStructuredArray(
+          education?.pitfalls,
+          parseLines(state.pitfallsText),
+        ),
         references: parseLines(state.referencesText),
         scoringSystems: parseJsonField(state.scoringSystemsJson, 'Scoring systems'),
         investigations: parseJsonField(state.investigationsJson, 'Investigations'),
@@ -352,6 +380,11 @@ export default function DiagnosisEducationPanel({
                 Archive or edit manually first.
               </div>
             ) : null}
+
+            <QualityWarningsBox
+              warnings={qualityWarnings}
+              blockers={publishBlockers}
+            />
 
             <EducationPreview preview={preview} />
 
@@ -490,6 +523,37 @@ function MetaTile({ label, value }: { label: string; value: string }) {
         {label}
       </p>
       <p className="mt-2 text-sm font-semibold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function QualityWarningsBox({
+  warnings,
+  blockers,
+}: {
+  warnings: string[];
+  blockers: string[];
+}) {
+  if (warnings.length === 0 && blockers.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+      <p className="font-semibold">Review attention needed before launch</p>
+      <ul className="mt-2 list-disc space-y-1 pl-4">
+        {warnings.map((warning) => (
+          <li key={warning}>{qualityWarningCopy(warning)}</li>
+        ))}
+        {blockers.map((blocker) => (
+          <li key={blocker}>{publishBlockerCopy(blocker)}</li>
+        ))}
+      </ul>
+      <p className="mt-2 text-amber-800">
+        AI-assisted content can pass structure checks while still needing
+        clinical tightening. Treat these as reviewer prompts, not automatic
+        rejection.
+      </p>
     </div>
   );
 }
@@ -902,12 +966,16 @@ function toPreview(
   const hydrated = education ? toFormState(education, form.title) : form;
   return {
     takeaway: hydrated.highYieldTakeaway || hydrated.definition,
-    recognition: parseLines(hydrated.clinicalPatternText),
+    recognition: education
+      ? previewLinesFromJson(education.clinicalPattern, parseLines(hydrated.clinicalPatternText))
+      : parseLines(hydrated.clinicalPatternText),
     pearls: hydrated.examPearls.filter((pearl) => pearl.label && pearl.explanation),
     differentials: hydrated.differentials.filter(
       (item) => item.diagnosis && item.distinguishingPoint,
     ),
-    pitfalls: parseLines(hydrated.pitfallsText),
+    pitfalls: education
+      ? previewLinesFromJson(education.pitfalls, parseLines(hydrated.pitfallsText))
+      : parseLines(hydrated.pitfallsText),
   };
 }
 
@@ -918,6 +986,26 @@ function parseLines(value: string): string[] {
     .filter((line) => line.length > 0);
 }
 
+function preserveStructuredArray(
+  current: JsonValue | null | undefined,
+  replacement: string[],
+): JsonValue {
+  if (hasStructuredArrayItems(current) && replacement.length === 0) {
+    return current as JsonValue;
+  }
+
+  return replacement;
+}
+
+function hasStructuredArrayItems(value: JsonValue | null | undefined): boolean {
+  return Array.isArray(value)
+    ? value.some(
+        (item) =>
+          typeof item === 'object' && item !== null && !Array.isArray(item),
+      )
+    : false;
+}
+
 function stringifyLines(value: JsonValue | null): string {
   if (!Array.isArray(value)) {
     return '';
@@ -926,6 +1014,32 @@ function stringifyLines(value: JsonValue | null): string {
   return value
     .filter((item): item is string => typeof item === 'string')
     .join('\n');
+}
+
+function previewLinesFromJson(value: JsonValue | null, fallback: string[]): string[] {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  const items = value
+    .map((item) => {
+      if (typeof item === 'string') {
+        return item;
+      }
+
+      const record = asRecord(item);
+      return (
+        stringField(record, 'pattern') ??
+        stringField(record, 'finding') ??
+        stringField(record, 'pitfall') ??
+        stringField(record, 'test') ??
+        stringField(record, 'step') ??
+        null
+      );
+    })
+    .filter((item): item is string => Boolean(item));
+
+  return items.length > 0 ? items : fallback;
 }
 
 function stringifyJson(value: JsonValue | null): string {
@@ -956,6 +1070,8 @@ function parsePearls(value: JsonValue | null): DiagnosisEducationPearl[] {
       label: typeof item.label === 'string' ? item.label : '',
       explanation:
         typeof item.explanation === 'string' ? item.explanation : '',
+      whyItMatters:
+        typeof item.whyItMatters === 'string' ? item.whyItMatters : undefined,
     }))
     .filter((item) => item.label || item.explanation);
 
@@ -973,10 +1089,16 @@ function parseDifferentials(
     .map((item) => asRecord(item))
     .map((item) => ({
       diagnosis: typeof item.diagnosis === 'string' ? item.diagnosis : '',
+      whyConfused:
+        typeof item.whyConfused === 'string' ? item.whyConfused : undefined,
       distinguishingPoint:
         typeof item.distinguishingPoint === 'string'
           ? item.distinguishingPoint
           : '',
+      keySeparator:
+        typeof item.keySeparator === 'string' ? item.keySeparator : undefined,
+      classicTrap:
+        typeof item.classicTrap === 'string' ? item.classicTrap : undefined,
     }))
     .filter((item) => item.diagnosis || item.distinguishingPoint);
 
@@ -989,6 +1111,44 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function stringField(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === 'string' && value.trim().length > 0
+    ? value
+    : null;
+}
+
 function replaceAt<T>(items: T[], index: number, value: T): T[] {
   return items.map((item, itemIndex) => (itemIndex === index ? value : item));
+}
+
+function qualityWarningCopy(warning: string): string {
+  const copy: Record<string, string> = {
+    generic_filler_phrases_detected:
+      'Generic teaching phrases detected; tighten into diagnostic discriminators.',
+    low_diagnostic_reasoning_density:
+      'Low diagnostic reasoning density; add why this finding shifts suspicion.',
+    missing_structured_why_layer:
+      'Missing structured why-layer fields; add why findings matter diagnostically.',
+    missing_comparative_differential_reasoning:
+      'Differentials need stronger contrast, not just mimic summaries.',
+    missing_why_it_matters_recall_prompt:
+      'Recall prompts should include at least one why-it-matters question.',
+  };
+
+  return copy[warning] ?? warning;
+}
+
+function publishBlockerCopy(blocker: string): string {
+  const copy: Record<string, string> = {
+    missing_summary: 'Publish blocker: summary definition is missing.',
+    contains_drug_dosing:
+      'Publish blocker: content contains drug dosing and must be reviewed.',
+    contains_patient_specific_advice:
+      'Publish blocker: content sounds patient-specific rather than educational.',
+    high_risk_sections_need_references:
+      'Publish blocker: management, investigations, or scoring content needs references.',
+  };
+
+  return copy[blocker] ?? `Publish blocker: ${blocker}`;
 }

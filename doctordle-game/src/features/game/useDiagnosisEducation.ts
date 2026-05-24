@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useApi } from '../../lib/api'
+import { ApiRequestError, useApi } from '../../lib/api'
 import { getDiagnosisEducationApi } from './game.api'
 
 const diagnosisEducationEnabled =
@@ -12,14 +12,42 @@ export function useDiagnosisEducation(diagnosisRegistryId: string | null) {
     queryKey: ['diagnosis-education', diagnosisRegistryId],
     queryFn: async () => {
       if (!diagnosisRegistryId) {
-        throw new Error('Missing diagnosis registry id')
+        return null
       }
 
-      return getDiagnosisEducationApi(request, diagnosisRegistryId)
+      if (import.meta.env.DEV) {
+        performance.mark?.(`education:${diagnosisRegistryId}:start`)
+      }
+
+      try {
+        return await getDiagnosisEducationApi(request, diagnosisRegistryId)
+      } catch (error) {
+        if (error instanceof ApiRequestError && error.status === 404) {
+          if (import.meta.env.DEV) {
+            console.debug('[education-query] unavailable', diagnosisRegistryId)
+          }
+          return null
+        }
+
+        throw error
+      } finally {
+        if (import.meta.env.DEV) {
+          performance.mark?.(`education:${diagnosisRegistryId}:end`)
+        }
+      }
     },
     enabled: diagnosisEducationEnabled && Boolean(diagnosisRegistryId),
     staleTime: 24 * 60 * 60 * 1000,
-    retry: 1,
+    gcTime: 24 * 60 * 60 * 1000,
+    retry: (failureCount, error) => {
+      if (error instanceof ApiRequestError && [401, 403, 404].includes(error.status)) {
+        return false
+      }
+
+      return failureCount < 1
+    },
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   })
 
   return {

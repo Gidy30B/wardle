@@ -18,6 +18,8 @@ export function useLeaderboard(mode: LeaderboardMode, options: UseLeaderboardOpt
     queryFn: async () => getLeaderboardApi(request, mode),
     enabled: enabled && isLoaded && isSignedIn,
     placeholderData: (previousData) => previousData,
+    staleTime: 2 * 60_000,
+    gcTime: 10 * 60_000,
   })
 
   const currentUserPositionQuery = useQuery({
@@ -25,6 +27,8 @@ export function useLeaderboard(mode: LeaderboardMode, options: UseLeaderboardOpt
     queryFn: async () => getCurrentUserLeaderboardPositionApi(request, mode),
     enabled: enabled && isLoaded && isSignedIn && Boolean(userId),
     placeholderData: (previousData) => previousData,
+    staleTime: 2 * 60_000,
+    gcTime: 10 * 60_000,
   })
 
   return {

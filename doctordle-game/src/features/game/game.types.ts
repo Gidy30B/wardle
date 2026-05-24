@@ -238,21 +238,61 @@ export type LearnLibraryResponse = {
 
 export type DiagnosisEducationRecallPrompt = {
   id?: string
-  type?: 'CLOZE' | 'SHORT_ANSWER' | 'DISTINGUISH' | 'PEARL_RECALL'
+  type?: 'CLOZE' | 'SHORT_ANSWER' | 'DISTINGUISH' | 'PEARL_RECALL' | 'WHY_IT_MATTERS'
   prompt?: string
   answer?: string
+  explanation?: string
+  linkedConcept?: string
   sourceSection?: string
   difficulty?: 'BASIC' | 'INTERMEDIATE' | 'ADVANCED'
 }
 
 export type DiagnosisEducationDifferential = {
   diagnosis?: string
+  whyConfused?: string
   distinguishingPoint?: string
+  keySeparator?: string
+  classicTrap?: string
 }
 
 export type DiagnosisEducationPearl = {
   label?: string
   explanation?: string
+  whyItMatters?: string
+}
+
+export type DiagnosisEducationClinicalPattern = {
+  pattern?: string
+  whyItMatters?: string
+  progression?: string
+  commonTrap?: string
+}
+
+export type DiagnosisEducationFinding = {
+  finding?: string
+  whyItMatters?: string
+  diagnosticImpact?: string
+  discriminator?: string
+}
+
+export type DiagnosisEducationInvestigation = {
+  test?: string
+  significance?: string
+  interpretation?: string
+  discriminator?: string
+}
+
+export type DiagnosisEducationPitfall = {
+  pitfall?: string
+  whyItHappens?: string
+  consequence?: string
+  saferHeuristic?: string
+}
+
+export type DiagnosisEducationManagement = {
+  step?: string
+  rationale?: string
+  urgency?: string
 }
 
 export type DiagnosisEducation = {
@@ -263,14 +303,14 @@ export type DiagnosisEducation = {
     definition?: string
     highYieldTakeaway?: string
   } | string | null
-  recognitionPattern?: string[] | null
-  keySymptoms?: string[] | null
-  keySigns?: string[] | null
+  recognitionPattern?: Array<string | DiagnosisEducationClinicalPattern> | null
+  keySymptoms?: Array<string | DiagnosisEducationFinding> | null
+  keySigns?: Array<string | DiagnosisEducationFinding> | null
   examPearls?: DiagnosisEducationPearl[] | string[] | null
-  investigations?: string[] | null
+  investigations?: Array<string | DiagnosisEducationInvestigation> | null
   differentialDistinguishers?: DiagnosisEducationDifferential[] | string[] | null
-  pitfalls?: string[] | null
-  managementOverview?: string[] | null
+  pitfalls?: Array<string | DiagnosisEducationPitfall> | null
+  managementOverview?: Array<string | DiagnosisEducationManagement> | null
   complications?: string[] | null
   recallPrompts?: DiagnosisEducationRecallPrompt[] | null
   reviewedAt?: string | null

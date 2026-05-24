@@ -12,5 +12,7 @@ export function useUserSettings() {
     queryFn: async () => getUserSettingsApi(request),
     enabled: isLoaded && isSignedIn && Boolean(userId),
     placeholderData: (previousData) => previousData,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
   })
 }

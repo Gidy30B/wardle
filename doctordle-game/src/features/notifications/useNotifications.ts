@@ -1,6 +1,7 @@
+import { useAuth } from '@clerk/clerk-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useApi } from '../../lib/api'
+import { ApiRequestError, useApi } from '../../lib/api'
 import {
   getNotificationsApi,
   getUnreadCountApi,
@@ -37,27 +38,41 @@ function payloadToNotification(
 }
 
 export function useNotifications() {
+  const { isLoaded, isSignedIn, userId } = useAuth()
   const { request } = useApi()
   const queryClient = useQueryClient()
   const [toast, setToast] = useState<NotificationCreatedPayload | null>(null)
+  const queriesEnabled = isLoaded && isSignedIn === true && Boolean(userId)
 
   const notificationsQuery = useQuery({
-    queryKey: notificationsKey,
-    queryFn: () => getNotificationsApi(request, { limit: 40 }),
-    staleTime: 30_000,
+    queryKey: [...notificationsKey, userId],
+    queryFn: async () => {
+      if (import.meta.env.DEV) console.debug('[notifications-query] list start')
+      return getNotificationsApi(request, { limit: 40 })
+    },
+    enabled: queriesEnabled,
+    staleTime: 120_000,
+    gcTime: 10 * 60_000,
+    retry: shouldRetryNotificationQuery,
   })
 
   const unreadCountQuery = useQuery({
-    queryKey: unreadCountKey,
-    queryFn: () => getUnreadCountApi(request),
-    staleTime: 15_000,
+    queryKey: [...unreadCountKey, userId],
+    queryFn: async () => {
+      if (import.meta.env.DEV) console.debug('[notifications-query] unread start')
+      return getUnreadCountApi(request)
+    },
+    enabled: queriesEnabled,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    retry: shouldRetryNotificationQuery,
   })
 
   const markReadMutation = useMutation({
     mutationFn: (id: string) => markNotificationReadApi(request, id),
     onSuccess: (_result, id) => {
       queryClient.setQueryData<NotificationsResponse>(
-        notificationsKey,
+        [...notificationsKey, userId],
         (current) => {
           if (!current) {
             return current
@@ -72,7 +87,7 @@ export function useNotifications() {
           }
         },
       )
-      queryClient.invalidateQueries({ queryKey: unreadCountKey })
+      queryClient.invalidateQueries({ queryKey: [...unreadCountKey, userId] })
     },
   })
 
@@ -81,7 +96,7 @@ export function useNotifications() {
     onSuccess: () => {
       const now = new Date().toISOString()
       queryClient.setQueryData<NotificationsResponse>(
-        notificationsKey,
+        [...notificationsKey, userId],
         (current) =>
           current
             ? {
@@ -92,7 +107,7 @@ export function useNotifications() {
               }
             : current,
       )
-      queryClient.setQueryData<UnreadCountResponse>(unreadCountKey, {
+      queryClient.setQueryData<UnreadCountResponse>([...unreadCountKey, userId], {
         unreadCount: 0,
       })
     },
@@ -101,7 +116,7 @@ export function useNotifications() {
   useEffect(() => {
     return subscribeNotificationCreated((payload) => {
       queryClient.setQueryData<NotificationsResponse>(
-        notificationsKey,
+        [...notificationsKey, userId],
         (current) => {
           const notification = payloadToNotification(payload)
 
@@ -118,12 +133,12 @@ export function useNotifications() {
           }
         },
       )
-      queryClient.setQueryData<UnreadCountResponse>(unreadCountKey, {
+      queryClient.setQueryData<UnreadCountResponse>([...unreadCountKey, userId], {
         unreadCount: payload.unreadCount,
       })
       setToast(payload)
     })
-  }, [queryClient])
+  }, [queryClient, userId])
 
   const notifications = notificationsQuery.data?.notifications ?? []
   const unreadCount = unreadCountQuery.data?.unreadCount ?? 0
@@ -151,4 +166,12 @@ export function useNotifications() {
       toast,
     ],
   )
+}
+
+function shouldRetryNotificationQuery(failureCount: number, error: Error) {
+  if (error instanceof ApiRequestError && [401, 403, 404].includes(error.status)) {
+    return false
+  }
+
+  return failureCount < 1
 }

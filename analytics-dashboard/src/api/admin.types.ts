@@ -273,11 +273,15 @@ export type DiagnosisEducationSummary = {
 export type DiagnosisEducationPearl = {
   label: string;
   explanation: string;
+  whyItMatters?: string;
 };
 
 export type DiagnosisEducationDifferential = {
   diagnosis: string;
+  whyConfused?: string;
   distinguishingPoint: string;
+  keySeparator?: string;
+  classicTrap?: string;
 };
 
 export type DiagnosisEducationRecord = {
@@ -323,23 +327,25 @@ export type DiagnosisEducationRevision = {
 export type AdminDiagnosisEducationResponse = {
   diagnosisRegistry: EditorialDiagnosisRegistrySummary;
   education: DiagnosisEducationRecord | null;
+  qualityWarnings?: string[];
+  publishBlockers?: string[];
 };
 
 export type UpsertDiagnosisEducationPayload = {
   title?: string;
   summary?: DiagnosisEducationSummary;
-  clinicalPattern?: string[];
-  keySymptoms?: string[];
-  keySigns?: string[];
-  examPearls?: DiagnosisEducationPearl[];
+  clinicalPattern?: JsonValue;
+  keySymptoms?: JsonValue;
+  keySigns?: JsonValue;
+  examPearls?: JsonValue;
   scoringSystems?: JsonValue;
   investigations?: JsonValue;
-  differentials?: DiagnosisEducationDifferential[];
+  differentials?: JsonValue;
   management?: JsonValue;
   complications?: JsonValue;
-  pitfalls?: string[];
+  pitfalls?: JsonValue;
   recallPrompts?: JsonValue;
-  references?: string[];
+  references?: JsonValue;
 };
 
 export type ReviewDiagnosisEducationPayload = {

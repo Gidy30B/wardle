@@ -12,6 +12,8 @@ export function useTodayCases() {
     queryFn: async () => getTodayCasesApi(request),
     enabled: isLoaded && isSignedIn,
     placeholderData: (previousData) => previousData,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   return {

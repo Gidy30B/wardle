@@ -62,19 +62,67 @@ const DIAGNOSIS_EDUCATION_DRAFT_SCHEMA = {
         highYieldTakeaway: { type: 'string' },
       },
     },
-    clinicalPattern: { type: 'array', items: { type: 'string' } },
-    keySymptoms: { type: 'array', items: { type: 'string' } },
-    keySigns: { type: 'array', items: { type: 'string' } },
-    examPearls: {
+    clinicalPattern: {
       type: 'array',
+      minItems: 3,
+      maxItems: 5,
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['id', 'label', 'explanation'],
+        required: ['pattern', 'whyItMatters', 'progression', 'commonTrap'],
+        properties: {
+          pattern: { type: 'string' },
+          whyItMatters: { type: 'string' },
+          progression: { type: 'string' },
+          commonTrap: { type: 'string' },
+        },
+      },
+    },
+    keySymptoms: {
+      type: 'array',
+      minItems: 3,
+      maxItems: 6,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['finding', 'whyItMatters', 'diagnosticImpact', 'discriminator'],
+        properties: {
+          finding: { type: 'string' },
+          whyItMatters: { type: 'string' },
+          diagnosticImpact: { type: 'string' },
+          discriminator: { type: 'string' },
+        },
+      },
+    },
+    keySigns: {
+      type: 'array',
+      minItems: 3,
+      maxItems: 6,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['finding', 'whyItMatters', 'diagnosticImpact', 'discriminator'],
+        properties: {
+          finding: { type: 'string' },
+          whyItMatters: { type: 'string' },
+          diagnosticImpact: { type: 'string' },
+          discriminator: { type: 'string' },
+        },
+      },
+    },
+    examPearls: {
+      type: 'array',
+      minItems: 3,
+      maxItems: 6,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'label', 'explanation', 'whyItMatters'],
         properties: {
           id: { type: 'string' },
           label: { type: 'string' },
           explanation: { type: 'string' },
+          whyItMatters: { type: 'string' },
         },
       },
     },
@@ -93,25 +141,83 @@ const DIAGNOSIS_EDUCATION_DRAFT_SCHEMA = {
         },
       },
     },
-    investigations: { type: 'array', items: { type: 'string' } },
-    differentials: {
+    investigations: {
       type: 'array',
+      minItems: 3,
+      maxItems: 6,
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['id', 'diagnosis', 'distinguishingPoint'],
+        required: ['test', 'significance', 'interpretation', 'discriminator'],
         properties: {
-          id: { type: 'string' },
-          diagnosis: { type: 'string' },
-          distinguishingPoint: { type: 'string' },
+          test: { type: 'string' },
+          significance: { type: 'string' },
+          interpretation: { type: 'string' },
+          discriminator: { type: 'string' },
         },
       },
     },
-    management: { type: 'array', items: { type: 'string' } },
+    differentials: {
+      type: 'array',
+      minItems: 3,
+      maxItems: 6,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'id',
+          'diagnosis',
+          'whyConfused',
+          'distinguishingPoint',
+          'keySeparator',
+          'classicTrap',
+        ],
+        properties: {
+          id: { type: 'string' },
+          diagnosis: { type: 'string' },
+          whyConfused: { type: 'string' },
+          distinguishingPoint: { type: 'string' },
+          keySeparator: { type: 'string' },
+          classicTrap: { type: 'string' },
+        },
+      },
+    },
+    management: {
+      type: 'array',
+      minItems: 3,
+      maxItems: 6,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['step', 'rationale', 'urgency'],
+        properties: {
+          step: { type: 'string' },
+          rationale: { type: 'string' },
+          urgency: { type: 'string' },
+        },
+      },
+    },
     complications: { type: 'array', items: { type: 'string' } },
-    pitfalls: { type: 'array', items: { type: 'string' } },
+    pitfalls: {
+      type: 'array',
+      minItems: 3,
+      maxItems: 5,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['pitfall', 'whyItHappens', 'consequence', 'saferHeuristic'],
+        properties: {
+          pitfall: { type: 'string' },
+          whyItHappens: { type: 'string' },
+          consequence: { type: 'string' },
+          saferHeuristic: { type: 'string' },
+        },
+      },
+    },
     recallPrompts: {
       type: 'array',
+      minItems: 3,
+      maxItems: 5,
       items: {
         type: 'object',
         additionalProperties: false,
@@ -120,6 +226,8 @@ const DIAGNOSIS_EDUCATION_DRAFT_SCHEMA = {
           'type',
           'prompt',
           'answer',
+          'explanation',
+          'linkedConcept',
           'sourceSection',
           'difficulty',
         ],
@@ -127,10 +235,18 @@ const DIAGNOSIS_EDUCATION_DRAFT_SCHEMA = {
           id: { type: 'string' },
           type: {
             type: 'string',
-            enum: ['CLOZE', 'SHORT_ANSWER', 'DISTINGUISH', 'PEARL_RECALL'],
+            enum: [
+              'CLOZE',
+              'SHORT_ANSWER',
+              'DISTINGUISH',
+              'PEARL_RECALL',
+              'WHY_IT_MATTERS',
+            ],
           },
           prompt: { type: 'string' },
           answer: { type: 'string' },
+          explanation: { type: 'string' },
+          linkedConcept: { type: 'string' },
           sourceSection: { type: 'string' },
           difficulty: {
             type: 'string',
@@ -159,6 +275,35 @@ const PUBLISHABLE_REVIEW_STATUSES = new Set<DiagnosisEducationStatus>([
   DiagnosisEducationStatus.REJECTED,
   DiagnosisEducationStatus.ARCHIVED,
 ]);
+
+const GENERIC_EDUCATION_PHRASES = [
+  'may present with',
+  'can present with',
+  'can include',
+  'often associated with',
+  'important to note',
+  'patients may',
+  'a variety of symptoms',
+  'management depends',
+  'should be considered',
+];
+
+const DIAGNOSTIC_REASONING_TERMS = [
+  'supports',
+  'favors',
+  'suggests',
+  'distinguishes',
+  'raises suspicion',
+  'argues against',
+  'points toward',
+  'implies',
+  'indicates',
+  'helps differentiate',
+  'lowers suspicion',
+  'increases suspicion',
+  'more likely',
+  'less likely',
+];
 
 type DiagnosisEducationWithRegistry = DiagnosisEducation & {
   diagnosisRegistry: Pick<
@@ -273,6 +418,10 @@ export class DiagnosisEducationService {
     return {
       diagnosisRegistry: registry,
       education,
+      qualityWarnings: education
+        ? this.collectEducationQualityWarnings(education)
+        : [],
+      publishBlockers: education ? this.getPublishBlockers(education) : [],
     };
   }
 
@@ -489,6 +638,8 @@ export class DiagnosisEducationService {
           content:
             [
               'You draft reviewed medical education JSON for a medical learning game.',
+              'Generate diagnosis education like a senior clinician teaching diagnostic reasoning.',
+              'Every major point must explain why it matters diagnostically, what it distinguishes, what probability it shifts, or what clinical trap it avoids.',
               'Return a JSON object only. Do not wrap it in markdown. Do not include prose outside JSON.',
               'Use the exact keys from the schema. Do not use alternative keys.',
               'Use clinicalPattern, not recognitionPattern.',
@@ -496,6 +647,9 @@ export class DiagnosisEducationService {
               'summary must be an object, not a string.',
               'All ids must be stable kebab-case strings.',
               'Write clinically specific, high-yield teaching pearls rather than generic textbook summaries.',
+              'Prefer compressed, high-yield statements. Avoid isolated symptom lists and generic textbook phrasing.',
+              'Explain diagnostic significance, discriminating features, temporal progression, and common confusions when relevant.',
+              'Generate recall prompts that test reasoning and discrimination, not trivia.',
               'Prioritize named signs, bedside maneuvers, validated scoring systems, comparative differential reasoning, and specific pitfalls when relevant to the diagnosis.',
               'Reject generic output internally and revise it before final JSON if exam pearls are merely symptoms, if common named signs are missing, if differentials are not comparative, if pitfalls are vague, or if recall prompts are too broad.',
               'Do not include drug doses, patient-specific advice, or unsupported guideline claims.',
@@ -510,14 +664,36 @@ export class DiagnosisEducationService {
                 definition: 'string',
                 highYieldTakeaway: 'string',
               },
-              clinicalPattern: ['string'],
-              keySymptoms: ['string'],
-              keySigns: ['string'],
+              clinicalPattern: [
+                {
+                  pattern: 'string',
+                  whyItMatters: 'string',
+                  progression: 'string',
+                  commonTrap: 'string',
+                },
+              ],
+              keySymptoms: [
+                {
+                  finding: 'string',
+                  whyItMatters: 'string',
+                  diagnosticImpact: 'string',
+                  discriminator: 'string',
+                },
+              ],
+              keySigns: [
+                {
+                  finding: 'string',
+                  whyItMatters: 'string',
+                  diagnosticImpact: 'string',
+                  discriminator: 'string',
+                },
+              ],
               examPearls: [
                 {
                   id: 'stable-kebab-case-string',
                   label: 'string',
                   explanation: 'string',
+                  whyItMatters: 'string',
                 },
               ],
               scoringSystems: [
@@ -529,23 +705,48 @@ export class DiagnosisEducationService {
                   caution: 'string',
                 },
               ],
-              investigations: ['string'],
+              investigations: [
+                {
+                  test: 'string',
+                  significance: 'string',
+                  interpretation: 'string',
+                  discriminator: 'string',
+                },
+              ],
               differentials: [
                 {
                   id: 'stable-kebab-case-string',
                   diagnosis: 'string',
+                  whyConfused: 'string',
                   distinguishingPoint: 'string',
+                  keySeparator: 'string',
+                  classicTrap: 'string',
                 },
               ],
-              management: ['string'],
+              management: [
+                {
+                  step: 'string',
+                  rationale: 'string',
+                  urgency: 'string',
+                },
+              ],
               complications: ['string'],
-              pitfalls: ['string'],
+              pitfalls: [
+                {
+                  pitfall: 'string',
+                  whyItHappens: 'string',
+                  consequence: 'string',
+                  saferHeuristic: 'string',
+                },
+              ],
               recallPrompts: [
                 {
                   id: 'stable-kebab-case-string',
-                  type: 'SHORT_ANSWER',
+                  type: 'WHY_IT_MATTERS',
                   prompt: 'string',
                   answer: 'string',
+                  explanation: 'string',
+                  linkedConcept: 'string',
                   sourceSection: 'string',
                   difficulty: 'BASIC',
                 },
@@ -585,6 +786,20 @@ export class DiagnosisEducationService {
               'If differentials are not comparative, revise them.',
               'If pitfalls are generic, make them clinically specific.',
               'If recall prompts are vague, make them test a concrete pearl.',
+              'At least one recall prompt should use WHY_IT_MATTERS.',
+              'At least one recall prompt should use DISTINGUISH when meaningful mimics exist.',
+            ],
+            badExamples: [
+              'Fever may occur.',
+              'Patients can present with abdominal pain.',
+              'Diagnosis includes history, exam, and investigations.',
+              'Management depends on severity.',
+            ],
+            goodExamples: [
+              'Migratory periumbilical to right lower quadrant pain favors appendicitis because it reflects progression from visceral to parietal peritoneal irritation.',
+              'Lipase more than three times the upper limit of normal supports pancreatitis over uncomplicated biliary colic.',
+              'Hypoxia out of proportion to auscultatory findings favors pulmonary embolism over pneumonia.',
+              'Steroids before antibiotics can worsen unrecognized infection.',
             ],
             styleExampleDoNotCopyDiagnosisGlobally: {
               diagnosis: 'Appendicitis',
@@ -673,6 +888,9 @@ export class DiagnosisEducationService {
               'differentials must be objects with id, diagnosis, and distinguishingPoint.',
               'scoringSystems must be objects with id, name, use, components, and caution.',
               'recallPrompts must be objects with id, type, prompt, answer, sourceSection, and difficulty.',
+              'recallPrompts may include explanation and linkedConcept.',
+              'Recall prompts must include at least one WHY_IT_MATTERS prompt.',
+              'Recall prompts should include at least one DISTINGUISH prompt when meaningful differentials exist.',
               'Recognition pattern must include classic illness script, typical context, symptom sequence, and relevant atypical presentations.',
               'Exam pearls must prioritize named signs, bedside findings, validated scores, clinical maneuvers, and what each means.',
               'Differential distinguishers must be comparative, not generic mimic summaries.',
@@ -699,6 +917,16 @@ export class DiagnosisEducationService {
       normalized,
       diagnosisRegistryId,
     );
+    const qualityWarnings = this.collectEducationQualityWarnings(validatedDraft);
+    if (qualityWarnings.length) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'diagnosis_education.generate.quality_warnings',
+          diagnosisRegistryId,
+          warnings: qualityWarnings,
+        }),
+      );
+    }
 
     const education = await this.prisma.$transaction(async (tx) => {
       const saved = existing
@@ -779,16 +1007,7 @@ export class DiagnosisEducationService {
       errors.push('summary.definition is required');
     }
 
-    for (const field of [
-      'clinicalPattern',
-      'keySymptoms',
-      'keySigns',
-      'investigations',
-      'management',
-      'complications',
-      'pitfalls',
-      'references',
-    ] satisfies EducationJsonField[]) {
+    for (const field of ['complications', 'references'] satisfies EducationJsonField[]) {
       if (field in draft && draft[field] !== null) {
         const value = this.validateStringArray(draft[field]);
         if (value) {
@@ -799,11 +1018,39 @@ export class DiagnosisEducationService {
       }
     }
 
+    if ('clinicalPattern' in draft && draft.clinicalPattern !== null) {
+      const value = this.validateObjectOrStringArray(
+        draft.clinicalPattern,
+        ['pattern', 'whyItMatters'],
+        ['progression', 'commonTrap'],
+      );
+      if (value) {
+        validated.clinicalPattern = value;
+      } else {
+        errors.push('clinicalPattern must include pattern and whyItMatters');
+      }
+    }
+
+    for (const field of ['keySymptoms', 'keySigns'] satisfies EducationJsonField[]) {
+      if (field in draft && draft[field] !== null) {
+        const value = this.validateObjectOrStringArray(
+          draft[field],
+          ['finding', 'whyItMatters'],
+          ['diagnosticImpact', 'discriminator'],
+        );
+        if (value) {
+          validated[field] = value;
+        } else {
+          errors.push(`${field} must include finding and whyItMatters`);
+        }
+      }
+    }
+
     if ('examPearls' in draft && draft.examPearls !== null) {
-      const value = this.validateObjectArray(
+      const value = this.validateObjectOrStringArray(
         draft.examPearls,
         ['label', 'explanation'],
-        ['id'],
+        ['id', 'whyItMatters'],
       );
       if (value) {
         validated.examPearls = value;
@@ -812,11 +1059,24 @@ export class DiagnosisEducationService {
       }
     }
 
+    if ('investigations' in draft && draft.investigations !== null) {
+      const value = this.validateObjectOrStringArray(
+        draft.investigations,
+        ['test', 'significance'],
+        ['interpretation', 'discriminator'],
+      );
+      if (value) {
+        validated.investigations = value;
+      } else {
+        errors.push('investigations must include test and significance');
+      }
+    }
+
     if ('differentials' in draft && draft.differentials !== null) {
-      const value = this.validateObjectArray(
+      const value = this.validateObjectOrStringArray(
         draft.differentials,
         ['diagnosis', 'distinguishingPoint'],
-        ['id'],
+        ['id', 'whyConfused', 'keySeparator', 'classicTrap'],
       );
       if (value) {
         validated.differentials = value;
@@ -824,6 +1084,32 @@ export class DiagnosisEducationService {
         errors.push(
           'differentials must include diagnosis and distinguishingPoint',
         );
+      }
+    }
+
+    if ('management' in draft && draft.management !== null) {
+      const value = this.validateObjectOrStringArray(
+        draft.management,
+        ['step'],
+        ['rationale', 'urgency'],
+      );
+      if (value) {
+        validated.management = value;
+      } else {
+        errors.push('management must include step');
+      }
+    }
+
+    if ('pitfalls' in draft && draft.pitfalls !== null) {
+      const value = this.validateObjectOrStringArray(
+        draft.pitfalls,
+        ['pitfall'],
+        ['whyItHappens', 'consequence', 'saferHeuristic'],
+      );
+      if (value) {
+        validated.pitfalls = value;
+      } else {
+        errors.push('pitfalls must include pitfall');
       }
     }
 
@@ -888,6 +1174,117 @@ export class DiagnosisEducationService {
     return normalized;
   }
 
+  private collectEducationQualityWarnings(
+    draft: Partial<Record<EducationJsonField, unknown>>,
+  ): string[] {
+    const text = EDUCATION_JSON_FIELDS.map((field) =>
+      JSON.stringify(draft[field] ?? ''),
+    ).join('\n').toLowerCase();
+
+    const genericPhraseCount = GENERIC_EDUCATION_PHRASES.reduce(
+      (count, phrase) => count + (text.includes(phrase) ? 1 : 0),
+      0,
+    );
+    const diagnosticVerbCount = DIAGNOSTIC_REASONING_TERMS.reduce(
+      (count, term) => count + (text.includes(term) ? 1 : 0),
+      0,
+    );
+    const warnings: string[] = [];
+
+    if (genericPhraseCount >= 2) {
+      warnings.push('generic_filler_phrases_detected');
+    }
+
+    if (diagnosticVerbCount < 4) {
+      warnings.push('low_diagnostic_reasoning_density');
+    }
+
+    if (!this.hasStructuredWhyLayer(draft)) {
+      warnings.push('missing_structured_why_layer');
+    }
+
+    if (!this.hasDifferentialReasoning(draft)) {
+      warnings.push('missing_comparative_differential_reasoning');
+    }
+
+    if (!this.hasRecallType(draft, 'WHY_IT_MATTERS')) {
+      warnings.push('missing_why_it_matters_recall_prompt');
+    }
+
+    return warnings;
+  }
+
+  private hasStructuredWhyLayer(
+    draft: Partial<Record<EducationJsonField, unknown>>,
+  ): boolean {
+    return [
+      draft.clinicalPattern,
+      draft.keySymptoms,
+      draft.keySigns,
+      draft.examPearls,
+      draft.investigations,
+      draft.management,
+      draft.pitfalls,
+    ].some((value) =>
+      Array.isArray(value)
+        ? value.some(
+            (item) =>
+              this.isPlainObject(item) &&
+              ('whyItMatters' in item ||
+                'significance' in item ||
+                'rationale' in item ||
+                'consequence' in item),
+          )
+        : false,
+    );
+  }
+
+  private hasDifferentialReasoning(
+    draft: Partial<Record<EducationJsonField, unknown>>,
+  ): boolean {
+    return Array.isArray(draft.differentials)
+      ? draft.differentials.some(
+          (item) => {
+            if (!this.isPlainObject(item)) {
+              return false;
+            }
+
+            const distinguishingPoint = this.cleanString(
+              item.distinguishingPoint,
+            );
+            const hasStructuredContrast = Boolean(
+              this.cleanString(item.whyConfused) ||
+                this.cleanString(item.keySeparator) ||
+                this.cleanString(item.classicTrap),
+            );
+            const pointIncludesContrast = distinguishingPoint
+              ? /\b(?:unlike|whereas|compared with|rather than|instead of|distinguish|differentiate|favors|argues against)\b/i.test(
+                  distinguishingPoint,
+                )
+              : false;
+
+            return Boolean(
+              distinguishingPoint &&
+                (hasStructuredContrast || pointIncludesContrast),
+            );
+          },
+        )
+      : false;
+  }
+
+  private hasRecallType(
+    draft: Partial<Record<EducationJsonField, unknown>>,
+    recallType: string,
+  ): boolean {
+    return Array.isArray(draft.recallPrompts)
+      ? draft.recallPrompts.some(
+          (item) =>
+            this.isPlainObject(item) &&
+            this.cleanString(item.type) === recallType,
+        )
+      : false;
+  }
+
   private validateSummary(value: unknown): Prisma.InputJsonObject | null {
     if (!this.isPlainObject(value)) {
       return null;
@@ -930,6 +1327,50 @@ export class DiagnosisEducationService {
     }
 
     const items = value.map((item) => {
+      if (!this.isPlainObject(item)) {
+        return null;
+      }
+
+      const output: Record<string, string> = {};
+      for (const key of requiredKeys) {
+        const stringValue = this.cleanString(item[key]);
+        if (!stringValue) {
+          return null;
+        }
+        output[key] = stringValue;
+      }
+
+      for (const key of optionalKeys) {
+        const stringValue = this.cleanString(item[key]);
+        if (stringValue) {
+          output[key] = stringValue;
+        }
+      }
+
+      return output as Prisma.InputJsonObject;
+    });
+
+    if (items.some((item) => item === null)) {
+      return null;
+    }
+
+    return items as Prisma.InputJsonArray;
+  }
+
+  private validateObjectOrStringArray(
+    value: unknown,
+    requiredKeys: string[],
+    optionalKeys: string[] = [],
+  ): Prisma.InputJsonArray | null {
+    if (!Array.isArray(value)) {
+      return null;
+    }
+
+    const items = value.map((item) => {
+      if (typeof item === 'string') {
+        return this.cleanString(item);
+      }
+
       if (!this.isPlainObject(item)) {
         return null;
       }
@@ -1009,7 +1450,31 @@ export class DiagnosisEducationService {
         return null;
       }
 
-      return { id, type, prompt, answer, sourceSection, difficulty };
+      if (
+        ![
+          'CLOZE',
+          'SHORT_ANSWER',
+          'DISTINGUISH',
+          'PEARL_RECALL',
+          'WHY_IT_MATTERS',
+        ].includes(type)
+      ) {
+        return null;
+      }
+
+      const explanation = this.cleanString(item.explanation);
+      const linkedConcept = this.cleanString(item.linkedConcept);
+
+      return {
+        id,
+        type,
+        prompt,
+        answer,
+        ...(explanation ? { explanation } : {}),
+        ...(linkedConcept ? { linkedConcept } : {}),
+        sourceSection,
+        difficulty,
+      };
     });
 
     if (items.some((item) => item === null)) {

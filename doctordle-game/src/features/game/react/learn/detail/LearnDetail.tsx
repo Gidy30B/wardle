@@ -32,7 +32,10 @@ type EducationState = {
 type CompareItem = {
   name: string;
   casePoint?: string;
+  whyConfused?: string;
   generalPoint?: string;
+  keySeparator?: string;
+  classicTrap?: string;
 };
 
 const DETAIL_TABS: Array<{ id: DetailTab; label: string }> = [
@@ -52,6 +55,16 @@ function normalizeDiagnosisName(value: string) {
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getString(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
 }
 
 function getEducationSummary(education: DiagnosisEducation | null) {
@@ -90,6 +103,9 @@ function buildCompareItems({
     const name = typeof entry === "string" ? entry : entry.diagnosis;
     const generalPoint =
       typeof entry === "string" ? undefined : entry.distinguishingPoint;
+    const whyConfused = typeof entry === "string" ? undefined : entry.whyConfused;
+    const keySeparator = typeof entry === "string" ? undefined : entry.keySeparator;
+    const classicTrap = typeof entry === "string" ? undefined : entry.classicTrap;
     if (!name) return;
 
     const normalized = normalizeDiagnosisName(name);
@@ -99,13 +115,16 @@ function buildCompareItems({
     if (existingIndex !== undefined) {
       items[existingIndex] = {
         ...items[existingIndex],
+        whyConfused: whyConfused ?? items[existingIndex].whyConfused,
         generalPoint: generalPoint ?? items[existingIndex].generalPoint,
+        keySeparator: keySeparator ?? items[existingIndex].keySeparator,
+        classicTrap: classicTrap ?? items[existingIndex].classicTrap,
       };
       return;
     }
 
     indexByName.set(normalized, items.length);
-    items.push({ name, generalPoint });
+    items.push({ name, whyConfused, generalPoint, keySeparator, classicTrap });
   });
 
   return items;
@@ -748,16 +767,35 @@ function CompareDifferentialsList({ items }: { items: CompareItem[] }) {
             </span>
           </div>
 
-          {item.casePoint || item.generalPoint ? (
+          {item.casePoint ||
+          item.whyConfused ||
+          item.generalPoint ||
+          item.keySeparator ||
+          item.classicTrap ? (
             <div className="mt-3 space-y-2">
               {item.casePoint ? (
                 <ComparisonPoint label="In this case" tone="amber">
                   {item.casePoint}
                 </ComparisonPoint>
               ) : null}
+              {item.whyConfused ? (
+                <ComparisonPoint label="Why confused" tone="amber">
+                  {item.whyConfused}
+                </ComparisonPoint>
+              ) : null}
               {item.generalPoint ? (
                 <ComparisonPoint label="In general" tone="teal">
                   {item.generalPoint}
+                </ComparisonPoint>
+              ) : null}
+              {item.keySeparator ? (
+                <ComparisonPoint label="Key separator" tone="teal">
+                  {item.keySeparator}
+                </ComparisonPoint>
+              ) : null}
+              {item.classicTrap ? (
+                <ComparisonPoint label="Classic trap" tone="amber">
+                  {item.classicTrap}
                 </ComparisonPoint>
               ) : null}
             </div>
@@ -805,7 +843,7 @@ function EducationBulletList({
   warning = false,
   secondary = false,
 }: {
-  items?: string[] | null;
+  items?: Array<unknown> | null;
   warning?: boolean;
   secondary?: boolean;
 }) {
@@ -824,21 +862,99 @@ function EducationBulletList({
 
   return (
     <ul className="space-y-1.5">
-      {items.map((item) => (
-        <li
-          key={item}
-          className={`flex min-w-0 gap-3 rounded-[13px] border px-4 py-3 ${cardClass}`}
-        >
-          <span
-            className={`mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`}
-          />
-          <span className="min-w-0 break-words text-sm leading-6 text-white/64">
-            {item}
-          </span>
-        </li>
-      ))}
+      {items.map((item, index) => {
+        const rendered = renderEducationInsight(item);
+        if (!rendered) return null;
+
+        return (
+          <li
+            key={`${rendered.title ?? rendered.body}-${index}`}
+            className={`flex min-w-0 gap-3 rounded-[13px] border px-4 py-3 ${cardClass}`}
+          >
+            <span
+              className={`mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`}
+            />
+            <div className="min-w-0">
+              {rendered.title ? (
+                <p className="break-words text-sm font-bold leading-5 text-white/76">
+                  {rendered.title}
+                </p>
+              ) : null}
+              <p
+                className={`break-words text-sm leading-6 text-white/64 ${
+                  rendered.title ? "mt-1" : ""
+                }`}
+              >
+                {rendered.body}
+              </p>
+              {rendered.details.length ? (
+                <div className="mt-2 space-y-1">
+                  {rendered.details.map((detail) => (
+                    <p
+                      key={detail}
+                      className="break-words font-brand-mono text-[10px] leading-5 text-white/38"
+                    >
+                      {detail}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </li>
+        );
+      })}
     </ul>
   );
+}
+
+function renderEducationInsight(item: unknown): {
+  title?: string;
+  body: string;
+  details: string[];
+} | null {
+  if (typeof item === "string") {
+    const body = item.trim();
+    return body ? { body, details: [] } : null;
+  }
+
+  if (!isRecord(item)) return null;
+
+  const title =
+    getString(item.pattern) ??
+    getString(item.finding) ??
+    getString(item.test) ??
+    getString(item.pitfall) ??
+    getString(item.step);
+  const body =
+    getString(item.whyItMatters) ??
+    getString(item.significance) ??
+    getString(item.rationale) ??
+    getString(item.consequence) ??
+    getString(item.diagnosticImpact) ??
+    getString(item.interpretation);
+
+  if (!title && !body) return null;
+
+  const details = [
+    labelDetail("Progression", item.progression),
+    labelDetail("Discriminator", item.discriminator),
+    labelDetail("Trap", item.commonTrap ?? item.classicTrap),
+    labelDetail("Interpretation", item.interpretation),
+    labelDetail("Why it happens", item.whyItHappens),
+    labelDetail("Safer heuristic", item.saferHeuristic),
+    labelDetail("Urgency", item.urgency),
+  ].filter((detail): detail is string => Boolean(detail));
+
+  return {
+    title: title ?? undefined,
+    body: body ?? title ?? "",
+    details,
+  };
+}
+
+function labelDetail(label: string, value: unknown) {
+  const text = getString(value);
+  return text ? `${label}: ${text}` : null;
 }
 
 function EducationPearlList({
@@ -856,6 +972,8 @@ function EducationPearlList({
         const label = typeof pearl === "string" ? pearl : pearl.label;
         const explanation =
           typeof pearl === "string" ? undefined : pearl.explanation;
+        const whyItMatters =
+          typeof pearl === "string" ? undefined : pearl.whyItMatters;
 
         if (!label && !explanation) return null;
 
@@ -872,6 +990,11 @@ function EducationPearlList({
             {explanation ? (
               <p className="mt-1 break-words text-sm leading-6 text-white/58">
                 {explanation}
+              </p>
+            ) : null}
+            {whyItMatters ? (
+              <p className="mt-2 break-words font-brand-mono text-[10px] leading-5 text-[var(--wardle-color-teal)]/68">
+                Why it matters: {whyItMatters}
               </p>
             ) : null}
           </div>

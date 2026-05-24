@@ -29,7 +29,8 @@ export function useProfileOnboarding() {
     queryKey: profileQueryKey,
     queryFn: async () => getBackendProfileApi(request),
     enabled: isLoaded && isSignedIn && Boolean(userId),
-    retry: 1,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   useEffect(() => {
