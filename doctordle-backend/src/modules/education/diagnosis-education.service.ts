@@ -365,14 +365,12 @@ export class DiagnosisEducationService {
     });
 
     if (!unlocked) {
-      this.logger.warn(
-        JSON.stringify({
-          event: 'diagnosis_education.player.miss',
-          reason: 'missing_completed_unlock',
-          userId: input.userId,
-          diagnosisRegistryId: input.diagnosisRegistryId,
-        }),
-      );
+      await this.logPlayerEducationMiss({
+        reason: 'missing_completed_unlock',
+        userId: input.userId,
+        diagnosisRegistryId: input.diagnosisRegistryId,
+        selectedRowId: null,
+      });
       throw new NotFoundException('Diagnosis education not found');
     }
 
@@ -381,18 +379,17 @@ export class DiagnosisEducationService {
         diagnosisRegistryId: input.diagnosisRegistryId,
         editorialStatus: DiagnosisEducationStatus.PUBLISHED,
       },
+      orderBy: [{ publishedAt: 'desc' }, { updatedAt: 'desc' }],
       include: { diagnosisRegistry: { select: this.registrySelect() } },
     });
 
     if (!education) {
-      this.logger.warn(
-        JSON.stringify({
-          event: 'diagnosis_education.player.miss',
-          reason: 'missing_published_education',
-          userId: input.userId,
-          diagnosisRegistryId: input.diagnosisRegistryId,
-        }),
-      );
+      await this.logPlayerEducationMiss({
+        reason: 'missing_published_education',
+        userId: input.userId,
+        diagnosisRegistryId: input.diagnosisRegistryId,
+        selectedRowId: null,
+      });
       throw new NotFoundException('Diagnosis education not found');
     }
 
@@ -573,6 +570,90 @@ export class DiagnosisEducationService {
     });
 
     return education;
+  }
+
+  private async logPlayerEducationMiss(input: {
+    reason:
+      | 'missing_completed_unlock'
+      | 'missing_published_education'
+      | 'missing_registry_id';
+    userId: string;
+    diagnosisRegistryId?: string;
+    selectedRowId?: string | null;
+  }) {
+    if (!input.diagnosisRegistryId) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'diagnosis_education.player.miss',
+          reason: input.reason,
+          userId: input.userId,
+        }),
+      );
+      return;
+    }
+
+    const [educationRows, sessionRows] = await Promise.all([
+      this.prisma.diagnosisEducation.findMany({
+        where: { diagnosisRegistryId: input.diagnosisRegistryId },
+        select: {
+          id: true,
+          editorialStatus: true,
+          publishedAt: true,
+          reviewedAt: true,
+          updatedAt: true,
+          version: true,
+        },
+        orderBy: [{ updatedAt: 'desc' }],
+        take: 5,
+      }),
+      this.prisma.gameSession.findMany({
+        where: {
+          userId: input.userId,
+          case: {
+            diagnosisRegistryId: input.diagnosisRegistryId,
+          },
+        },
+        select: {
+          id: true,
+          status: true,
+          completedAt: true,
+          startedAt: true,
+          caseId: true,
+        },
+        orderBy: [{ startedAt: 'desc' }],
+        take: 5,
+      }),
+    ]);
+
+    this.logger.warn(
+      JSON.stringify({
+        event: 'diagnosis_education.player.miss',
+        reason: input.reason,
+        userId: input.userId,
+        diagnosisRegistryId: input.diagnosisRegistryId,
+        selectedRowId: input.selectedRowId ?? null,
+        educationRowsFoundCount: educationRows.length,
+        educationRows: educationRows.map((row) => ({
+          id: row.id,
+          editorialStatus: row.editorialStatus,
+          publishedAt: row.publishedAt?.toISOString() ?? null,
+          reviewedAt: row.reviewedAt?.toISOString() ?? null,
+          updatedAt: row.updatedAt.toISOString(),
+          version: row.version,
+        })),
+        unlockSessionRowsFoundCount: sessionRows.length,
+        unlockSatisfied: sessionRows.some(
+          (row) => row.status === 'completed' && row.completedAt !== null,
+        ),
+        unlockSessions: sessionRows.map((row) => ({
+          id: row.id,
+          caseId: row.caseId,
+          status: row.status,
+          completedAt: row.completedAt?.toISOString() ?? null,
+          startedAt: row.startedAt.toISOString(),
+        })),
+      }),
+    );
   }
 
   async generateDraft(diagnosisRegistryId: string, userId: string) {

@@ -37,7 +37,8 @@ export function useDiagnosisEducation(diagnosisRegistryId: string | null) {
       }
     },
     enabled: diagnosisEducationEnabled && Boolean(diagnosisRegistryId),
-    staleTime: 24 * 60 * 60 * 1000,
+    staleTime: (query) =>
+      query.state.data === null ? 30_000 : 24 * 60 * 60 * 1000,
     gcTime: 24 * 60 * 60 * 1000,
     retry: (failureCount, error) => {
       if (error instanceof ApiRequestError && [401, 403, 404].includes(error.status)) {
@@ -46,7 +47,8 @@ export function useDiagnosisEducation(diagnosisRegistryId: string | null) {
 
       return failureCount < 1
     },
-    refetchOnMount: false,
+    refetchOnMount: (query) => query.state.data === null,
+    refetchOnWindowFocus: (query) => query.state.data === null,
     refetchOnReconnect: false,
   })
 

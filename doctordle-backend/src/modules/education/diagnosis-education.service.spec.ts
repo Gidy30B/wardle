@@ -366,11 +366,13 @@ function buildService() {
     diagnosisEducation: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn(),
       create: jest.fn(),
     },
     gameSession: {
       findFirst: jest.fn().mockResolvedValue({ id: 'session-1' }),
+      findMany: jest.fn().mockResolvedValue([]),
     },
     $transaction: jest.fn(
       async (handler: (transaction: typeof tx) => Promise<unknown>) =>
@@ -596,6 +598,127 @@ describe('DiagnosisEducationService', () => {
         'admin-1',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('makes published education visible to players immediately after review publish', async () => {
+    const { prisma, tx, service } = buildService();
+    let education = buildEducation({
+      editorialStatus: DiagnosisEducationStatus.APPROVED,
+      publishedAt: null,
+      references: ['reviewed source'],
+    });
+    prisma.diagnosisEducation.findUnique.mockImplementation(async () => education);
+    tx.diagnosisEducation.update.mockImplementation(async ({ data }) => {
+      education = {
+        ...education,
+        editorialStatus: data.editorialStatus,
+        reviewedAt: data.reviewedAt,
+        reviewedByUserId: data.reviewedByUserId,
+        publishedAt: data.publishedAt,
+        version: education.version + 1,
+        diagnosisRegistry: {
+          id: 'registry-1',
+          displayLabel: 'Appendicitis',
+          canonicalName: 'appendicitis',
+          specialty: 'General Surgery',
+          category: 'Inflammatory',
+          bodySystem: 'Gastrointestinal',
+          clinicalSetting: 'EMERGENCY',
+          difficultyBand: 'BASIC',
+        },
+      };
+      return education;
+    });
+    prisma.diagnosisEducation.findFirst.mockImplementation(async () =>
+      education.editorialStatus === DiagnosisEducationStatus.PUBLISHED
+        ? {
+            ...education,
+            diagnosisRegistry: {
+              id: 'registry-1',
+              displayLabel: 'Appendicitis',
+              canonicalName: 'appendicitis',
+              specialty: 'General Surgery',
+              category: 'Inflammatory',
+              bodySystem: 'Gastrointestinal',
+              clinicalSetting: 'EMERGENCY',
+              difficultyBand: 'BASIC',
+            },
+          }
+        : null,
+    );
+
+    await service.reviewEducation(
+      'education-1',
+      { status: DiagnosisEducationStatus.PUBLISHED },
+      'admin-1',
+    );
+
+    const result = await service.getPublishedForUser({
+      userId: 'user-1',
+      diagnosisRegistryId: 'registry-1',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        diagnosisRegistryId: 'registry-1',
+        title: 'Appendicitis',
+      }),
+    );
+    expect(prisma.diagnosisEducation.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: [{ publishedAt: 'desc' }, { updatedAt: 'desc' }],
+        where: {
+          diagnosisRegistryId: 'registry-1',
+          editorialStatus: DiagnosisEducationStatus.PUBLISHED,
+        },
+      }),
+    );
+  });
+
+  it('logs structured diagnostics when public education is still unavailable', async () => {
+    const { prisma, service } = buildService();
+    prisma.gameSession.findFirst.mockResolvedValue(null);
+    prisma.diagnosisEducation.findMany.mockResolvedValue([
+      buildEducation({
+        editorialStatus: DiagnosisEducationStatus.APPROVED,
+        publishedAt: null,
+      }),
+    ]);
+    prisma.gameSession.findMany.mockResolvedValue([
+      {
+        id: 'session-1',
+        caseId: 'case-1',
+        status: 'active',
+        completedAt: null,
+        startedAt: new Date('2026-05-01T00:00:00.000Z'),
+      },
+    ]);
+
+    await expect(
+      service.getPublishedForUser({
+        userId: 'user-1',
+        diagnosisRegistryId: 'registry-1',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(prisma.diagnosisEducation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { diagnosisRegistryId: 'registry-1' },
+        select: expect.objectContaining({
+          editorialStatus: true,
+          publishedAt: true,
+          reviewedAt: true,
+        }) as unknown,
+      }),
+    );
+    expect(prisma.gameSession.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'user-1',
+          case: { diagnosisRegistryId: 'registry-1' },
+        }) as unknown,
+      }),
+    );
   });
 
   it('keeps AI draft generation disabled unless explicitly enabled', async () => {
