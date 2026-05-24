@@ -616,16 +616,6 @@ describe('DiagnosisEducationService', () => {
         reviewedByUserId: data.reviewedByUserId,
         publishedAt: data.publishedAt,
         version: education.version + 1,
-        diagnosisRegistry: {
-          id: 'registry-1',
-          displayLabel: 'Appendicitis',
-          canonicalName: 'appendicitis',
-          specialty: 'General Surgery',
-          category: 'Inflammatory',
-          bodySystem: 'Gastrointestinal',
-          clinicalSetting: 'EMERGENCY',
-          difficultyBand: 'BASIC',
-        },
       };
       return education;
     });
@@ -866,6 +856,13 @@ describe('DiagnosisEducationService', () => {
     expect(request.messages[0].content).toContain('named signs');
     expect(request.messages[0].content).toContain('senior clinician');
     expect(request.messages[0].content).toContain('why it matters diagnostically');
+    expect(request.messages[0].content).toContain(
+      'what diagnostic probability changes',
+    );
+    expect(request.messages[0].content).toContain(
+      'finding -> significance -> discriminator',
+    );
+    expect(request.messages[0].content).toContain('operational reasoning');
     expect(request.messages[0].content).toContain('not trivia');
     expect(request.messages[0].content).toContain(
       'differentials are not comparative',
@@ -886,6 +883,15 @@ describe('DiagnosisEducationService', () => {
     expect(request.messages[1].content).toContain('BMJ Best Practice');
     expect(request.messages[1].content).toContain('WHY_IT_MATTERS');
     expect(request.messages[1].content).toContain('badExamples');
+    expect(request.messages[1].content).toContain(
+      'Important for early diagnosis.',
+    );
+    expect(request.messages[1].content).toContain(
+      'Kussmaul respirations indicate clinically significant metabolic acidosis',
+    );
+    expect(request.messages[1].content).toContain(
+      'Hypokalemia risk changes insulin timing.',
+    );
   });
 
   it('collects quality warnings for generic low-density education', () => {
@@ -915,6 +921,56 @@ describe('DiagnosisEducationService', () => {
 
     expect(warnings).toContain('generic_filler_phrases_detected');
     expect(warnings).toContain('missing_why_it_matters_recall_prompt');
+  });
+
+  it('flags generic exam pearl why-layer prose', () => {
+    const { service } = buildService();
+    const warnings = (
+      service as unknown as {
+        collectEducationQualityWarnings: (
+          draft: Record<string, unknown>,
+        ) => string[];
+      }
+    ).collectEducationQualityWarnings({
+      ...buildValidGeneratedDraft({
+        examPearls: [
+          {
+            id: 'mental-status',
+            label: 'Mental status',
+            explanation: 'Assess for confusion or lethargy.',
+            whyItMatters:
+              'Critical for preventing deterioration during the management process.',
+          },
+        ],
+      }),
+    });
+
+    expect(warnings).toContain('generic_exam_pearl_why_layer');
+  });
+
+  it('allows operational exam pearl why-layer prose', () => {
+    const { service } = buildService();
+    const warnings = (
+      service as unknown as {
+        collectEducationQualityWarnings: (
+          draft: Record<string, unknown>,
+        ) => string[];
+      }
+    ).collectEducationQualityWarnings({
+      ...buildValidGeneratedDraft({
+        examPearls: [
+          {
+            id: 'potassium-risk',
+            label: 'Potassium risk',
+            explanation: 'Check potassium before insulin when DKA is suspected.',
+            whyItMatters:
+              'Hypokalemia risk changes insulin timing because treatment can shift potassium intracellularly and worsen instability.',
+          },
+        ],
+      }),
+    });
+
+    expect(warnings).not.toContain('generic_exam_pearl_why_layer');
   });
 
   it('normalizes safe legacy AI aliases before validation', async () => {

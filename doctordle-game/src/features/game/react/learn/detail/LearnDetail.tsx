@@ -38,6 +38,18 @@ type CompareItem = {
   classicTrap?: string;
 };
 
+type InsightDetail = {
+  kind:
+    | "flow"
+    | "separates"
+    | "trap"
+    | "interpret"
+    | "mechanism"
+    | "safer"
+    | "urgency";
+  text: string;
+};
+
 const DETAIL_TABS: Array<{ id: DetailTab; label: string }> = [
   { id: "case", label: "Case" },
   { id: "diagnosis", label: "Diagnosis" },
@@ -752,11 +764,11 @@ function CompareDifferentialsList({ items }: { items: CompareItem[] }) {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="grid gap-2 xl:grid-cols-2">
       {items.map((item) => (
         <div
           key={normalizeDiagnosisName(item.name)}
-          className="rounded-[14px] border border-white/[0.06] bg-white/[0.025] px-4 py-3"
+          className="rounded-[14px] border border-white/[0.06] bg-white/[0.025] px-4 py-3.5"
         >
           <div className="flex min-w-0 items-start justify-between gap-3">
             <p className="min-w-0 break-words text-sm font-bold text-[var(--wardle-color-mint)]">
@@ -767,36 +779,33 @@ function CompareDifferentialsList({ items }: { items: CompareItem[] }) {
             </span>
           </div>
 
-          {item.casePoint ||
-          item.whyConfused ||
-          item.generalPoint ||
-          item.keySeparator ||
-          item.classicTrap ? (
-            <div className="mt-3 space-y-2">
+          {item.keySeparator || item.generalPoint ? (
+            <div className="mt-3 rounded-[12px] border border-[rgba(0,180,166,0.12)] bg-[rgba(0,180,166,0.035)] px-3 py-2.5">
+              <p className="font-brand-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--wardle-color-teal)]/65">
+                Key separator
+              </p>
+              <p className="mt-1 break-words text-sm font-medium leading-6 text-white/68">
+                {item.keySeparator ?? item.generalPoint}
+              </p>
+            </div>
+          ) : null}
+
+          {item.casePoint || item.whyConfused || item.classicTrap ? (
+            <div className="mt-3 space-y-1.5">
               {item.casePoint ? (
-                <ComparisonPoint label="In this case" tone="amber">
+                <ComparisonLine label="case" tone="amber">
                   {item.casePoint}
-                </ComparisonPoint>
+                </ComparisonLine>
               ) : null}
               {item.whyConfused ? (
-                <ComparisonPoint label="Why confused" tone="amber">
+                <ComparisonLine label="confusable" tone="muted">
                   {item.whyConfused}
-                </ComparisonPoint>
-              ) : null}
-              {item.generalPoint ? (
-                <ComparisonPoint label="In general" tone="teal">
-                  {item.generalPoint}
-                </ComparisonPoint>
-              ) : null}
-              {item.keySeparator ? (
-                <ComparisonPoint label="Key separator" tone="teal">
-                  {item.keySeparator}
-                </ComparisonPoint>
+                </ComparisonLine>
               ) : null}
               {item.classicTrap ? (
-                <ComparisonPoint label="Classic trap" tone="amber">
+                <ComparisonLine label="trap" tone="amber">
                   {item.classicTrap}
-                </ComparisonPoint>
+                </ComparisonLine>
               ) : null}
             </div>
           ) : (
@@ -810,28 +819,24 @@ function CompareDifferentialsList({ items }: { items: CompareItem[] }) {
   );
 }
 
-function ComparisonPoint({
+function ComparisonLine({
   label,
   tone,
   children,
 }: {
   label: string;
-  tone: "teal" | "amber";
+  tone: "amber" | "muted";
   children: ReactNode;
 }) {
   const labelClass =
-    tone === "teal"
-      ? "text-[var(--wardle-color-teal)]/70"
-      : "text-[var(--wardle-color-amber)]/75";
+    tone === "amber" ? "text-[var(--wardle-color-amber)]/72" : "text-white/32";
 
   return (
-    <div>
-      <p
-        className={`font-brand-mono text-[9px] font-bold uppercase tracking-[0.14em] ${labelClass}`}
-      >
+    <div className="grid grid-cols-[74px_minmax(0,1fr)] gap-2">
+      <p className={`font-brand-mono text-[9px] font-bold uppercase tracking-[0.14em] ${labelClass}`}>
         {label}
       </p>
-      <p className="mt-1 break-words text-sm leading-6 text-white/58">
+      <p className="break-words text-[13px] leading-5 text-white/50">
         {children}
       </p>
     </div>
@@ -869,12 +874,12 @@ function EducationBulletList({
         return (
           <li
             key={`${rendered.title ?? rendered.body}-${index}`}
-            className={`flex min-w-0 gap-3 rounded-[13px] border px-4 py-3 ${cardClass}`}
+            className={`flex min-w-0 gap-3 rounded-[13px] border px-3.5 py-3 ${cardClass}`}
           >
             <span
               className={`mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`}
             />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               {rendered.title ? (
                 <p className="break-words text-sm font-bold leading-5 text-white/76">
                   {rendered.title}
@@ -887,18 +892,7 @@ function EducationBulletList({
               >
                 {rendered.body}
               </p>
-              {rendered.details.length ? (
-                <div className="mt-2 space-y-1">
-                  {rendered.details.map((detail) => (
-                    <p
-                      key={detail}
-                      className="break-words font-brand-mono text-[10px] leading-5 text-white/38"
-                    >
-                      {detail}
-                    </p>
-                  ))}
-                </div>
-              ) : null}
+              <InsightDetailStack details={rendered.details} warning={warning} />
             </div>
           </li>
         );
@@ -910,7 +904,7 @@ function EducationBulletList({
 function renderEducationInsight(item: unknown): {
   title?: string;
   body: string;
-  details: string[];
+  details: InsightDetail[];
 } | null {
   if (typeof item === "string") {
     const body = item.trim();
@@ -936,14 +930,14 @@ function renderEducationInsight(item: unknown): {
   if (!title && !body) return null;
 
   const details = [
-    labelDetail("Progression", item.progression),
-    labelDetail("Discriminator", item.discriminator),
-    labelDetail("Trap", item.commonTrap ?? item.classicTrap),
-    labelDetail("Interpretation", item.interpretation),
-    labelDetail("Why it happens", item.whyItHappens),
-    labelDetail("Safer heuristic", item.saferHeuristic),
-    labelDetail("Urgency", item.urgency),
-  ].filter((detail): detail is string => Boolean(detail));
+    insightDetail("flow", item.progression),
+    insightDetail("separates", item.discriminator),
+    insightDetail("trap", item.commonTrap ?? item.classicTrap),
+    insightDetail("interpret", item.interpretation),
+    insightDetail("mechanism", item.whyItHappens),
+    insightDetail("safer", item.saferHeuristic),
+    insightDetail("urgency", item.urgency),
+  ].filter((detail): detail is InsightDetail => Boolean(detail));
 
   return {
     title: title ?? undefined,
@@ -952,9 +946,92 @@ function renderEducationInsight(item: unknown): {
   };
 }
 
-function labelDetail(label: string, value: unknown) {
+function insightDetail(kind: InsightDetail["kind"], value: unknown) {
   const text = getString(value);
-  return text ? `${label}: ${text}` : null;
+  return text ? { kind, text } : null;
+}
+
+function InsightDetailStack({
+  details,
+  warning,
+}: {
+  details: InsightDetail[];
+  warning: boolean;
+}) {
+  if (!details.length) return null;
+
+  const visible = details.slice(0, 2);
+  const hidden = details.slice(2);
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      {visible.map((detail) => (
+        <InsightDetailRow
+          key={`${detail.kind}-${detail.text}`}
+          detail={detail}
+          warning={warning}
+        />
+      ))}
+      {hidden.length ? (
+        <details className="group">
+          <summary className="cursor-pointer list-none font-brand-mono text-[9px] font-bold uppercase tracking-[0.14em] text-white/30 transition group-open:text-white/42">
+            More context
+          </summary>
+          <div className="mt-1.5 space-y-1.5">
+            {hidden.map((detail) => (
+              <InsightDetailRow
+                key={`${detail.kind}-${detail.text}`}
+                detail={detail}
+                warning={warning}
+              />
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+function InsightDetailRow({
+  detail,
+  warning,
+}: {
+  detail: InsightDetail;
+  warning: boolean;
+}) {
+  return (
+    <p
+      className={`break-words border-l pl-2.5 text-[12px] leading-5 ${
+        warning
+          ? "border-amber-300/20 text-amber-50/46"
+          : "border-[var(--wardle-color-teal)]/18 text-white/42"
+      }`}
+    >
+      <span className="mr-1.5 font-brand-mono text-[9px] font-bold uppercase tracking-[0.12em] text-white/28">
+        {detailKindCopy(detail.kind)}
+      </span>
+      {detail.text}
+    </p>
+  );
+}
+
+function detailKindCopy(kind: InsightDetail["kind"]) {
+  switch (kind) {
+    case "flow":
+      return "flow";
+    case "separates":
+      return "separates";
+    case "trap":
+      return "trap";
+    case "interpret":
+      return "read";
+    case "mechanism":
+      return "why";
+    case "safer":
+      return "safer";
+    case "urgency":
+      return "urgency";
+  }
 }
 
 function EducationPearlList({
@@ -993,8 +1070,8 @@ function EducationPearlList({
               </p>
             ) : null}
             {whyItMatters ? (
-              <p className="mt-2 break-words font-brand-mono text-[10px] leading-5 text-[var(--wardle-color-teal)]/68">
-                Why it matters: {whyItMatters}
+              <p className="mt-2 break-words border-l border-[var(--wardle-color-teal)]/20 pl-2.5 text-[12px] leading-5 text-white/44">
+                {whyItMatters}
               </p>
             ) : null}
           </div>

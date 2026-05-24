@@ -305,6 +305,62 @@ const DIAGNOSTIC_REASONING_TERMS = [
   'less likely',
 ];
 
+const GENERIC_WHY_LAYER_PHRASES = [
+  'important for early diagnosis',
+  'important for management',
+  'critical for management',
+  'guides treatment',
+  'guides therapeutic',
+  'guides management',
+  'prevents deterioration',
+  'preventing deterioration',
+  'avoids deterioration',
+  'urgent evaluation',
+  'critical intervention',
+  'management decisions',
+  'clinically important',
+  'severe complications',
+  'early diagnosis',
+  'therapeutic interventions',
+  'prioritizes urgent evaluation',
+];
+
+const WHY_LAYER_REASONING_MARKERS = [
+  'supports',
+  'favors',
+  'suggests',
+  'distinguish',
+  'differentiate',
+  'argues against',
+  'raises concern',
+  'increases concern',
+  'lowers suspicion',
+  'increases suspicion',
+  'points toward',
+  'indicates',
+  'implies',
+  'over',
+  'rather than',
+  'unlike',
+  'because',
+  'reflects',
+  'due to',
+  'consistent with',
+  'changes',
+  'should prompt',
+  'should slow',
+  'requires',
+  'need for',
+  'monitoring',
+  'escalation',
+  'timing',
+  'risk of',
+  'risk for',
+  'severity',
+  'hemodynamic',
+  'icu',
+];
+
 type DiagnosisEducationWithRegistry = DiagnosisEducation & {
   diagnosisRegistry: Pick<
     DiagnosisRegistry,
@@ -730,6 +786,10 @@ export class DiagnosisEducationService {
               'Write clinically specific, high-yield teaching pearls rather than generic textbook summaries.',
               'Prefer compressed, high-yield statements. Avoid isolated symptom lists and generic textbook phrasing.',
               'Explain diagnostic significance, discriminating features, temporal progression, and common confusions when relevant.',
+              'A why-it-matters statement must explain what diagnostic probability changes, what management decision changes, or what clinical risk increases.',
+              'Exam pearls should connect finding -> significance -> discriminator or management implication.',
+              'Prefer operational reasoning over abstract educational phrasing and avoid generic urgency wording.',
+              'Whenever possible, state what the finding favors, what it argues against, or what dangerous confusion it resolves.',
               'Generate recall prompts that test reasoning and discrimination, not trivia.',
               'Prioritize named signs, bedside maneuvers, validated scoring systems, comparative differential reasoning, and specific pitfalls when relevant to the diagnosis.',
               'Reject generic output internally and revise it before final JSON if exam pearls are merely symptoms, if common named signs are missing, if differentials are not comparative, if pitfalls are vague, or if recall prompts are too broad.',
@@ -844,6 +904,11 @@ export class DiagnosisEducationService {
               examPearls: [
                 'Prioritize named signs, bedside findings, validated scores, and clinical maneuvers.',
                 'Each pearl should explain what the finding means.',
+                'Each whyItMatters line must explain what probability changes, what management decision changes, or what clinical risk increases.',
+                'Connect finding -> significance -> discriminator or management implication.',
+                'Prefer operational reasoning over abstract educational phrasing.',
+                'Avoid generic urgency wording such as "important for management" or "guides treatment decisions".',
+                'When possible, explain what the finding favors, what it argues against, or what dangerous confusion it resolves.',
                 'Do not list symptoms as exam pearls.',
               ],
               differentialDistinguishers: [
@@ -864,6 +929,8 @@ export class DiagnosisEducationService {
               'If named signs are common for this diagnosis, include them.',
               'If a validated scoring system is commonly taught for this diagnosis, include it.',
               'If exam pearls are just symptoms, revise them into bedside findings or maneuvers.',
+              'Reject exam pearl whyItMatters lines that only say the finding is important, urgent, or guides management.',
+              'Each exam pearl whyItMatters should include diagnostic comparison, severity interpretation, operational change, or dangerous confusion avoided.',
               'If differentials are not comparative, revise them.',
               'If pitfalls are generic, make them clinically specific.',
               'If recall prompts are vague, make them test a concrete pearl.',
@@ -875,12 +942,21 @@ export class DiagnosisEducationService {
               'Patients can present with abdominal pain.',
               'Diagnosis includes history, exam, and investigations.',
               'Management depends on severity.',
+              'Important for early diagnosis.',
+              'Critical for management.',
+              'Guides treatment decisions.',
+              'Avoids deterioration.',
             ],
             goodExamples: [
               'Migratory periumbilical to right lower quadrant pain favors appendicitis because it reflects progression from visceral to parietal peritoneal irritation.',
               'Lipase more than three times the upper limit of normal supports pancreatitis over uncomplicated biliary colic.',
               'Hypoxia out of proportion to auscultatory findings favors pulmonary embolism over pneumonia.',
               'Steroids before antibiotics can worsen unrecognized infection.',
+              'Kussmaul respirations indicate clinically significant metabolic acidosis rather than uncomplicated hyperglycemia.',
+              'Worsening mental status increases concern for cerebral edema and should slow aggressive osmotic correction.',
+              'Marked dehydration with ketosis favors DKA over isolated gastroenteritis.',
+              'Profound acidemia increases concern for hemodynamic instability and need for close monitoring.',
+              'Hypokalemia risk changes insulin timing.',
             ],
             styleExampleDoNotCopyDiagnosisGlobally: {
               diagnosis: 'Appendicitis',
@@ -974,6 +1050,9 @@ export class DiagnosisEducationService {
               'Recall prompts should include at least one DISTINGUISH prompt when meaningful differentials exist.',
               'Recognition pattern must include classic illness script, typical context, symptom sequence, and relevant atypical presentations.',
               'Exam pearls must prioritize named signs, bedside findings, validated scores, clinical maneuvers, and what each means.',
+              'Exam pearl whyItMatters must connect findings to diagnostic probability, management decisions, clinical risk, or dangerous confusion avoided.',
+              'Exam pearl whyItMatters must avoid generic urgency phrases such as "important for management" or "guides treatment decisions".',
+              'Exam pearls should be 1-2 dense reasoning sentences, not paragraph prose.',
               'Differential distinguishers must be comparative, not generic mimic summaries.',
               'Pitfalls must be specific clinical traps.',
               'References must include at least two source labels when scoring systems, investigations, or management are populated.',
@@ -1292,6 +1371,10 @@ export class DiagnosisEducationService {
       warnings.push('missing_why_it_matters_recall_prompt');
     }
 
+    if (this.hasGenericExamPearlWhyLayer(draft)) {
+      warnings.push('generic_exam_pearl_why_layer');
+    }
+
     return warnings;
   }
 
@@ -1364,6 +1447,38 @@ export class DiagnosisEducationService {
             this.cleanString(item.type) === recallType,
         )
       : false;
+  }
+
+  private hasGenericExamPearlWhyLayer(
+    draft: Partial<Record<EducationJsonField, unknown>>,
+  ): boolean {
+    if (!Array.isArray(draft.examPearls)) {
+      return false;
+    }
+
+    return draft.examPearls.some((item) => {
+      if (!this.isPlainObject(item)) {
+        return false;
+      }
+
+      const whyItMatters = this.cleanString(item.whyItMatters);
+      return Boolean(whyItMatters && this.isGenericWhyLayer(whyItMatters));
+    });
+  }
+
+  private isGenericWhyLayer(text: string): boolean {
+    const normalized = text.toLowerCase();
+    const hasGenericPhrase = GENERIC_WHY_LAYER_PHRASES.some((phrase) =>
+      normalized.includes(phrase),
+    );
+
+    if (!hasGenericPhrase) {
+      return false;
+    }
+
+    return !WHY_LAYER_REASONING_MARKERS.some((marker) =>
+      normalized.includes(marker),
+    );
   }
 
   private validateSummary(value: unknown): Prisma.InputJsonObject | null {
