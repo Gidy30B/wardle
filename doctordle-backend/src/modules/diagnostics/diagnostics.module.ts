@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { RedisCacheService } from '../../core/cache/redis-cache.service';
+import { RedisCacheModule } from '../../core/cache/redis-cache.module';
 import { PrismaService } from '../../core/db/prisma.service';
 import { AppLoggerService } from '../../core/logger/app-logger.service';
 import { MetricsService } from '../../core/logger/metrics.service';
@@ -14,9 +14,8 @@ import { EvaluatorV1Service } from './v1/evaluator-v1.service';
 import { EvaluatorV2Service } from './v2/evaluator-v2.service';
 
 @Module({
-  imports: [CasesModule, KnowledgeModule],
+  imports: [CasesModule, KnowledgeModule, RedisCacheModule],
   providers: [
-    RedisCacheService,
     PrismaService,
     AppLoggerService,
     MetricsService,

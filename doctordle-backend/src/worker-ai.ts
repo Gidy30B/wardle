@@ -4,6 +4,7 @@ import { validateEnv } from './core/config/env.validation';
 import { AiWorkerModule } from './modules/queue/ai-worker.module';
 
 async function bootstrap() {
+  process.env.APP_PROCESS_ROLE ??= 'worker';
   validateEnv();
   const logger = new Logger('AiWorkerBootstrap');
   const app = await NestFactory.createApplicationContext(AiWorkerModule);

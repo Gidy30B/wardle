@@ -292,7 +292,7 @@ export default function LearnTabPage({
   roundViewModel,
 }: LearnTabPageProps) {
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<DetailTab>("breakdown");
+  const [activeTab, setActiveTab] = useState<DetailTab>("case");
   const [studyQueueCaseIds, setStudyQueueCaseIds] = useState<string[] | null>(
     null,
   );
@@ -306,7 +306,7 @@ export default function LearnTabPage({
 
   const resetLearnSelection = () => {
     setSelectedCaseId(null);
-    setActiveTab("breakdown");
+    setActiveTab("case");
     setStudyQueueCaseIds(null);
     setStudyQueueIndex(0);
     setSelectedMobileSpecialty(null);
@@ -361,7 +361,7 @@ export default function LearnTabPage({
     setStudyQueueIndex(0);
     setSelectedMobileSpecialty(null);
     setSelectedCaseId(targetCase.case.id);
-    setActiveTab("breakdown");
+    setActiveTab("case");
     onOpenIntentConsumed?.(openIntent.intentId);
   }, [
     completedCases,
@@ -424,12 +424,12 @@ export default function LearnTabPage({
     setStudyQueueIndex(0);
     setSelectedCaseId(dailyCaseId);
     setSelectedMobileSpecialty(null);
-    setActiveTab("breakdown");
+    setActiveTab("case");
   };
 
   const clearSelectedCase = () => {
     setSelectedCaseId(null);
-    setActiveTab("breakdown");
+    setActiveTab("case");
     setStudyQueueCaseIds(null);
     setStudyQueueIndex(0);
   };
@@ -437,7 +437,7 @@ export default function LearnTabPage({
   const clearSelectedMobileSpecialty = () => {
     setSelectedMobileSpecialty(null);
     setSelectedCaseId(null);
-    setActiveTab("breakdown");
+    setActiveTab("case");
   };
 
   const startDueReviewQueue = () => {
@@ -449,7 +449,7 @@ export default function LearnTabPage({
     setStudyQueueCaseIds(queueCaseIds);
     setStudyQueueIndex(0);
     setSelectedCaseId(null);
-    setActiveTab("breakdown");
+    setActiveTab("case");
   };
 
   const exitStudyQueue = () => {
@@ -510,7 +510,7 @@ export default function LearnTabPage({
               setStudyQueueIndex(0);
               setSelectedCaseId(null);
               setSelectedMobileSpecialty(null);
-              setActiveTab("breakdown");
+              setActiveTab("case");
             }}
           />
         ) : !selectedCase ? (

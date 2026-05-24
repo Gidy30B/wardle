@@ -30,6 +30,7 @@ import CaseClinicalSection from './CaseClinicalSection';
 import CaseDiagnosisSection from './CaseDiagnosisSection';
 import CaseGenerationQualitySection from './CaseGenerationQualitySection';
 import CaseHistorySection from './CaseHistorySection';
+import DiagnosisEducationPanel from './DiagnosisEducationPanel';
 import CaseValidationSection from './CaseValidationSection';
 import CaseWorkflowSection from './CaseWorkflowSection';
 import {
@@ -547,6 +548,12 @@ export default function CaseDetail({
           onUpdateCaseDiagnosis={handleUpdateCaseDiagnosis}
           onLinkDiagnosis={handleLinkDiagnosis}
           onCreateAndLinkDiagnosis={handleCreateAndLinkDiagnosis}
+        />
+
+        <DiagnosisEducationPanel
+          client={client}
+          diagnosisRegistryId={detail.diagnosisRegistryId}
+          diagnosisLabel={diagnosisName}
         />
 
         <CaseClinicalSection

@@ -28,7 +28,7 @@ export type LearnOpenIntent = {
   openLatestPlayedCase: boolean;
 };
 
-export type DetailTab = "breakdown" | "differentials" | "clues";
+export type DetailTab = "case" | "diagnosis" | "compare";
 
 export type LearnPerformanceSummary = {
   accuracyPct: number | null;

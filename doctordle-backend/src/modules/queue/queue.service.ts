@@ -45,14 +45,26 @@ export type NotificationCreateJobPayload = {
 };
 
 type QueueHealth = {
+  name: string;
   waiting: number;
   active: number;
+  delayed: number;
   failed: number;
   completed: number;
-  lagMs: number;
+  paused: boolean;
+  oldestWaitingJobAgeSeconds: number | null;
+  latestFailedReason?: string;
+  error?: string;
 };
 
 export type QueueHealthSummary = {
+  status: 'ok' | 'degraded';
+  role: string;
+  redis: {
+    connected: boolean;
+    pingMs: number | null;
+    error?: string;
+  };
   gameCompletion: QueueHealth;
   aiContent: QueueHealth;
   notifications: QueueHealth;
@@ -228,36 +240,122 @@ export class QueueService implements OnModuleDestroy {
   }
 
   async getHealth(): Promise<QueueHealthSummary> {
+    const redis = await this.getRedisHealth();
+    const gameCompletion = await this.getQueueHealth(
+      this.gameCompletionQueue,
+      GAME_COMPLETION_QUEUE_NAME,
+    );
+    const aiContent = await this.getQueueHealth(
+      this.aiContentQueue,
+      AI_CONTENT_QUEUE_NAME,
+    );
+    const notifications = await this.getQueueHealth(
+      this.notificationQueue,
+      NOTIFICATION_QUEUE_NAME,
+    );
+    const queues = [gameCompletion, aiContent, notifications];
+
     return {
-      gameCompletion: await this.getQueueHealth(this.gameCompletionQueue),
-      aiContent: await this.getQueueHealth(this.aiContentQueue),
-      notifications: await this.getQueueHealth(this.notificationQueue),
+      status:
+        redis.connected && queues.every((queue) => !queue.error)
+          ? 'ok'
+          : 'degraded',
+      role: getEnv().APP_PROCESS_ROLE,
+      redis,
+      gameCompletion,
+      aiContent,
+      notifications,
     };
   }
 
   private async getQueueHealth<T extends object>(
     queue: Queue<T>,
+    name: string,
   ): Promise<QueueHealth> {
-    const counts = await queue.getJobCounts(
-      'waiting',
-      'active',
-      'failed',
-      'completed',
-    );
+    try {
+      const counts = await queue.getJobCounts(
+        'waiting',
+        'active',
+        'delayed',
+        'failed',
+        'completed',
+      );
 
-    const waitingJobs = await queue.getWaiting(0, 0);
-    const oldestWaiting = waitingJobs[0];
-    const lagMs = oldestWaiting
-      ? Math.max(0, Date.now() - oldestWaiting.timestamp)
-      : 0;
+      const [waitingJobs, failedJobs, paused] = await Promise.all([
+        queue.getWaiting(0, 0),
+        queue.getFailed(0, 0),
+        queue.isPaused(),
+      ]);
+      const oldestWaiting = waitingJobs[0];
+      const latestFailed = failedJobs[0];
+      const oldestWaitingJobAgeSeconds = oldestWaiting
+        ? Math.max(0, Math.round((Date.now() - oldestWaiting.timestamp) / 1000))
+        : null;
 
-    return {
-      waiting: counts.waiting ?? 0,
-      active: counts.active ?? 0,
-      failed: counts.failed ?? 0,
-      completed: counts.completed ?? 0,
-      lagMs,
-    };
+      return {
+        name,
+        waiting: counts.waiting ?? 0,
+        active: counts.active ?? 0,
+        delayed: counts.delayed ?? 0,
+        failed: counts.failed ?? 0,
+        completed: counts.completed ?? 0,
+        paused,
+        oldestWaitingJobAgeSeconds,
+        ...(latestFailed?.failedReason
+          ? { latestFailedReason: latestFailed.failedReason }
+          : {}),
+      };
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'queue.health.read_failed',
+          queue: name,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+
+      return {
+        name,
+        waiting: 0,
+        active: 0,
+        delayed: 0,
+        failed: 0,
+        completed: 0,
+        paused: false,
+        oldestWaitingJobAgeSeconds: null,
+        error: this.sanitizeError(error),
+      };
+    }
+  }
+
+  private async getRedisHealth(): Promise<QueueHealthSummary['redis']> {
+    const startedAt = Date.now();
+
+    try {
+      await this.connection.ping();
+      return {
+        connected: true,
+        pingMs: Date.now() - startedAt,
+      };
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'queue.redis.ping_failed',
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+
+      return {
+        connected: false,
+        pingMs: null,
+        error: this.sanitizeError(error),
+      };
+    }
+  }
+
+  private sanitizeError(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error);
+    return message.replace(/redis:\/\/[^@\s]+@/gi, 'redis://***@');
   }
 
   private async assertEnqueueRateLimit(queueName: string): Promise<void> {

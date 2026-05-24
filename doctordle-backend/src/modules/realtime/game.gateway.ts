@@ -63,6 +63,13 @@ export class GameGateway implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
+    if (process.env.APP_PROCESS_ROLE !== 'api') {
+      this.logger.log(
+        `Skipping websocket Redis subscription because APP_PROCESS_ROLE=${process.env.APP_PROCESS_ROLE ?? 'undefined'}`,
+      );
+      return;
+    }
+
     await this.redisPubSub.subscribe(this.channelName, (event: RealtimeEnvelope) => {
       this.logger.log({
         event: 'ws.redis.received',

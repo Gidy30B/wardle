@@ -25,7 +25,10 @@ import type {
   DiagnosisRarityBandValue,
   DiagnosisUrgencyLevelValue,
 } from './diagnosis-registry-taxonomy.js';
-import { normalizeDiagnosisTerm } from './diagnosis-term-normalizer.js';
+import {
+  getDiagnosisTermNormalizedCandidates,
+  normalizeDiagnosisTerm,
+} from './diagnosis-term-normalizer.js';
 
 type DiagnosisRegistryEditorialClient =
   | PrismaService
@@ -319,6 +322,11 @@ export class DiagnosisRegistryEditorialService {
   ): Promise<CreateEditorialDiagnosisResult> {
     const canonicalName = this.requireCanonicalName(input.canonicalName);
     const canonicalNormalized = normalizeDiagnosisTerm(canonicalName);
+    await this.assertNoDuplicateCandidate(
+      canonicalName,
+      canonicalNormalized,
+      client,
+    );
     const aliases = this.normalizeAliasTerms(
       input.aliases ?? [],
       canonicalNormalized,
@@ -513,6 +521,59 @@ export class DiagnosisRegistryEditorialService {
     }
 
     return registry;
+  }
+
+  private async assertNoDuplicateCandidate(
+    canonicalName: string,
+    canonicalNormalized: string,
+    client: DiagnosisRegistryEditorialClient,
+  ) {
+    const candidates = getDiagnosisTermNormalizedCandidates(canonicalName).filter(
+      (candidate) => candidate !== canonicalNormalized,
+    );
+    if (!candidates.length) {
+      return;
+    }
+
+    const duplicate = (await (
+      client as PrismaService
+    ).diagnosisRegistry.findFirst({
+      where: {
+        OR: [
+          {
+            canonicalNormalized: {
+              in: candidates,
+            },
+          },
+          {
+            aliases: {
+              some: {
+                active: true,
+                normalizedTerm: {
+                  in: candidates,
+                },
+              },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        canonicalName: true,
+        canonicalNormalized: true,
+      },
+    })) as Pick<
+      DiagnosisRegistryRow,
+      'id' | 'canonicalName' | 'canonicalNormalized'
+    > | null;
+
+    if (!duplicate) {
+      return;
+    }
+
+    throw new BadRequestException(
+      `Possible duplicate diagnosis registry entry for "${canonicalName}". Use existing registry "${duplicate.canonicalName}" (${duplicate.id}) or add an alias instead.`,
+    );
   }
 
   private rankSearchResult(

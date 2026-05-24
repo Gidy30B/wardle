@@ -43,7 +43,7 @@ export function useSelectedLearnCase({
       !filteredCases.some(matchesSelectedCase)
     ) {
       setSelectedCaseId(null);
-      setActiveTab("breakdown");
+      setActiveTab("case");
     }
   }, [
     filteredCases,

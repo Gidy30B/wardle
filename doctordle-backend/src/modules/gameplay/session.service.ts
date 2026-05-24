@@ -305,6 +305,8 @@ export class SessionService {
           case: {
             id: session.case.id,
             publicNumber: session.case.publicNumber ?? null,
+            diagnosisRegistryId: session.case.diagnosisRegistryId ?? null,
+            educationAvailable: Boolean(session.case.diagnosisRegistryId),
             displayLabel: responseCase.displayLabel,
             trackDisplayLabel: responseCase.trackDisplayLabel,
             title: session.case.title,

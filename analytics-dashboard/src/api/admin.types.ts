@@ -173,6 +173,22 @@ export type DiagnosisRegistryStatus = 'ACTIVE' | 'HIDDEN' | 'DEPRECATED' | 'DRAF
 
 export type DiagnosisDifficultyBand = 'BASIC' | 'INTERMEDIATE' | 'ADVANCED';
 
+export type DiagnosisEducationStatus =
+  | 'DRAFT'
+  | 'GENERATED'
+  | 'NEEDS_REVIEW'
+  | 'NEEDS_EDIT'
+  | 'APPROVED'
+  | 'PUBLISHED'
+  | 'REJECTED'
+  | 'ARCHIVED';
+
+export type DiagnosisEducationSource =
+  | 'MANUAL'
+  | 'AI_ASSISTED'
+  | 'IMPORTED'
+  | 'HYBRID';
+
 export type DiagnosisMappingStatus =
   | 'MATCHED'
   | 'REVIEW_REQUIRED'
@@ -247,6 +263,87 @@ export type EditorialDiagnosisRegistrySummary = {
   isCompositional?: boolean;
   notes?: string | null;
   aliasPreview?: string[];
+};
+
+export type DiagnosisEducationSummary = {
+  definition?: string;
+  highYieldTakeaway?: string;
+};
+
+export type DiagnosisEducationPearl = {
+  label: string;
+  explanation: string;
+};
+
+export type DiagnosisEducationDifferential = {
+  diagnosis: string;
+  distinguishingPoint: string;
+};
+
+export type DiagnosisEducationRecord = {
+  id: string;
+  diagnosisRegistryId: string;
+  title: string;
+  summary: JsonValue;
+  clinicalPattern: JsonValue | null;
+  keySymptoms: JsonValue | null;
+  keySigns: JsonValue | null;
+  examPearls: JsonValue | null;
+  scoringSystems: JsonValue | null;
+  investigations: JsonValue | null;
+  differentials: JsonValue | null;
+  management: JsonValue | null;
+  complications: JsonValue | null;
+  pitfalls: JsonValue | null;
+  recallPrompts: JsonValue | null;
+  references: JsonValue | null;
+  editorialStatus: DiagnosisEducationStatus;
+  source: DiagnosisEducationSource;
+  version: number;
+  generatedAt: string | null;
+  reviewedAt: string | null;
+  reviewedByUserId: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  revisions?: DiagnosisEducationRevision[];
+};
+
+export type DiagnosisEducationRevision = {
+  id: string;
+  educationId: string;
+  version: number;
+  snapshot: JsonValue;
+  editorialStatus: DiagnosisEducationStatus;
+  source: DiagnosisEducationSource;
+  createdByUserId: string | null;
+  createdAt: string;
+};
+
+export type AdminDiagnosisEducationResponse = {
+  diagnosisRegistry: EditorialDiagnosisRegistrySummary;
+  education: DiagnosisEducationRecord | null;
+};
+
+export type UpsertDiagnosisEducationPayload = {
+  title?: string;
+  summary?: DiagnosisEducationSummary;
+  clinicalPattern?: string[];
+  keySymptoms?: string[];
+  keySigns?: string[];
+  examPearls?: DiagnosisEducationPearl[];
+  scoringSystems?: JsonValue;
+  investigations?: JsonValue;
+  differentials?: DiagnosisEducationDifferential[];
+  management?: JsonValue;
+  complications?: JsonValue;
+  pitfalls?: string[];
+  recallPrompts?: JsonValue;
+  references?: string[];
+};
+
+export type ReviewDiagnosisEducationPayload = {
+  status: DiagnosisEducationStatus;
 };
 
 export type EditorialDiagnosisPublishReadiness = {

@@ -1,6 +1,7 @@
 import type { ApiClient } from './client';
 import type {
   AdminViewer,
+  AdminDiagnosisEducationResponse,
   AttemptsOverTimePayload,
   CreateDiagnosisAndLinkPayload,
   CreateDiagnosisRegistryPayload,
@@ -23,7 +24,9 @@ import type {
   StartCaseReviewResult,
   SubmitCaseReviewPayload,
   SubmitCaseReviewResult,
+  ReviewDiagnosisEducationPayload,
   UpdateCaseDiagnosisPayload,
+  UpsertDiagnosisEducationPayload,
   ValidationOutcomeSummary,
 } from './admin.types';
 export type * from './admin.types';
@@ -114,6 +117,51 @@ export function createDiagnosisRegistry(
     '/admin/diagnosis-registry',
     payload,
   );
+}
+
+export function getDiagnosisEducationForAdmin(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.get<AdminDiagnosisEducationResponse>(
+    `/admin/education/diagnoses/${diagnosisRegistryId}`,
+  );
+}
+
+export function createDiagnosisEducationForAdmin(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  payload: UpsertDiagnosisEducationPayload,
+) {
+  return client.post(
+    `/admin/education/diagnoses/${diagnosisRegistryId}`,
+    payload,
+  );
+}
+
+export function generateDiagnosisEducationDraft(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.post(
+    `/admin/education/diagnoses/${diagnosisRegistryId}/generate`,
+  );
+}
+
+export function updateDiagnosisEducationForAdmin(
+  client: ApiClient,
+  educationId: string,
+  payload: UpsertDiagnosisEducationPayload,
+) {
+  return client.patch(`/admin/education/${educationId}`, payload);
+}
+
+export function reviewDiagnosisEducationForAdmin(
+  client: ApiClient,
+  educationId: string,
+  payload: ReviewDiagnosisEducationPayload,
+) {
+  return client.post(`/admin/education/${educationId}/review`, payload);
 }
 
 export function linkCaseDiagnosis(

@@ -17,7 +17,7 @@ const MENU_ITEMS: Array<{
   bg: string
   label: string
   sub: string
-}> = [
+}> = ([
   {
     id: 'gameplay',
     icon: '🎮',
@@ -53,7 +53,17 @@ const MENU_ITEMS: Array<{
     label: 'Account & Privacy',
     sub: 'Password, data, sign out',
   },
-]
+].filter(
+  (item) =>
+    // TODO: Re-enable after production-ready appearance/gameplay/premium systems ship.
+    item.id !== 'gameplay' && item.id !== 'appearance',
+) as Array<{
+  id: SettingsScreenId
+  icon: string
+  bg: string
+  label: string
+  sub: string
+}>)
 
 export function SettingsHomeScreen({
   displayName,
@@ -233,7 +243,9 @@ export function SettingsHomeScreen({
         </button>
       </div>
 
-      <div
+      {false ? (
+        // TODO: Re-enable after production-ready appearance/gameplay/premium systems ship.
+        <div
         style={{
           margin: '10px 16px 0',
           background: 'rgba(26,60,94,0.55)',
@@ -298,8 +310,8 @@ export function SettingsHomeScreen({
         >
           Upgrade — KES 299/month →
         </button>
-      </div>
-
+        </div>
+      ) : null}
       <SettingsSectionLabel>Preferences</SettingsSectionLabel>
       <SettingsSection>
         {MENU_ITEMS.map((item, index) => (

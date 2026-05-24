@@ -6,6 +6,19 @@ export type ApiClient = {
   post<T>(path: string, body?: unknown): Promise<T>;
 };
 
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(
+    message: string,
+    status: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 const apiBaseUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, '');
 
 if (!apiBaseUrl) {
@@ -33,8 +46,20 @@ async function readError(response: Response): Promise<string> {
   }
 
   try {
-    const parsed = JSON.parse(text) as { message?: string };
-    return parsed.message ?? text;
+    const parsed = JSON.parse(text) as { message?: unknown; error?: unknown };
+    if (typeof parsed.message === 'string') {
+      return parsed.message;
+    }
+    if (Array.isArray(parsed.message)) {
+      return parsed.message.join(', ');
+    }
+    if (parsed.message && typeof parsed.message === 'object') {
+      return JSON.stringify(parsed.message);
+    }
+    if (typeof parsed.error === 'string') {
+      return parsed.error;
+    }
+    return text;
   } catch {
     return text;
   }
@@ -70,7 +95,7 @@ export function createApiClient(getToken: TokenGetter): ApiClient {
     });
 
     if (!response.ok) {
-      throw new Error(await readError(response));
+      throw new ApiError(await readError(response), response.status);
     }
 
     if (response.status === 204) {

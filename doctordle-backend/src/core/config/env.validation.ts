@@ -59,6 +59,9 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === 'true'),
+  DIAGNOSIS_EDUCATION_API_ENABLED: optionalBooleanWithDefault(true),
+  ADMIN_DIAGNOSIS_EDUCATION_ENABLED: optionalBooleanWithDefault(true),
+  AI_EDUCATION_GENERATION_ENABLED: optionalBooleanWithDefault(false),
   DAILY_SCHEDULER_ENABLED: optionalBooleanWithDefault(true),
   DAILY_SCHEDULE_WINDOW_DAYS: z
     .preprocess(

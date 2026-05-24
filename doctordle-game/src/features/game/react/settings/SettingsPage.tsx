@@ -1,15 +1,11 @@
 import { useAuth, useUser } from '@clerk/clerk-react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useApi } from '../../../../lib/api'
 import {
   getBackendProfileApi,
-  getUserSettingsApi,
-  updateUserSettingsApi,
 } from '../../../profile/profile.api'
 import { cleanupRegisteredPushToken } from '../../../notifications/pushRegistration'
-import type { UserSettings } from '../../../profile/profile.types'
-import { DEFAULT_USER_SETTINGS } from './settings.constants'
 import type { SettingsPageProps, SettingsScreenId } from './settings.types'
 import {
   getDisplayName,
@@ -17,8 +13,6 @@ import {
   getMembershipLabel,
 } from './settings.utils'
 import { AccountSettingsScreen } from './screens/AccountSettingsScreen'
-import { AppearanceSettingsScreen } from './screens/AppearanceSettingsScreen'
-import { GameplaySettingsScreen } from './screens/GameplaySettingsScreen'
 import { LegalSettingsScreen } from './screens/LegalSettingsScreen'
 import { NotificationSettingsScreen } from './screens/NotificationSettingsScreen'
 import { SettingsHomeScreen } from './screens/SettingsHomeScreen'
@@ -38,7 +32,6 @@ export default function SettingsPage({
   const { isLoaded, isSignedIn, signOut, userId } = useAuth()
   const { user } = useUser()
   const { request } = useApi()
-  const queryClient = useQueryClient()
   const [subScreen, setSubScreen] = useState<SettingsScreenId | null>(null)
 
   const profileQuery = useQuery({
@@ -48,23 +41,7 @@ export default function SettingsPage({
     placeholderData: (previousData) => previousData,
   })
 
-  const settingsQuery = useQuery({
-    queryKey: ['settings', 'me', userId],
-    queryFn: async () => getUserSettingsApi(request),
-    enabled: isLoaded && isSignedIn && Boolean(userId),
-    placeholderData: (previousData) => previousData,
-  })
-
-  const settingsMutation = useMutation({
-    mutationFn: async (payload: Partial<UserSettings>) =>
-      updateUserSettingsApi(request, payload),
-    onSuccess: (settings) => {
-      queryClient.setQueryData(['settings', 'me', userId], settings)
-    },
-  })
-
   const backendProfile = profileQuery.data
-  const settings = settingsQuery.data ?? DEFAULT_USER_SETTINGS
   const fallbackDisplayName = getFallbackDisplayName({
     fullName: user?.fullName,
     username: user?.username,
@@ -81,19 +58,20 @@ export default function SettingsPage({
   }
 
   switch (subScreen) {
-    case 'gameplay':
-      return (
-        <GameplaySettingsScreen
-          onBack={goHome}
-          settings={settings}
-          saving={settingsMutation.isPending}
-          onUpdate={(payload) => settingsMutation.mutate(payload)}
-        />
-      )
+    // TODO: Re-enable after production-ready appearance/gameplay/premium systems ship.
+    // case 'gameplay':
+    //   return (
+    //     <GameplaySettingsScreen
+    //       onBack={goHome}
+    //       settings={settings}
+    //       saving={settingsMutation.isPending}
+    //       onUpdate={(payload) => settingsMutation.mutate(payload)}
+    //     />
+    //   )
     case 'notifications':
       return <NotificationSettingsScreen onBack={goHome} />
-    case 'appearance':
-      return <AppearanceSettingsScreen onBack={goHome} />
+    // case 'appearance':
+    //   return <AppearanceSettingsScreen onBack={goHome} />
     case 'stats':
       return (
         <StatsSettingsScreen

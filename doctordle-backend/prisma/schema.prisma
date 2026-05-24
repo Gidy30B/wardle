@@ -137,6 +137,24 @@ enum DiagnosisMappingMethod {
   NONE
 }
 
+enum DiagnosisEducationStatus {
+  DRAFT
+  GENERATED
+  NEEDS_REVIEW
+  NEEDS_EDIT
+  APPROVED
+  PUBLISHED
+  REJECTED
+  ARCHIVED
+}
+
+enum DiagnosisEducationSource {
+  MANUAL
+  AI_ASSISTED
+  IMPORTED
+  HYBRID
+}
+
 model Diagnosis {
   id            String               @id @default(uuid())
   name          String               @unique
@@ -231,6 +249,7 @@ model DiagnosisRegistry {
   aliases               DiagnosisAlias[]
   cases                 Case[]                    @relation("CaseDiagnosisRegistry")
   caseRevisions         CaseRevision[]            @relation("CaseRevisionDiagnosisRegistry")
+  education             DiagnosisEducation?
   selectedAttempts      Attempt[]                 @relation("AttemptSelectedDiagnosisRegistry")
   strictMatchedAttempts Attempt[]                 @relation("AttemptStrictMatchedDiagnosisRegistry")
 
@@ -244,6 +263,60 @@ model DiagnosisRegistry {
   @@index([difficultyBand])
   @@index([rarityBand])
   @@index([clinicalSetting])
+}
+
+model DiagnosisEducation {
+  id                  String                   @id @default(uuid())
+  diagnosisRegistryId String                   @unique
+  title               String
+  summary             Json
+  clinicalPattern     Json?
+  keySymptoms         Json?
+  keySigns            Json?
+  examPearls          Json?
+  scoringSystems      Json?
+  investigations      Json?
+  differentials       Json?
+  management          Json?
+  complications       Json?
+  pitfalls            Json?
+  recallPrompts       Json?
+  references          Json?
+  editorialStatus     DiagnosisEducationStatus @default(DRAFT)
+  source              DiagnosisEducationSource @default(MANUAL)
+  version             Int                      @default(1)
+  generatedAt         DateTime?
+  reviewedAt          DateTime?
+  reviewedByUserId    String?
+  publishedAt         DateTime?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  diagnosisRegistry   DiagnosisRegistry        @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  reviewedBy          User?                    @relation("DiagnosisEducationReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  revisions           DiagnosisEducationRevision[]
+
+  @@index([editorialStatus])
+  @@index([source])
+  @@index([updatedAt])
+  @@index([reviewedByUserId])
+}
+
+model DiagnosisEducationRevision {
+  id               String                   @id @default(uuid())
+  educationId      String
+  version          Int
+  snapshot         Json
+  editorialStatus  DiagnosisEducationStatus
+  source           DiagnosisEducationSource
+  createdByUserId  String?
+  createdAt        DateTime                 @default(now())
+  education        DiagnosisEducation       @relation(fields: [educationId], references: [id], onDelete: Cascade)
+  createdBy        User?                    @relation("DiagnosisEducationRevisionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([educationId, version])
+  @@index([educationId])
+  @@index([createdByUserId])
+  @@index([createdAt])
 }
 
 model DiagnosisAlias {
@@ -514,6 +587,8 @@ model User {
   createdCaseRevisions     CaseRevision[]           @relation("CaseRevisionCreatedByUser")
   triggeredCaseValidations CaseValidationRun[]      @relation("CaseValidationRunTriggeredByUser")
   caseReviews              CaseReview[]             @relation("CaseReviewReviewerUser")
+  reviewedDiagnosisEducation DiagnosisEducation[]    @relation("DiagnosisEducationReviewedByUser")
+  createdDiagnosisEducationRevisions DiagnosisEducationRevision[] @relation("DiagnosisEducationRevisionCreatedByUser")
   primaryOrganization      Organization?            @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
   organizations            UserOrganization[]
 

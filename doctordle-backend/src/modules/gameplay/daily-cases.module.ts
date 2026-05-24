@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { InternalApiGuard } from '../../auth/internal-api.guard';
-import { RedisCacheService } from '../../core/cache/redis-cache.service';
+import { RedisCacheModule } from '../../core/cache/redis-cache.module';
 import { DatabaseModule } from '../../core/db/database.module';
 import { DevOnlyGuard } from '../cases/guards/dev-only.guard';
 import { CaseAssignmentService } from './case-assignment.service';
@@ -10,7 +10,7 @@ import { DailyLimitService } from './daily-limit.service';
 import { InternalDailyCasesController } from './internal-daily-cases.controller';
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, RedisCacheModule],
   controllers: [InternalDailyCasesController],
   providers: [
     CaseAssignmentService,
@@ -19,7 +19,6 @@ import { InternalDailyCasesController } from './internal-daily-cases.controller'
     DailyLimitService,
     DevOnlyGuard,
     InternalApiGuard,
-    RedisCacheService,
   ],
   exports: [CaseAssignmentService, DailyCasesService, DailyCaseSchedulerService],
 })

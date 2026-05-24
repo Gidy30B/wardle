@@ -17,6 +17,7 @@ describe('DiagnosisRegistryEditorialService', () => {
       diagnosisRegistry: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
       },
       diagnosisAlias: {
         findFirst: jest.fn(),
@@ -201,6 +202,23 @@ describe('DiagnosisRegistryEditorialService', () => {
         aliasPreview: ['MI'],
       }),
     });
+  });
+
+  it('blocks parenthetical duplicate creation when the core term already exists', async () => {
+    const fixture = createFixture();
+    fixture.prisma.diagnosisRegistry.findFirst.mockResolvedValue({
+      id: 'registry-gbm',
+      canonicalName: 'Glioblastoma multiforme',
+      canonicalNormalized: 'glioblastoma multiforme',
+    });
+
+    await expect(
+      fixture.service.createDiagnosis({
+        canonicalName: 'Primary brain tumor (glioblastoma multiforme)',
+      }),
+    ).rejects.toThrow('Possible duplicate diagnosis registry entry');
+
+    expect(importDiagnosisRegistryRecords).not.toHaveBeenCalled();
   });
 
   it('rejects accepted alias collisions across registry entries', async () => {

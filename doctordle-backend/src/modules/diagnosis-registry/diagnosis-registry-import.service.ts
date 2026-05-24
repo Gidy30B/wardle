@@ -15,7 +15,10 @@ import type {
   DiagnosisRarityBandValue,
   DiagnosisUrgencyLevelValue,
 } from './diagnosis-registry-taxonomy.js';
-import { normalizeDiagnosisTerm } from './diagnosis-term-normalizer.js';
+import {
+  getDiagnosisTermNormalizedCandidates,
+  normalizeDiagnosisTerm,
+} from './diagnosis-term-normalizer.js';
 
 type DiagnosisRegistryImportClient =
   | PrismaService
@@ -276,6 +279,18 @@ async function importDiagnosisRegistryRecord(
     },
     select: REGISTRY_SELECT,
   })) as ExistingRegistryRecord | null;
+  const duplicateCandidate = existingRegistry
+    ? null
+    : await findDuplicateCandidateRegistry(
+        prisma,
+        canonicalName,
+        canonicalNormalized,
+      );
+  if (duplicateCandidate) {
+    throw new Error(
+      `Possible duplicate diagnosis registry entry for "${canonicalName}". Existing registry "${duplicateCandidate.canonicalName}" (${duplicateCandidate.id}) matches a normalized candidate.`,
+    );
+  }
 
   const mutation = buildRegistryMutationInput(
     record,
@@ -311,6 +326,52 @@ async function importDiagnosisRegistryRecord(
     collisions: aliasResult.collisions,
     errors: aliasResult.errors,
   };
+}
+
+async function findDuplicateCandidateRegistry(
+  prisma: any,
+  canonicalName: string,
+  canonicalNormalized: string,
+): Promise<Pick<
+  ExistingRegistryRecord,
+  'id' | 'canonicalName' | 'canonicalNormalized'
+> | null> {
+  const candidates = getDiagnosisTermNormalizedCandidates(canonicalName).filter(
+    (candidate) => candidate !== canonicalNormalized,
+  );
+  if (!candidates.length) {
+    return null;
+  }
+
+  return (await prisma.diagnosisRegistry.findFirst({
+    where: {
+      OR: [
+        {
+          canonicalNormalized: {
+            in: candidates,
+          },
+        },
+        {
+          aliases: {
+            some: {
+              active: true,
+              normalizedTerm: {
+                in: candidates,
+              },
+            },
+          },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      canonicalName: true,
+      canonicalNormalized: true,
+    },
+  })) as Pick<
+    ExistingRegistryRecord,
+    'id' | 'canonicalName' | 'canonicalNormalized'
+  > | null;
 }
 
 function buildRegistryMutationInput(

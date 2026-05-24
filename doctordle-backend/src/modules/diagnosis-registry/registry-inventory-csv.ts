@@ -17,7 +17,10 @@ import {
   type DiagnosisRarityBandValue,
   type DiagnosisUrgencyLevelValue,
 } from './diagnosis-registry-taxonomy';
-import { normalizeDiagnosisTerm } from './diagnosis-term-normalizer';
+import {
+  getDiagnosisTermNormalizedCandidates,
+  normalizeDiagnosisTerm,
+} from './diagnosis-term-normalizer';
 
 type RegistryInventoryClient =
   | PrismaService
@@ -53,6 +56,7 @@ type ParsedInventoryRow = {
 type ExistingRegistryRow = {
   id: string;
   canonicalName: string;
+  canonicalNormalized: string;
   displayLabel: string;
   specialty: string | null;
   subspecialty: string | null;
@@ -131,6 +135,7 @@ const REQUIRED_HEADERS = [
 const REGISTRY_SELECT = {
   id: true,
   canonicalName: true,
+  canonicalNormalized: true,
   displayLabel: true,
   specialty: true,
   subspecialty: true,
@@ -440,6 +445,18 @@ async function importInventoryRow(
     where: { canonicalNormalized: row.canonicalNormalized },
     select: REGISTRY_SELECT,
   })) as ExistingRegistryRow | null;
+  const duplicateCandidate = existing
+    ? null
+    : await findDuplicateCandidateRegistry(
+        prisma,
+        row.canonicalName,
+        row.canonicalNormalized,
+      );
+  if (duplicateCandidate) {
+    throw new Error(
+      `Possible duplicate diagnosis registry entry for "${row.canonicalName}". Existing registry "${duplicateCandidate.canonicalName}" (${duplicateCandidate.id}) matches a normalized candidate.`,
+    );
+  }
   const mutation = buildRegistryMutation(row, existing);
   const hasChanges = existing ? hasRegistryChanges(existing, mutation) : true;
   const registryId =
@@ -475,6 +492,52 @@ async function importInventoryRow(
     aliasesUpdated: aliasResult.aliasesUpdated,
     duplicateAliases: aliasResult.duplicateAliases,
   };
+}
+
+async function findDuplicateCandidateRegistry(
+  prisma: any,
+  canonicalName: string,
+  canonicalNormalized: string,
+): Promise<Pick<
+  ExistingRegistryRow,
+  'id' | 'canonicalName' | 'canonicalNormalized'
+> | null> {
+  const candidates = getDiagnosisTermNormalizedCandidates(canonicalName).filter(
+    (candidate) => candidate !== canonicalNormalized,
+  );
+  if (!candidates.length) {
+    return null;
+  }
+
+  return (await prisma.diagnosisRegistry.findFirst({
+    where: {
+      OR: [
+        {
+          canonicalNormalized: {
+            in: candidates,
+          },
+        },
+        {
+          aliases: {
+            some: {
+              active: true,
+              normalizedTerm: {
+                in: candidates,
+              },
+            },
+          },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      canonicalName: true,
+      canonicalNormalized: true,
+    },
+  })) as Pick<
+    ExistingRegistryRow,
+    'id' | 'canonicalName' | 'canonicalNormalized'
+  > | null;
 }
 
 function buildRegistryMutation(

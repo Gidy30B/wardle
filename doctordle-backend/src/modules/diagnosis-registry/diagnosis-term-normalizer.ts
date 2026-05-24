@@ -16,3 +16,20 @@ export function normalizeDiagnosisTerm(value: string): string {
     .replace(WHITESPACE_PATTERN, ' ')
     .trim();
 }
+
+export function getDiagnosisTermNormalizedCandidates(value: string): string[] {
+  const candidates = new Set<string>();
+  const normalized = normalizeDiagnosisTerm(value);
+  if (normalized) {
+    candidates.add(normalized);
+  }
+
+  for (const match of value.matchAll(/\(([^()]+)\)/g)) {
+    const parenthetical = normalizeDiagnosisTerm(match[1]);
+    if (parenthetical) {
+      candidates.add(parenthetical);
+    }
+  }
+
+  return [...candidates];
+}

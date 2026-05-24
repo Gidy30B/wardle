@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { RedisCacheService } from '../../core/cache/redis-cache.service';
+import { RedisCacheModule } from '../../core/cache/redis-cache.module';
 import { EventsModule } from '../../core/events/events.module';
 import { PrismaService } from '../../core/db/prisma.service';
 import { AppLoggerService } from '../../core/logger/app-logger.service';
@@ -40,6 +40,7 @@ import { XpService } from './xp.service';
     DiagnosticsModule,
     QueueModule,
     EventsModule,
+    RedisCacheModule,
   ],
   controllers: [GameController, UserProgressController, DiagnosisRegistryController],
   providers: [
@@ -62,7 +63,6 @@ import { XpService } from './xp.service';
     RankService,
     UserProgressService,
     RateLimitGuard,
-    RedisCacheService,
     PrismaService,
     AppLoggerService,
     MetricsService,

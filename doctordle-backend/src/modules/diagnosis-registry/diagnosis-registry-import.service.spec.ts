@@ -8,6 +8,7 @@ function createImportFixture() {
   const prisma = {
     diagnosisRegistry: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
     },
@@ -116,6 +117,31 @@ describe('importDiagnosisRegistryRecords', () => {
         }),
       }),
     );
+  });
+
+  it('rejects parenthetical duplicate imports when the core term already exists', async () => {
+    const fixture = createImportFixture();
+    fixture.prisma.diagnosisRegistry.findUnique.mockResolvedValue(null);
+    fixture.prisma.diagnosisRegistry.findFirst.mockResolvedValue({
+      id: 'registry-gbm',
+      canonicalName: 'Glioblastoma multiforme',
+      canonicalNormalized: 'glioblastoma multiforme',
+    });
+
+    const summary = await importDiagnosisRegistryRecords(fixture.prisma as never, [
+      {
+        canonicalName: 'Primary brain tumor (glioblastoma multiforme)',
+      },
+    ]);
+
+    expect(summary.createdDiagnoses).toBe(0);
+    expect(summary.errors).toEqual([
+      expect.objectContaining({
+        canonicalName: 'Primary brain tumor (glioblastoma multiforme)',
+        reason: expect.stringContaining('Possible duplicate diagnosis registry entry'),
+      }),
+    ]);
+    expect(fixture.prisma.diagnosisRegistry.create).not.toHaveBeenCalled();
   });
 
   it('reuses an existing canonical diagnosis by normalized identity and stays idempotent on rerun', async () => {

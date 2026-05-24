@@ -165,6 +165,8 @@ export type TodayCase = {
   case: {
     id: string
     publicNumber?: number | null
+    diagnosisRegistryId?: string | null
+    educationAvailable?: boolean
     displayLabel?: string
     trackDisplayLabel?: string
     title: string
@@ -201,6 +203,8 @@ export type LearnLibraryCase = {
   case: {
     id: string
     publicNumber?: number | null
+    diagnosisRegistryId?: string | null
+    educationAvailable?: boolean
     displayLabel?: string
     trackDisplayLabel?: string
     title: string
@@ -230,6 +234,47 @@ export type LearnLibraryResponse = {
       accuracyPct: number | null
     }>
   }
+}
+
+export type DiagnosisEducationRecallPrompt = {
+  id?: string
+  type?: 'CLOZE' | 'SHORT_ANSWER' | 'DISTINGUISH' | 'PEARL_RECALL'
+  prompt?: string
+  answer?: string
+  sourceSection?: string
+  difficulty?: 'BASIC' | 'INTERMEDIATE' | 'ADVANCED'
+}
+
+export type DiagnosisEducationDifferential = {
+  diagnosis?: string
+  distinguishingPoint?: string
+}
+
+export type DiagnosisEducationPearl = {
+  label?: string
+  explanation?: string
+}
+
+export type DiagnosisEducation = {
+  diagnosisRegistryId: string
+  title: string
+  diagnosis?: CaseDiagnosisReadModel | null
+  summary?: {
+    definition?: string
+    highYieldTakeaway?: string
+  } | string | null
+  recognitionPattern?: string[] | null
+  keySymptoms?: string[] | null
+  keySigns?: string[] | null
+  examPearls?: DiagnosisEducationPearl[] | string[] | null
+  investigations?: string[] | null
+  differentialDistinguishers?: DiagnosisEducationDifferential[] | string[] | null
+  pitfalls?: string[] | null
+  managementOverview?: string[] | null
+  complications?: string[] | null
+  recallPrompts?: DiagnosisEducationRecallPrompt[] | null
+  reviewedAt?: string | null
+  version: number
 }
 
 export type LeaderboardEntry = {

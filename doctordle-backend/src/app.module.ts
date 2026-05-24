@@ -16,6 +16,7 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { StatsModule } from './modules/stats/stats.module';
+import { EducationModule } from './modules/education/education.module';
 
 @Module({
   controllers: [HealthController],
@@ -36,6 +37,7 @@ import { StatsModule } from './modules/stats/stats.module';
     OrganizationsModule,
     NotificationsModule,
     StatsModule,
+    EducationModule,
   ],
 })
 export class AppModule {}

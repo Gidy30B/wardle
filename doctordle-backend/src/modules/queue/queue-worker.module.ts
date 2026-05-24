@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { RedisCacheService } from '../../core/cache/redis-cache.service';
+import { RedisCacheModule } from '../../core/cache/redis-cache.module';
 import { DatabaseModule } from '../../core/db/database.module';
 import { EventsModule } from '../../core/events/events.module';
 import { PrismaService } from '../../core/db/prisma.service';
@@ -26,6 +26,7 @@ import { QueueProcessor } from './queue.processor';
     RealtimeModule,
     NotificationsModule,
     RedisModule,
+    RedisCacheModule,
   ],
   providers: [
     QueueProcessor,
@@ -34,7 +35,6 @@ import { QueueProcessor } from './queue.processor';
     StreakService,
     XpService,
     LeaderboardService,
-    RedisCacheService,
     PrismaService,
     AppLoggerService,
     MetricsService,

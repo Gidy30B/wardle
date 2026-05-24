@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { RedisCacheService } from '../../core/cache/redis-cache.service';
+import { RedisCacheModule } from '../../core/cache/redis-cache.module';
 import { DatabaseModule } from '../../core/db/database.module';
 import { PrismaService } from '../../core/db/prisma.service';
 import { RedisModule } from '../../core/redis/redis.module';
@@ -17,13 +17,13 @@ import { AiProcessor } from './processors/ai.processor';
     RealtimeModule,
     NotificationsModule,
     RedisModule,
+    RedisCacheModule,
   ],
   providers: [
     AiProcessor,
     HintService,
     ExplanationService,
     PrismaService,
-    RedisCacheService,
   ],
 })
 export class AiWorkerModule {}

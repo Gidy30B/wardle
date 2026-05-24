@@ -192,6 +192,7 @@ describe('SessionService gameplay registry correctness', () => {
         case: {
           id: 'case-1',
           title: 'Asthma',
+          diagnosisRegistryId: 'registry-1',
           date: new Date('2026-04-22T00:00:00.000Z'),
           difficulty: 'medium',
           explanation: {
@@ -245,6 +246,8 @@ describe('SessionService gameplay registry correctness', () => {
         case: expect.objectContaining({
           id: 'case-1',
           title: 'Asthma',
+          diagnosisRegistryId: 'registry-1',
+          educationAvailable: true,
           diagnosis: {
             id: 'registry-1',
             displayLabel: 'Asthma',
@@ -270,6 +273,60 @@ describe('SessionService gameplay registry correctness', () => {
             differentials: ['COPD'],
           }),
         }),
+      }),
+    );
+  });
+
+  it('marks legacy-only learning library cases as education unavailable', async () => {
+    const fixture = createSessionServiceFixture();
+    fixture.prisma.gameSession.findMany.mockResolvedValue([
+      {
+        id: 'session-1',
+        userId: 'user-1',
+        caseId: 'case-1',
+        dailyCaseId: 'daily-1',
+        status: 'completed',
+        startedAt: new Date('2026-04-22T08:00:00.000Z'),
+        completedAt: new Date('2026-04-22T08:01:40.000Z'),
+        dailyCase: {
+          id: 'daily-1',
+          date: new Date('2026-04-22T00:00:00.000Z'),
+          track: 'DAILY',
+          sequenceIndex: 1,
+        },
+        case: {
+          id: 'case-1',
+          title: 'Asthma',
+          date: new Date('2026-04-22T00:00:00.000Z'),
+          difficulty: 'medium',
+          explanation: {
+            summary: 'Acute bronchospasm with reversible airflow obstruction.',
+          },
+          differentials: ['COPD'],
+          diagnosis: {
+            id: 'diagnosis-1',
+            name: 'Asthma',
+            system: 'Pulmonology',
+          },
+          diagnosisRegistry: null,
+          diagnosisRegistryId: null,
+        },
+        attempts: [{ result: 'correct' }],
+      },
+    ]);
+
+    const result = await fixture.service.getCompletedLearningLibrary({
+      userId: 'user-1',
+    });
+
+    expect(result.cases[0].case).toEqual(
+      expect.objectContaining({
+        diagnosisRegistryId: null,
+        educationAvailable: false,
+        diagnosis: expect.objectContaining({
+          id: 'diagnosis-1',
+          displayLabel: 'Asthma',
+        }) as unknown,
       }),
     );
   });

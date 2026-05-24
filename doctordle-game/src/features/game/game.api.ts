@@ -6,6 +6,7 @@ import type {
   LeaderboardEntry,
   LeaderboardMode,
   LearnLibraryResponse,
+  DiagnosisEducation,
   TodayCasesResponse,
   UserLeaderboardPosition,
   GameExplanation,
@@ -160,6 +161,13 @@ export async function getLearnLibraryApi(
   request: RequestJson,
 ): Promise<LearnLibraryResponse> {
   return request<LearnLibraryResponse>('/game/learn')
+}
+
+export async function getDiagnosisEducationApi(
+  request: RequestJson,
+  diagnosisRegistryId: string,
+): Promise<DiagnosisEducation> {
+  return request<DiagnosisEducation>(`/education/diagnoses/${diagnosisRegistryId}`)
 }
 
 export async function getLeaderboardApi(
