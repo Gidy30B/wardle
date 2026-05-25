@@ -6,6 +6,7 @@ import type {
   ClinicalClue,
   DiagnosisEducation,
   LearnLibraryCase,
+  TypedEducationPearl,
 } from "../../../game.types";
 import { useDiagnosisEducation } from "../../../useDiagnosisEducation";
 import type { DetailTab } from "../learn.types";
@@ -79,6 +80,23 @@ function getString(value: unknown) {
   return trimmed.length ? trimmed : null;
 }
 
+function isTypedPearl(value: unknown): value is TypedEducationPearl {
+  return (
+    isRecord(value) &&
+    typeof value.type === "string" &&
+    typeof value.content === "string" &&
+    value.content.trim().length > 0
+  );
+}
+
+function pearlTypeLabel(type: string) {
+  return type
+    .toLowerCase()
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 function getEducationSummary(education: DiagnosisEducation | null) {
   if (!education?.summary) {
     return { definition: null, takeaway: null };
@@ -112,12 +130,34 @@ function buildCompareItems({
   });
 
   education?.differentialDistinguishers?.forEach((entry) => {
-    const name = typeof entry === "string" ? entry : entry.diagnosis;
+    const name =
+      typeof entry === "string"
+        ? entry
+        : isTypedPearl(entry)
+          ? entry.title
+          : entry.diagnosis;
     const generalPoint =
-      typeof entry === "string" ? undefined : entry.distinguishingPoint;
-    const whyConfused = typeof entry === "string" ? undefined : entry.whyConfused;
-    const keySeparator = typeof entry === "string" ? undefined : entry.keySeparator;
-    const classicTrap = typeof entry === "string" ? undefined : entry.classicTrap;
+      typeof entry === "string"
+        ? undefined
+        : isTypedPearl(entry)
+          ? entry.content
+          : entry.distinguishingPoint;
+    const whyConfused =
+      typeof entry === "string" || isTypedPearl(entry)
+        ? undefined
+        : entry.whyConfused;
+    const keySeparator =
+      typeof entry === "string"
+        ? undefined
+        : isTypedPearl(entry)
+          ? entry.discriminator
+          : entry.keySeparator;
+    const classicTrap =
+      typeof entry === "string"
+        ? undefined
+        : isTypedPearl(entry)
+          ? entry.trapAvoided
+          : entry.classicTrap;
     if (!name) return;
 
     const normalized = normalizeDiagnosisName(name);
@@ -913,6 +953,22 @@ function renderEducationInsight(item: unknown): {
 
   if (!isRecord(item)) return null;
 
+  if (isTypedPearl(item)) {
+    const details = [
+      insightDetail("separates", item.discriminator),
+      insightDetail("urgency", item.managementImplication),
+      insightDetail("urgency", item.escalationImplication),
+      insightDetail("trap", item.trapAvoided),
+      insightDetail("mechanism", item.whyItMatters),
+    ].filter((detail): detail is InsightDetail => Boolean(detail));
+
+    return {
+      title: item.title ?? pearlTypeLabel(item.type),
+      body: item.content,
+      details,
+    };
+  }
+
   const title =
     getString(item.pattern) ??
     getString(item.finding) ??
@@ -1046,11 +1102,35 @@ function EducationPearlList({
   return (
     <div className="space-y-1.5">
       {pearls.map((pearl) => {
-        const label = typeof pearl === "string" ? pearl : pearl.label;
+        const typed = isTypedPearl(pearl) ? pearl : null;
+        const legacyPearl: Record<string, unknown> | null =
+          !typed && isRecord(pearl) ? pearl : null;
+        const label =
+          typeof pearl === "string"
+            ? pearl
+            : typed
+              ? (typed.title ?? pearlTypeLabel(typed.type))
+              : getString(legacyPearl?.label);
         const explanation =
-          typeof pearl === "string" ? undefined : pearl.explanation;
+          typeof pearl === "string"
+            ? undefined
+            : typed
+              ? typed.content
+              : getString(legacyPearl?.explanation) ?? undefined;
         const whyItMatters =
-          typeof pearl === "string" ? undefined : pearl.whyItMatters;
+          typeof pearl === "string"
+            ? undefined
+            : typed
+              ? typed.whyItMatters
+              : getString(legacyPearl?.whyItMatters) ?? undefined;
+        const secondaryDetails = typed
+          ? [
+              insightDetail("separates", typed.discriminator),
+              insightDetail("urgency", typed.managementImplication),
+              insightDetail("urgency", typed.escalationImplication),
+              insightDetail("trap", typed.trapAvoided),
+            ].filter((detail): detail is InsightDetail => Boolean(detail))
+          : [];
 
         if (!label && !explanation) return null;
 
@@ -1059,6 +1139,11 @@ function EducationPearlList({
             key={`${label ?? ""}-${explanation ?? ""}`}
             className="rounded-[13px] border border-[rgba(0,180,166,0.12)] bg-[rgba(0,180,166,0.04)] px-4 py-3"
           >
+            {typed ? (
+              <p className="mb-1 font-brand-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--wardle-color-teal)]/50">
+                {pearlTypeLabel(typed.type)}
+              </p>
+            ) : null}
             {label ? (
               <p className="break-words text-sm font-bold text-[var(--wardle-color-teal)]/86">
                 {label}
@@ -1073,6 +1158,9 @@ function EducationPearlList({
               <p className="mt-2 break-words border-l border-[var(--wardle-color-teal)]/20 pl-2.5 text-[12px] leading-5 text-white/44">
                 {whyItMatters}
               </p>
+            ) : null}
+            {secondaryDetails.length ? (
+              <InsightDetailStack details={secondaryDetails} warning={false} />
             ) : null}
           </div>
         );

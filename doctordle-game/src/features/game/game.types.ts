@@ -247,6 +247,38 @@ export type DiagnosisEducationRecallPrompt = {
   difficulty?: 'BASIC' | 'INTERMEDIATE' | 'ADVANCED'
 }
 
+export type PearlType =
+  | 'PATTERN_RECOGNITION'
+  | 'HIGH_YIELD_DISCRIMINATOR'
+  | 'PITFALL'
+  | 'ESCALATION_RED_FLAG'
+  | 'MANAGEMENT'
+  | 'MNEMONIC'
+  | 'EXAM'
+  | 'INVESTIGATION'
+
+export type PearlCritique = {
+  genericityScore?: number
+  discriminatorStrength?: number
+  operationalReasoningScore?: number
+  memorabilityScore?: number
+  managementImpactScore?: number
+  warnings: string[]
+}
+
+export type TypedEducationPearl = {
+  id: string
+  type: PearlType
+  title?: string
+  content: string
+  whyItMatters?: string
+  discriminator?: string
+  managementImplication?: string
+  escalationImplication?: string
+  trapAvoided?: string
+  critique?: PearlCritique
+}
+
 export type DiagnosisEducationDifferential = {
   diagnosis?: string
   whyConfused?: string
@@ -256,9 +288,18 @@ export type DiagnosisEducationDifferential = {
 }
 
 export type DiagnosisEducationPearl = {
+  id?: string
+  type?: PearlType
+  title?: string
+  content?: string
   label?: string
   explanation?: string
   whyItMatters?: string
+  discriminator?: string
+  managementImplication?: string
+  escalationImplication?: string
+  trapAvoided?: string
+  critique?: PearlCritique
 }
 
 export type DiagnosisEducationClinicalPattern = {
@@ -303,14 +344,14 @@ export type DiagnosisEducation = {
     definition?: string
     highYieldTakeaway?: string
   } | string | null
-  recognitionPattern?: Array<string | DiagnosisEducationClinicalPattern> | null
+  recognitionPattern?: Array<string | DiagnosisEducationClinicalPattern | TypedEducationPearl> | null
   keySymptoms?: Array<string | DiagnosisEducationFinding> | null
   keySigns?: Array<string | DiagnosisEducationFinding> | null
-  examPearls?: DiagnosisEducationPearl[] | string[] | null
-  investigations?: Array<string | DiagnosisEducationInvestigation> | null
-  differentialDistinguishers?: DiagnosisEducationDifferential[] | string[] | null
-  pitfalls?: Array<string | DiagnosisEducationPitfall> | null
-  managementOverview?: Array<string | DiagnosisEducationManagement> | null
+  examPearls?: Array<string | DiagnosisEducationPearl | TypedEducationPearl> | null
+  investigations?: Array<string | DiagnosisEducationInvestigation | TypedEducationPearl> | null
+  differentialDistinguishers?: Array<string | DiagnosisEducationDifferential | TypedEducationPearl> | null
+  pitfalls?: Array<string | DiagnosisEducationPitfall | TypedEducationPearl> | null
+  managementOverview?: Array<string | DiagnosisEducationManagement | TypedEducationPearl> | null
   complications?: string[] | null
   recallPrompts?: DiagnosisEducationRecallPrompt[] | null
   reviewedAt?: string | null

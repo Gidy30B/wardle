@@ -270,10 +270,51 @@ export type DiagnosisEducationSummary = {
   highYieldTakeaway?: string;
 };
 
+export type PearlType =
+  | 'PATTERN_RECOGNITION'
+  | 'HIGH_YIELD_DISCRIMINATOR'
+  | 'PITFALL'
+  | 'ESCALATION_RED_FLAG'
+  | 'MANAGEMENT'
+  | 'MNEMONIC'
+  | 'EXAM'
+  | 'INVESTIGATION';
+
+export type PearlCritique = {
+  genericityScore?: number;
+  discriminatorStrength?: number;
+  operationalReasoningScore?: number;
+  memorabilityScore?: number;
+  managementImpactScore?: number;
+  warnings: string[];
+};
+
+export type TypedEducationPearl = {
+  id: string;
+  type: PearlType;
+  title?: string;
+  content: string;
+  whyItMatters?: string;
+  discriminator?: string;
+  managementImplication?: string;
+  escalationImplication?: string;
+  trapAvoided?: string;
+  critique?: PearlCritique;
+};
+
 export type DiagnosisEducationPearl = {
+  id?: string;
+  type?: PearlType;
+  title?: string;
+  content?: string;
   label: string;
   explanation: string;
   whyItMatters?: string;
+  discriminator?: string;
+  managementImplication?: string;
+  escalationImplication?: string;
+  trapAvoided?: string;
+  critique?: PearlCritique;
 };
 
 export type DiagnosisEducationDifferential = {

@@ -322,6 +322,27 @@ function buildValidGeneratedDraft(
   };
 }
 
+function buildTypedPearl(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'dka-kussmaul-respirations',
+    type: 'EXAM',
+    title: 'Kussmaul respirations',
+    content:
+      'Deep, labored respirations support clinically significant metabolic acidosis rather than uncomplicated hyperglycemia.',
+    whyItMatters:
+      'This shifts concern toward advanced DKA physiology and need for close monitoring.',
+    discriminator:
+      'Favors ketoacidosis over isolated hyperglycemia or anxiety-related tachypnea.',
+    managementImplication:
+      'Prompts electrolyte-aware DKA management rather than simple glucose correction.',
+    escalationImplication:
+      'Raises concern for monitored care when paired with altered mentation or profound acidemia.',
+    trapAvoided:
+      'Avoids dismissing compensatory respiratory effort as nonspecific shortness of breath.',
+    ...overrides,
+  };
+}
+
 function mockOpenAiDraft(service: DiagnosisEducationService, payload: string) {
   const create = jest.fn().mockResolvedValue({
     choices: [{ message: { content: payload } }],
@@ -811,6 +832,57 @@ describe('DiagnosisEducationService', () => {
     expect(result).toEqual(savedEducation);
   });
 
+  it('normalizes typed generated pearls with critique metadata', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
+    resetEnvCacheForTests();
+    const { prisma, tx, service } = buildService();
+    const typedPearl = buildTypedPearl();
+    prisma.diagnosisRegistry.findUnique.mockResolvedValue(
+      buildRegistryForGeneration(),
+    );
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
+    tx.diagnosisEducation.create.mockResolvedValue(
+      buildEducation({
+        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+        source: DiagnosisEducationSource.AI_ASSISTED,
+        reviewedAt: null,
+        reviewedByUserId: null,
+        publishedAt: null,
+      }),
+    );
+    mockOpenAiDraft(
+      service,
+      JSON.stringify(
+        buildValidGeneratedDraft({
+          examPearls: [typedPearl],
+        }),
+      ),
+    );
+
+    await service.generateDraft('registry-1', 'admin-1');
+
+    expect(tx.diagnosisEducation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          examPearls: [
+            expect.objectContaining({
+              id: 'dka-kussmaul-respirations',
+              type: 'EXAM',
+              title: 'Kussmaul respirations',
+              content:
+                'Deep, labored respirations support clinically significant metabolic acidosis rather than uncomplicated hyperglycemia.',
+              critique: expect.objectContaining({
+                warnings: expect.any(Array),
+                operationalReasoningScore: expect.any(Number),
+              }) as unknown,
+            }),
+          ],
+        }),
+      }),
+    );
+  });
+
   it('requests the exact diagnosis education JSON schema from AI', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
     process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
@@ -853,6 +925,11 @@ describe('DiagnosisEducationService', () => {
     );
     expect(request.messages[1].content).toContain('"clinicalPattern"');
     expect(request.messages[1].content).toContain('"differentials"');
+    expect(request.messages[1].content).toContain('typedPearlContract');
+    expect(request.messages[1].content).toContain('HIGH_YIELD_DISCRIMINATOR');
+    expect(request.messages[1].content).toContain(
+      'Typed pearl content must be 18-45 words',
+    );
     expect(request.messages[0].content).toContain('named signs');
     expect(request.messages[0].content).toContain('senior clinician');
     expect(request.messages[0].content).toContain('why it matters diagnostically');
@@ -971,6 +1048,33 @@ describe('DiagnosisEducationService', () => {
     });
 
     expect(warnings).not.toContain('generic_exam_pearl_why_layer');
+  });
+
+  it('collects typed pearl warning codes from critique metadata', () => {
+    const { service } = buildService();
+    const warnings = (
+      service as unknown as {
+        collectEducationQualityWarnings: (
+          draft: Record<string, unknown>,
+        ) => string[];
+      }
+    ).collectEducationQualityWarnings({
+      ...buildValidGeneratedDraft({
+        examPearls: [
+          buildTypedPearl({
+            content: 'Important finding.',
+            whyItMatters: '',
+            discriminator: '',
+            managementImplication: '',
+            escalationImplication: '',
+            trapAvoided: '',
+          }),
+        ],
+      }),
+    });
+
+    expect(warnings).toContain('typed_pearl_too_short');
+    expect(warnings).toContain('typed_pearl_missing_why_layer');
   });
 
   it('normalizes safe legacy AI aliases before validation', async () => {

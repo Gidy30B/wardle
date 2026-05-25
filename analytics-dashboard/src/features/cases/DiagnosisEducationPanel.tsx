@@ -281,13 +281,30 @@ export default function DiagnosisEducationPanel({
         ),
         examPearls: state.examPearls
           .map((pearl) => ({
+            ...(pearl.id?.trim() ? { id: pearl.id.trim() } : {}),
+            ...(pearl.type ? { type: pearl.type } : {}),
+            ...(pearl.title?.trim() ? { title: pearl.title.trim() } : {}),
+            ...(pearl.content?.trim() ? { content: pearl.content.trim() } : {}),
             label: pearl.label.trim(),
             explanation: pearl.explanation.trim(),
             ...(pearl.whyItMatters?.trim()
               ? { whyItMatters: pearl.whyItMatters.trim() }
               : {}),
+            ...(pearl.discriminator?.trim()
+              ? { discriminator: pearl.discriminator.trim() }
+              : {}),
+            ...(pearl.managementImplication?.trim()
+              ? { managementImplication: pearl.managementImplication.trim() }
+              : {}),
+            ...(pearl.escalationImplication?.trim()
+              ? { escalationImplication: pearl.escalationImplication.trim() }
+              : {}),
+            ...(pearl.trapAvoided?.trim()
+              ? { trapAvoided: pearl.trapAvoided.trim() }
+              : {}),
+            ...(pearl.critique ? { critique: pearl.critique } : {}),
           }))
-          .filter((pearl) => pearl.label && pearl.explanation),
+          .filter((pearl) => (pearl.label && pearl.explanation) || pearl.content),
         differentials: state.differentials
           .map((item) => ({
             diagnosis: item.diagnosis.trim(),
@@ -757,40 +774,59 @@ function PearlRows({
         Exam pearls
       </p>
       {rows.map((row, index) => (
-        <div key={index} className="grid gap-2 md:grid-cols-[1fr_2fr_auto]">
-          <input
-            type="text"
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            placeholder="Label"
-            value={row.label}
-            disabled={disabled}
-            onChange={(event) =>
-              onChange(replaceAt(rows, index, { ...row, label: event.target.value }))
-            }
-          />
-          <input
-            type="text"
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            placeholder="Explanation"
-            value={row.explanation}
-            disabled={disabled}
-            onChange={(event) =>
-              onChange(
-                replaceAt(rows, index, {
-                  ...row,
-                  explanation: event.target.value,
-                }),
-              )
-            }
-          />
-          <button
-            type="button"
-            disabled={disabled || rows.length === 1}
-            onClick={() => onChange(rows.filter((_, rowIndex) => rowIndex !== index))}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Remove
-          </button>
+        <div key={index} className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="grid gap-2 md:grid-cols-[1fr_2fr_auto]">
+            <input
+              type="text"
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Label"
+              value={row.title ?? row.label}
+              disabled={disabled}
+              onChange={(event) =>
+                onChange(
+                  replaceAt(rows, index, {
+                    ...row,
+                    title: row.type ? event.target.value : row.title,
+                    label: event.target.value,
+                  }),
+                )
+              }
+            />
+            <input
+              type="text"
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Explanation"
+              value={row.content ?? row.explanation}
+              disabled={disabled}
+              onChange={(event) =>
+                onChange(
+                  replaceAt(rows, index, {
+                    ...row,
+                    content: row.type ? event.target.value : row.content,
+                    explanation: event.target.value,
+                  }),
+                )
+              }
+            />
+            <button
+              type="button"
+              disabled={disabled || rows.length === 1}
+              onClick={() => onChange(rows.filter((_, rowIndex) => rowIndex !== index))}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Remove
+            </button>
+          </div>
+          {row.type || row.critique?.warnings?.length ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {row.type ? (
+                <span className="rounded-full bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700">
+                  {pearlTypeLabel(row.type)}
+                </span>
+              ) : null}
+              <PearlWarningBadges warnings={row.critique?.warnings ?? []} />
+            </div>
+          ) : null}
         </div>
       ))}
       <button
@@ -873,6 +909,38 @@ function DifferentialRows({
       </button>
     </div>
   );
+}
+
+function PearlWarningBadges({ warnings }: { warnings: string[] }) {
+  if (!warnings.length) {
+    return null;
+  }
+
+  return (
+    <>
+      {warnings.slice(0, 4).map((warning) => (
+        <span
+          key={warning}
+          className="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700"
+        >
+          {warning.replace(/_/g, ' ')}
+        </span>
+      ))}
+      {warnings.length > 4 ? (
+        <span className="text-xs font-medium text-slate-500">
+          +{warnings.length - 4} more
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+function pearlTypeLabel(type: string) {
+  return type
+    .toLowerCase()
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 }
 
 function EducationPreview({
@@ -1067,15 +1135,74 @@ function parsePearls(value: JsonValue | null): DiagnosisEducationPearl[] {
   const rows = value
     .map((item) => asRecord(item))
     .map((item) => ({
-      label: typeof item.label === 'string' ? item.label : '',
+      id: typeof item.id === 'string' ? item.id : undefined,
+      type: typeof item.type === 'string' ? item.type as DiagnosisEducationPearl['type'] : undefined,
+      title: typeof item.title === 'string' ? item.title : undefined,
+      content: typeof item.content === 'string' ? item.content : undefined,
+      label:
+        typeof item.label === 'string'
+          ? item.label
+          : typeof item.title === 'string'
+            ? item.title
+            : '',
       explanation:
-        typeof item.explanation === 'string' ? item.explanation : '',
+        typeof item.explanation === 'string'
+          ? item.explanation
+          : typeof item.content === 'string'
+            ? item.content
+            : '',
       whyItMatters:
         typeof item.whyItMatters === 'string' ? item.whyItMatters : undefined,
+      discriminator:
+        typeof item.discriminator === 'string' ? item.discriminator : undefined,
+      managementImplication:
+        typeof item.managementImplication === 'string'
+          ? item.managementImplication
+          : undefined,
+      escalationImplication:
+        typeof item.escalationImplication === 'string'
+          ? item.escalationImplication
+          : undefined,
+      trapAvoided:
+        typeof item.trapAvoided === 'string' ? item.trapAvoided : undefined,
+      critique: parsePearlCritique(item.critique),
     }))
     .filter((item) => item.label || item.explanation);
 
   return rows.length > 0 ? rows : [{ label: '', explanation: '' }];
+}
+
+function parsePearlCritique(value: unknown): DiagnosisEducationPearl['critique'] {
+  const record = asRecord(value);
+  if (!Array.isArray(record.warnings)) {
+    return undefined;
+  }
+
+  return {
+    genericityScore:
+      typeof record.genericityScore === 'number'
+        ? record.genericityScore
+        : undefined,
+    discriminatorStrength:
+      typeof record.discriminatorStrength === 'number'
+        ? record.discriminatorStrength
+        : undefined,
+    operationalReasoningScore:
+      typeof record.operationalReasoningScore === 'number'
+        ? record.operationalReasoningScore
+        : undefined,
+    memorabilityScore:
+      typeof record.memorabilityScore === 'number'
+        ? record.memorabilityScore
+        : undefined,
+    managementImpactScore:
+      typeof record.managementImpactScore === 'number'
+        ? record.managementImpactScore
+        : undefined,
+    warnings: record.warnings.filter(
+      (warning): warning is string => typeof warning === 'string',
+    ),
+  };
 }
 
 function parseDifferentials(
@@ -1134,6 +1261,16 @@ function qualityWarningCopy(warning: string): string {
       'Differentials need stronger contrast, not just mimic summaries.',
     missing_why_it_matters_recall_prompt:
       'Recall prompts should include at least one why-it-matters question.',
+    typed_pearl_generic_phrase:
+      'Typed pearl warning: generic phrase detected; rewrite as operational reasoning.',
+    typed_pearl_missing_operational_reasoning:
+      'Typed pearl warning: add discriminator, management impact, escalation logic, or trap avoided.',
+    typed_pearl_weak_discriminator:
+      'Typed pearl warning: discriminator pearl needs a stronger contrast against mimics.',
+    typed_pearl_duplicate_teaching_point:
+      'Typed pearl warning: duplicate teaching point detected.',
+    generic_exam_pearl_why_layer:
+      'Exam pearl why-layer is too generic; explain what changes clinically.',
   };
 
   return copy[warning] ?? warning;
@@ -1148,6 +1285,8 @@ function publishBlockerCopy(blocker: string): string {
       'Publish blocker: content sounds patient-specific rather than educational.',
     high_risk_sections_need_references:
       'Publish blocker: management, investigations, or scoring content needs references.',
+    typed_pearl_missing_required_content:
+      'Publish blocker: typed pearl is missing id, type, or content.',
   };
 
   return copy[blocker] ?? `Publish blocker: ${blocker}`;

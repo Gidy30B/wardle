@@ -48,6 +48,34 @@ const EDUCATION_JSON_FIELDS: EducationJsonField[] = [
   'references',
 ];
 
+const PEARL_TYPE_VALUES = [
+  'PATTERN_RECOGNITION',
+  'HIGH_YIELD_DISCRIMINATOR',
+  'PITFALL',
+  'ESCALATION_RED_FLAG',
+  'MANAGEMENT',
+  'MNEMONIC',
+  'EXAM',
+  'INVESTIGATION',
+] as const;
+
+const TYPED_PEARL_DRAFT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['id', 'type', 'title', 'content', 'whyItMatters'],
+  properties: {
+    id: { type: 'string' },
+    type: { type: 'string', enum: PEARL_TYPE_VALUES },
+    title: { type: 'string' },
+    content: { type: 'string' },
+    whyItMatters: { type: 'string' },
+    discriminator: { type: 'string' },
+    managementImplication: { type: 'string' },
+    escalationImplication: { type: 'string' },
+    trapAvoided: { type: 'string' },
+  },
+} as const;
+
 const DIAGNOSIS_EDUCATION_DRAFT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -66,17 +94,7 @@ const DIAGNOSIS_EDUCATION_DRAFT_SCHEMA = {
       type: 'array',
       minItems: 3,
       maxItems: 5,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['pattern', 'whyItMatters', 'progression', 'commonTrap'],
-        properties: {
-          pattern: { type: 'string' },
-          whyItMatters: { type: 'string' },
-          progression: { type: 'string' },
-          commonTrap: { type: 'string' },
-        },
-      },
+      items: TYPED_PEARL_DRAFT_SCHEMA,
     },
     keySymptoms: {
       type: 'array',
@@ -114,17 +132,7 @@ const DIAGNOSIS_EDUCATION_DRAFT_SCHEMA = {
       type: 'array',
       minItems: 3,
       maxItems: 6,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['id', 'label', 'explanation', 'whyItMatters'],
-        properties: {
-          id: { type: 'string' },
-          label: { type: 'string' },
-          explanation: { type: 'string' },
-          whyItMatters: { type: 'string' },
-        },
-      },
+      items: TYPED_PEARL_DRAFT_SCHEMA,
     },
     scoringSystems: {
       type: 'array',
@@ -145,74 +153,26 @@ const DIAGNOSIS_EDUCATION_DRAFT_SCHEMA = {
       type: 'array',
       minItems: 3,
       maxItems: 6,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['test', 'significance', 'interpretation', 'discriminator'],
-        properties: {
-          test: { type: 'string' },
-          significance: { type: 'string' },
-          interpretation: { type: 'string' },
-          discriminator: { type: 'string' },
-        },
-      },
+      items: TYPED_PEARL_DRAFT_SCHEMA,
     },
     differentials: {
       type: 'array',
       minItems: 3,
       maxItems: 6,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: [
-          'id',
-          'diagnosis',
-          'whyConfused',
-          'distinguishingPoint',
-          'keySeparator',
-          'classicTrap',
-        ],
-        properties: {
-          id: { type: 'string' },
-          diagnosis: { type: 'string' },
-          whyConfused: { type: 'string' },
-          distinguishingPoint: { type: 'string' },
-          keySeparator: { type: 'string' },
-          classicTrap: { type: 'string' },
-        },
-      },
+      items: TYPED_PEARL_DRAFT_SCHEMA,
     },
     management: {
       type: 'array',
       minItems: 3,
       maxItems: 6,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['step', 'rationale', 'urgency'],
-        properties: {
-          step: { type: 'string' },
-          rationale: { type: 'string' },
-          urgency: { type: 'string' },
-        },
-      },
+      items: TYPED_PEARL_DRAFT_SCHEMA,
     },
     complications: { type: 'array', items: { type: 'string' } },
     pitfalls: {
       type: 'array',
       minItems: 3,
       maxItems: 5,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['pitfall', 'whyItHappens', 'consequence', 'saferHeuristic'],
-        properties: {
-          pitfall: { type: 'string' },
-          whyItHappens: { type: 'string' },
-          consequence: { type: 'string' },
-          saferHeuristic: { type: 'string' },
-        },
-      },
+      items: TYPED_PEARL_DRAFT_SCHEMA,
     },
     recallPrompts: {
       type: 'array',
@@ -267,6 +227,30 @@ type EducationWriteData = {
 } & Partial<Record<EducationJsonField, Prisma.InputJsonValue>>;
 
 type ValidatedEducationDraft = Record<EducationJsonField, Prisma.InputJsonValue>;
+
+type PearlType = (typeof PEARL_TYPE_VALUES)[number];
+
+type PearlCritique = {
+  genericityScore?: number;
+  discriminatorStrength?: number;
+  operationalReasoningScore?: number;
+  memorabilityScore?: number;
+  managementImpactScore?: number;
+  warnings: string[];
+};
+
+type TypedEducationPearl = {
+  id: string;
+  type: PearlType;
+  title?: string;
+  content: string;
+  whyItMatters?: string;
+  discriminator?: string;
+  managementImplication?: string;
+  escalationImplication?: string;
+  trapAvoided?: string;
+  critique?: PearlCritique;
+};
 
 const PUBLISHABLE_REVIEW_STATUSES = new Set<DiagnosisEducationStatus>([
   DiagnosisEducationStatus.NEEDS_EDIT,
@@ -323,6 +307,12 @@ const GENERIC_WHY_LAYER_PHRASES = [
   'early diagnosis',
   'therapeutic interventions',
   'prioritizes urgent evaluation',
+  'early diagnosis is important',
+  'prompt treatment is necessary',
+  'can be life-threatening',
+  'requires urgent management',
+  'clinical correlation is advised',
+  'timely intervention is crucial',
 ];
 
 const WHY_LAYER_REASONING_MARKERS = [
@@ -783,6 +773,9 @@ export class DiagnosisEducationService {
               'Use differentials, not differentialDistinguishers.',
               'summary must be an object, not a string.',
               'All ids must be stable kebab-case strings.',
+              'Use typed clinical cognition pearls for clinicalPattern, examPearls, investigations, differentials, management, and pitfalls.',
+              'Each typed pearl must include id, type, title, content, and whyItMatters.',
+              'Typed pearl content must be 18-45 words and no more than 2 sentences.',
               'Write clinically specific, high-yield teaching pearls rather than generic textbook summaries.',
               'Prefer compressed, high-yield statements. Avoid isolated symptom lists and generic textbook phrasing.',
               'Explain diagnostic significance, discriminating features, temporal progression, and common confusions when relevant.',
@@ -800,6 +793,22 @@ export class DiagnosisEducationService {
           role: 'user',
           content: JSON.stringify({
             task: 'Draft diagnosis-level high-yield education for editorial review.',
+            typedPearlContract: {
+              requiredFields: ['id', 'type', 'title', 'content', 'whyItMatters'],
+              optionalFields: [
+                'discriminator',
+                'managementImplication',
+                'escalationImplication',
+                'trapAvoided',
+              ],
+              allowedTypes: PEARL_TYPE_VALUES,
+              constraints: [
+                'content must be 18-45 words.',
+                'content must be no more than 2 sentences.',
+                'Each pearl must prevent a mistake, change management, distinguish similar diagnoses, or explain why a finding matters.',
+                'Avoid textbook introductions and generic urgency statements.',
+              ],
+            },
             exactOutputShape: {
               summary: {
                 definition: 'string',
@@ -807,10 +816,15 @@ export class DiagnosisEducationService {
               },
               clinicalPattern: [
                 {
-                  pattern: 'string',
+                  id: 'stable-kebab-case-string',
+                  type: 'PATTERN_RECOGNITION',
+                  title: 'string',
+                  content: '18-45 words, max 2 sentences',
                   whyItMatters: 'string',
-                  progression: 'string',
-                  commonTrap: 'string',
+                  discriminator: 'string',
+                  managementImplication: 'string',
+                  escalationImplication: 'string',
+                  trapAvoided: 'string',
                 },
               ],
               keySymptoms: [
@@ -832,9 +846,14 @@ export class DiagnosisEducationService {
               examPearls: [
                 {
                   id: 'stable-kebab-case-string',
-                  label: 'string',
-                  explanation: 'string',
+                  type: 'EXAM',
+                  title: 'string',
+                  content: '18-45 words, max 2 sentences',
                   whyItMatters: 'string',
+                  discriminator: 'string',
+                  managementImplication: 'string',
+                  escalationImplication: 'string',
+                  trapAvoided: 'string',
                 },
               ],
               scoringSystems: [
@@ -848,36 +867,55 @@ export class DiagnosisEducationService {
               ],
               investigations: [
                 {
-                  test: 'string',
-                  significance: 'string',
-                  interpretation: 'string',
+                  id: 'stable-kebab-case-string',
+                  type: 'INVESTIGATION',
+                  title: 'string',
+                  content: '18-45 words, max 2 sentences',
+                  whyItMatters: 'string',
                   discriminator: 'string',
+                  managementImplication: 'string',
+                  escalationImplication: 'string',
+                  trapAvoided: 'string',
                 },
               ],
               differentials: [
                 {
                   id: 'stable-kebab-case-string',
-                  diagnosis: 'string',
-                  whyConfused: 'string',
-                  distinguishingPoint: 'string',
-                  keySeparator: 'string',
-                  classicTrap: 'string',
+                  type: 'HIGH_YIELD_DISCRIMINATOR',
+                  title: 'close mimic diagnosis',
+                  content: '18-45 words, max 2 sentences',
+                  whyItMatters: 'string',
+                  discriminator: 'string',
+                  managementImplication: 'string',
+                  escalationImplication: 'string',
+                  trapAvoided: 'string',
                 },
               ],
               management: [
                 {
-                  step: 'string',
-                  rationale: 'string',
-                  urgency: 'string',
+                  id: 'stable-kebab-case-string',
+                  type: 'MANAGEMENT',
+                  title: 'string',
+                  content: '18-45 words, max 2 sentences',
+                  whyItMatters: 'string',
+                  discriminator: 'string',
+                  managementImplication: 'string',
+                  escalationImplication: 'string',
+                  trapAvoided: 'string',
                 },
               ],
               complications: ['string'],
               pitfalls: [
                 {
-                  pitfall: 'string',
-                  whyItHappens: 'string',
-                  consequence: 'string',
-                  saferHeuristic: 'string',
+                  id: 'stable-kebab-case-string',
+                  type: 'PITFALL',
+                  title: 'string',
+                  content: '18-45 words, max 2 sentences',
+                  whyItMatters: 'string',
+                  discriminator: 'string',
+                  managementImplication: 'string',
+                  escalationImplication: 'string',
+                  trapAvoided: 'string',
                 },
               ],
               recallPrompts: [
@@ -1041,8 +1079,10 @@ export class DiagnosisEducationService {
               'Do not use recognitionPattern; use clinicalPattern.',
               'Do not use differentialDistinguishers; use differentials.',
               'summary must be an object with definition and highYieldTakeaway.',
-              'examPearls must be objects with id, label, and explanation.',
-              'differentials must be objects with id, diagnosis, and distinguishingPoint.',
+              'clinicalPattern, examPearls, investigations, differentials, management, and pitfalls must use typed pearl objects.',
+              'Typed pearl objects must include id, type, title, content, and whyItMatters.',
+              'Typed pearl content must be 18-45 words and no more than 2 sentences.',
+              'Typed pearls must answer at least one: what mistake this prevents, how management changes, how similar diagnoses are distinguished, or why the finding matters.',
               'scoringSystems must be objects with id, name, use, components, and caution.',
               'recallPrompts must be objects with id, type, prompt, answer, sourceSection, and difficulty.',
               'recallPrompts may include explanation and linkedConcept.',
@@ -1179,8 +1219,9 @@ export class DiagnosisEducationService {
     }
 
     if ('clinicalPattern' in draft && draft.clinicalPattern !== null) {
-      const value = this.validateObjectOrStringArray(
+      const value = this.validateEducationPearlArray(
         draft.clinicalPattern,
+        'PATTERN_RECOGNITION',
         ['pattern', 'whyItMatters'],
         ['progression', 'commonTrap'],
       );
@@ -1207,8 +1248,9 @@ export class DiagnosisEducationService {
     }
 
     if ('examPearls' in draft && draft.examPearls !== null) {
-      const value = this.validateObjectOrStringArray(
+      const value = this.validateEducationPearlArray(
         draft.examPearls,
+        'EXAM',
         ['label', 'explanation'],
         ['id', 'whyItMatters'],
       );
@@ -1220,8 +1262,9 @@ export class DiagnosisEducationService {
     }
 
     if ('investigations' in draft && draft.investigations !== null) {
-      const value = this.validateObjectOrStringArray(
+      const value = this.validateEducationPearlArray(
         draft.investigations,
+        'INVESTIGATION',
         ['test', 'significance'],
         ['interpretation', 'discriminator'],
       );
@@ -1233,8 +1276,9 @@ export class DiagnosisEducationService {
     }
 
     if ('differentials' in draft && draft.differentials !== null) {
-      const value = this.validateObjectOrStringArray(
+      const value = this.validateEducationPearlArray(
         draft.differentials,
+        'HIGH_YIELD_DISCRIMINATOR',
         ['diagnosis', 'distinguishingPoint'],
         ['id', 'whyConfused', 'keySeparator', 'classicTrap'],
       );
@@ -1248,8 +1292,9 @@ export class DiagnosisEducationService {
     }
 
     if ('management' in draft && draft.management !== null) {
-      const value = this.validateObjectOrStringArray(
+      const value = this.validateEducationPearlArray(
         draft.management,
+        'MANAGEMENT',
         ['step'],
         ['rationale', 'urgency'],
       );
@@ -1261,8 +1306,9 @@ export class DiagnosisEducationService {
     }
 
     if ('pitfalls' in draft && draft.pitfalls !== null) {
-      const value = this.validateObjectOrStringArray(
+      const value = this.validateEducationPearlArray(
         draft.pitfalls,
+        'PITFALL',
         ['pitfall'],
         ['whyItHappens', 'consequence', 'saferHeuristic'],
       );
@@ -1375,6 +1421,10 @@ export class DiagnosisEducationService {
       warnings.push('generic_exam_pearl_why_layer');
     }
 
+    for (const warning of this.collectTypedPearlWarningCodes(draft)) {
+      warnings.push(`typed_pearl_${warning}`);
+    }
+
     return warnings;
   }
 
@@ -1479,6 +1529,138 @@ export class DiagnosisEducationService {
     return !WHY_LAYER_REASONING_MARKERS.some((marker) =>
       normalized.includes(marker),
     );
+  }
+
+  private collectTypedPearlWarningCodes(
+    draft: Partial<Record<EducationJsonField, unknown>>,
+  ): string[] {
+    const warnings = new Set<string>();
+
+    for (const field of [
+      'clinicalPattern',
+      'examPearls',
+      'investigations',
+      'differentials',
+      'management',
+      'pitfalls',
+    ] satisfies EducationJsonField[]) {
+      const value = draft[field];
+      if (!Array.isArray(value)) {
+        continue;
+      }
+
+      for (const item of value) {
+        if (!this.isPlainObject(item) || !this.isTypedEducationPearl(item)) {
+          continue;
+        }
+
+        const critique = this.extractPearlCritique(item);
+        for (const warning of critique.warnings) {
+          warnings.add(warning);
+        }
+      }
+    }
+
+    return [...warnings].sort();
+  }
+
+  private collectTypedPearlPublishBlockers(
+    draft: Partial<Record<EducationJsonField, unknown>>,
+  ): string[] {
+    const blockers = new Set<string>();
+
+    for (const field of [
+      'clinicalPattern',
+      'examPearls',
+      'investigations',
+      'differentials',
+      'management',
+      'pitfalls',
+    ] satisfies EducationJsonField[]) {
+      const value = draft[field];
+      if (!Array.isArray(value)) {
+        continue;
+      }
+
+      const typedPearls = value.filter(
+        (item): item is Record<string, unknown> =>
+          this.isPlainObject(item) &&
+          ('type' in item || 'content' in item || 'critique' in item),
+      );
+      if (!typedPearls.length) {
+        continue;
+      }
+
+      const malformed = typedPearls.some(
+        (item) =>
+          !this.cleanString(item.id) ||
+          !this.cleanPearlType(item.type) ||
+          !this.cleanString(item.content),
+      );
+      if (malformed) {
+        blockers.add('typed_pearl_missing_required_content');
+      }
+
+      const allLackOperationalReasoning = typedPearls.every((item) => {
+        const critique = this.extractPearlCritique(item);
+        return critique.warnings.includes('missing_operational_reasoning');
+      });
+      if (allLackOperationalReasoning) {
+        blockers.add(`typed_pearl_${field}_missing_operational_reasoning`);
+      }
+
+      const severeGeneric = typedPearls.some((item) => {
+        const critique = this.extractPearlCritique(item);
+        return (
+          critique.warnings.includes('generic_phrase') &&
+          critique.warnings.includes('missing_why_layer')
+        );
+      });
+      if (severeGeneric) {
+        blockers.add(`typed_pearl_${field}_generic_without_why_layer`);
+      }
+    }
+
+    return [...blockers];
+  }
+
+  private extractPearlCritique(value: Record<string, unknown>): PearlCritique {
+    const critique = value.critique;
+    if (
+      this.isPlainObject(critique) &&
+      Array.isArray(critique.warnings) &&
+      critique.warnings.every((warning) => typeof warning === 'string')
+    ) {
+      return {
+        genericityScore:
+          typeof critique.genericityScore === 'number'
+            ? critique.genericityScore
+            : undefined,
+        discriminatorStrength:
+          typeof critique.discriminatorStrength === 'number'
+            ? critique.discriminatorStrength
+            : undefined,
+        operationalReasoningScore:
+          typeof critique.operationalReasoningScore === 'number'
+            ? critique.operationalReasoningScore
+            : undefined,
+        memorabilityScore:
+          typeof critique.memorabilityScore === 'number'
+            ? critique.memorabilityScore
+            : undefined,
+        managementImpactScore:
+          typeof critique.managementImpactScore === 'number'
+            ? critique.managementImpactScore
+            : undefined,
+        warnings: critique.warnings,
+      };
+    }
+
+    if (this.isTypedEducationPearl(value)) {
+      return this.validateTypedPearl(value);
+    }
+
+    return { warnings: ['missing_type'] };
   }
 
   private validateSummary(value: unknown): Prisma.InputJsonObject | null {
@@ -1595,6 +1777,260 @@ export class DiagnosisEducationService {
     }
 
     return items as Prisma.InputJsonArray;
+  }
+
+  private validateEducationPearlArray(
+    value: unknown,
+    fallbackType: PearlType,
+    legacyRequiredKeys: string[],
+    legacyOptionalKeys: string[] = [],
+  ): Prisma.InputJsonArray | null {
+    if (!Array.isArray(value)) {
+      return null;
+    }
+
+    const fingerprints = new Map<string, number>();
+    const normalizedItems = value.map((item) => {
+      const normalized = this.normalizeEducationPearl(
+        item,
+        fallbackType,
+        legacyRequiredKeys,
+        legacyOptionalKeys,
+      );
+
+      if (!normalized || !this.isPlainObject(normalized)) {
+        return normalized;
+      }
+
+      if (!this.isTypedEducationPearl(normalized)) {
+        return normalized;
+      }
+
+      const fingerprint = this.fingerprintTeachingPoint(normalized.content);
+      if (fingerprint) {
+        fingerprints.set(fingerprint, (fingerprints.get(fingerprint) ?? 0) + 1);
+      }
+
+      return normalized;
+    });
+
+    if (normalizedItems.some((item) => item === null)) {
+      return null;
+    }
+
+    const itemsWithDuplicateWarnings = normalizedItems.map((item) => {
+      if (!this.isPlainObject(item) || !this.isTypedEducationPearl(item)) {
+        return item;
+      }
+
+      const fingerprint = this.fingerprintTeachingPoint(item.content);
+      const critique = this.validateTypedPearl(
+        item,
+        Boolean(fingerprint && (fingerprints.get(fingerprint) ?? 0) > 1),
+      );
+
+      return {
+        ...item,
+        critique,
+      } satisfies TypedEducationPearl;
+    });
+
+    return itemsWithDuplicateWarnings as Prisma.InputJsonArray;
+  }
+
+  private normalizeEducationPearl(
+    value: unknown,
+    fallbackType: PearlType,
+    legacyRequiredKeys: string[],
+    legacyOptionalKeys: string[] = [],
+  ): Prisma.InputJsonValue | null {
+    if (typeof value === 'string') {
+      return this.cleanString(value);
+    }
+
+    if (!this.isPlainObject(value)) {
+      return null;
+    }
+
+    if ('type' in value || 'content' in value) {
+      const id = this.cleanString(value.id);
+      const type = this.cleanPearlType(value.type) ?? fallbackType;
+      const content = this.cleanString(value.content);
+
+      if (!id || !content) {
+        return null;
+      }
+
+      const pearl: TypedEducationPearl = {
+        id,
+        type,
+        content,
+      };
+
+      const title = this.cleanString(value.title);
+      const whyItMatters = this.cleanString(value.whyItMatters);
+      const discriminator = this.cleanString(value.discriminator);
+      const managementImplication = this.cleanString(
+        value.managementImplication,
+      );
+      const escalationImplication = this.cleanString(
+        value.escalationImplication,
+      );
+      const trapAvoided = this.cleanString(value.trapAvoided);
+
+      if (title) {
+        pearl.title = title;
+      }
+      if (whyItMatters) {
+        pearl.whyItMatters = whyItMatters;
+      }
+      if (discriminator) {
+        pearl.discriminator = discriminator;
+      }
+      if (managementImplication) {
+        pearl.managementImplication = managementImplication;
+      }
+      if (escalationImplication) {
+        pearl.escalationImplication = escalationImplication;
+      }
+      if (trapAvoided) {
+        pearl.trapAvoided = trapAvoided;
+      }
+
+      pearl.critique = this.validateTypedPearl(pearl);
+      return pearl as Prisma.InputJsonObject;
+    }
+
+    const output: Record<string, string> = {};
+    for (const key of legacyRequiredKeys) {
+      const stringValue = this.cleanString(value[key]);
+      if (!stringValue) {
+        return null;
+      }
+      output[key] = stringValue;
+    }
+
+    for (const key of legacyOptionalKeys) {
+      const stringValue = this.cleanString(value[key]);
+      if (stringValue) {
+        output[key] = stringValue;
+      }
+    }
+
+    return output as Prisma.InputJsonObject;
+  }
+
+  private validateTypedPearl(
+    pearl: TypedEducationPearl,
+    duplicateTeachingPoint = false,
+  ): PearlCritique {
+    const warnings: string[] = [];
+    const content = pearl.content.trim();
+    const combinedText = [
+      pearl.content,
+      pearl.whyItMatters,
+      pearl.discriminator,
+      pearl.managementImplication,
+      pearl.escalationImplication,
+      pearl.trapAvoided,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const wordCount = content.split(/\s+/).filter(Boolean).length;
+    const sentenceCount = (content.match(/[.!?]+/g) ?? []).length || 1;
+    const hasGenericPhrase = this.hasGenericPearlPhrase(combinedText);
+    const hasWhyLayer = Boolean(
+      this.cleanString(pearl.whyItMatters) ||
+        this.cleanString(pearl.discriminator) ||
+        this.cleanString(pearl.managementImplication) ||
+        this.cleanString(pearl.escalationImplication) ||
+        this.cleanString(pearl.trapAvoided),
+    );
+    const hasOperationalReasoning =
+      hasWhyLayer &&
+      WHY_LAYER_REASONING_MARKERS.some((marker) =>
+        combinedText.toLowerCase().includes(marker),
+      );
+    const hasStrongDiscriminator = Boolean(
+      this.cleanString(pearl.discriminator) ||
+        /\b(?:over|rather than|unlike|distinguish|differentiate|favors|argues against)\b/i.test(
+          combinedText,
+        ),
+    );
+
+    if (!PEARL_TYPE_VALUES.includes(pearl.type)) {
+      warnings.push('missing_type');
+    }
+    if (wordCount < 18) {
+      warnings.push('too_short');
+    }
+    if (wordCount > 45) {
+      warnings.push('too_long');
+    }
+    if (sentenceCount > 2) {
+      warnings.push('too_many_sentences');
+    }
+    if (hasGenericPhrase) {
+      warnings.push('generic_phrase');
+    }
+    if (!hasWhyLayer) {
+      warnings.push('missing_why_layer');
+    }
+    if (!hasOperationalReasoning) {
+      warnings.push('missing_operational_reasoning');
+    }
+    if (
+      pearl.type === 'HIGH_YIELD_DISCRIMINATOR' &&
+      !hasStrongDiscriminator
+    ) {
+      warnings.push('weak_discriminator');
+    }
+    if (duplicateTeachingPoint) {
+      warnings.push('duplicate_teaching_point');
+    }
+
+    return {
+      genericityScore: hasGenericPhrase ? 0.85 : 0.1,
+      discriminatorStrength: hasStrongDiscriminator ? 0.85 : 0.25,
+      operationalReasoningScore: hasOperationalReasoning ? 0.85 : 0.2,
+      memorabilityScore: wordCount >= 18 && wordCount <= 45 ? 0.75 : 0.35,
+      managementImpactScore:
+        pearl.managementImplication || pearl.escalationImplication ? 0.8 : 0.3,
+      warnings,
+    };
+  }
+
+  private isTypedEducationPearl(
+    value: Record<string, unknown>,
+  ): value is TypedEducationPearl {
+    return Boolean(
+      this.cleanString(value.id) &&
+        this.cleanPearlType(value.type) &&
+        this.cleanString(value.content),
+    );
+  }
+
+  private cleanPearlType(value: unknown): PearlType | null {
+    return typeof value === 'string' &&
+      PEARL_TYPE_VALUES.includes(value as PearlType)
+      ? (value as PearlType)
+      : null;
+  }
+
+  private hasGenericPearlPhrase(text: string): boolean {
+    const normalized = text.toLowerCase();
+    return GENERIC_WHY_LAYER_PHRASES.some((phrase) =>
+      normalized.includes(phrase),
+    );
+  }
+
+  private fingerprintTeachingPoint(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\b(?:the|a|an|and|or|of|to|in|with|for|is|are|can|may)\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   private validateScoringSystems(value: unknown): Prisma.InputJsonArray | null {
@@ -1849,6 +2285,8 @@ export class DiagnosisEducationService {
     if (hasHighRiskContent && !hasReferences) {
       blockers.push('high_risk_sections_need_references');
     }
+
+    blockers.push(...this.collectTypedPearlPublishBlockers(education));
 
     return blockers;
   }
