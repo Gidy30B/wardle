@@ -148,7 +148,6 @@ export default function WardleAuthForm() {
           signUp: signUpState.signUp,
           setActive: signUpState.setActive,
           email: normalizedEmail,
-          username,
         })
         if (signUpResult === 'needs_email_verification') {
           setPendingEmailCode({ kind: 'signup', email: normalizedEmail })
@@ -378,27 +377,13 @@ async function startSignUpEmailCode({
   signUp,
   setActive,
   email,
-  username,
 }: {
   signUp: NonNullable<ReturnType<typeof useSignUp>['signUp']>
   setActive: NonNullable<ReturnType<typeof useSignUp>['setActive']>
   email: string
-  username: string
 }) {
-  const normalizedUsername = username
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_')
-    .replace(/[^a-z0-9_]/g, '')
-    .replace(/^_+|_+$/g, '')
-
-  if (!normalizedUsername) {
-    throw new Error('Choose a username with at least one letter or number.')
-  }
-
   const signUpResult = await signUp.create({
     emailAddress: email.trim(),
-    username: `${normalizedUsername}_${Math.random().toString(36).slice(2, 8)}`,
   })
   throwIfClerkResultError(signUpResult)
 
