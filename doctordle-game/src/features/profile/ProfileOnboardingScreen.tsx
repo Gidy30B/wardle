@@ -52,14 +52,19 @@ export default function ProfileOnboardingScreen({
   const [searching, setSearching] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const hasExistingUsername = suggestedUsername.trim().length > 0
 
   const canSubmit =
-    username.trim().length > 0 &&
+    (hasExistingUsername || username.trim().length > 0) &&
     (mode === 'individual' ||
       (mode === 'join' && selectedOrganization != null) ||
       (mode === 'create' && newOrganizationName.trim().length >= 2))
 
   const tileIndexes = useMemo(() => Array.from({ length: 25 }, (_, index) => index), [])
+
+  useEffect(() => {
+    setUsername(suggestedUsername)
+  }, [suggestedUsername])
 
   useEffect(() => {
     if (mode !== 'join') {
@@ -109,7 +114,7 @@ export default function ProfileOnboardingScreen({
   const handleSubmit = async () => {
     setError('')
 
-    if (!username.trim()) {
+    if (!hasExistingUsername && !username.trim()) {
       setError('Choose the username your classmates will see.')
       return
     }
@@ -145,7 +150,7 @@ export default function ProfileOnboardingScreen({
       await queryClient.invalidateQueries({ queryKey: ['organizations', 'me', userId] })
 
       await onComplete({
-        username,
+        username: hasExistingUsername ? suggestedUsername : username,
         university: organization?.name,
         organization,
       })
@@ -193,22 +198,24 @@ export default function ProfileOnboardingScreen({
               Set up your Wardle profile
             </h1>
             <p className="mt-2 text-sm leading-6 text-white/62">
-              {onboardingStatus === 'PROFILE_REQUIRED'
+              {onboardingStatus === 'PROFILE_REQUIRED' && !hasExistingUsername
                 ? 'Choose a username, then decide whether to connect an institution.'
                 : 'Choose whether to continue individually or connect your institution.'}
             </p>
           </div>
 
           <div className="mt-5 space-y-4">
-            <FieldLabel label="Username">
-              <input
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                placeholder="Dr. in the making"
-                className={inputClassName}
-                autoComplete="username"
-              />
-            </FieldLabel>
+            {!hasExistingUsername ? (
+              <FieldLabel label="Username">
+                <input
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  placeholder="Dr. in the making"
+                  className={inputClassName}
+                  autoComplete="username"
+                />
+              </FieldLabel>
+            ) : null}
 
             <div>
               <span className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-white/48">

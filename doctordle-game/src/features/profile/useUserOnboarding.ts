@@ -1,11 +1,7 @@
-import { useAuth, useUser } from '@clerk/clerk-react'
+import { useAuth } from '@clerk/clerk-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useApi } from '../../lib/api'
-import {
-  clearPendingAuthProfile,
-  consumePendingAuthProfile,
-} from '../auth/authProfileSync'
 import type { Organization } from '../organizations/organization.types'
 import {
   completeOnboardingIndividualApi,
@@ -17,7 +13,6 @@ import type { WardleProfileCompletionPayload } from './profile.types'
 
 export function useUserOnboarding() {
   const { isLoaded, isSignedIn, userId } = useAuth()
-  const { user } = useUser()
   const { request } = useApi()
   const queryClient = useQueryClient()
 
@@ -35,51 +30,6 @@ export function useUserOnboarding() {
     staleTime: 10 * 60_000,
     gcTime: 30 * 60_000,
   })
-
-  useEffect(() => {
-    if (
-      !userId ||
-      !query.data ||
-      query.data.onboardingStatus === 'COMPLETE'
-    ) {
-      return
-    }
-
-    const email = user?.primaryEmailAddress?.emailAddress
-    const pendingProfile = consumePendingAuthProfile(userId, email)
-    if (!pendingProfile?.username.trim()) {
-      return
-    }
-
-    const pendingUsername = pendingProfile.username.trim()
-    if (pendingUsername === query.data.username?.trim()) {
-      clearPendingAuthProfile(email)
-      return
-    }
-
-    void saveOnboardingProfileApi(request, {
-      username: pendingUsername,
-    })
-      .then(async (state) => {
-        clearPendingAuthProfile(email)
-        queryClient.setQueryData(queryKey, state)
-        await queryClient.invalidateQueries({ queryKey: profileQueryKey })
-      })
-      .catch((error: unknown) => {
-        if (import.meta.env.DEV) {
-          console.warn('[auth] Failed to sync pending signup profile', error)
-        }
-      })
-  }, [
-    profileQueryKey,
-    query.data,
-    query.data?.onboardingStatus,
-    queryClient,
-    queryKey,
-    request,
-    user?.primaryEmailAddress?.emailAddress,
-    userId,
-  ])
 
   const suggestedUsername = query.data?.username?.trim() || ''
 

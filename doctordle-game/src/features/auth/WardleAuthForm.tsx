@@ -1,7 +1,6 @@
 import { useSignIn, useSignUp } from '@clerk/clerk-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import Button from '../../components/ui/Button'
-import { savePendingAuthProfile } from './authProfileSync'
 import { getClerkOAuthRedirects, isNativeRuntime } from './authRedirects'
 
 type AuthMode = 'signin' | 'signup'
@@ -14,7 +13,6 @@ export default function WardleAuthForm() {
   const signInState = useSignIn()
   const signUpState = useSignUp()
   const [mode, setMode] = useState<AuthMode>('signin')
-  const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
   const [pendingEmailCode, setPendingEmailCode] = useState<PendingEmailCode>(null)
@@ -114,11 +112,6 @@ export default function WardleAuthForm() {
 
     const normalizedEmail = email.trim()
 
-    if (mode === 'signup' && !username.trim()) {
-      setError('Choose the username your classmates will see.')
-      return
-    }
-
     if (!normalizedEmail.includes('@')) {
       setError("That email doesn't look right.")
       return
@@ -139,11 +132,6 @@ export default function WardleAuthForm() {
           setError('Check your email for the Wardle sign-in code.')
         }
       } else {
-        savePendingAuthProfile({
-          email: normalizedEmail,
-          username,
-        })
-
         const signUpResult = await startSignUpEmailCode({
           signUp: signUpState.signUp,
           setActive: signUpState.setActive,
@@ -196,20 +184,6 @@ export default function WardleAuthForm() {
             </span>
             .
           </div>
-        ) : null}
-
-        {mode === 'signup' && !pendingEmailCode ? (
-          <>
-            <Field label="Username">
-              <input
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                placeholder="Dr. in the making"
-                className={inputClassName}
-                autoComplete="username"
-              />
-            </Field>
-          </>
         ) : null}
 
         {pendingEmailCode ? (
@@ -285,18 +259,14 @@ export default function WardleAuthForm() {
         {mode === 'signup' && !pendingEmailCode ? (
           <div className="rounded-[14px] border border-[rgba(244,162,97,0.24)] bg-[rgba(244,162,97,0.08)] px-4 py-3">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--wardle-color-amber)]">
-              Founding member perk
+              Founder members perk
             </p>
             <p className="mt-1 text-xs leading-5 text-white/50">
-              Your class details help power school-aware rankings and future learning groups.
+              Early members get extended premium access and a founders badge when premium launches.
             </p>
           </div>
         ) : null}
       </form>
-
-      <p className="mt-5 text-center text-xs leading-5 text-white/40">
-        Clerk handles authentication and session security. Wardle uses profile details for app features only.
-      </p>
     </div>
   )
 }

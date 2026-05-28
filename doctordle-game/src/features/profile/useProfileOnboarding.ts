@@ -1,8 +1,7 @@
-import { useAuth, useUser } from '@clerk/clerk-react'
+import { useAuth } from '@clerk/clerk-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useApi } from '../../lib/api'
-import { consumePendingAuthProfile } from '../auth/authProfileSync'
 import { getBackendProfileApi, updateBackendProfileApi } from './profile.api'
 import {
   readProfileOnboarding,
@@ -15,7 +14,6 @@ import type {
 
 export function useProfileOnboarding() {
   const { isLoaded, isSignedIn, userId } = useAuth()
-  const { user } = useUser()
   const { request } = useApi()
   const queryClient = useQueryClient()
   const [revision, setRevision] = useState(0)
@@ -32,34 +30,6 @@ export function useProfileOnboarding() {
     staleTime: 10 * 60_000,
     gcTime: 30 * 60_000,
   })
-
-  useEffect(() => {
-    if (!userId) {
-      return
-    }
-
-    const consumedProfile = consumePendingAuthProfile(
-      userId,
-      user?.primaryEmailAddress?.emailAddress,
-    )
-    if (consumedProfile) {
-      setRevision((value) => value + 1)
-      void updateBackendProfileApi(request, {
-        username: consumedProfile.username.trim(),
-        individualMode: true,
-        organizationId: null,
-      })
-        .then(async () => {
-          await queryClient.invalidateQueries({ queryKey: profileQueryKey })
-          await queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
-        })
-        .catch((error: unknown) => {
-          if (import.meta.env.DEV) {
-            console.warn('[auth] Failed to sync pending signup profile', error)
-          }
-        })
-    }
-  }, [profileQueryKey, queryClient, request, user?.primaryEmailAddress?.emailAddress, userId])
 
   const localProfile = useMemo(() => {
     if (!userId) {
