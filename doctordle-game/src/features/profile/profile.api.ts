@@ -13,7 +13,7 @@ export async function getBackendProfileApi(request: RequestJson): Promise<Backen
 export async function updateBackendProfileApi(
   request: RequestJson,
   payload: {
-    displayName?: string
+    username?: string
     trainingLevel?: string
     country?: string
     individualMode?: boolean
@@ -34,7 +34,7 @@ export async function getUserOnboardingApi(
 
 export async function saveOnboardingProfileApi(
   request: RequestJson,
-  payload: { displayName: string },
+  payload: { username: string },
 ): Promise<UserOnboardingState> {
   return request<UserOnboardingState>('/users/me/onboarding/profile', {
     method: 'POST',

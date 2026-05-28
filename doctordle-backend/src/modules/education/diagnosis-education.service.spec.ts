@@ -1,6 +1,8 @@
 import {
   BadRequestException,
+  ConflictException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   DiagnosisEducationSource,
@@ -65,7 +67,9 @@ function buildEducation(
     clinicalPattern: ['Migratory abdominal pain'],
     keySymptoms: ['Anorexia'],
     keySigns: ['McBurney point tenderness'],
-    examPearls: [{ label: 'Rovsing sign', explanation: 'RLQ pain with LLQ palpation.' }],
+    examPearls: [
+      { label: 'Rovsing sign', explanation: 'RLQ pain with LLQ palpation.' },
+    ],
     scoringSystems: null,
     investigations: null,
     differentials: null,
@@ -178,21 +182,24 @@ function buildValidGeneratedDraft(
         whyItMatters:
           'Peritoneal signs suggest advanced inflammation or perforation risk.',
         diagnosticImpact: 'Increases urgency.',
-        discriminator: 'Simple gastroenteritis should not cause focal peritonism.',
+        discriminator:
+          'Simple gastroenteritis should not cause focal peritonism.',
       },
       {
         finding: 'Rovsing sign',
         whyItMatters:
           'Contralateral palpation causing RLQ pain supports peritoneal irritation.',
         diagnosticImpact: 'Supports appendicitis.',
-        discriminator: 'Functional pain is less likely to produce this pattern.',
+        discriminator:
+          'Functional pain is less likely to produce this pattern.',
       },
     ],
     examPearls: [
       {
         id: 'rovsing-sign',
         label: 'Rovsing sign',
-        explanation: 'Right lower quadrant pain with left lower quadrant palpation.',
+        explanation:
+          'Right lower quadrant pain with left lower quadrant palpation.',
         whyItMatters:
           'It supports peritoneal irritation and helps distinguish appendicitis from diffuse gastroenteritis.',
       },
@@ -212,32 +219,38 @@ function buildValidGeneratedDraft(
         significance:
           'Leukocytosis supports inflammation but does not rule appendicitis in or out alone.',
         interpretation: 'A left shift increases suspicion when the story fits.',
-        discriminator: 'Normal WBC should not override progressive focal RLQ findings.',
+        discriminator:
+          'Normal WBC should not override progressive focal RLQ findings.',
       },
       {
         test: 'Ultrasound',
         significance:
           'Useful first-line imaging in children and pregnancy because it can show a noncompressible appendix without radiation.',
-        interpretation: 'Positive imaging supports appendicitis; nondiagnostic imaging may need escalation.',
+        interpretation:
+          'Positive imaging supports appendicitis; nondiagnostic imaging may need escalation.',
         discriminator: 'Ovarian or urinary mimics may also be assessed.',
       },
       {
         test: 'CT abdomen/pelvis',
         significance:
           'High diagnostic yield in adults when diagnosis is uncertain or complications are suspected.',
-        interpretation: 'Appendiceal enlargement or periappendiceal inflammation supports diagnosis.',
-        discriminator: 'Can reveal diverticulitis, stone, abscess, or malignancy mimics.',
+        interpretation:
+          'Appendiceal enlargement or periappendiceal inflammation supports diagnosis.',
+        discriminator:
+          'Can reveal diverticulitis, stone, abscess, or malignancy mimics.',
       },
     ],
     differentials: [
       {
         id: 'gastroenteritis',
         diagnosis: 'Gastroenteritis',
-        whyConfused: 'Both can cause abdominal pain, nausea, and low-grade fever.',
+        whyConfused:
+          'Both can cause abdominal pain, nausea, and low-grade fever.',
         distinguishingPoint:
           'Prominent diarrhea and diffuse crampy pain favor gastroenteritis, while progressive focal RLQ tenderness favors appendicitis.',
         keySeparator: 'Localization and peritoneal signs.',
-        classicTrap: 'Assuming early appendicitis is viral gastroenteritis before pain localizes.',
+        classicTrap:
+          'Assuming early appendicitis is viral gastroenteritis before pain localizes.',
       },
     ],
     management: [
@@ -245,7 +258,8 @@ function buildValidGeneratedDraft(
         step: 'Early surgical assessment',
         rationale:
           'Definitive management planning matters because delayed recognition increases perforation risk.',
-        urgency: 'Urgent when peritoneal signs, sepsis, or perforation concern is present.',
+        urgency:
+          'Urgent when peritoneal signs, sepsis, or perforation concern is present.',
       },
       {
         step: 'Supportive care while evaluating',
@@ -264,28 +278,33 @@ function buildValidGeneratedDraft(
     pitfalls: [
       {
         pitfall: 'Normal WBC false reassurance',
-        whyItHappens: 'Early appendicitis may not yet have strong lab abnormalities.',
+        whyItHappens:
+          'Early appendicitis may not yet have strong lab abnormalities.',
         consequence: 'Delayed diagnosis can increase perforation risk.',
-        saferHeuristic: 'Prioritize progression and focal peritoneal findings over a single normal lab.',
+        saferHeuristic:
+          'Prioritize progression and focal peritoneal findings over a single normal lab.',
       },
       {
         pitfall: 'Pelvic or retrocecal appendix anatomy',
         whyItHappens: 'Position changes the site of irritation.',
         consequence: 'Pain may appear suprapubic, flank, or back-predominant.',
-        saferHeuristic: 'Use psoas, obturator, and serial exams when localization is atypical.',
+        saferHeuristic:
+          'Use psoas, obturator, and serial exams when localization is atypical.',
       },
       {
         pitfall: 'Transient pain improvement after perforation',
         whyItHappens: 'Pressure can briefly decompress after rupture.',
         consequence: 'False reassurance may delay treatment of peritonitis.',
-        saferHeuristic: 'Reassess vitals and peritoneal signs when symptoms change suddenly.',
+        saferHeuristic:
+          'Reassess vitals and peritoneal signs when symptoms change suddenly.',
       },
     ],
     recallPrompts: [
       {
         id: 'appendicitis-pattern',
         type: 'WHY_IT_MATTERS',
-        prompt: 'Why does periumbilical pain migrating to the RLQ increase suspicion for appendicitis?',
+        prompt:
+          'Why does periumbilical pain migrating to the RLQ increase suspicion for appendicitis?',
         answer:
           'It reflects progression from visceral to parietal peritoneal irritation, making appendicitis more likely than nonspecific gastroenteritis.',
         explanation:
@@ -343,11 +362,43 @@ function buildTypedPearl(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function mockOpenAiDraft(service: DiagnosisEducationService, payload: string) {
-  const create = jest.fn().mockResolvedValue({
-    choices: [{ message: { content: payload } }],
-  });
+function assertStrictOpenAiSchema(schema: unknown, path = 'root') {
+  if (!schema || typeof schema !== 'object') {
+    return;
+  }
 
+  const record = schema as Record<string, unknown>;
+  if (record.type === 'object' || record.properties) {
+    const properties = (record.properties ?? {}) as Record<string, unknown>;
+    const keys = Object.keys(properties);
+
+    expect(record.additionalProperties).toBe(false);
+    expect(Array.isArray(record.required)).toBe(true);
+
+    for (const key of keys) {
+      expect(record.required as string[]).toContain(key);
+      assertStrictOpenAiSchema(properties[key], `${path}.${key}`);
+    }
+  }
+
+  if (record.type === 'array' && record.items) {
+    assertStrictOpenAiSchema(record.items, `${path}[]`);
+  }
+
+  for (const key of ['anyOf', 'oneOf', 'allOf']) {
+    const children = record[key];
+    if (Array.isArray(children)) {
+      children.forEach((child, index) =>
+        assertStrictOpenAiSchema(child, `${path}.${key}[${index}]`),
+      );
+    }
+  }
+}
+
+function setMockOpenAiCreate(
+  service: DiagnosisEducationService,
+  create: jest.Mock,
+) {
   Object.defineProperty(service, 'openaiClient', {
     value: {
       chat: {
@@ -357,8 +408,49 @@ function mockOpenAiDraft(service: DiagnosisEducationService, payload: string) {
       },
     },
   });
+}
+
+function mockOpenAiDraft(service: DiagnosisEducationService, payload: string) {
+  const create = jest.fn().mockResolvedValue({
+    choices: [{ message: { content: payload } }],
+  });
+
+  setMockOpenAiCreate(service, create);
 
   return create;
+}
+
+function mockOpenAiError(overrides: Record<string, unknown> = {}) {
+  return Object.assign(new Error('Connection error'), {
+    name: 'APIConnectionError',
+    requestID: 'req_test_123',
+    cause: Object.assign(new Error('other side closed'), {
+      code: 'UND_ERR_SOCKET',
+    }),
+    ...overrides,
+  });
+}
+
+function mockRetryDelay(service: DiagnosisEducationService) {
+  return jest
+    .spyOn(
+      service as unknown as {
+        waitForOpenAiRetry: (delayMs: number) => Promise<void>;
+      },
+      'waitForOpenAiRetry',
+    )
+    .mockResolvedValue(undefined);
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, resolve, reject };
 }
 
 function buildService() {
@@ -628,7 +720,9 @@ describe('DiagnosisEducationService', () => {
       publishedAt: null,
       references: ['reviewed source'],
     });
-    prisma.diagnosisEducation.findUnique.mockImplementation(async () => education);
+    prisma.diagnosisEducation.findUnique.mockImplementation(
+      async () => education,
+    );
     tx.diagnosisEducation.update.mockImplementation(async ({ data }) => {
       education = {
         ...education,
@@ -778,6 +872,190 @@ describe('DiagnosisEducationService', () => {
     await expect(
       service.generateDraft('registry-1', 'admin-1'),
     ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('returns conflict for concurrent same-diagnosis generation', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
+    resetEnvCacheForTests();
+    const { prisma, tx, service } = buildService();
+    const registryLookup =
+      deferred<ReturnType<typeof buildRegistryForGeneration>>();
+    prisma.diagnosisRegistry.findUnique.mockReturnValue(registryLookup.promise);
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
+    tx.diagnosisEducation.create.mockResolvedValue(
+      buildEducation({
+        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+        source: DiagnosisEducationSource.AI_ASSISTED,
+        reviewedAt: null,
+        reviewedByUserId: null,
+        publishedAt: null,
+      }),
+    );
+    mockOpenAiDraft(service, JSON.stringify(buildValidGeneratedDraft()));
+
+    const firstGeneration = service.generateDraft('registry-1', 'admin-1');
+    await expect(
+      service.generateDraft('registry-1', 'admin-2'),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    registryLookup.resolve(buildRegistryForGeneration());
+    await firstGeneration;
+  });
+
+  it('releases the same-diagnosis generation lock after success', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
+    resetEnvCacheForTests();
+    const { prisma, tx, service } = buildService();
+    prisma.diagnosisRegistry.findUnique.mockResolvedValue(
+      buildRegistryForGeneration(),
+    );
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
+    tx.diagnosisEducation.create.mockResolvedValue(
+      buildEducation({
+        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+        source: DiagnosisEducationSource.AI_ASSISTED,
+        reviewedAt: null,
+        reviewedByUserId: null,
+        publishedAt: null,
+      }),
+    );
+    const create = mockOpenAiDraft(
+      service,
+      JSON.stringify(buildValidGeneratedDraft()),
+    );
+
+    await service.generateDraft('registry-1', 'admin-1');
+    await service.generateDraft('registry-1', 'admin-1');
+
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it('releases the same-diagnosis generation lock after failure', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
+    resetEnvCacheForTests();
+    const { prisma, tx, service } = buildService();
+    prisma.diagnosisRegistry.findUnique.mockResolvedValue(
+      buildRegistryForGeneration(),
+    );
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
+    tx.diagnosisEducation.create.mockResolvedValue(
+      buildEducation({
+        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+        source: DiagnosisEducationSource.AI_ASSISTED,
+        reviewedAt: null,
+        reviewedByUserId: null,
+        publishedAt: null,
+      }),
+    );
+    const create = jest
+      .fn()
+      .mockResolvedValueOnce({
+        choices: [{ message: { content: '{"summary":' } }],
+      })
+      .mockResolvedValueOnce({
+        choices: [
+          { message: { content: JSON.stringify(buildValidGeneratedDraft()) } },
+        ],
+      });
+    setMockOpenAiCreate(service, create);
+
+    await expect(
+      service.generateDraft('registry-1', 'admin-1'),
+    ).rejects.toThrow('AI returned invalid education JSON');
+    await service.generateDraft('registry-1', 'admin-1');
+
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries connection-level AI generation failure then succeeds', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
+    resetEnvCacheForTests();
+    const { prisma, tx, service } = buildService();
+    const savedEducation = buildEducation({
+      editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+      source: DiagnosisEducationSource.AI_ASSISTED,
+      reviewedAt: null,
+      reviewedByUserId: null,
+      publishedAt: null,
+    });
+    prisma.diagnosisRegistry.findUnique.mockResolvedValue(
+      buildRegistryForGeneration(),
+    );
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
+    tx.diagnosisEducation.create.mockResolvedValue(savedEducation);
+    const create = jest
+      .fn()
+      .mockRejectedValueOnce(mockOpenAiError())
+      .mockResolvedValueOnce({
+        choices: [
+          { message: { content: JSON.stringify(buildValidGeneratedDraft()) } },
+        ],
+      });
+    setMockOpenAiCreate(service, create);
+    const retryDelay = mockRetryDelay(service);
+
+    const result = await service.generateDraft('registry-1', 'admin-1');
+
+    expect(result).toEqual(savedEducation);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(retryDelay).toHaveBeenCalledWith(500);
+  });
+
+  it('returns 503 after persistent connection-level AI generation failures', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
+    resetEnvCacheForTests();
+    const { prisma, service } = buildService();
+    prisma.diagnosisRegistry.findUnique.mockResolvedValue(
+      buildRegistryForGeneration(),
+    );
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
+    const create = jest.fn().mockRejectedValue(mockOpenAiError());
+    setMockOpenAiCreate(service, create);
+    const retryDelay = mockRetryDelay(service);
+
+    await expect(
+      service.generateDraft('registry-1', 'admin-1'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(retryDelay).toHaveBeenNthCalledWith(1, 500);
+    expect(retryDelay).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ maxRetries: 0, timeout: 20_000 }),
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not retry OpenAI invalid request errors', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
+    resetEnvCacheForTests();
+    const { prisma, service } = buildService();
+    prisma.diagnosisRegistry.findUnique.mockResolvedValue(
+      buildRegistryForGeneration(),
+    );
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
+    const invalidRequestError = Object.assign(new Error('Invalid schema'), {
+      name: 'BadRequestError',
+      status: 400,
+      requestID: 'req_bad_schema',
+    });
+    const create = jest.fn().mockRejectedValue(invalidRequestError);
+    setMockOpenAiCreate(service, create);
+    const retryDelay = mockRetryDelay(service);
+
+    await expect(service.generateDraft('registry-1', 'admin-1')).rejects.toBe(
+      invalidRequestError,
+    );
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(retryDelay).not.toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
@@ -932,7 +1210,9 @@ describe('DiagnosisEducationService', () => {
     );
     expect(request.messages[0].content).toContain('named signs');
     expect(request.messages[0].content).toContain('senior clinician');
-    expect(request.messages[0].content).toContain('why it matters diagnostically');
+    expect(request.messages[0].content).toContain(
+      'why it matters diagnostically',
+    );
     expect(request.messages[0].content).toContain(
       'what diagnostic probability changes',
     );
@@ -969,6 +1249,40 @@ describe('DiagnosisEducationService', () => {
     expect(request.messages[1].content).toContain(
       'Hypokalemia risk changes insulin timing.',
     );
+  });
+
+  it('sends an OpenAI strict-compatible structured output schema', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
+    resetEnvCacheForTests();
+    const { prisma, tx, service } = buildService();
+    prisma.diagnosisRegistry.findUnique.mockResolvedValue(
+      buildRegistryForGeneration(),
+    );
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
+    tx.diagnosisEducation.create.mockResolvedValue(
+      buildEducation({
+        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+        source: DiagnosisEducationSource.AI_ASSISTED,
+        reviewedAt: null,
+        reviewedByUserId: null,
+        publishedAt: null,
+      }),
+    );
+    const create = mockOpenAiDraft(
+      service,
+      JSON.stringify(buildValidGeneratedDraft()),
+    );
+
+    await service.generateDraft('registry-1', 'admin-1');
+
+    const request = create.mock.calls[0][0] as {
+      response_format: {
+        json_schema?: { schema?: unknown };
+      };
+    };
+
+    assertStrictOpenAiSchema(request.response_format.json_schema?.schema);
   });
 
   it('collects quality warnings for generic low-density education', () => {
@@ -1039,7 +1353,8 @@ describe('DiagnosisEducationService', () => {
           {
             id: 'potassium-risk',
             label: 'Potassium risk',
-            explanation: 'Check potassium before insulin when DKA is suspected.',
+            explanation:
+              'Check potassium before insulin when DKA is suspected.',
             whyItMatters:
               'Hypokalemia risk changes insulin timing because treatment can shift potassium intracellularly and worsen instability.',
           },

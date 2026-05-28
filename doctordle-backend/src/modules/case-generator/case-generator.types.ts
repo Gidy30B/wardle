@@ -15,6 +15,16 @@ export type GeneratedCase = {
     summary: string;
     reasoning: string[];
     keyFindings: string[];
+    differentialAnalysis: Array<{
+      diagnosis: string;
+      whyPlausibleEarly: string;
+      ruledOutByClues: Array<{
+        clueOrder: number;
+        evidence: string;
+        reason: string;
+      }>;
+      finalReasonLessLikely: string;
+    }>;
   };
 };
 
@@ -24,6 +34,7 @@ export type CaseGenerationCritique = {
   clinicalAccuracyScore: number;
   clueProgressionScore: number;
   differentialQualityScore: number;
+  differentialRuleOutScore: number;
   ambiguitySuitabilityScore: number;
   issues: string[];
   recommendations: string[];

@@ -59,10 +59,20 @@ export class UsersService {
             : undefined);
 
       const nextUserData: Prisma.UserUpdateInput = {
-        displayName: payload.displayName,
         trainingLevel: payload.trainingLevel,
         country: payload.country,
       };
+
+      if (payload.username !== undefined) {
+        const usernameIdentity = normalizeUsernameForWrite(payload.username);
+        await this.assertNormalizedUsernameAvailable(
+          tx,
+          usernameIdentity.normalizedUsername,
+          userId,
+        );
+        nextUserData.username = usernameIdentity.username;
+        nextUserData.normalizedUsername = usernameIdentity.normalizedUsername;
+      }
 
       if (typeof nextIndividualMode === 'boolean') {
         nextUserData.individualMode = nextIndividualMode;
@@ -116,7 +126,7 @@ export class UsersService {
       await this.recomputeOnboardingState(tx, userId);
     });
 
-    if (payload.displayName?.trim()) {
+    if (payload.username?.trim()) {
       await this.cache.deleteByPrefix('leaderboard:daily:');
       await this.cache.deleteByPrefix('leaderboard:weekly:');
     }
@@ -125,13 +135,20 @@ export class UsersService {
   }
 
   async saveOnboardingProfile(userId: string, payload: OnboardingProfileDto) {
-    const displayName = payload.displayName.trim();
+    const usernameIdentity = normalizeUsernameForWrite(payload.username);
 
     await this.prisma.$transaction(async (tx) => {
+      await this.assertNormalizedUsernameAvailable(
+        tx,
+        usernameIdentity.normalizedUsername,
+        userId,
+      );
+
       await tx.user.update({
         where: { id: userId },
         data: {
-          displayName,
+          username: usernameIdentity.username,
+          normalizedUsername: usernameIdentity.normalizedUsername,
         },
       });
 
@@ -147,7 +164,7 @@ export class UsersService {
   }
 
   async completeOnboardingAsIndividual(userId: string) {
-    await this.assertUserHasDisplayName(userId);
+    await this.assertUserHasUsername(userId);
 
     await this.prisma.user.update({
       where: { id: userId },
@@ -166,7 +183,7 @@ export class UsersService {
     userId: string,
     payload: OnboardingOrganizationDto,
   ) {
-    await this.assertUserHasDisplayName(userId);
+    await this.assertUserHasUsername(userId);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.organization.findUniqueOrThrow({
@@ -271,18 +288,33 @@ export class UsersService {
     }
   }
 
-  private async assertUserHasDisplayName(userId: string) {
+  private async assertUserHasUsername(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { displayName: true },
+      select: { username: true },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    if (!user.displayName?.trim()) {
-      throw new BadRequestException('Complete your display name first');
+    if (!user.username?.trim()) {
+      throw new BadRequestException('Complete your username first');
+    }
+  }
+
+  private async assertNormalizedUsernameAvailable(
+    tx: Prisma.TransactionClient,
+    normalizedUsername: string,
+    userId: string,
+  ) {
+    const existing = await tx.user.findUnique({
+      where: { normalizedUsername },
+      select: { id: true },
+    });
+
+    if (existing && existing.id !== userId) {
+      throw new BadRequestException('Username is already taken');
     }
   }
 
@@ -294,14 +326,14 @@ export class UsersService {
     const user = await tx.user.findUniqueOrThrow({
       where: { id: userId },
       select: {
-        displayName: true,
+        username: true,
         individualMode: true,
         primaryOrganizationId: true,
         onboardingCompletedAt: true,
       },
     });
 
-    if (!user.displayName?.trim()) {
+    if (!user.username?.trim()) {
       await tx.user.update({
         where: { id: userId },
         data: {
@@ -372,7 +404,8 @@ function toUserProfileDto(user: {
   id: string;
   clerkId: string | null;
   email: string | null;
-  displayName: string | null;
+  username: string | null;
+  normalizedUsername: string | null;
   trainingLevel: string | null;
   country: string | null;
   individualMode: boolean;
@@ -436,7 +469,8 @@ function toUserProfileDto(user: {
     clerkId: user.clerkId,
     email: user.email,
     role: user.role,
-    displayName: user.displayName,
+    username: user.username,
+    normalizedUsername: user.normalizedUsername,
     trainingLevel: user.trainingLevel,
     country: user.country,
     individualMode: user.individualMode,
@@ -458,7 +492,8 @@ function toUserOnboardingDto(profile: ReturnType<typeof toUserProfileDto>) {
   return {
     userId: profile.userId,
     email: profile.email,
-    displayName: profile.displayName,
+    username: profile.username,
+    normalizedUsername: profile.normalizedUsername,
     onboardingStatus: profile.onboardingStatus,
     individualMode: profile.individualMode,
     primaryOrganizationId: profile.primaryOrganizationId,
@@ -504,3 +539,48 @@ function toOrganizationDto(organization: {
     updatedAt: organization.updatedAt,
   };
 }
+
+function normalizeUsernameForWrite(value: string) {
+  const username = value.replace(/\s+/g, ' ').trim();
+  const normalizedUsername = username.toLowerCase();
+
+  if (username.length < 2) {
+    throw new BadRequestException('Username must be at least 2 characters');
+  }
+
+  if (username.length > 80) {
+    throw new BadRequestException('Username must be at most 80 characters');
+  }
+
+  if (!/[a-z0-9]/i.test(username)) {
+    throw new BadRequestException(
+      'Username must include at least one letter or number',
+    );
+  }
+
+  if (RESERVED_NORMALIZED_USERNAMES.has(normalizedUsername)) {
+    throw new BadRequestException('Username is reserved');
+  }
+
+  return {
+    username,
+    normalizedUsername,
+  };
+}
+
+const RESERVED_NORMALIZED_USERNAMES = new Set([
+  'admin',
+  'administrator',
+  'api',
+  'auth',
+  'doctordle',
+  'help',
+  'moderator',
+  'null',
+  'root',
+  'support',
+  'system',
+  'user',
+  'username',
+  'wardle',
+]);

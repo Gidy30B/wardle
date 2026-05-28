@@ -1,6 +1,6 @@
 type PendingAuthProfile = {
   email: string
-  displayName: string
+  username: string
   createdAt: string
 }
 
@@ -8,7 +8,7 @@ const PENDING_PROFILE_PREFIX = 'wardle:pending-auth-profile:'
 
 export function savePendingAuthProfile(profile: {
   email: string
-  displayName: string
+  username: string
 }) {
   if (typeof window === 'undefined') {
     return
@@ -18,7 +18,7 @@ export function savePendingAuthProfile(profile: {
   // durable until the backend confirms profile persistence.
   const payload: PendingAuthProfile = {
     email: normalizeEmail(profile.email),
-    displayName: profile.displayName.trim(),
+    username: profile.username.trim(),
     createdAt: new Date().toISOString(),
   }
 
@@ -40,14 +40,14 @@ export function consumePendingAuthProfile(userId: string, email: string | null |
 
   try {
     const pending = JSON.parse(rawValue) as Partial<PendingAuthProfile>
-    if (!pending.displayName?.trim()) {
+    if (!pending.username?.trim()) {
       return null
     }
 
     return {
       ...pending,
       userId,
-      displayName: pending.displayName.trim(),
+      username: pending.username.trim(),
     }
   } catch {
     window.localStorage.removeItem(key)

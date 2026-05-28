@@ -2,24 +2,8 @@ import type { BackendProfile } from '../../../profile/profile.types'
 import type { UserOrganizationMembership } from '../../../organizations/organization.types'
 import { DIFFICULTY_OPTIONS } from './settings.constants'
 
-export function getFallbackDisplayName(input: {
-  fullName?: string | null
-  username?: string | null
-  email?: string | null
-}) {
-  return (
-    input.fullName ??
-    input.username ??
-    input.email?.split('@')[0] ??
-    'Wardle clinician'
-  )
-}
-
-export function getDisplayName(
-  backendProfile: BackendProfile | null | undefined,
-  fallbackDisplayName: string,
-) {
-  return backendProfile?.displayName?.trim() || fallbackDisplayName
+export function getUsername(backendProfile: BackendProfile | null | undefined) {
+  return backendProfile?.username?.trim() || ''
 }
 
 export function getMembershipLabel(memberships: UserOrganizationMembership[]) {
@@ -34,4 +18,3 @@ export function getNextDifficultyPreference(current: string) {
   )
   return DIFFICULTY_OPTIONS[(currentIndex + 1) % DIFFICULTY_OPTIONS.length].value
 }
-

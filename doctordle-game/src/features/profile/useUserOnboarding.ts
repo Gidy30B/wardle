@@ -47,18 +47,18 @@ export function useUserOnboarding() {
 
     const email = user?.primaryEmailAddress?.emailAddress
     const pendingProfile = consumePendingAuthProfile(userId, email)
-    if (!pendingProfile?.displayName.trim()) {
+    if (!pendingProfile?.username.trim()) {
       return
     }
 
-    const pendingDisplayName = pendingProfile.displayName.trim()
-    if (pendingDisplayName === query.data.displayName?.trim()) {
+    const pendingUsername = pendingProfile.username.trim()
+    if (pendingUsername === query.data.username?.trim()) {
       clearPendingAuthProfile(email)
       return
     }
 
     void saveOnboardingProfileApi(request, {
-      displayName: pendingDisplayName,
+      username: pendingUsername,
     })
       .then(async (state) => {
         clearPendingAuthProfile(email)
@@ -81,11 +81,7 @@ export function useUserOnboarding() {
     userId,
   ])
 
-  const suggestedDisplayName =
-    query.data?.displayName?.trim() ||
-    user?.fullName ||
-    user?.primaryEmailAddress?.emailAddress?.split('@')[0] ||
-    ''
+  const suggestedUsername = query.data?.username?.trim() || ''
 
   const saveProfile = useCallback(
     async (payload: WardleProfileCompletionPayload) => {
@@ -94,10 +90,10 @@ export function useUserOnboarding() {
       }
 
       let state = query.data
-      const displayName = payload.displayName.trim()
+      const username = payload.username.trim()
 
-      if (displayName && displayName !== state?.displayName?.trim()) {
-        state = await saveOnboardingProfileApi(request, { displayName })
+      if (username && username !== state?.username?.trim()) {
+        state = await saveOnboardingProfileApi(request, { username })
       }
 
       if (payload.organization) {
@@ -119,26 +115,26 @@ export function useUserOnboarding() {
   const completeWithOrganization = useCallback(
     async (organization: Organization) => {
       await saveProfile({
-        displayName: query.data?.displayName ?? suggestedDisplayName,
+        username: query.data?.username ?? suggestedUsername,
         university: organization.name,
         organization,
       })
     },
-    [query.data?.displayName, saveProfile, suggestedDisplayName],
+    [query.data?.username, saveProfile, suggestedUsername],
   )
 
   const continueIndividually = useCallback(async () => {
     await saveProfile({
-      displayName: query.data?.displayName ?? suggestedDisplayName,
+      username: query.data?.username ?? suggestedUsername,
       organization: null,
     })
-  }, [query.data?.displayName, saveProfile, suggestedDisplayName])
+  }, [query.data?.username, saveProfile, suggestedUsername])
 
   return {
     onboarding: query.data ?? null,
     loading: query.isPending && !query.data,
     error: query.error,
-    suggestedDisplayName,
+    suggestedUsername,
     shouldShowOnboarding:
       isLoaded &&
       isSignedIn &&

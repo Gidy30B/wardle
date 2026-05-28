@@ -7,6 +7,7 @@ import { CaseValidationModule } from '../case-validation/case-validation.module'
 import { DiagnosisRegistryEditorialService } from '../diagnosis-registry/diagnosis-registry-editorial.service.js';
 import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
 import { EditorialObservabilityModule } from '../editorial/editorial-observability.module.js';
+import { DiagnosisGraphModule } from '../diagnosis-graph/diagnosis-graph.module.js';
 import { CaseReviewService } from './case-review.service';
 
 @Module({
@@ -15,6 +16,7 @@ import { CaseReviewService } from './case-review.service';
     DatabaseModule,
     CaseValidationModule,
     EditorialObservabilityModule,
+    DiagnosisGraphModule,
   ],
   controllers: [AdminController],
   providers: [

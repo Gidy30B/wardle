@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { UserOnboardingStatus } from '@prisma/client';
 import { UsersService } from './users.service';
 
@@ -83,7 +83,8 @@ describe('UsersService onboarding', () => {
     id: 'user-1',
     clerkId: 'clerk-1',
     email: 'ada@example.com',
-    displayName: 'Ada Lovelace',
+    username: 'Ada Lovelace',
+    normalizedUsername: 'ada lovelace',
     trainingLevel: null,
     country: null,
     individualMode: false,
@@ -101,7 +102,7 @@ describe('UsersService onboarding', () => {
         findUnique: jest.fn().mockResolvedValue(profileUser),
         update: jest.fn().mockResolvedValue(profileUser),
         findUniqueOrThrow: jest.fn().mockResolvedValue({
-          displayName: 'Ada Lovelace',
+          username: 'Ada Lovelace',
           individualMode: false,
           primaryOrganizationId: null,
           onboardingCompletedAt: null,
@@ -133,12 +134,19 @@ describe('UsersService onboarding', () => {
     const { service, prisma, cache } = createService();
 
     await service.saveOnboardingProfile('user-1', {
-      displayName: 'Ada Lovelace',
+      username: 'Ada Lovelace',
     });
 
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { normalizedUsername: 'ada lovelace' },
+      select: { id: true },
+    });
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: 'user-1' },
-      data: { displayName: 'Ada Lovelace' },
+      data: {
+        username: 'Ada Lovelace',
+        normalizedUsername: 'ada lovelace',
+      },
     });
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: 'user-1' },
@@ -151,12 +159,42 @@ describe('UsersService onboarding', () => {
     expect(cache.deleteByPrefix).toHaveBeenCalledWith('leaderboard:daily:');
   });
 
+  it('rejects usernames already claimed by another user', async () => {
+    const { service, prisma } = createService({
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'other-user' }),
+        update: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
+      },
+    });
+
+    await expect(
+      service.saveOnboardingProfile('user-1', {
+        username: 'Ada Lovelace',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects reserved usernames', async () => {
+    const { service, prisma } = createService();
+
+    await expect(
+      service.saveOnboardingProfile('user-1', {
+        username: 'Admin',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
   it('completes onboarding as an individual without touching memberships', async () => {
     const { service, prisma } = createService({
       user: {
         findUnique: jest
           .fn()
-          .mockResolvedValueOnce({ displayName: 'Ada Lovelace' })
+          .mockResolvedValueOnce({ username: 'Ada Lovelace' })
           .mockResolvedValueOnce({
             ...profileUser,
             individualMode: true,
@@ -184,7 +222,7 @@ describe('UsersService onboarding', () => {
       user: {
         findUnique: jest
           .fn()
-          .mockResolvedValueOnce({ displayName: 'Ada Lovelace' })
+          .mockResolvedValueOnce({ username: 'Ada Lovelace' })
           .mockResolvedValueOnce({
             ...profileUser,
             individualMode: false,

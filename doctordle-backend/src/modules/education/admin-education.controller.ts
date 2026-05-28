@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Logger,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -18,6 +19,8 @@ import { UpsertDiagnosisEducationDto } from './dto/upsert-diagnosis-education.dt
 @Controller('admin/education')
 @UseGuards(AdminGuard)
 export class AdminEducationController {
+  private readonly logger = new Logger(AdminEducationController.name);
+
   constructor(
     private readonly diagnosisEducationService: DiagnosisEducationService,
   ) {}
@@ -52,6 +55,13 @@ export class AdminEducationController {
     diagnosisRegistryId: string,
     @Req() request: AuthenticatedRequest,
   ) {
+    this.logger.log(
+      JSON.stringify({
+        event: 'admin_education.generate.entered',
+        diagnosisRegistryId,
+        userId: request.user.id,
+      }),
+    );
     return this.diagnosisEducationService.generateDraft(
       diagnosisRegistryId,
       request.user.id,

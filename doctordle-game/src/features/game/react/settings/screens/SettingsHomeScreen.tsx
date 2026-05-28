@@ -66,13 +66,13 @@ const MENU_ITEMS: Array<{
 }>)
 
 export function SettingsHomeScreen({
-  displayName,
+  username,
   organizationLabel,
   trainingLevel,
   currentStreak,
   onSelectScreen,
 }: {
-  displayName: string
+  username: string
   organizationLabel: string
   trainingLevel: string | null
   currentStreak: number | null
@@ -145,7 +145,7 @@ export function SettingsHomeScreen({
             position: 'relative',
           }}
         >
-          {displayName.charAt(0).toUpperCase()}
+          {username.charAt(0).toUpperCase()}
           <div
             style={{
               position: 'absolute',
@@ -173,7 +173,7 @@ export function SettingsHomeScreen({
               color: 'var(--wardle-color-mint)',
             }}
           >
-            {displayName}
+            {username}
           </div>
           <div
             style={{

@@ -21,6 +21,7 @@ import { DiagnosisRegistryEditorialService } from '../diagnosis-registry/diagnos
 import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
 import { normalizeDiagnosisTerm } from '../diagnosis-registry/diagnosis-term-normalizer.js';
 import { EditorialMetricsService } from '../editorial/editorial-metrics.service.js';
+import { DiagnosisGraphExtractionService } from '../diagnosis-graph/diagnosis-graph-extraction.service.js';
 import { getApprovalResetFields } from '../editorial/policies/approval-policy.js';
 import { getCaseDiagnosisPublishReadiness } from '../editorial/policies/diagnosis-publish-readiness.policy.js';
 import {
@@ -231,6 +232,7 @@ export class CaseReviewService {
     private readonly editorialMetrics: EditorialMetricsService,
     private readonly diagnosisRegistryLinkService: DiagnosisRegistryLinkService,
     private readonly diagnosisRegistryEditorialService: DiagnosisRegistryEditorialService,
+    private readonly diagnosisGraphExtractionService?: DiagnosisGraphExtractionService,
   ) {}
 
   async listEditorialCases(query: ListEditorialCasesDto) {
@@ -877,6 +879,21 @@ export class CaseReviewService {
     );
 
     this.editorialMetrics.recordReviewOutcome(input.decision);
+
+    if (input.decision === ReviewDecision.APPROVED) {
+      await this.diagnosisGraphExtractionService
+        ?.extractFromApprovedCase(caseId)
+        .catch((error) => {
+          this.logger.error(
+            JSON.stringify({
+              event: 'diagnosis_graph.case_extraction.failed',
+              caseId,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+            error instanceof Error ? error.stack : undefined,
+          );
+        });
+    }
 
     return result;
   }

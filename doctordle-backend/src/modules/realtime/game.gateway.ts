@@ -10,8 +10,8 @@ import {
 } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
 import { ClerkJwtService } from '../../auth/clerk-jwt.service';
-import { PrismaService } from '../../core/db/prisma.service';
 import { RedisPubSubService } from '../../core/redis/redis-pubsub.service';
+import { UserSyncService } from '../users/user-sync.service';
 import {
   NOTIFICATION_V1_CREATED_EVENT,
   type NotificationCreatedRealtimePayload,
@@ -58,8 +58,8 @@ export class GameGateway implements OnModuleInit {
 
   constructor(
     private readonly clerkJwtService: ClerkJwtService,
-    private readonly prisma: PrismaService,
     private readonly redisPubSub: RedisPubSubService,
+    private readonly userSyncService: UserSyncService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -117,17 +117,8 @@ export class GameGateway implements OnModuleInit {
     try {
       const principal = await this.clerkJwtService.verifyBearerToken(token);
       const clerkId = principal.clerkId;
-      const userId = await this.resolveUserIdFromClerk(clerkId);
-
-      if (!userId) {
-        this.logger.error({
-          event: 'ws.auth.user_not_found',
-          clerkId,
-          socketId: client.id,
-        });
-        client.disconnect();
-        return;
-      }
+      const syncedUser = await this.userSyncService.syncUser(principal);
+      const userId = syncedUser.id;
 
       client.data.userId = userId;
       client.join(userId);
@@ -177,15 +168,6 @@ export class GameGateway implements OnModuleInit {
 
     const normalizedToken = token.trim();
     return normalizedToken.length > 0 ? normalizedToken : null;
-  }
-
-  private async resolveUserIdFromClerk(clerkId: string): Promise<string | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { clerkId },
-      select: { id: true },
-    });
-
-    return user?.id ?? null;
   }
 
   private emitRewardAppliedLocally(

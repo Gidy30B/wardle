@@ -19,7 +19,7 @@ import type {
 } from './profile.types'
 
 type ProfileOnboardingScreenProps = {
-  suggestedDisplayName: string
+  suggestedUsername: string
   onboardingStatus: UserOnboardingStatus
   onComplete: (profile: WardleProfileCompletionPayload) => void | Promise<void>
 }
@@ -34,14 +34,14 @@ const ORGANIZATION_TYPES: Array<{ value: OrganizationType; label: string }> = [
 ]
 
 export default function ProfileOnboardingScreen({
-  suggestedDisplayName,
+  suggestedUsername,
   onboardingStatus,
   onComplete,
 }: ProfileOnboardingScreenProps) {
   const { userId } = useAuth()
   const { request } = useApi()
   const queryClient = useQueryClient()
-  const [displayName, setDisplayName] = useState(suggestedDisplayName)
+  const [username, setUsername] = useState(suggestedUsername)
   const [mode, setMode] = useState<OrganizationMode>('individual')
   const [organizationQuery, setOrganizationQuery] = useState('')
   const [organizationResults, setOrganizationResults] = useState<Organization[]>([])
@@ -54,7 +54,7 @@ export default function ProfileOnboardingScreen({
   const [error, setError] = useState('')
 
   const canSubmit =
-    displayName.trim().length > 0 &&
+    username.trim().length > 0 &&
     (mode === 'individual' ||
       (mode === 'join' && selectedOrganization != null) ||
       (mode === 'create' && newOrganizationName.trim().length >= 2))
@@ -109,8 +109,8 @@ export default function ProfileOnboardingScreen({
   const handleSubmit = async () => {
     setError('')
 
-    if (!displayName.trim()) {
-      setError('Enter the display name your classmates will see.')
+    if (!username.trim()) {
+      setError('Choose the username your classmates will see.')
       return
     }
 
@@ -145,7 +145,7 @@ export default function ProfileOnboardingScreen({
       await queryClient.invalidateQueries({ queryKey: ['organizations', 'me', userId] })
 
       await onComplete({
-        displayName,
+        username,
         university: organization?.name,
         organization,
       })
@@ -194,18 +194,19 @@ export default function ProfileOnboardingScreen({
             </h1>
             <p className="mt-2 text-sm leading-6 text-white/62">
               {onboardingStatus === 'PROFILE_REQUIRED'
-                ? 'Add a display name, then choose whether to connect an institution.'
+                ? 'Choose a username, then decide whether to connect an institution.'
                 : 'Choose whether to continue individually or connect your institution.'}
             </p>
           </div>
 
           <div className="mt-5 space-y-4">
-            <FieldLabel label="Display name">
+            <FieldLabel label="Username">
               <input
-                value={displayName}
-                onChange={(event) => setDisplayName(event.target.value)}
-                placeholder="Dr. in the making..."
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder="Dr. in the making"
                 className={inputClassName}
+                autoComplete="username"
               />
             </FieldLabel>
 

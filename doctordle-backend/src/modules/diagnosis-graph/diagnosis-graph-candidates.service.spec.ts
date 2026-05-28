@@ -1,0 +1,195 @@
+import {
+  DiagnosisGraphCandidateStatus,
+  DiagnosisGraphCandidateType,
+  DiagnosisGraphFactStatus,
+  DiagnosisGraphSourceType,
+} from '@prisma/client';
+import { DiagnosisGraphCandidatesService } from './diagnosis-graph-candidates.service';
+
+describe('DiagnosisGraphCandidatesService', () => {
+  const candidate = {
+    id: 'candidate-1',
+    diagnosisRegistryId: 'registry-1',
+    type: DiagnosisGraphCandidateType.FINDING,
+    rawText: 'Nocturnal wheeze',
+    normalizedText: 'nocturnal wheeze',
+    dedupeKey: 'candidate-key',
+    payload: null,
+    targetDiagnosisRegistryId: null,
+    unresolvedTargetText: null,
+    sourceType: DiagnosisGraphSourceType.CASE,
+    sourceId: 'case-1',
+    sourceVersion: 1,
+    sourcePath: 'clues.0',
+  };
+
+  const buildService = () => {
+    const tx = {
+      diagnosisGraphCandidate: {
+        findUnique: jest.fn().mockResolvedValue(candidate),
+        update: jest.fn().mockImplementation(({ data }) =>
+          Promise.resolve({ ...candidate, ...data }),
+        ),
+      },
+      diagnosisGraphFact: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockImplementation(({ data }) =>
+          Promise.resolve({ id: 'fact-1', ...data }),
+        ),
+        update: jest.fn().mockImplementation(({ data }) =>
+          Promise.resolve({ id: 'fact-1', ...data }),
+        ),
+      },
+    };
+    const prisma = {
+      diagnosisGraphCandidate: {
+        findUnique: jest.fn().mockResolvedValue(candidate),
+        update: jest.fn().mockImplementation(({ data }) =>
+          Promise.resolve({ ...candidate, ...data }),
+        ),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      diagnosisGraphFact: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      $transaction: jest.fn((handler: (transaction: typeof tx) => unknown) =>
+        handler(tx),
+      ),
+    };
+
+    return {
+      prisma,
+      tx,
+      service: new DiagnosisGraphCandidatesService(prisma as never),
+    };
+  };
+
+  it('approves a candidate and creates an active fact', async () => {
+    const { tx, service } = buildService();
+
+    const result = await service.approveCandidate('candidate-1', 'user-1');
+
+    expect(tx.diagnosisGraphFact.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          diagnosisRegistryId: 'registry-1',
+          type: DiagnosisGraphCandidateType.FINDING,
+          label: 'Nocturnal wheeze',
+          normalizedLabel: 'nocturnal wheeze',
+          dedupeKey: expect.any(String),
+          status: DiagnosisGraphFactStatus.ACTIVE,
+          sourceCandidateId: 'candidate-1',
+        }),
+      }),
+    );
+    expect(tx.diagnosisGraphCandidate.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: DiagnosisGraphCandidateStatus.APPROVED,
+          reviewedByUserId: 'user-1',
+          promotedFactId: 'fact-1',
+        }),
+      }),
+    );
+    expect(result.fact.id).toBe('fact-1');
+  });
+
+  it('rejects a candidate with review metadata', async () => {
+    const { prisma, service } = buildService();
+
+    await service.rejectCandidate('candidate-1', 'user-1', {
+      note: 'Too vague',
+    });
+
+    expect(prisma.diagnosisGraphCandidate.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: DiagnosisGraphCandidateStatus.REJECTED,
+          reviewedByUserId: 'user-1',
+          reviewNote: 'Too vague',
+        }),
+      }),
+    );
+  });
+
+  it('merges a candidate into a target fact', async () => {
+    const { tx, service } = buildService();
+    tx.diagnosisGraphFact.findUnique.mockResolvedValue({ id: 'fact-1' });
+
+    await service.mergeCandidate('candidate-1', 'user-1', {
+      targetFactId: 'fact-1',
+      note: 'Duplicate',
+    });
+
+    expect(tx.diagnosisGraphCandidate.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: DiagnosisGraphCandidateStatus.MERGED,
+          reviewedByUserId: 'user-1',
+          promotedFactId: 'fact-1',
+          reviewNote: 'Duplicate',
+        }),
+      }),
+    );
+  });
+
+  it('queries only active facts for the public graph', async () => {
+    const { prisma, service } = buildService();
+
+    await service.getActiveGraph('registry-1');
+
+    expect(prisma.diagnosisGraphFact.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          diagnosisRegistryId: 'registry-1',
+          status: DiagnosisGraphFactStatus.ACTIVE,
+        },
+      }),
+    );
+  });
+
+  it('updates an existing null-target fact using the stable dedupe key', async () => {
+    const { tx, service } = buildService();
+    tx.diagnosisGraphFact.findUnique.mockResolvedValue({
+      id: 'fact-1',
+      sourceCandidateId: null,
+      provenance: null,
+    });
+
+    await service.approveCandidate('candidate-1', 'user-1');
+
+    expect(tx.diagnosisGraphFact.create).not.toHaveBeenCalled();
+    expect(tx.diagnosisGraphFact.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'fact-1' },
+        data: expect.objectContaining({
+          sourceCandidateId: 'candidate-1',
+          dedupeKey: expect.any(String),
+        }),
+      }),
+    );
+  });
+
+  it('uses different fact dedupe keys for the same label with different targets', async () => {
+    const { tx, service } = buildService();
+    tx.diagnosisGraphCandidate.findUnique
+      .mockResolvedValueOnce({
+        ...candidate,
+        id: 'candidate-1',
+        targetDiagnosisRegistryId: 'target-1',
+      })
+      .mockResolvedValueOnce({
+        ...candidate,
+        id: 'candidate-2',
+        targetDiagnosisRegistryId: 'target-2',
+      });
+
+    await service.approveCandidate('candidate-1', 'user-1');
+    await service.approveCandidate('candidate-2', 'user-1');
+
+    const first = tx.diagnosisGraphFact.create.mock.calls[0][0].data.dedupeKey;
+    const second = tx.diagnosisGraphFact.create.mock.calls[1][0].data.dedupeKey;
+    expect(first).not.toBe(second);
+  });
+});

@@ -189,6 +189,80 @@ export type DiagnosisEducationSource =
   | 'IMPORTED'
   | 'HYBRID';
 
+export type DiagnosisGraphCandidateType =
+  | 'FINDING'
+  | 'INVESTIGATION'
+  | 'MIMIC'
+  | 'PITFALL'
+  | 'MANAGEMENT'
+  | 'COMPLICATION'
+  | 'RECALL_PROMPT'
+  | 'CASE_REASONING';
+
+export type DiagnosisGraphSourceType = 'CASE' | 'DIAGNOSIS_EDUCATION';
+
+export type DiagnosisGraphCandidateStatus =
+  | 'CANDIDATE'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'MERGED';
+
+export type DiagnosisGraphFactStatus = 'ACTIVE' | 'ARCHIVED';
+
+export type DiagnosisGraphCandidate = {
+  id: string;
+  diagnosisRegistryId: string;
+  type: DiagnosisGraphCandidateType;
+  status: DiagnosisGraphCandidateStatus;
+  sourceType: DiagnosisGraphSourceType;
+  sourceId: string;
+  sourceVersion: number | null;
+  sourcePath: string;
+  rawText: string;
+  normalizedText: string;
+  dedupeKey: string;
+  payload: JsonValue | null;
+  targetDiagnosisRegistryId: string | null;
+  unresolvedTargetText: string | null;
+  confidence: number | null;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  mergedIntoId: string | null;
+  promotedFactId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  diagnosisRegistry?: {
+    id: string;
+    displayLabel: string;
+  };
+  targetDiagnosisRegistry?: {
+    id: string;
+    displayLabel: string;
+  } | null;
+  promotedFact?: {
+    id: string;
+    status: DiagnosisGraphFactStatus;
+  } | null;
+};
+
+export type DiagnosisGraphCandidateFilters = {
+  diagnosisRegistryId?: string;
+  type?: DiagnosisGraphCandidateType;
+  status?: DiagnosisGraphCandidateStatus;
+  sourceType?: DiagnosisGraphSourceType;
+};
+
+export type RejectDiagnosisGraphCandidatePayload = {
+  note?: string;
+};
+
+export type MergeDiagnosisGraphCandidatePayload = {
+  targetCandidateId?: string;
+  targetFactId?: string;
+  note?: string;
+};
+
 export type DiagnosisMappingStatus =
   | 'MATCHED'
   | 'REVIEW_REQUIRED'

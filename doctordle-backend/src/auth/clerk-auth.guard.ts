@@ -41,7 +41,7 @@ export class ClerkAuthGuard implements CanActivate {
       id: user.id,
       clerkId: principal.clerkId,
       email: principal.email ?? undefined,
-      displayName: user.displayName ?? undefined,
+      username: user.username ?? undefined,
       role: user.role,
     };
 

@@ -45,7 +45,7 @@ export function useProfileOnboarding() {
     if (consumedProfile) {
       setRevision((value) => value + 1)
       void updateBackendProfileApi(request, {
-        displayName: consumedProfile.displayName.trim(),
+        username: consumedProfile.username.trim(),
         individualMode: true,
         organizationId: null,
       })
@@ -69,11 +69,7 @@ export function useProfileOnboarding() {
     return readProfileOnboarding(userId)
   }, [revision, userId])
 
-  const suggestedDisplayName =
-    user?.fullName ??
-    user?.username ??
-    user?.primaryEmailAddress?.emailAddress?.split('@')[0] ??
-    ''
+  const suggestedUsername = backendProfileQuery.data?.username?.trim() || ''
 
   const saveProfile = useCallback(
     async (payload: WardleProfileCompletionPayload) => {
@@ -83,13 +79,13 @@ export function useProfileOnboarding() {
 
       const individualMode = payload.organization == null
       await updateBackendProfileApi(request, {
-        displayName: payload.displayName.trim(),
+        username: payload.username.trim(),
         individualMode,
         organizationId: payload.organization?.id ?? null,
       })
 
       const nextProfile: WardleProfileOnboarding = {
-        displayName: payload.displayName.trim(),
+        username: payload.username.trim(),
         university: payload.university?.trim() ?? payload.organization?.name ?? '',
         organizationId: payload.organization?.id ?? null,
         organizationName: payload.organization?.name ?? null,
@@ -113,12 +109,12 @@ export function useProfileOnboarding() {
     }
 
     const nextProfile: WardleProfileOnboarding = {
-      displayName: '',
+      username: '',
       university: '',
       organizationId: null,
       organizationName: null,
       organizationType: null,
-      skipped: true,
+      skipped: false,
       completedAt: null,
     }
 
@@ -127,9 +123,8 @@ export function useProfileOnboarding() {
   }, [userId])
 
   const isOnboardingResolved = Boolean(
-    backendProfileQuery.data?.displayName?.trim() ||
-    localProfile?.skipped ||
-      localProfile?.displayName.trim(),
+    backendProfileQuery.data?.username?.trim() ||
+      localProfile?.username.trim(),
   )
 
   return {
@@ -137,7 +132,7 @@ export function useProfileOnboarding() {
     loading: backendProfileQuery.isPending && !backendProfileQuery.data,
     error: backendProfileQuery.error,
     localProfile,
-    suggestedDisplayName,
+    suggestedUsername,
     shouldShowOnboarding:
       isLoaded && isSignedIn && !backendProfileQuery.isPending && !isOnboardingResolved,
     saveProfile,

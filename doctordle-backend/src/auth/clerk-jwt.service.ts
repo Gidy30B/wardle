@@ -13,11 +13,6 @@ type JwtPayload = {
   email?: string;
   email_address?: string;
   email_addresses?: Array<{ email_address?: string }>;
-  name?: string;
-  full_name?: string;
-  username?: string;
-  first_name?: string;
-  last_name?: string;
   iss?: string;
   aud?: string | string[];
   exp?: number;
@@ -38,7 +33,6 @@ type JwkEntry = {
 type VerifiedClerkPrincipal = {
   clerkId: string;
   email?: string | null;
-  displayName?: string | null;
   payload: JwtPayload;
 };
 
@@ -81,7 +75,6 @@ export class ClerkJwtService {
     return {
       clerkId,
       email: this.resolveEmail(payload),
-      displayName: this.resolveDisplayName(payload),
       payload,
     };
   }
@@ -186,30 +179,4 @@ export class ClerkJwtService {
     );
   }
 
-  private resolveDisplayName(payload: JwtPayload): string | null {
-    const firstLast = [payload.first_name, payload.last_name]
-      .map((value) => value?.trim())
-      .filter(Boolean)
-      .join(' ');
-    const candidate =
-      payload.name ??
-      payload.full_name ??
-      (firstLast.length > 0 ? firstLast : null) ??
-      this.humanizeUsername(payload.username);
-
-    return this.normalizeDisplayName(candidate);
-  }
-
-  private humanizeUsername(username?: string): string | null {
-    if (!username) {
-      return null;
-    }
-
-    return username.replace(/[_-]+/g, ' ');
-  }
-
-  private normalizeDisplayName(value?: string | null): string | null {
-    const normalized = value?.replace(/\s+/g, ' ').trim();
-    return normalized && normalized.length >= 2 ? normalized : null;
-  }
 }

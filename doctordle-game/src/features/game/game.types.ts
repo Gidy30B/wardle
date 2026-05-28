@@ -361,7 +361,7 @@ export type DiagnosisEducation = {
 export type LeaderboardEntry = {
   rank: number
   userId: string
-  displayName?: string
+  username?: string
   organizationName?: string
   streak?: number
   score: number

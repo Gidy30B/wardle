@@ -17,6 +17,7 @@ import { OrganizationsModule } from './modules/organizations/organizations.modul
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { EducationModule } from './modules/education/education.module';
+import { DiagnosisGraphModule } from './modules/diagnosis-graph/diagnosis-graph.module';
 
 @Module({
   controllers: [HealthController],
@@ -38,6 +39,7 @@ import { EducationModule } from './modules/education/education.module';
     NotificationsModule,
     StatsModule,
     EducationModule,
+    DiagnosisGraphModule,
   ],
 })
 export class AppModule {}

@@ -5,6 +5,7 @@ const navigationItems = [
   { to: '/cases', label: 'Cases', icon: 'C' },
   { to: '/generate', label: 'Generate Cases', icon: 'G' },
   { to: '/publish', label: 'Publish', icon: 'P' },
+  { to: '/diagnosis-graph/candidates', label: 'Graph', icon: 'K' },
   { to: '/analytics', label: 'Analytics', icon: 'A' },
 ];
 

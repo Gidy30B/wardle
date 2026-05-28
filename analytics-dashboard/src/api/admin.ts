@@ -2,6 +2,8 @@ import type { ApiClient } from './client';
 import type {
   AdminViewer,
   AdminDiagnosisEducationResponse,
+  DiagnosisGraphCandidate,
+  DiagnosisGraphCandidateFilters,
   AttemptsOverTimePayload,
   CreateDiagnosisAndLinkPayload,
   CreateDiagnosisRegistryPayload,
@@ -25,6 +27,8 @@ import type {
   SubmitCaseReviewPayload,
   SubmitCaseReviewResult,
   ReviewDiagnosisEducationPayload,
+  RejectDiagnosisGraphCandidatePayload,
+  MergeDiagnosisGraphCandidatePayload,
   UpdateCaseDiagnosisPayload,
   UpsertDiagnosisEducationPayload,
   ValidationOutcomeSummary,
@@ -48,6 +52,40 @@ function withQuery(
 
   const query = search.toString();
   return query ? `${path}?${query}` : path;
+}
+
+export function getDiagnosisGraphCandidates(
+  client: ApiClient,
+  filters: DiagnosisGraphCandidateFilters = {},
+) {
+  return client.get<DiagnosisGraphCandidate[]>(
+    withQuery('/admin/diagnosis-graph/candidates', {
+      diagnosisRegistryId: filters.diagnosisRegistryId,
+      type: filters.type,
+      status: filters.status,
+      sourceType: filters.sourceType,
+    }),
+  );
+}
+
+export function approveDiagnosisGraphCandidate(client: ApiClient, id: string) {
+  return client.post(`/admin/diagnosis-graph/candidates/${id}/approve`);
+}
+
+export function rejectDiagnosisGraphCandidate(
+  client: ApiClient,
+  id: string,
+  payload: RejectDiagnosisGraphCandidatePayload,
+) {
+  return client.post(`/admin/diagnosis-graph/candidates/${id}/reject`, payload);
+}
+
+export function mergeDiagnosisGraphCandidate(
+  client: ApiClient,
+  id: string,
+  payload: MergeDiagnosisGraphCandidatePayload,
+) {
+  return client.post(`/admin/diagnosis-graph/candidates/${id}/merge`, payload);
 }
 
 export function fetchAdminViewer(client: ApiClient) {

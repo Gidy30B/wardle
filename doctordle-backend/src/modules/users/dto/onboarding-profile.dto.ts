@@ -6,5 +6,5 @@ export class OnboardingProfileDto {
   @IsString()
   @MinLength(2)
   @MaxLength(80)
-  displayName!: string;
+  username!: string;
 }

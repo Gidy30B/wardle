@@ -10,7 +10,8 @@ export type BackendProfile = {
   email?: string | null
   role?: string | null
   userId: string
-  displayName?: string | null
+  username?: string | null
+  normalizedUsername?: string | null
   trainingLevel?: string | null
   country?: string | null
   individualMode?: boolean
@@ -31,7 +32,8 @@ export type UserOnboardingStatus =
 export type UserOnboardingState = {
   userId: string
   email: string | null
-  displayName: string | null
+  username: string | null
+  normalizedUsername: string | null
   onboardingStatus: UserOnboardingStatus
   individualMode: boolean
   primaryOrganizationId: string | null
@@ -70,7 +72,7 @@ export type UserSettingsUpdate = Partial<
 >
 
 export type WardleProfileOnboarding = {
-  displayName: string
+  username: string
   university: string
   organizationId?: string | null
   organizationName?: string | null
@@ -80,7 +82,7 @@ export type WardleProfileOnboarding = {
 }
 
 export type WardleProfileCompletionPayload = {
-  displayName: string
+  username: string
   university?: string
   organization?: Organization | null
 }

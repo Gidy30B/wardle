@@ -41,16 +41,12 @@ function formatScore(score: number) {
   return String(score)
 }
 
-function getDisplayName(entry: LeaderboardEntry, currentUserId: string | null) {
-  if (entry.userId === currentUserId) {
-    return 'You'
+function getUsername(entry: LeaderboardEntry) {
+  if (entry.username?.trim()) {
+    return entry.username.trim()
   }
 
-  if (entry.displayName?.trim()) {
-    return entry.displayName.trim()
-  }
-
-  return `Player ${entry.userId.slice(0, 4)}`
+  return ''
 }
 
 function getInitials(name: string | null | undefined) {
@@ -173,7 +169,7 @@ function LeaderboardSection({
                   key={`${mode}-podium-${entry.rank}-${entry.userId}`}
                   entry={entry}
                   index={index}
-                  displayName={getDisplayName(entry, currentUserId)}
+                  username={getUsername(entry)}
                   school={getPodiumSchoolName({
                     entry,
                     currentUserId,
@@ -194,7 +190,7 @@ function LeaderboardSection({
                 <LeaderboardRow
                   key={`${mode}-${entry.rank}-${entry.userId}`}
                   entry={entry}
-                  displayName={getDisplayName(entry, currentUserId)}
+                  username={getUsername(entry)}
                   meta={getEntryMeta({
                     entry,
                     currentUserId,
@@ -218,7 +214,7 @@ function LeaderboardSection({
             <div className="mt-3 border-t border-white/10 pt-3">
               <LeaderboardRow
                 entry={currentUserPosition}
-                displayName="You"
+                username={getUsername(currentUserPosition)}
                 meta={getEntryMeta({
                   entry: currentUserPosition,
                   currentUserId,
@@ -325,12 +321,12 @@ function PeriodButton({
 function PodiumPlayer({
   entry,
   index,
-  displayName,
+  username,
   school,
 }: {
   entry: LeaderboardEntry
   index: number
-  displayName: string
+  username: string
   school: string
 }) {
   const colors = ['#8A9BB0', '#F4A261', '#CD7F32']
@@ -347,10 +343,10 @@ function PodiumPlayer({
             boxShadow: `0 4px 16px ${colors[index]}44`,
           }}
         >
-          {getInitials(displayName)}
+          {getInitials(username)}
         </div>
         <div className="truncate text-[11px] font-bold text-[var(--wardle-color-mint)]">
-          {displayName}
+          {username}
         </div>
         <div className="truncate text-[10px] text-white/42">{school}</div>
       </div>
@@ -372,14 +368,14 @@ function PodiumPlayer({
 
 function LeaderboardRow({
   entry,
-  displayName,
+  username,
   meta,
   isCurrentUser,
   progressWidth,
   animationDelay,
 }: {
   entry: LeaderboardEntry
-  displayName: string
+  username: string
   meta: string
   isCurrentUser: boolean
   progressWidth: string
@@ -404,7 +400,7 @@ function LeaderboardRow({
         {entry.rank}
       </div>
       <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--wardle-color-navy),rgba(0,180,166,0.34))] text-sm font-black text-[var(--wardle-color-mint)]">
-        {getInitials(displayName)}
+        {getInitials(username)}
       </div>
       <div className="min-w-0 flex-1">
         <div
@@ -412,7 +408,7 @@ function LeaderboardRow({
             isCurrentUser ? 'text-[var(--wardle-color-teal)]' : 'text-[var(--wardle-color-mint)]'
           }`}
         >
-          {displayName}
+          {username}
           {isCurrentUser ? (
             <span className="ml-1 text-[10px] text-[var(--wardle-color-teal)]">(You)</span>
           ) : null}

@@ -59,6 +59,27 @@ describe('CaseGeneratorService', () => {
     resetEnvCacheForTests();
   });
 
+  const buildDifferentialAnalysis = (
+    differentials: string[] = [
+      'Chronic obstructive pulmonary disease',
+      'Vocal cord dysfunction',
+      'Heart failure',
+    ],
+  ): GeneratedCase['explanation']['differentialAnalysis'] =>
+    differentials.map((diagnosis) => ({
+      diagnosis,
+      whyPlausibleEarly: `${diagnosis} is plausible early because cough, wheeze, and chest tightness can overlap with the broad opening presentation.`,
+      ruledOutByClues: [
+        {
+          clueOrder: 5,
+          evidence:
+            'Spirometry shows reversible airflow obstruction with FEV1 increase of 15%',
+          reason: `The reversible obstructive spirometry result supports asthma more strongly than ${diagnosis}.`,
+        },
+      ],
+      finalReasonLessLikely: `${diagnosis} is less likely because reversible airflow obstruction and bronchodilator response fit asthma better.`,
+    }));
+
   const buildGeneratedCase = (
     overrides: Partial<GeneratedCase> = {},
   ): GeneratedCase => ({
@@ -114,6 +135,7 @@ describe('CaseGeneratorService', () => {
         'Bronchodilator response',
         'Reversible airflow obstruction',
       ],
+      differentialAnalysis: buildDifferentialAnalysis(overrides.differentials),
     },
     ...overrides,
   });
@@ -371,6 +393,139 @@ describe('CaseGeneratorService', () => {
     ).toThrow('Generated case must include 3-5 plausible differentials');
   });
 
+  it('accepts valid generated cases with differential analysis', () => {
+    const { service } = buildService();
+
+    expect(() => service.validateCase(buildGeneratedCase())).not.toThrow();
+  });
+
+  it('rejects missing differential analysis', () => {
+    const { service } = buildService();
+    const generatedCase = buildGeneratedCase();
+
+    expect(() =>
+      service.validateCase({
+        ...generatedCase,
+        explanation: {
+          ...generatedCase.explanation,
+          differentialAnalysis: undefined as never,
+        },
+      }),
+    ).toThrow('Generated case schema is invalid');
+  });
+
+  it('rejects mismatch between differentials and differentialAnalysis', () => {
+    const { service } = buildService();
+    const generatedCase = buildGeneratedCase();
+
+    expect(() =>
+      service.validateCase({
+        ...generatedCase,
+        explanation: {
+          ...generatedCase.explanation,
+          differentialAnalysis:
+            generatedCase.explanation.differentialAnalysis.slice(0, 2),
+        },
+      }),
+    ).toThrow('exactly one item per differential');
+  });
+
+  it('rejects extra diagnosis in differentialAnalysis', () => {
+    const { service } = buildService();
+    const generatedCase = buildGeneratedCase();
+
+    expect(() =>
+      service.validateCase({
+        ...generatedCase,
+        explanation: {
+          ...generatedCase.explanation,
+          differentialAnalysis: [
+            ...generatedCase.explanation.differentialAnalysis.slice(0, 2),
+            {
+              ...generatedCase.explanation.differentialAnalysis[2],
+              diagnosis: 'Pneumonia',
+            },
+          ],
+        },
+      }),
+    ).toThrow('contains extra diagnosis');
+  });
+
+  it('rejects final diagnosis inside differentialAnalysis', () => {
+    const { service } = buildService();
+    const generatedCase = buildGeneratedCase();
+
+    expect(() =>
+      service.validateCase({
+        ...generatedCase,
+        explanation: {
+          ...generatedCase.explanation,
+          differentialAnalysis: [
+            ...generatedCase.explanation.differentialAnalysis.slice(0, 2),
+            {
+              ...generatedCase.explanation.differentialAnalysis[2],
+              diagnosis: 'Asthma',
+            },
+          ],
+        },
+      }),
+    ).toThrow('must not include the final diagnosis');
+  });
+
+  it('rejects empty or generic rule-out reasoning', () => {
+    const { service } = buildService();
+    const generatedCase = buildGeneratedCase();
+
+    expect(() =>
+      service.validateCase({
+        ...generatedCase,
+        explanation: {
+          ...generatedCase.explanation,
+          differentialAnalysis: [
+            {
+              ...generatedCase.explanation.differentialAnalysis[0],
+              ruledOutByClues: [
+                {
+                  ...generatedCase.explanation.differentialAnalysis[0]
+                    .ruledOutByClues[0],
+                  reason: 'less likely clinically',
+                },
+              ],
+            },
+            ...generatedCase.explanation.differentialAnalysis.slice(1),
+          ],
+        },
+      }),
+    ).toThrow('rule-out reason must be non-empty and case-specific');
+  });
+
+  it('rejects invalid differentialAnalysis clueOrder', () => {
+    const { service } = buildService();
+    const generatedCase = buildGeneratedCase();
+
+    expect(() =>
+      service.validateCase({
+        ...generatedCase,
+        explanation: {
+          ...generatedCase.explanation,
+          differentialAnalysis: [
+            {
+              ...generatedCase.explanation.differentialAnalysis[0],
+              ruledOutByClues: [
+                {
+                  ...generatedCase.explanation.differentialAnalysis[0]
+                    .ruledOutByClues[0],
+                  clueOrder: 9,
+                },
+              ],
+            },
+            ...generatedCase.explanation.differentialAnalysis.slice(1),
+          ],
+        },
+      }),
+    ).toThrow('references invalid clueOrder 9');
+  });
+
   it('rejects answer leakage before the confirmatory clue', () => {
     const { service } = buildService();
     const generatedCase = buildGeneratedCase({
@@ -442,6 +597,7 @@ describe('CaseGeneratorService', () => {
           critiquePassed: true,
           critiqueIssues: [],
           critiqueRecommendations: [],
+          differentialRuleOutScore: 88,
           estimatedDifficulty: 'medium',
           estimatedSolveClue: 5,
           specialty: null,
@@ -463,9 +619,21 @@ describe('CaseGeneratorService', () => {
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           explanation: expect.objectContaining({
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            differentialAnalysis: expect.arrayContaining([
+              expect.objectContaining({
+                diagnosis: 'Chronic obstructive pulmonary disease',
+                ruledOutByClues: expect.arrayContaining([
+                  expect.objectContaining({
+                    clueOrder: 5,
+                  }),
+                ]) as unknown,
+              }),
+            ]),
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             generationQuality: expect.objectContaining({
               critiqueScore: 94,
               critiquePassed: true,
+              differentialRuleOutScore: 88,
               estimatedDifficulty: 'medium',
               estimatedSolveClue: 5,
               hasLabs: true,
@@ -663,6 +831,7 @@ describe('CaseGeneratorService', () => {
           clinicalAccuracyScore: 96,
           clueProgressionScore: 88,
           differentialQualityScore: 90,
+          differentialRuleOutScore: 86,
           ambiguitySuitabilityScore: 84,
           issues: [],
           recommendations: ['Ready for editorial review'],
@@ -684,6 +853,7 @@ describe('CaseGeneratorService', () => {
       generationQuality?: {
         critiqueScore: number;
         critiquePassed: boolean;
+        differentialRuleOutScore: number;
         estimatedDifficulty: string;
         estimatedSolveClue: number;
         specialty: string | null;
@@ -702,6 +872,7 @@ describe('CaseGeneratorService', () => {
       expect.objectContaining({
         critiqueScore: 92,
         critiquePassed: true,
+        differentialRuleOutScore: 86,
         estimatedDifficulty: 'medium',
         estimatedSolveClue: 5,
         specialty: null,
@@ -710,7 +881,7 @@ describe('CaseGeneratorService', () => {
         hasImaging: false,
         hasVitals: true,
         differentialCount: 3,
-        qualityScore: 91,
+        qualityScore: 90,
       }),
     );
   });
@@ -730,6 +901,7 @@ describe('CaseGeneratorService', () => {
           clinicalAccuracyScore: 96,
           clueProgressionScore: 88,
           differentialQualityScore: 90,
+          differentialRuleOutScore: 86,
           ambiguitySuitabilityScore: 84,
           issues: [],
           recommendations: [],
@@ -813,6 +985,7 @@ describe('CaseGeneratorService', () => {
           clinicalAccuracyScore: 96,
           clueProgressionScore: 88,
           differentialQualityScore: 90,
+          differentialRuleOutScore: 86,
           ambiguitySuitabilityScore: 84,
           issues: [],
           recommendations: [],

@@ -42,6 +42,19 @@ const clinicalClueSchema = z.object({
   order: z.number().int(),
 });
 
+const differentialRuleOutSchema = z.object({
+  clueOrder: z.number().int(),
+  evidence: z.string(),
+  reason: z.string(),
+});
+
+const differentialAnalysisSchema = z.object({
+  diagnosis: z.string(),
+  whyPlausibleEarly: z.string(),
+  ruledOutByClues: z.array(differentialRuleOutSchema),
+  finalReasonLessLikely: z.string(),
+});
+
 const generatedCaseSchema = z.object({
   clues: z.array(clinicalClueSchema),
   answer: z.string(),
@@ -51,6 +64,7 @@ const generatedCaseSchema = z.object({
     summary: z.string(),
     reasoning: z.array(z.string()),
     keyFindings: z.array(z.string()),
+    differentialAnalysis: z.array(differentialAnalysisSchema),
   }),
 });
 
@@ -68,6 +82,7 @@ const caseGenerationCritiqueSchema = z.object({
   clinicalAccuracyScore: z.number().min(0).max(100),
   clueProgressionScore: z.number().min(0).max(100),
   differentialQualityScore: z.number().min(0).max(100),
+  differentialRuleOutScore: z.number().min(0).max(100),
   ambiguitySuitabilityScore: z.number().min(0).max(100),
   issues: z.array(z.string()),
   recommendations: z.array(z.string()),
@@ -87,6 +102,12 @@ const LOW_ACUITY_PATTERN =
   /\b(chronic|intermittent|mild|stable|routine|gradual|months|years|well appearing)\b/i;
 const OBJECTIVE_DETAIL_PATTERN =
   /\b(\d+(\.\d+)?|positive|negative|elevated|low|high|increased|decreased|reduced|normal|abnormal|opacity|consolidation|effusion|lesion|mass|fracture|ischemia|infiltrate|dilated|enlarged)\b/i;
+const GENERIC_DIFFERENTIAL_REASON_PATTERNS = [
+  /\bless consistent with the presentation\b/i,
+  /\bdoes not fit the case\b/i,
+  /\bless likely clinically\b/i,
+  /\bnot supported by findings\b/i,
+];
 const DIAGNOSIS_ACRONYM_STOPWORDS = new Set([
   'acute',
   'chronic',
@@ -111,6 +132,7 @@ type PersistedGeneratedExplanation = GeneratedCase['explanation'] & {
     critiquePassed: boolean;
     critiqueIssues: string[];
     critiqueRecommendations: string[];
+    differentialRuleOutScore: number;
     estimatedDifficulty: 'easy' | 'medium' | 'hard';
     estimatedSolveClue: number;
     specialty: string | null;
@@ -513,6 +535,155 @@ export class CaseGeneratorService {
         'Generated case explanation must include key findings',
       );
     }
+
+    this.validateDifferentialAnalysis(generatedCase);
+  }
+
+  private validateDifferentialAnalysis(generatedCase: GeneratedCase): void {
+    const analysis = generatedCase.explanation.differentialAnalysis;
+    if (!Array.isArray(analysis)) {
+      throw new BadRequestException(
+        'Generated case explanation must include differentialAnalysis',
+      );
+    }
+
+    if (analysis.length !== generatedCase.differentials.length) {
+      throw new BadRequestException(
+        'Generated case differentialAnalysis must include exactly one item per differential',
+      );
+    }
+
+    const normalizedAnswer = this.normalizeClinicalText(generatedCase.answer);
+    const normalizedDifferentials = new Map(
+      generatedCase.differentials.map((differential) => [
+        this.normalizeClinicalText(differential),
+        differential,
+      ]),
+    );
+    const seenAnalysisDiagnoses = new Set<string>();
+    const clueByOrder = new Map(
+      generatedCase.clues.map((clue) => [clue.order, clue.value]),
+    );
+
+    for (const item of analysis) {
+      const normalizedDiagnosis = this.normalizeClinicalText(item.diagnosis);
+      if (!normalizedDiagnosis) {
+        throw new BadRequestException(
+          'Generated case differentialAnalysis diagnosis is required',
+        );
+      }
+
+      if (normalizedDiagnosis === normalizedAnswer) {
+        throw new BadRequestException(
+          'Generated case differentialAnalysis must not include the final diagnosis',
+        );
+      }
+
+      if (!normalizedDifferentials.has(normalizedDiagnosis)) {
+        throw new BadRequestException(
+          `Generated case differentialAnalysis contains extra diagnosis: ${item.diagnosis}`,
+        );
+      }
+
+      if (seenAnalysisDiagnoses.has(normalizedDiagnosis)) {
+        throw new BadRequestException(
+          `Generated case differentialAnalysis contains duplicate diagnosis: ${item.diagnosis}`,
+        );
+      }
+      seenAnalysisDiagnoses.add(normalizedDiagnosis);
+
+      this.assertSpecificText(
+        item.whyPlausibleEarly,
+        'whyPlausibleEarly must be non-empty and case-specific',
+      );
+      this.assertSpecificText(
+        item.finalReasonLessLikely,
+        'finalReasonLessLikely must be non-empty and case-specific',
+      );
+
+      if (!Array.isArray(item.ruledOutByClues) || item.ruledOutByClues.length === 0) {
+        throw new BadRequestException(
+          `Differential "${item.diagnosis}" must include at least one ruledOutByClues entry`,
+        );
+      }
+
+      for (const ruleOut of item.ruledOutByClues) {
+        const clueText = clueByOrder.get(ruleOut.clueOrder);
+        if (!clueText) {
+          throw new BadRequestException(
+            `Differential "${item.diagnosis}" references invalid clueOrder ${ruleOut.clueOrder}`,
+          );
+        }
+
+        this.assertSpecificText(
+          ruleOut.evidence,
+          `Differential "${item.diagnosis}" rule-out evidence must be non-empty and case-specific`,
+        );
+        this.assertSpecificText(
+          ruleOut.reason,
+          `Differential "${item.diagnosis}" rule-out reason must be non-empty and case-specific`,
+        );
+
+        if (!this.isGroundedInClue(ruleOut.evidence, clueText)) {
+          throw new BadRequestException(
+            `Differential "${item.diagnosis}" rule-out evidence must be copied or tightly paraphrased from clue ${ruleOut.clueOrder}`,
+          );
+        }
+      }
+    }
+
+    if (seenAnalysisDiagnoses.size !== normalizedDifferentials.size) {
+      throw new BadRequestException(
+        'Generated case differentialAnalysis is missing one or more listed differentials',
+      );
+    }
+  }
+
+  private assertSpecificText(value: string, message: string): void {
+    const normalized = this.normalizeClinicalText(value);
+    if (!normalized || normalized.length < 8) {
+      throw new BadRequestException(message);
+    }
+
+    if (
+      GENERIC_DIFFERENTIAL_REASON_PATTERNS.some((pattern) =>
+        pattern.test(value),
+      ) &&
+      normalized.split(' ').length < 10
+    ) {
+      throw new BadRequestException(message);
+    }
+  }
+
+  private isGroundedInClue(evidence: string, clueText: string): boolean {
+    const normalizedEvidence = this.normalizeClinicalText(evidence);
+    const normalizedClue = this.normalizeClinicalText(clueText);
+    if (!normalizedEvidence || !normalizedClue) {
+      return false;
+    }
+
+    if (
+      normalizedClue.includes(normalizedEvidence) ||
+      normalizedEvidence.includes(normalizedClue)
+    ) {
+      return true;
+    }
+
+    const evidenceTokens = this.extractMeaningfulTokens(normalizedEvidence);
+    if (evidenceTokens.length === 0) {
+      return false;
+    }
+
+    const clueTokens = new Set(this.extractMeaningfulTokens(normalizedClue));
+    const overlap = evidenceTokens.filter((token) => clueTokens.has(token)).length;
+    return overlap / evidenceTokens.length >= 0.6;
+  }
+
+  private extractMeaningfulTokens(value: string): string[] {
+    return value
+      .split(' ')
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 3 && !DIAGNOSIS_ACRONYM_STOPWORDS.has(token));
   }
 
   normalizeCase(generatedCase: GeneratedCase): GeneratedCase {
@@ -539,6 +710,18 @@ export class CaseGeneratorService {
         keyFindings: generatedCase.explanation.keyFindings
           .map((finding) => finding.trim())
           .filter((finding) => finding.length > 0),
+        differentialAnalysis: generatedCase.explanation.differentialAnalysis.map(
+          (item) => ({
+            diagnosis: item.diagnosis.trim(),
+            whyPlausibleEarly: item.whyPlausibleEarly.trim(),
+            ruledOutByClues: item.ruledOutByClues.map((ruleOut) => ({
+              clueOrder: ruleOut.clueOrder,
+              evidence: ruleOut.evidence.trim(),
+              reason: ruleOut.reason.trim(),
+            })),
+            finalReasonLessLikely: item.finalReasonLessLikely.trim(),
+          }),
+        ),
         ...(generationQuality ? { generationQuality } : {}),
       } as GeneratedCase['explanation'],
     };
@@ -1160,7 +1343,10 @@ export class CaseGeneratorService {
       '"diagnosis": "...",',
       '"summary": "...",',
       '"reasoning": [...],',
-      '"keyFindings": [...]',
+      '"keyFindings": [...],',
+      '"differentialAnalysis": [',
+      '{"diagnosis": "...", "whyPlausibleEarly": "...", "ruledOutByClues": [{"clueOrder": 2, "evidence": "...", "reason": "..."}], "finalReasonLessLikely": "..."}',
+      ']',
       '}',
       '}',
       '',
@@ -1177,6 +1363,10 @@ export class CaseGeneratorService {
       '* maintain age, sex, timeline, vitals, labs, and imaging consistency',
       '* no duplicate clues',
       '* no fluff',
+      '* differentialAnalysis is for Wardle future clinical knowledge graph',
+      '* differentialAnalysis must encode differential-vs-evidence relationships',
+      '* for each differential, explain why it was plausible from early clues, which exact clue evidence weakened or ruled it out, and why the final diagnosis fits better',
+      '* every rule-out must be grounded in a specific clue and quote or tightly paraphrase that clue evidence',
       track ? `* specialty focus: ${track}` : undefined,
       '',
       'Use concise, concrete clinical details. Do not include extra JSON keys.',
@@ -1250,7 +1440,10 @@ export class CaseGeneratorService {
       '"diagnosis": "...",',
       '"summary": "...",',
       '"reasoning": [...],',
-      '"keyFindings": [...]',
+      '"keyFindings": [...],',
+      '"differentialAnalysis": [',
+      '{"diagnosis": "...", "whyPlausibleEarly": "...", "ruledOutByClues": [{"clueOrder": 2, "evidence": "...", "reason": "..."}], "finalReasonLessLikely": "..."}',
+      ']',
       '}',
       '}',
       '',
@@ -1265,6 +1458,10 @@ export class CaseGeneratorService {
       '* maintain age, sex, timeline, vitals, labs, and imaging consistency',
       '* no duplicate clues',
       '* no fluff',
+      '* differentialAnalysis is for Wardle future clinical knowledge graph',
+      '* differentialAnalysis must encode differential-vs-evidence relationships',
+      '* for each differential, explain why it was plausible from early clues, which exact clue evidence weakened or ruled it out, and why the fixed final diagnosis fits better',
+      '* every rule-out must be grounded in a specific clue and quote or tightly paraphrase that clue evidence',
       '',
       'Use concise, concrete clinical details. Do not include extra JSON keys.',
     ]
@@ -1283,6 +1480,8 @@ export class CaseGeneratorService {
       'Do not name or abbreviate the final diagnosis in clues 0 through 4.',
       'Use realistic labs, imaging, vitals, exam findings, timelines, and units where appropriate.',
       'Keep the case internally consistent and make the explanation address why the final diagnosis fits and why differentials are less likely.',
+      'Do not only list differentials; explain why each differential loses against the final diagnosis using specific clue evidence.',
+      'Rule-out reasoning must use specific clue evidence and avoid generic teaching prose.',
     ].join('\n');
   }
 
@@ -1295,6 +1494,8 @@ export class CaseGeneratorService {
       'Do not include the fixed diagnosis, canonical name, or accepted aliases in the differential list.',
       'Do not name or abbreviate the fixed diagnosis in clues 0 through 4.',
       'Use realistic labs, imaging, vitals, exam findings, timelines, and units where appropriate.',
+      'Do not only list differentials; explain why each differential loses against the fixed final diagnosis using specific clue evidence.',
+      'Rule-out reasoning must use specific clue evidence and avoid generic teaching prose.',
     ].join('\n');
   }
 
@@ -1304,7 +1505,10 @@ export class CaseGeneratorService {
       'Return valid JSON only.',
       'Pass only cases that are clinically consistent, have exactly 6 progressive clues, include 3-5 plausible differentials, avoid answer leakage before the confirmatory clue, and have realistic labs/imaging when present.',
       'Score from 0 to 100. A case should pass only when it is ready to save as a draft for editorial review.',
-      'Provide clinicalAccuracyScore, clueProgressionScore, differentialQualityScore, and ambiguitySuitabilityScore from 0 to 100.',
+      'Provide clinicalAccuracyScore, clueProgressionScore, differentialQualityScore, differentialRuleOutScore, and ambiguitySuitabilityScore from 0 to 100.',
+      'Critique differentialAnalysis strictly: can each differential actually be ruled out using the supplied clues, does every differential have a specific clue-grounded reason, and are the rule-outs clinically valid?',
+      'Fail if differentialAnalysis is missing, any differential is unmatched, any rule-out is not grounded in a clue, rule-out evidence is hallucinated, or the explanation says a differential is ruled out without enough case evidence.',
+      'Fail generic, invented, or unsupported rule-out reasoning.',
       'List concrete issues and recommendations. Use empty arrays when none.',
     ].join('\n');
   }
@@ -1411,14 +1615,15 @@ export class CaseGeneratorService {
       ...generatedCase,
       explanation: {
         ...generatedCase.explanation,
-        generationQuality: {
-          version: 'case-generator:v2',
-          critiqueScore: critique.score,
-          critiquePassed: critique.passed,
-          critiqueIssues: critique.issues,
-          critiqueRecommendations: critique.recommendations,
-          ...metadata,
-        },
+      generationQuality: {
+        version: 'case-generator:v2',
+        critiqueScore: critique.score,
+        critiquePassed: critique.passed,
+        critiqueIssues: critique.issues,
+        critiqueRecommendations: critique.recommendations,
+        differentialRuleOutScore: critique.differentialRuleOutScore,
+        ...metadata,
+      },
       },
     } as GeneratedCase;
   }
@@ -1434,6 +1639,7 @@ export class CaseGeneratorService {
     | 'critiquePassed'
     | 'critiqueIssues'
     | 'critiqueRecommendations'
+    | 'differentialRuleOutScore'
   > {
     const hasLabs = generatedCase.clues.some((clue) => clue.type === 'lab');
     const hasImaging = generatedCase.clues.some(
@@ -1531,10 +1737,11 @@ export class CaseGeneratorService {
 
   private computeQualityScore(critique: CaseGenerationCritique): number {
     const weightedScore =
-      critique.clinicalAccuracyScore * 0.35 +
-      critique.clueProgressionScore * 0.25 +
-      critique.differentialQualityScore * 0.25 +
-      critique.ambiguitySuitabilityScore * 0.15;
+      critique.clinicalAccuracyScore * 0.3 +
+      critique.clueProgressionScore * 0.2 +
+      critique.differentialQualityScore * 0.2 +
+      critique.differentialRuleOutScore * 0.2 +
+      critique.ambiguitySuitabilityScore * 0.1;
 
     return Math.round(this.clampScore(weightedScore));
   }
@@ -2048,8 +2255,12 @@ export class CaseGeneratorService {
     generatedCase: GeneratedCase,
     target: NonNullable<PlannedGenerationSlot['diagnosis']>,
   ): string {
-    const normalizedCase = this.normalizeCase(generatedCase);
-    const orderedClues = [...normalizedCase.clues]
+    const orderedClues = [...generatedCase.clues]
+      .map((clue) => ({
+        type: clue.type,
+        value: clue.value.trim(),
+        order: clue.order,
+      }))
       .sort((left, right) => left.order - right.order)
       .map((clue) =>
         [
@@ -2062,8 +2273,8 @@ export class CaseGeneratorService {
     return [
       target.diagnosisRegistryId,
       this.normalizeClinicalText(
-        normalizedCase.clues.find((clue) => clue.type === 'history')?.value ??
-          normalizedCase.clues[0]?.value ??
+        generatedCase.clues.find((clue) => clue.type === 'history')?.value ??
+          generatedCase.clues[0]?.value ??
           '',
       ),
       ...orderedClues,
@@ -2107,6 +2318,44 @@ export class CaseGeneratorService {
             summary: '',
             reasoning: [''],
             keyFindings: [''],
+            differentialAnalysis: [
+              {
+                diagnosis: 'placeholder',
+                whyPlausibleEarly: 'placeholder early scenario overlap',
+                ruledOutByClues: [
+                  {
+                    clueOrder: parsedClues.data[0]?.order ?? 0,
+                    evidence: parsedClues.data[0]?.value ?? 'placeholder',
+                    reason: 'placeholder scenario comparison',
+                  },
+                ],
+                finalReasonLessLikely: 'placeholder scenario comparison',
+              },
+              {
+                diagnosis: 'placeholder 2',
+                whyPlausibleEarly: 'placeholder early scenario overlap',
+                ruledOutByClues: [
+                  {
+                    clueOrder: parsedClues.data[0]?.order ?? 0,
+                    evidence: parsedClues.data[0]?.value ?? 'placeholder',
+                    reason: 'placeholder scenario comparison',
+                  },
+                ],
+                finalReasonLessLikely: 'placeholder scenario comparison',
+              },
+              {
+                diagnosis: 'placeholder 3',
+                whyPlausibleEarly: 'placeholder early scenario overlap',
+                ruledOutByClues: [
+                  {
+                    clueOrder: parsedClues.data[0]?.order ?? 0,
+                    evidence: parsedClues.data[0]?.value ?? 'placeholder',
+                    reason: 'placeholder scenario comparison',
+                  },
+                ],
+                finalReasonLessLikely: 'placeholder scenario comparison',
+              },
+            ],
           },
         },
         {

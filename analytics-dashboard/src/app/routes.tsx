@@ -3,6 +3,7 @@ import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import AnalyticsPage from '../features/analytics/AnalyticsPage';
 import CasesPage from '../features/cases/CasesPage';
 import DashboardPage from '../features/dashboard/DashboardPage';
+import DiagnosisGraphCandidatesPage from '../features/diagnosis-graph/DiagnosisGraphCandidatesPage';
 import GeneratePage from '../features/generation/GeneratePage';
 import PublishPage from '../features/publish/PublishPage';
 import { useAdmin } from '../hooks/useAdmin';
@@ -28,6 +29,10 @@ const routeContext: Record<string, { title: string; subtitle: string }> = {
   '/analytics': {
     title: 'Analytics',
     subtitle: 'Gameplay and case-quality insights',
+  },
+  '/diagnosis-graph/candidates': {
+    title: 'Diagnosis Graph',
+    subtitle: 'Review extracted graph candidates before promotion',
   },
   '/publish': {
     title: 'Publish',
@@ -143,6 +148,14 @@ export default function AppRoutes() {
         <Route path="/generate" element={<GeneratePage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/publish" element={<PublishPage />} />
+        <Route
+          path="/diagnosis-graph/candidates"
+          element={<DiagnosisGraphCandidatesPage />}
+        />
+        <Route
+          path="/admin/diagnosis-graph/candidates"
+          element={<Navigate to="/diagnosis-graph/candidates" replace />}
+        />
         <Route path="/admin" element={<Navigate to="/" replace />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

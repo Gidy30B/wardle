@@ -14,7 +14,7 @@ export default function WardleAuthForm() {
   const signInState = useSignIn()
   const signUpState = useSignUp()
   const [mode, setMode] = useState<AuthMode>('signin')
-  const [displayName, setDisplayName] = useState('')
+  const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
   const [pendingEmailCode, setPendingEmailCode] = useState<PendingEmailCode>(null)
@@ -114,8 +114,8 @@ export default function WardleAuthForm() {
 
     const normalizedEmail = email.trim()
 
-    if (mode === 'signup' && !displayName.trim()) {
-      setError('Enter the display name your classmates will see.')
+    if (mode === 'signup' && !username.trim()) {
+      setError('Choose the username your classmates will see.')
       return
     }
 
@@ -141,14 +141,14 @@ export default function WardleAuthForm() {
       } else {
         savePendingAuthProfile({
           email: normalizedEmail,
-          displayName,
+          username,
         })
 
         const signUpResult = await startSignUpEmailCode({
           signUp: signUpState.signUp,
           setActive: signUpState.setActive,
           email: normalizedEmail,
-          displayName,
+          username,
         })
         if (signUpResult === 'needs_email_verification') {
           setPendingEmailCode({ kind: 'signup', email: normalizedEmail })
@@ -201,13 +201,13 @@ export default function WardleAuthForm() {
 
         {mode === 'signup' && !pendingEmailCode ? (
           <>
-            <Field label="Display name">
+            <Field label="Username">
               <input
-                value={displayName}
-                onChange={(event) => setDisplayName(event.target.value)}
-                placeholder="Dr. in the making..."
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder="Dr. in the making"
                 className={inputClassName}
-                autoComplete="name"
+                autoComplete="username"
               />
             </Field>
           </>
@@ -378,14 +378,14 @@ async function startSignUpEmailCode({
   signUp,
   setActive,
   email,
-  displayName,
+  username,
 }: {
   signUp: NonNullable<ReturnType<typeof useSignUp>['signUp']>
   setActive: NonNullable<ReturnType<typeof useSignUp>['setActive']>
   email: string
-  displayName: string
+  username: string
 }) {
-  const normalizedUsername = displayName
+  const normalizedUsername = username
     .trim()
     .toLowerCase()
     .replace(/\s+/g, '_')
@@ -393,7 +393,7 @@ async function startSignUpEmailCode({
     .replace(/^_+|_+$/g, '')
 
   if (!normalizedUsername) {
-    throw new Error('Enter a display name with at least one letter or number.')
+    throw new Error('Choose a username with at least one letter or number.')
   }
 
   const signUpResult = await signUp.create({

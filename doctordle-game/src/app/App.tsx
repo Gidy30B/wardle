@@ -114,7 +114,7 @@ export default function App() {
       ) : screen === 'profile-onboarding' ? (
         <AnimatedScreen screenKey="profile-onboarding">
           <ProfileOnboardingScreen
-            suggestedDisplayName={userOnboarding.suggestedDisplayName}
+            suggestedUsername={userOnboarding.suggestedUsername}
             onboardingStatus={userOnboarding.onboarding?.onboardingStatus ?? 'PROFILE_REQUIRED'}
             onComplete={userOnboarding.saveProfile}
           />

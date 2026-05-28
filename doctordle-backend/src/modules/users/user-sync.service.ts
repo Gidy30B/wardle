@@ -6,14 +6,14 @@ import { PrismaService } from '../../core/db/prisma.service';
 export type ClerkPrincipal = {
   clerkId: string;
   email?: string | null;
-  displayName?: string | null;
 };
 
 export type SyncedUser = {
   id: string;
   clerkId: string | null;
   email: string | null;
-  displayName: string | null;
+  username: string | null;
+  normalizedUsername: string | null;
   subscriptionTier: string;
   lastPlayedAt: Date | null;
   role: string;
@@ -32,17 +32,13 @@ export class UserSyncService {
   async syncUser(principal: ClerkPrincipal): Promise<SyncedUser> {
     const existingByClerkId = await this.findByClerkId(principal.clerkId);
     if (existingByClerkId) {
-      const shouldFillDisplayName =
-        !existingByClerkId.displayName?.trim() && principal.displayName?.trim();
       await this.prisma.user.update({
         where: { id: existingByClerkId.id },
         data: {
           email: principal.email ?? undefined,
-          ...(shouldFillDisplayName
+          ...(!existingByClerkId.username?.trim()
             ? {
-                displayName: principal.displayName!.trim(),
-                individualMode: false,
-                onboardingStatus: UserOnboardingStatus.ORGANIZATION_REQUIRED,
+                onboardingStatus: UserOnboardingStatus.PROFILE_REQUIRED,
                 onboardingCompletedAt: null,
               }
             : {}),
@@ -57,18 +53,14 @@ export class UserSyncService {
     });
 
     if (existingById && !existingById.clerkId) {
-      const shouldFillDisplayName =
-        !existingById.displayName?.trim() && principal.displayName?.trim();
       await this.prisma.user.update({
         where: { id: existingById.id },
         data: {
           clerkId: principal.clerkId,
           email: principal.email ?? undefined,
-          ...(shouldFillDisplayName
+          ...(!existingById.username?.trim()
             ? {
-                displayName: principal.displayName!.trim(),
-                individualMode: false,
-                onboardingStatus: UserOnboardingStatus.ORGANIZATION_REQUIRED,
+                onboardingStatus: UserOnboardingStatus.PROFILE_REQUIRED,
                 onboardingCompletedAt: null,
               }
             : {}),
@@ -78,17 +70,13 @@ export class UserSyncService {
       return this.loadSyncedUser(existingById.id);
     }
 
-    const displayName = principal.displayName?.trim() || undefined;
     const createdUser = await this.prisma.user.create({
       data: {
         id: randomUUID(),
         clerkId: principal.clerkId,
         email: principal.email ?? undefined,
-        displayName,
         individualMode: false,
-        onboardingStatus: displayName
-          ? UserOnboardingStatus.ORGANIZATION_REQUIRED
-          : UserOnboardingStatus.PROFILE_REQUIRED,
+        onboardingStatus: UserOnboardingStatus.PROFILE_REQUIRED,
         subscriptionTier: 'free',
       },
     });
@@ -103,7 +91,8 @@ export class UserSyncService {
           "id",
           "clerkId",
           "email",
-          "displayName",
+          "username",
+          "normalizedUsername",
           "subscriptionTier",
           "lastPlayedAt",
           "role"

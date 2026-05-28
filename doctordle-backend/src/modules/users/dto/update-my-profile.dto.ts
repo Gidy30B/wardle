@@ -14,7 +14,7 @@ export class UpdateMyProfileDto {
   @IsString()
   @MinLength(2)
   @MaxLength(80)
-  displayName?: string;
+  username?: string;
 
   @IsOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))

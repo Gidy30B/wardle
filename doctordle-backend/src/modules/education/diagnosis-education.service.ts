@@ -1,8 +1,10 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   DiagnosisEducationSource,
@@ -12,8 +14,13 @@ import {
   type DiagnosisRegistry,
 } from '@prisma/client';
 import OpenAI from 'openai';
+import type {
+  ChatCompletion,
+  ChatCompletionCreateParamsNonStreaming,
+} from 'openai/resources/chat/completions';
 import { getEnv } from '../../core/config/env.validation';
 import { PrismaService } from '../../core/db/prisma.service';
+import { DiagnosisGraphExtractionService } from '../diagnosis-graph/diagnosis-graph-extraction.service';
 import type { ReviewDiagnosisEducationDto } from './dto/review-diagnosis-education.dto';
 import type { UpsertDiagnosisEducationDto } from './dto/upsert-diagnosis-education.dto';
 
@@ -62,17 +69,27 @@ const PEARL_TYPE_VALUES = [
 const TYPED_PEARL_DRAFT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['id', 'type', 'title', 'content', 'whyItMatters'],
+  required: [
+    'id',
+    'type',
+    'title',
+    'content',
+    'whyItMatters',
+    'discriminator',
+    'managementImplication',
+    'escalationImplication',
+    'trapAvoided',
+  ],
   properties: {
     id: { type: 'string' },
     type: { type: 'string', enum: PEARL_TYPE_VALUES },
-    title: { type: 'string' },
+    title: { type: ['string', 'null'] },
     content: { type: 'string' },
-    whyItMatters: { type: 'string' },
-    discriminator: { type: 'string' },
-    managementImplication: { type: 'string' },
-    escalationImplication: { type: 'string' },
-    trapAvoided: { type: 'string' },
+    whyItMatters: { type: ['string', 'null'] },
+    discriminator: { type: ['string', 'null'] },
+    managementImplication: { type: ['string', 'null'] },
+    escalationImplication: { type: ['string', 'null'] },
+    trapAvoided: { type: ['string', 'null'] },
   },
 } as const;
 
@@ -103,7 +120,12 @@ const DIAGNOSIS_EDUCATION_DRAFT_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['finding', 'whyItMatters', 'diagnosticImpact', 'discriminator'],
+        required: [
+          'finding',
+          'whyItMatters',
+          'diagnosticImpact',
+          'discriminator',
+        ],
         properties: {
           finding: { type: 'string' },
           whyItMatters: { type: 'string' },
@@ -119,7 +141,12 @@ const DIAGNOSIS_EDUCATION_DRAFT_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['finding', 'whyItMatters', 'diagnosticImpact', 'discriminator'],
+        required: [
+          'finding',
+          'whyItMatters',
+          'diagnosticImpact',
+          'discriminator',
+        ],
         properties: {
           finding: { type: 'string' },
           whyItMatters: { type: 'string' },
@@ -226,7 +253,10 @@ type EducationWriteData = {
   version: number;
 } & Partial<Record<EducationJsonField, Prisma.InputJsonValue>>;
 
-type ValidatedEducationDraft = Record<EducationJsonField, Prisma.InputJsonValue>;
+type ValidatedEducationDraft = Record<
+  EducationJsonField,
+  Prisma.InputJsonValue
+>;
 
 type PearlType = (typeof PEARL_TYPE_VALUES)[number];
 
@@ -351,6 +381,15 @@ const WHY_LAYER_REASONING_MARKERS = [
   'icu',
 ];
 
+const OPENAI_EDUCATION_MODEL = 'gpt-4o-mini';
+const OPENAI_EDUCATION_TIMEOUT_MS = 60_000;
+const OPENAI_EDUCATION_SYNC_ATTEMPT_TIMEOUT_MS = 20_000;
+const OPENAI_CONNECTION_RETRY_DELAYS_MS = [500] as const;
+const OPENAI_CONNECTION_ERROR_MESSAGE =
+  'AI education generation is temporarily unavailable. Please retry.';
+const EDUCATION_GENERATION_CONFLICT_MESSAGE =
+  'Education generation is already in progress for this diagnosis.';
+
 type DiagnosisEducationWithRegistry = DiagnosisEducation & {
   diagnosisRegistry: Pick<
     DiagnosisRegistry,
@@ -369,11 +408,20 @@ type DiagnosisEducationWithRegistry = DiagnosisEducation & {
 export class DiagnosisEducationService {
   private readonly logger = new Logger(DiagnosisEducationService.name);
   private readonly openaiClient?: OpenAI;
+  // TODO: replace with a Redis-backed lock before running multiple API replicas.
+  private readonly educationGenerationLocks = new Set<string>();
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly diagnosisGraphExtractionService?: DiagnosisGraphExtractionService,
+  ) {
     const env = getEnv();
     if (env.OPENAI_API_KEY) {
-      this.openaiClient = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+      this.openaiClient = new OpenAI({
+        apiKey: env.OPENAI_API_KEY,
+        timeout: OPENAI_EDUCATION_TIMEOUT_MS,
+        maxRetries: 3,
+      });
     }
   }
 
@@ -615,6 +663,21 @@ export class DiagnosisEducationService {
       return saved;
     });
 
+    if (input.status === DiagnosisEducationStatus.PUBLISHED) {
+      await this.diagnosisGraphExtractionService
+        ?.extractFromPublishedEducation(educationId)
+        .catch((error) => {
+          this.logger.error(
+            JSON.stringify({
+              event: 'diagnosis_graph.education_extraction.failed',
+              educationId,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+            error instanceof Error ? error.stack : undefined,
+          );
+        });
+    }
+
     return education;
   }
 
@@ -710,60 +773,67 @@ export class DiagnosisEducationService {
     }
 
     if (!this.openaiClient) {
-      throw new BadRequestException('OPENAI_API_KEY is required for generation');
-    }
-
-    const registry = await this.prisma.diagnosisRegistry.findUnique({
-      where: { id: diagnosisRegistryId },
-      include: {
-        aliases: {
-          where: { active: true },
-          select: { term: true, acceptedForMatch: true },
-          orderBy: [{ acceptedForMatch: 'desc' }, { rank: 'asc' }],
-          take: 20,
-        },
-        cases: {
-          select: {
-            title: true,
-            clues: true,
-            explanation: true,
-            differentials: true,
-          },
-          take: 3,
-          orderBy: { date: 'desc' },
-        },
-      },
-    });
-
-    if (!registry) {
-      throw new NotFoundException('Diagnosis registry entry not found');
-    }
-
-    const existing = await this.prisma.diagnosisEducation.findUnique({
-      where: { diagnosisRegistryId },
-    });
-
-    if (existing?.editorialStatus === DiagnosisEducationStatus.PUBLISHED) {
       throw new BadRequestException(
-        'Cannot generate over published education. Archive or create draft manually first.',
+        'OPENAI_API_KEY is required for generation',
       );
     }
 
-    const completion = await this.openaiClient.chat.completions.create({
-      model: 'gpt-4o-mini',
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'diagnosis_education_draft',
-          strict: true,
-          schema: DIAGNOSIS_EDUCATION_DRAFT_SCHEMA,
+    if (this.educationGenerationLocks.has(diagnosisRegistryId)) {
+      throw new ConflictException(EDUCATION_GENERATION_CONFLICT_MESSAGE);
+    }
+
+    this.educationGenerationLocks.add(diagnosisRegistryId);
+    try {
+      const registry = await this.prisma.diagnosisRegistry.findUnique({
+        where: { id: diagnosisRegistryId },
+        include: {
+          aliases: {
+            where: { active: true },
+            select: { term: true, acceptedForMatch: true },
+            orderBy: [{ acceptedForMatch: 'desc' }, { rank: 'asc' }],
+            take: 20,
+          },
+          cases: {
+            select: {
+              title: true,
+              clues: true,
+              explanation: true,
+              differentials: true,
+            },
+            take: 3,
+            orderBy: { date: 'desc' },
+          },
         },
-      },
-      messages: [
-        {
-          role: 'system',
-          content:
-            [
+      });
+
+      if (!registry) {
+        throw new NotFoundException('Diagnosis registry entry not found');
+      }
+
+      const existing = await this.prisma.diagnosisEducation.findUnique({
+        where: { diagnosisRegistryId },
+      });
+
+      if (existing?.editorialStatus === DiagnosisEducationStatus.PUBLISHED) {
+        throw new BadRequestException(
+          'Cannot generate over published education. Archive or create draft manually first.',
+        );
+      }
+
+      const request: ChatCompletionCreateParamsNonStreaming = {
+        model: OPENAI_EDUCATION_MODEL,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'diagnosis_education_draft',
+            strict: true,
+            schema: DIAGNOSIS_EDUCATION_DRAFT_SCHEMA,
+          },
+        },
+        messages: [
+          {
+            role: 'system',
+            content: [
               'You draft reviewed medical education JSON for a medical learning game.',
               'Generate diagnosis education like a senior clinician teaching diagnostic reasoning.',
               'Every major point must explain why it matters diagnostically, what it distinguishes, what probability it shifts, or what clinical trap it avoids.',
@@ -788,385 +858,399 @@ export class DiagnosisEducationService {
               'Reject generic output internally and revise it before final JSON if exam pearls are merely symptoms, if common named signs are missing, if differentials are not comparative, if pitfalls are vague, or if recall prompts are too broad.',
               'Do not include drug doses, patient-specific advice, or unsupported guideline claims.',
             ].join(' '),
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            task: 'Draft diagnosis-level high-yield education for editorial review.',
-            typedPearlContract: {
-              requiredFields: ['id', 'type', 'title', 'content', 'whyItMatters'],
-              optionalFields: [
-                'discriminator',
-                'managementImplication',
-                'escalationImplication',
-                'trapAvoided',
-              ],
-              allowedTypes: PEARL_TYPE_VALUES,
-              constraints: [
-                'content must be 18-45 words.',
-                'content must be no more than 2 sentences.',
-                'Each pearl must prevent a mistake, change management, distinguish similar diagnoses, or explain why a finding matters.',
-                'Avoid textbook introductions and generic urgency statements.',
-              ],
-            },
-            exactOutputShape: {
-              summary: {
-                definition: 'string',
-                highYieldTakeaway: 'string',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              task: 'Draft diagnosis-level high-yield education for editorial review.',
+              typedPearlContract: {
+                requiredFields: [
+                  'id',
+                  'type',
+                  'title',
+                  'content',
+                  'whyItMatters',
+                ],
+                optionalFields: [
+                  'discriminator',
+                  'managementImplication',
+                  'escalationImplication',
+                  'trapAvoided',
+                ],
+                allowedTypes: PEARL_TYPE_VALUES,
+                constraints: [
+                  'content must be 18-45 words.',
+                  'content must be no more than 2 sentences.',
+                  'Each pearl must prevent a mistake, change management, distinguish similar diagnoses, or explain why a finding matters.',
+                  'Avoid textbook introductions and generic urgency statements.',
+                ],
               },
-              clinicalPattern: [
-                {
-                  id: 'stable-kebab-case-string',
-                  type: 'PATTERN_RECOGNITION',
-                  title: 'string',
-                  content: '18-45 words, max 2 sentences',
-                  whyItMatters: 'string',
-                  discriminator: 'string',
-                  managementImplication: 'string',
-                  escalationImplication: 'string',
-                  trapAvoided: 'string',
+              exactOutputShape: {
+                summary: {
+                  definition: 'string',
+                  highYieldTakeaway: 'string',
                 },
+                clinicalPattern: [
+                  {
+                    id: 'stable-kebab-case-string',
+                    type: 'PATTERN_RECOGNITION',
+                    title: 'string',
+                    content: '18-45 words, max 2 sentences',
+                    whyItMatters: 'string',
+                    discriminator: 'string',
+                    managementImplication: 'string',
+                    escalationImplication: 'string',
+                    trapAvoided: 'string',
+                  },
+                ],
+                keySymptoms: [
+                  {
+                    finding: 'string',
+                    whyItMatters: 'string',
+                    diagnosticImpact: 'string',
+                    discriminator: 'string',
+                  },
+                ],
+                keySigns: [
+                  {
+                    finding: 'string',
+                    whyItMatters: 'string',
+                    diagnosticImpact: 'string',
+                    discriminator: 'string',
+                  },
+                ],
+                examPearls: [
+                  {
+                    id: 'stable-kebab-case-string',
+                    type: 'EXAM',
+                    title: 'string',
+                    content: '18-45 words, max 2 sentences',
+                    whyItMatters: 'string',
+                    discriminator: 'string',
+                    managementImplication: 'string',
+                    escalationImplication: 'string',
+                    trapAvoided: 'string',
+                  },
+                ],
+                scoringSystems: [
+                  {
+                    id: 'stable-kebab-case-string',
+                    name: 'string',
+                    use: 'string',
+                    components: ['string'],
+                    caution: 'string',
+                  },
+                ],
+                investigations: [
+                  {
+                    id: 'stable-kebab-case-string',
+                    type: 'INVESTIGATION',
+                    title: 'string',
+                    content: '18-45 words, max 2 sentences',
+                    whyItMatters: 'string',
+                    discriminator: 'string',
+                    managementImplication: 'string',
+                    escalationImplication: 'string',
+                    trapAvoided: 'string',
+                  },
+                ],
+                differentials: [
+                  {
+                    id: 'stable-kebab-case-string',
+                    type: 'HIGH_YIELD_DISCRIMINATOR',
+                    title: 'close mimic diagnosis',
+                    content: '18-45 words, max 2 sentences',
+                    whyItMatters: 'string',
+                    discriminator: 'string',
+                    managementImplication: 'string',
+                    escalationImplication: 'string',
+                    trapAvoided: 'string',
+                  },
+                ],
+                management: [
+                  {
+                    id: 'stable-kebab-case-string',
+                    type: 'MANAGEMENT',
+                    title: 'string',
+                    content: '18-45 words, max 2 sentences',
+                    whyItMatters: 'string',
+                    discriminator: 'string',
+                    managementImplication: 'string',
+                    escalationImplication: 'string',
+                    trapAvoided: 'string',
+                  },
+                ],
+                complications: ['string'],
+                pitfalls: [
+                  {
+                    id: 'stable-kebab-case-string',
+                    type: 'PITFALL',
+                    title: 'string',
+                    content: '18-45 words, max 2 sentences',
+                    whyItMatters: 'string',
+                    discriminator: 'string',
+                    managementImplication: 'string',
+                    escalationImplication: 'string',
+                    trapAvoided: 'string',
+                  },
+                ],
+                recallPrompts: [
+                  {
+                    id: 'stable-kebab-case-string',
+                    type: 'WHY_IT_MATTERS',
+                    prompt: 'string',
+                    answer: 'string',
+                    explanation: 'string',
+                    linkedConcept: 'string',
+                    sourceSection: 'string',
+                    difficulty: 'BASIC',
+                  },
+                ],
+                references: ['string'],
+              },
+              teachingRubric: {
+                clinicalPattern: [
+                  'Include the classic illness script.',
+                  'Name the typical patient or clinical context when relevant.',
+                  'Describe symptom sequence or tempo.',
+                  'Include important atypical presentations when clinically relevant.',
+                ],
+                examPearls: [
+                  'Prioritize named signs, bedside findings, validated scores, and clinical maneuvers.',
+                  'Each pearl should explain what the finding means.',
+                  'Each whyItMatters line must explain what probability changes, what management decision changes, or what clinical risk increases.',
+                  'Connect finding -> significance -> discriminator or management implication.',
+                  'Prefer operational reasoning over abstract educational phrasing.',
+                  'Avoid generic urgency wording such as "important for management" or "guides treatment decisions".',
+                  'When possible, explain what the finding favors, what it argues against, or what dangerous confusion it resolves.',
+                  'Do not list symptoms as exam pearls.',
+                ],
+                differentialDistinguishers: [
+                  'Each differential must be comparative.',
+                  'Explain how the mimic differs from the target diagnosis.',
+                  'Avoid non-comparative phrasing such as "may present with".',
+                ],
+                pitfalls: [
+                  'Use specific clinical traps, not generic warnings.',
+                  'Mention false reassurance patterns, atypical anatomy or populations, and dangerous misses when relevant.',
+                ],
+                references: [
+                  'Include at least two source labels when scoringSystems, investigations, or management are populated.',
+                  'Source labels can be guideline/topic labels in v1; URLs are not required.',
+                ],
+              },
+              qualitySelfCheck: [
+                'If named signs are common for this diagnosis, include them.',
+                'If a validated scoring system is commonly taught for this diagnosis, include it.',
+                'If exam pearls are just symptoms, revise them into bedside findings or maneuvers.',
+                'Reject exam pearl whyItMatters lines that only say the finding is important, urgent, or guides management.',
+                'Each exam pearl whyItMatters should include diagnostic comparison, severity interpretation, operational change, or dangerous confusion avoided.',
+                'If differentials are not comparative, revise them.',
+                'If pitfalls are generic, make them clinically specific.',
+                'If recall prompts are vague, make them test a concrete pearl.',
+                'At least one recall prompt should use WHY_IT_MATTERS.',
+                'At least one recall prompt should use DISTINGUISH when meaningful mimics exist.',
               ],
-              keySymptoms: [
-                {
-                  finding: 'string',
-                  whyItMatters: 'string',
-                  diagnosticImpact: 'string',
-                  discriminator: 'string',
-                },
+              badExamples: [
+                'Fever may occur.',
+                'Patients can present with abdominal pain.',
+                'Diagnosis includes history, exam, and investigations.',
+                'Management depends on severity.',
+                'Important for early diagnosis.',
+                'Critical for management.',
+                'Guides treatment decisions.',
+                'Avoids deterioration.',
               ],
-              keySigns: [
-                {
-                  finding: 'string',
-                  whyItMatters: 'string',
-                  diagnosticImpact: 'string',
-                  discriminator: 'string',
-                },
+              goodExamples: [
+                'Migratory periumbilical to right lower quadrant pain favors appendicitis because it reflects progression from visceral to parietal peritoneal irritation.',
+                'Lipase more than three times the upper limit of normal supports pancreatitis over uncomplicated biliary colic.',
+                'Hypoxia out of proportion to auscultatory findings favors pulmonary embolism over pneumonia.',
+                'Steroids before antibiotics can worsen unrecognized infection.',
+                'Kussmaul respirations indicate clinically significant metabolic acidosis rather than uncomplicated hyperglycemia.',
+                'Worsening mental status increases concern for cerebral edema and should slow aggressive osmotic correction.',
+                'Marked dehydration with ketosis favors DKA over isolated gastroenteritis.',
+                'Profound acidemia increases concern for hemodynamic instability and need for close monitoring.',
+                'Hypokalemia risk changes insulin timing.',
               ],
-              examPearls: [
-                {
-                  id: 'stable-kebab-case-string',
-                  type: 'EXAM',
-                  title: 'string',
-                  content: '18-45 words, max 2 sentences',
-                  whyItMatters: 'string',
-                  discriminator: 'string',
-                  managementImplication: 'string',
-                  escalationImplication: 'string',
-                  trapAvoided: 'string',
-                },
+              styleExampleDoNotCopyDiagnosisGlobally: {
+                diagnosis: 'Appendicitis',
+                clinicalPattern: [
+                  'Classically begins as vague periumbilical pain from visceral inflammation, then localizes to the right lower quadrant as parietal peritoneum becomes irritated.',
+                  'Anorexia, nausea, low-grade fever, and neutrophilic leukocytosis support the pattern.',
+                  'Retrocecal appendicitis may produce flank/back discomfort or psoas irritation; pelvic appendicitis may cause suprapubic pain or urinary symptoms.',
+                  'Pregnancy, children, and older adults may have less typical localization or muted systemic findings.',
+                ],
+                examPearls: [
+                  {
+                    id: 'appendicitis-mcburney-point',
+                    label: 'McBurney point tenderness',
+                    explanation:
+                      'Maximal tenderness one-third of the way from the ASIS to the umbilicus supports appendiceal irritation.',
+                  },
+                  {
+                    id: 'appendicitis-rovsing-sign',
+                    label: 'Rovsing sign',
+                    explanation:
+                      'Left lower quadrant palpation causing right lower quadrant pain suggests peritoneal irritation.',
+                  },
+                  {
+                    id: 'appendicitis-psoas-sign',
+                    label: 'Psoas sign',
+                    explanation:
+                      'Pain with hip extension suggests irritation from a retrocecal appendix.',
+                  },
+                  {
+                    id: 'appendicitis-obturator-sign',
+                    label: 'Obturator sign',
+                    explanation:
+                      'Pain with internal rotation of the flexed hip can suggest pelvic appendiceal irritation.',
+                  },
+                  {
+                    id: 'appendicitis-rebound-guarding',
+                    label: 'Rebound tenderness or guarding',
+                    explanation:
+                      'Peritoneal irritation increases concern for advanced inflammation or perforation.',
+                  },
+                  {
+                    id: 'appendicitis-alvarado-score',
+                    label: 'MANTRELS / Alvarado score',
+                    explanation:
+                      'Migration, anorexia, nausea/vomiting, tenderness, rebound, elevated temperature, leukocytosis, and left shift structure clinical probability.',
+                  },
+                ],
+                differentials: [
+                  {
+                    id: 'appendicitis-vs-gastroenteritis',
+                    diagnosis: 'Gastroenteritis',
+                    distinguishingPoint:
+                      'Gastroenteritis usually has prominent diarrhea/vomiting and diffuse crampy pain, unlike progressive localized right lower quadrant tenderness in appendicitis.',
+                  },
+                ],
+                pitfalls: [
+                  'A normal white blood cell count does not exclude appendicitis early in the course.',
+                  'Transient pain improvement can occur after perforation and should not be falsely reassuring.',
+                  'Retrocecal or pelvic appendix location can shift tenderness away from classic McBurney point localization.',
+                ],
+                references: [
+                  'Alvarado score / MANTRELS',
+                  'BMJ Best Practice',
+                  'Merck Manual',
+                ],
+              },
+              diagnosis: {
+                id: registry.id,
+                displayLabel: registry.displayLabel,
+                canonicalName: registry.canonicalName,
+                specialty: registry.specialty,
+                category: registry.category,
+                bodySystem: registry.bodySystem,
+                clinicalSetting: registry.clinicalSetting,
+                difficultyBand: registry.difficultyBand,
+                aliases: registry.aliases.map((alias) => alias.term),
+              },
+              exampleCases: registry.cases,
+              constraints: [
+                'Return JSON object only.',
+                'Do not use markdown.',
+                'Do not use recognitionPattern; use clinicalPattern.',
+                'Do not use differentialDistinguishers; use differentials.',
+                'summary must be an object with definition and highYieldTakeaway.',
+                'clinicalPattern, examPearls, investigations, differentials, management, and pitfalls must use typed pearl objects.',
+                'Typed pearl objects must include id, type, title, content, and whyItMatters.',
+                'Typed pearl content must be 18-45 words and no more than 2 sentences.',
+                'Typed pearls must answer at least one: what mistake this prevents, how management changes, how similar diagnoses are distinguished, or why the finding matters.',
+                'scoringSystems must be objects with id, name, use, components, and caution.',
+                'recallPrompts must be objects with id, type, prompt, answer, sourceSection, and difficulty.',
+                'recallPrompts may include explanation and linkedConcept.',
+                'Recall prompts must include at least one WHY_IT_MATTERS prompt.',
+                'Recall prompts should include at least one DISTINGUISH prompt when meaningful differentials exist.',
+                'Recognition pattern must include classic illness script, typical context, symptom sequence, and relevant atypical presentations.',
+                'Exam pearls must prioritize named signs, bedside findings, validated scores, clinical maneuvers, and what each means.',
+                'Exam pearl whyItMatters must connect findings to diagnostic probability, management decisions, clinical risk, or dangerous confusion avoided.',
+                'Exam pearl whyItMatters must avoid generic urgency phrases such as "important for management" or "guides treatment decisions".',
+                'Exam pearls should be 1-2 dense reasoning sentences, not paragraph prose.',
+                'Differential distinguishers must be comparative, not generic mimic summaries.',
+                'Pitfalls must be specific clinical traps.',
+                'References must include at least two source labels when scoring systems, investigations, or management are populated.',
+                'No drug doses.',
+                'No patient-specific advice.',
+                'Management must be broad and educational.',
+                'Scoring systems and management require references before publication.',
+                'Use concise bullets suitable for mobile.',
               ],
-              scoringSystems: [
-                {
-                  id: 'stable-kebab-case-string',
-                  name: 'string',
-                  use: 'string',
-                  components: ['string'],
-                  caution: 'string',
-                },
-              ],
-              investigations: [
-                {
-                  id: 'stable-kebab-case-string',
-                  type: 'INVESTIGATION',
-                  title: 'string',
-                  content: '18-45 words, max 2 sentences',
-                  whyItMatters: 'string',
-                  discriminator: 'string',
-                  managementImplication: 'string',
-                  escalationImplication: 'string',
-                  trapAvoided: 'string',
-                },
-              ],
-              differentials: [
-                {
-                  id: 'stable-kebab-case-string',
-                  type: 'HIGH_YIELD_DISCRIMINATOR',
-                  title: 'close mimic diagnosis',
-                  content: '18-45 words, max 2 sentences',
-                  whyItMatters: 'string',
-                  discriminator: 'string',
-                  managementImplication: 'string',
-                  escalationImplication: 'string',
-                  trapAvoided: 'string',
-                },
-              ],
-              management: [
-                {
-                  id: 'stable-kebab-case-string',
-                  type: 'MANAGEMENT',
-                  title: 'string',
-                  content: '18-45 words, max 2 sentences',
-                  whyItMatters: 'string',
-                  discriminator: 'string',
-                  managementImplication: 'string',
-                  escalationImplication: 'string',
-                  trapAvoided: 'string',
-                },
-              ],
-              complications: ['string'],
-              pitfalls: [
-                {
-                  id: 'stable-kebab-case-string',
-                  type: 'PITFALL',
-                  title: 'string',
-                  content: '18-45 words, max 2 sentences',
-                  whyItMatters: 'string',
-                  discriminator: 'string',
-                  managementImplication: 'string',
-                  escalationImplication: 'string',
-                  trapAvoided: 'string',
-                },
-              ],
-              recallPrompts: [
-                {
-                  id: 'stable-kebab-case-string',
-                  type: 'WHY_IT_MATTERS',
-                  prompt: 'string',
-                  answer: 'string',
-                  explanation: 'string',
-                  linkedConcept: 'string',
-                  sourceSection: 'string',
-                  difficulty: 'BASIC',
-                },
-              ],
-              references: ['string'],
-            },
-            teachingRubric: {
-              clinicalPattern: [
-                'Include the classic illness script.',
-                'Name the typical patient or clinical context when relevant.',
-                'Describe symptom sequence or tempo.',
-                'Include important atypical presentations when clinically relevant.',
-              ],
-              examPearls: [
-                'Prioritize named signs, bedside findings, validated scores, and clinical maneuvers.',
-                'Each pearl should explain what the finding means.',
-                'Each whyItMatters line must explain what probability changes, what management decision changes, or what clinical risk increases.',
-                'Connect finding -> significance -> discriminator or management implication.',
-                'Prefer operational reasoning over abstract educational phrasing.',
-                'Avoid generic urgency wording such as "important for management" or "guides treatment decisions".',
-                'When possible, explain what the finding favors, what it argues against, or what dangerous confusion it resolves.',
-                'Do not list symptoms as exam pearls.',
-              ],
-              differentialDistinguishers: [
-                'Each differential must be comparative.',
-                'Explain how the mimic differs from the target diagnosis.',
-                'Avoid non-comparative phrasing such as "may present with".',
-              ],
-              pitfalls: [
-                'Use specific clinical traps, not generic warnings.',
-                'Mention false reassurance patterns, atypical anatomy or populations, and dangerous misses when relevant.',
-              ],
-              references: [
-                'Include at least two source labels when scoringSystems, investigations, or management are populated.',
-                'Source labels can be guideline/topic labels in v1; URLs are not required.',
-              ],
-            },
-            qualitySelfCheck: [
-              'If named signs are common for this diagnosis, include them.',
-              'If a validated scoring system is commonly taught for this diagnosis, include it.',
-              'If exam pearls are just symptoms, revise them into bedside findings or maneuvers.',
-              'Reject exam pearl whyItMatters lines that only say the finding is important, urgent, or guides management.',
-              'Each exam pearl whyItMatters should include diagnostic comparison, severity interpretation, operational change, or dangerous confusion avoided.',
-              'If differentials are not comparative, revise them.',
-              'If pitfalls are generic, make them clinically specific.',
-              'If recall prompts are vague, make them test a concrete pearl.',
-              'At least one recall prompt should use WHY_IT_MATTERS.',
-              'At least one recall prompt should use DISTINGUISH when meaningful mimics exist.',
-            ],
-            badExamples: [
-              'Fever may occur.',
-              'Patients can present with abdominal pain.',
-              'Diagnosis includes history, exam, and investigations.',
-              'Management depends on severity.',
-              'Important for early diagnosis.',
-              'Critical for management.',
-              'Guides treatment decisions.',
-              'Avoids deterioration.',
-            ],
-            goodExamples: [
-              'Migratory periumbilical to right lower quadrant pain favors appendicitis because it reflects progression from visceral to parietal peritoneal irritation.',
-              'Lipase more than three times the upper limit of normal supports pancreatitis over uncomplicated biliary colic.',
-              'Hypoxia out of proportion to auscultatory findings favors pulmonary embolism over pneumonia.',
-              'Steroids before antibiotics can worsen unrecognized infection.',
-              'Kussmaul respirations indicate clinically significant metabolic acidosis rather than uncomplicated hyperglycemia.',
-              'Worsening mental status increases concern for cerebral edema and should slow aggressive osmotic correction.',
-              'Marked dehydration with ketosis favors DKA over isolated gastroenteritis.',
-              'Profound acidemia increases concern for hemodynamic instability and need for close monitoring.',
-              'Hypokalemia risk changes insulin timing.',
-            ],
-            styleExampleDoNotCopyDiagnosisGlobally: {
-              diagnosis: 'Appendicitis',
-              clinicalPattern: [
-                'Classically begins as vague periumbilical pain from visceral inflammation, then localizes to the right lower quadrant as parietal peritoneum becomes irritated.',
-                'Anorexia, nausea, low-grade fever, and neutrophilic leukocytosis support the pattern.',
-                'Retrocecal appendicitis may produce flank/back discomfort or psoas irritation; pelvic appendicitis may cause suprapubic pain or urinary symptoms.',
-                'Pregnancy, children, and older adults may have less typical localization or muted systemic findings.',
-              ],
-              examPearls: [
-                {
-                  id: 'appendicitis-mcburney-point',
-                  label: 'McBurney point tenderness',
-                  explanation:
-                    'Maximal tenderness one-third of the way from the ASIS to the umbilicus supports appendiceal irritation.',
-                },
-                {
-                  id: 'appendicitis-rovsing-sign',
-                  label: 'Rovsing sign',
-                  explanation:
-                    'Left lower quadrant palpation causing right lower quadrant pain suggests peritoneal irritation.',
-                },
-                {
-                  id: 'appendicitis-psoas-sign',
-                  label: 'Psoas sign',
-                  explanation:
-                    'Pain with hip extension suggests irritation from a retrocecal appendix.',
-                },
-                {
-                  id: 'appendicitis-obturator-sign',
-                  label: 'Obturator sign',
-                  explanation:
-                    'Pain with internal rotation of the flexed hip can suggest pelvic appendiceal irritation.',
-                },
-                {
-                  id: 'appendicitis-rebound-guarding',
-                  label: 'Rebound tenderness or guarding',
-                  explanation:
-                    'Peritoneal irritation increases concern for advanced inflammation or perforation.',
-                },
-                {
-                  id: 'appendicitis-alvarado-score',
-                  label: 'MANTRELS / Alvarado score',
-                  explanation:
-                    'Migration, anorexia, nausea/vomiting, tenderness, rebound, elevated temperature, leukocytosis, and left shift structure clinical probability.',
-                },
-              ],
-              differentials: [
-                {
-                  id: 'appendicitis-vs-gastroenteritis',
-                  diagnosis: 'Gastroenteritis',
-                  distinguishingPoint:
-                    'Gastroenteritis usually has prominent diarrhea/vomiting and diffuse crampy pain, unlike progressive localized right lower quadrant tenderness in appendicitis.',
-                },
-              ],
-              pitfalls: [
-                'A normal white blood cell count does not exclude appendicitis early in the course.',
-                'Transient pain improvement can occur after perforation and should not be falsely reassuring.',
-                'Retrocecal or pelvic appendix location can shift tenderness away from classic McBurney point localization.',
-              ],
-              references: [
-                'Alvarado score / MANTRELS',
-                'BMJ Best Practice',
-                'Merck Manual',
-              ],
-            },
-            diagnosis: {
-              id: registry.id,
-              displayLabel: registry.displayLabel,
-              canonicalName: registry.canonicalName,
-              specialty: registry.specialty,
-              category: registry.category,
-              bodySystem: registry.bodySystem,
-              clinicalSetting: registry.clinicalSetting,
-              difficultyBand: registry.difficultyBand,
-              aliases: registry.aliases.map((alias) => alias.term),
-            },
-            exampleCases: registry.cases,
-            constraints: [
-              'Return JSON object only.',
-              'Do not use markdown.',
-              'Do not use recognitionPattern; use clinicalPattern.',
-              'Do not use differentialDistinguishers; use differentials.',
-              'summary must be an object with definition and highYieldTakeaway.',
-              'clinicalPattern, examPearls, investigations, differentials, management, and pitfalls must use typed pearl objects.',
-              'Typed pearl objects must include id, type, title, content, and whyItMatters.',
-              'Typed pearl content must be 18-45 words and no more than 2 sentences.',
-              'Typed pearls must answer at least one: what mistake this prevents, how management changes, how similar diagnoses are distinguished, or why the finding matters.',
-              'scoringSystems must be objects with id, name, use, components, and caution.',
-              'recallPrompts must be objects with id, type, prompt, answer, sourceSection, and difficulty.',
-              'recallPrompts may include explanation and linkedConcept.',
-              'Recall prompts must include at least one WHY_IT_MATTERS prompt.',
-              'Recall prompts should include at least one DISTINGUISH prompt when meaningful differentials exist.',
-              'Recognition pattern must include classic illness script, typical context, symptom sequence, and relevant atypical presentations.',
-              'Exam pearls must prioritize named signs, bedside findings, validated scores, clinical maneuvers, and what each means.',
-              'Exam pearl whyItMatters must connect findings to diagnostic probability, management decisions, clinical risk, or dangerous confusion avoided.',
-              'Exam pearl whyItMatters must avoid generic urgency phrases such as "important for management" or "guides treatment decisions".',
-              'Exam pearls should be 1-2 dense reasoning sentences, not paragraph prose.',
-              'Differential distinguishers must be comparative, not generic mimic summaries.',
-              'Pitfalls must be specific clinical traps.',
-              'References must include at least two source labels when scoring systems, investigations, or management are populated.',
-              'No drug doses.',
-              'No patient-specific advice.',
-              'Management must be broad and educational.',
-              'Scoring systems and management require references before publication.',
-              'Use concise bullets suitable for mobile.',
-            ],
-          }),
-        },
-      ],
-    });
-    const content = completion.choices[0]?.message?.content;
-    if (!content) {
-      throw new BadRequestException('AI returned an empty education draft');
-    }
+            }),
+          },
+        ],
+      };
+      const completion = await this.createEducationDraftCompletion({
+        diagnosisRegistryId,
+        request,
+      });
+      const content = completion.choices[0]?.message?.content;
+      if (!content) {
+        throw new BadRequestException('AI returned an empty education draft');
+      }
 
-    const parsed = this.parseGeneratedDraft(content, diagnosisRegistryId);
-    const normalized = this.normalizeGeneratedDraft(parsed);
-    const validatedDraft = this.validateGeneratedDraft(
-      normalized,
-      diagnosisRegistryId,
-    );
-    const qualityWarnings = this.collectEducationQualityWarnings(validatedDraft);
-    if (qualityWarnings.length) {
-      this.logger.warn(
-        JSON.stringify({
-          event: 'diagnosis_education.generate.quality_warnings',
-          diagnosisRegistryId,
-          warnings: qualityWarnings,
-        }),
+      const parsed = this.parseGeneratedDraft(content, diagnosisRegistryId);
+      const normalized = this.normalizeGeneratedDraft(parsed);
+      const validatedDraft = this.validateGeneratedDraft(
+        normalized,
+        diagnosisRegistryId,
       );
+      const qualityWarnings =
+        this.collectEducationQualityWarnings(validatedDraft);
+      if (qualityWarnings.length) {
+        this.logger.warn(
+          JSON.stringify({
+            event: 'diagnosis_education.generate.quality_warnings',
+            diagnosisRegistryId,
+            warnings: qualityWarnings,
+          }),
+        );
+      }
+
+      const education = await this.prisma.$transaction(async (tx) => {
+        const saved = existing
+          ? await tx.diagnosisEducation.update({
+              where: { id: existing.id },
+              data: {
+                ...this.buildWriteData(validatedDraft, {
+                  title: registry.displayLabel,
+                  status: DiagnosisEducationStatus.NEEDS_REVIEW,
+                  source: DiagnosisEducationSource.AI_ASSISTED,
+                  version: existing.version + 1,
+                }),
+                generatedAt: new Date(),
+                reviewedAt: null,
+                reviewedByUserId: null,
+                publishedAt: null,
+              },
+            })
+          : await tx.diagnosisEducation.create({
+              data: {
+                ...this.buildWriteData(validatedDraft, {
+                  title: registry.displayLabel,
+                  status: DiagnosisEducationStatus.NEEDS_REVIEW,
+                  source: DiagnosisEducationSource.AI_ASSISTED,
+                  version: 1,
+                }),
+                diagnosisRegistryId,
+                summary: validatedDraft.summary,
+                generatedAt: new Date(),
+                reviewedAt: null,
+                reviewedByUserId: null,
+                publishedAt: null,
+              },
+            });
+
+        await this.createRevision(tx, saved, userId);
+        return saved;
+      });
+
+      return education;
+    } finally {
+      this.educationGenerationLocks.delete(diagnosisRegistryId);
     }
-
-    const education = await this.prisma.$transaction(async (tx) => {
-      const saved = existing
-        ? await tx.diagnosisEducation.update({
-            where: { id: existing.id },
-            data: {
-              ...this.buildWriteData(validatedDraft, {
-                title: registry.displayLabel,
-                status: DiagnosisEducationStatus.NEEDS_REVIEW,
-                source: DiagnosisEducationSource.AI_ASSISTED,
-                version: existing.version + 1,
-              }),
-              generatedAt: new Date(),
-              reviewedAt: null,
-              reviewedByUserId: null,
-              publishedAt: null,
-            },
-          })
-        : await tx.diagnosisEducation.create({
-            data: {
-              ...this.buildWriteData(validatedDraft, {
-                title: registry.displayLabel,
-                status: DiagnosisEducationStatus.NEEDS_REVIEW,
-                source: DiagnosisEducationSource.AI_ASSISTED,
-                version: 1,
-              }),
-              diagnosisRegistryId,
-              summary: validatedDraft.summary,
-              generatedAt: new Date(),
-              reviewedAt: null,
-              reviewedByUserId: null,
-              publishedAt: null,
-            },
-          });
-
-      await this.createRevision(tx, saved, userId);
-      return saved;
-    });
-
-    return education;
   }
 
   private parseGeneratedDraft(
@@ -1207,7 +1291,10 @@ export class DiagnosisEducationService {
       errors.push('summary.definition is required');
     }
 
-    for (const field of ['complications', 'references'] satisfies EducationJsonField[]) {
+    for (const field of [
+      'complications',
+      'references',
+    ] satisfies EducationJsonField[]) {
       if (field in draft && draft[field] !== null) {
         const value = this.validateStringArray(draft[field]);
         if (value) {
@@ -1232,7 +1319,10 @@ export class DiagnosisEducationService {
       }
     }
 
-    for (const field of ['keySymptoms', 'keySigns'] satisfies EducationJsonField[]) {
+    for (const field of [
+      'keySymptoms',
+      'keySigns',
+    ] satisfies EducationJsonField[]) {
       if (field in draft && draft[field] !== null) {
         const value = this.validateObjectOrStringArray(
           draft[field],
@@ -1367,7 +1457,10 @@ export class DiagnosisEducationService {
       normalized.clinicalPattern = draft.recognitionPattern;
     }
 
-    if (!('differentials' in normalized) && 'differentialDistinguishers' in draft) {
+    if (
+      !('differentials' in normalized) &&
+      'differentialDistinguishers' in draft
+    ) {
       normalized.differentials = draft.differentialDistinguishers;
     }
 
@@ -1385,7 +1478,9 @@ export class DiagnosisEducationService {
   ): string[] {
     const text = EDUCATION_JSON_FIELDS.map((field) =>
       JSON.stringify(draft[field] ?? ''),
-    ).join('\n').toLowerCase();
+    )
+      .join('\n')
+      .toLowerCase();
 
     const genericPhraseCount = GENERIC_EDUCATION_PHRASES.reduce(
       (count, phrase) => count + (text.includes(phrase) ? 1 : 0),
@@ -1457,32 +1552,30 @@ export class DiagnosisEducationService {
     draft: Partial<Record<EducationJsonField, unknown>>,
   ): boolean {
     return Array.isArray(draft.differentials)
-      ? draft.differentials.some(
-          (item) => {
-            if (!this.isPlainObject(item)) {
-              return false;
-            }
+      ? draft.differentials.some((item) => {
+          if (!this.isPlainObject(item)) {
+            return false;
+          }
 
-            const distinguishingPoint = this.cleanString(
-              item.distinguishingPoint,
-            );
-            const hasStructuredContrast = Boolean(
-              this.cleanString(item.whyConfused) ||
-                this.cleanString(item.keySeparator) ||
-                this.cleanString(item.classicTrap),
-            );
-            const pointIncludesContrast = distinguishingPoint
-              ? /\b(?:unlike|whereas|compared with|rather than|instead of|distinguish|differentiate|favors|argues against)\b/i.test(
-                  distinguishingPoint,
-                )
-              : false;
+          const distinguishingPoint = this.cleanString(
+            item.distinguishingPoint,
+          );
+          const hasStructuredContrast = Boolean(
+            this.cleanString(item.whyConfused) ||
+            this.cleanString(item.keySeparator) ||
+            this.cleanString(item.classicTrap),
+          );
+          const pointIncludesContrast = distinguishingPoint
+            ? /\b(?:unlike|whereas|compared with|rather than|instead of|distinguish|differentiate|favors|argues against)\b/i.test(
+                distinguishingPoint,
+              )
+            : false;
 
-            return Boolean(
-              distinguishingPoint &&
-                (hasStructuredContrast || pointIncludesContrast),
-            );
-          },
-        )
+          return Boolean(
+            distinguishingPoint &&
+            (hasStructuredContrast || pointIncludesContrast),
+          );
+        })
       : false;
   }
 
@@ -1941,10 +2034,10 @@ export class DiagnosisEducationService {
     const hasGenericPhrase = this.hasGenericPearlPhrase(combinedText);
     const hasWhyLayer = Boolean(
       this.cleanString(pearl.whyItMatters) ||
-        this.cleanString(pearl.discriminator) ||
-        this.cleanString(pearl.managementImplication) ||
-        this.cleanString(pearl.escalationImplication) ||
-        this.cleanString(pearl.trapAvoided),
+      this.cleanString(pearl.discriminator) ||
+      this.cleanString(pearl.managementImplication) ||
+      this.cleanString(pearl.escalationImplication) ||
+      this.cleanString(pearl.trapAvoided),
     );
     const hasOperationalReasoning =
       hasWhyLayer &&
@@ -1953,9 +2046,9 @@ export class DiagnosisEducationService {
       );
     const hasStrongDiscriminator = Boolean(
       this.cleanString(pearl.discriminator) ||
-        /\b(?:over|rather than|unlike|distinguish|differentiate|favors|argues against)\b/i.test(
-          combinedText,
-        ),
+      /\b(?:over|rather than|unlike|distinguish|differentiate|favors|argues against)\b/i.test(
+        combinedText,
+      ),
     );
 
     if (!PEARL_TYPE_VALUES.includes(pearl.type)) {
@@ -1979,10 +2072,7 @@ export class DiagnosisEducationService {
     if (!hasOperationalReasoning) {
       warnings.push('missing_operational_reasoning');
     }
-    if (
-      pearl.type === 'HIGH_YIELD_DISCRIMINATOR' &&
-      !hasStrongDiscriminator
-    ) {
+    if (pearl.type === 'HIGH_YIELD_DISCRIMINATOR' && !hasStrongDiscriminator) {
       warnings.push('weak_discriminator');
     }
     if (duplicateTeachingPoint) {
@@ -2005,8 +2095,8 @@ export class DiagnosisEducationService {
   ): value is TypedEducationPearl {
     return Boolean(
       this.cleanString(value.id) &&
-        this.cleanPearlType(value.type) &&
-        this.cleanString(value.content),
+      this.cleanPearlType(value.type) &&
+      this.cleanString(value.content),
     );
   }
 
@@ -2126,11 +2216,7 @@ export class DiagnosisEducationService {
   }
 
   private isPlainObject(value: unknown): value is Record<string, unknown> {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      !Array.isArray(value)
-    );
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 
   private assertAdminEnabled() {
@@ -2152,7 +2238,132 @@ export class DiagnosisEducationService {
     } satisfies Prisma.DiagnosisRegistrySelect;
   }
 
-  private toInputRecord(input: UpsertDiagnosisEducationDto): Record<string, unknown> {
+  private async createEducationDraftCompletion(input: {
+    diagnosisRegistryId: string;
+    request: ChatCompletionCreateParamsNonStreaming;
+  }): Promise<ChatCompletion> {
+    for (
+      let attemptIndex = 0;
+      attemptIndex <= OPENAI_CONNECTION_RETRY_DELAYS_MS.length;
+      attemptIndex += 1
+    ) {
+      const attempt = attemptIndex + 1;
+      try {
+        return await this.openaiClient!.chat.completions.create(input.request, {
+          timeout: OPENAI_EDUCATION_SYNC_ATTEMPT_TIMEOUT_MS,
+          maxRetries: 0,
+        });
+      } catch (error) {
+        const shouldRetry = this.isRetryableOpenAiConnectionError(error);
+        this.logOpenAiGenerationFailure({
+          diagnosisRegistryId: input.diagnosisRegistryId,
+          attempt,
+          error,
+          retrying:
+            shouldRetry &&
+            attemptIndex < OPENAI_CONNECTION_RETRY_DELAYS_MS.length,
+        });
+
+        if (
+          !shouldRetry ||
+          attemptIndex >= OPENAI_CONNECTION_RETRY_DELAYS_MS.length
+        ) {
+          if (shouldRetry) {
+            throw new ServiceUnavailableException(
+              OPENAI_CONNECTION_ERROR_MESSAGE,
+            );
+          }
+
+          throw error;
+        }
+
+        await this.waitForOpenAiRetry(
+          OPENAI_CONNECTION_RETRY_DELAYS_MS[attemptIndex],
+        );
+      }
+    }
+
+    throw new ServiceUnavailableException(OPENAI_CONNECTION_ERROR_MESSAGE);
+  }
+
+  private isRetryableOpenAiConnectionError(error: unknown): boolean {
+    const record = this.toErrorRecord(error);
+    const status = typeof record.status === 'number' ? record.status : null;
+    if (status !== null && status >= 400 && status < 500) {
+      return false;
+    }
+
+    const cause = this.toErrorRecord(record.cause);
+    const combined = [
+      record.name,
+      record.message,
+      record.code,
+      cause.name,
+      cause.message,
+      cause.code,
+    ]
+      .filter((value): value is string => typeof value === 'string')
+      .join(' ')
+      .toLowerCase();
+
+    return (
+      combined.includes('apiconnectionerror') ||
+      combined.includes('fetch failed') ||
+      combined.includes('und_err_socket') ||
+      combined.includes('other side closed') ||
+      combined.includes('timeout') ||
+      combined.includes('timed out') ||
+      combined.includes('econnreset') ||
+      combined.includes('econnrefused') ||
+      combined.includes('etimedout') ||
+      combined.includes('enotfound') ||
+      combined.includes('eai_again') ||
+      combined.includes('network') ||
+      combined.includes('connection error')
+    );
+  }
+
+  private logOpenAiGenerationFailure(input: {
+    diagnosisRegistryId: string;
+    attempt: number;
+    error: unknown;
+    retrying: boolean;
+  }) {
+    const error = this.toErrorRecord(input.error);
+    const cause = this.toErrorRecord(error.cause);
+    this.logger.warn(
+      JSON.stringify({
+        event: 'diagnosis_education.generate.openai_failure',
+        diagnosisRegistryId: input.diagnosisRegistryId,
+        model: OPENAI_EDUCATION_MODEL,
+        attempt: input.attempt,
+        retrying: input.retrying,
+        errorName: typeof error.name === 'string' ? error.name : null,
+        errorMessage: typeof error.message === 'string' ? error.message : null,
+        causeMessage: typeof cause.message === 'string' ? cause.message : null,
+        requestID:
+          typeof error.requestID === 'string'
+            ? error.requestID
+            : typeof error.request_id === 'string'
+              ? error.request_id
+              : null,
+      }),
+    );
+  }
+
+  private waitForOpenAiRetry(delayMs: number) {
+    return new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  private toErrorRecord(value: unknown): Record<string, unknown> {
+    return this.isPlainObject(value) || value instanceof Error
+      ? (value as Record<string, unknown>)
+      : {};
+  }
+
+  private toInputRecord(
+    input: UpsertDiagnosisEducationDto,
+  ): Record<string, unknown> {
     return { ...input };
   }
 
@@ -2239,7 +2450,9 @@ export class DiagnosisEducationService {
     };
   }
 
-  private toSnapshotJson(value: Prisma.JsonValue | null): Prisma.InputJsonValue | null {
+  private toSnapshotJson(
+    value: Prisma.JsonValue | null,
+  ): Prisma.InputJsonValue | null {
     return value === null ? null : (value as Prisma.InputJsonValue);
   }
 
@@ -2270,14 +2483,16 @@ export class DiagnosisEducationService {
       blockers.push('contains_drug_dosing');
     }
 
-    if (/\b(?:you should|your doctor|go to the emergency room)\b/i.test(fullText)) {
+    if (
+      /\b(?:you should|your doctor|go to the emergency room)\b/i.test(fullText)
+    ) {
       blockers.push('contains_patient_specific_advice');
     }
 
     const hasHighRiskContent = Boolean(
       education.management ||
-        education.scoringSystems ||
-        education.investigations,
+      education.scoringSystems ||
+      education.investigations,
     );
     const hasReferences =
       Array.isArray(education.references) && education.references.length > 0;

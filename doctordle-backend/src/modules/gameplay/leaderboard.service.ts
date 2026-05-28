@@ -18,7 +18,7 @@ type LeaderboardRow = {
   timeToComplete: number | null;
   completedAt: Date;
   user: {
-    displayName: string | null;
+    username: string | null;
     stats: {
       currentStreak: number;
     } | null;
@@ -41,7 +41,7 @@ type LeaderboardAggregate = LeaderboardRow & {
 type LeaderboardEntryDto = {
   rank: number;
   userId: string;
-  displayName?: string;
+  username?: string;
   organizationName?: string;
   streak?: number;
   score: number;
@@ -381,7 +381,7 @@ export class LeaderboardService {
   private getPublicUserSelect() {
     return {
       select: {
-        displayName: true,
+        username: true,
         stats: {
           select: {
             currentStreak: true,
@@ -491,7 +491,7 @@ export class LeaderboardService {
     row: LeaderboardRow,
     rank: number,
   ): LeaderboardEntryDto {
-    const displayName = row.user.displayName?.trim() || undefined;
+    const username = row.user.username?.trim() || undefined;
     const organizationName =
       row.user.primaryOrganization?.name.trim() ||
       row.user.organizations[0]?.organization.name.trim() ||
@@ -502,7 +502,7 @@ export class LeaderboardService {
     return {
       rank,
       userId: row.userId,
-      ...(displayName ? { displayName } : {}),
+      ...(username ? { username } : {}),
       ...(organizationName ? { organizationName } : {}),
       ...(typeof streak === 'number' ? { streak } : {}),
       score: row.score,

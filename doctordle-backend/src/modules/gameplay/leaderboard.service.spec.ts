@@ -1,7 +1,7 @@
 import { LeaderboardService } from './leaderboard.service';
 
 const user = {
-  displayName: null,
+  username: null,
   stats: null,
   organizations: [],
 };

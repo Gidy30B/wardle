@@ -13,17 +13,23 @@ describe('GameGateway runtime role Redis subscription', () => {
   });
 
   function createGateway() {
+    const clerkJwtService = {
+      verifyBearerToken: jest.fn().mockResolvedValue({ clerkId: 'clerk-1' }),
+    };
     const redisPubSub = {
       subscribe: jest.fn().mockResolvedValue(undefined),
     };
+    const userSyncService = {
+      syncUser: jest.fn().mockResolvedValue({ id: 'user-1' }),
+    };
 
     const gateway = new GameGateway(
-      {} as never,
-      {} as never,
+      clerkJwtService as never,
       redisPubSub as never,
+      userSyncService as never,
     );
 
-    return { gateway, redisPubSub };
+    return { clerkJwtService, gateway, redisPubSub, userSyncService };
   }
 
   it('subscribes to websocket Redis events in the api role', async () => {
@@ -45,5 +51,28 @@ describe('GameGateway runtime role Redis subscription', () => {
     await gateway.onModuleInit();
 
     expect(redisPubSub.subscribe).not.toHaveBeenCalled();
+  });
+
+  it('syncs websocket users before joining their room', async () => {
+    const { clerkJwtService, gateway, userSyncService } = createGateway();
+    const client = {
+      id: 'socket-1',
+      handshake: {
+        auth: {
+          token: 'token-1',
+        },
+      },
+      data: {},
+      join: jest.fn(),
+      disconnect: jest.fn(),
+    };
+
+    await gateway.handleConnection(client as never);
+
+    expect(clerkJwtService.verifyBearerToken).toHaveBeenCalledWith('token-1');
+    expect(userSyncService.syncUser).toHaveBeenCalledWith({ clerkId: 'clerk-1' });
+    expect(client.data).toEqual({ userId: 'user-1' });
+    expect(client.join).toHaveBeenCalledWith('user-1');
+    expect(client.disconnect).not.toHaveBeenCalled();
   });
 });

@@ -19,7 +19,7 @@ export function readProfileOnboarding(userId: string): WardleProfileOnboarding |
   try {
     const parsed = JSON.parse(rawValue) as Partial<WardleProfileOnboarding>
     return {
-      displayName: typeof parsed.displayName === 'string' ? parsed.displayName : '',
+      username: typeof parsed.username === 'string' ? parsed.username : '',
       university: typeof parsed.university === 'string' ? parsed.university : '',
       skipped: parsed.skipped === true,
       completedAt: typeof parsed.completedAt === 'string' ? parsed.completedAt : null,

@@ -1,4 +1,4 @@
-import { useAuth, useUser } from '@clerk/clerk-react'
+import { useAuth } from '@clerk/clerk-react'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useApi } from '../../../../lib/api'
@@ -8,8 +8,7 @@ import {
 import { cleanupRegisteredPushToken } from '../../../notifications/pushRegistration'
 import type { SettingsPageProps, SettingsScreenId } from './settings.types'
 import {
-  getDisplayName,
-  getFallbackDisplayName,
+  getUsername,
   getMembershipLabel,
 } from './settings.utils'
 import { AccountSettingsScreen } from './screens/AccountSettingsScreen'
@@ -30,7 +29,6 @@ export default function SettingsPage({
   onRetryStats,
 }: SettingsPageProps) {
   const { isLoaded, isSignedIn, signOut, userId } = useAuth()
-  const { user } = useUser()
   const { request } = useApi()
   const [subScreen, setSubScreen] = useState<SettingsScreenId | null>(null)
 
@@ -44,12 +42,7 @@ export default function SettingsPage({
   })
 
   const backendProfile = profileQuery.data
-  const fallbackDisplayName = getFallbackDisplayName({
-    fullName: user?.fullName,
-    username: user?.username,
-    email: user?.primaryEmailAddress?.emailAddress,
-  })
-  const displayName = getDisplayName(backendProfile, fallbackDisplayName)
+  const username = getUsername(backendProfile)
   const trainingLevel = backendProfile?.trainingLevel?.trim() || null
   const organizationLabel = organizationName ?? getMembershipLabel(memberships)
 
@@ -100,7 +93,7 @@ export default function SettingsPage({
     default:
       return (
         <SettingsHomeScreen
-          displayName={displayName}
+          username={username}
           organizationLabel={organizationLabel}
           trainingLevel={trainingLevel}
           currentStreak={currentStreak}

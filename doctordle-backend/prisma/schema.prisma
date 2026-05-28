@@ -155,6 +155,34 @@ enum DiagnosisEducationSource {
   HYBRID
 }
 
+enum DiagnosisGraphCandidateType {
+  FINDING
+  INVESTIGATION
+  MIMIC
+  PITFALL
+  MANAGEMENT
+  COMPLICATION
+  RECALL_PROMPT
+  CASE_REASONING
+}
+
+enum DiagnosisGraphSourceType {
+  CASE
+  DIAGNOSIS_EDUCATION
+}
+
+enum DiagnosisGraphCandidateStatus {
+  CANDIDATE
+  APPROVED
+  REJECTED
+  MERGED
+}
+
+enum DiagnosisGraphFactStatus {
+  ACTIVE
+  ARCHIVED
+}
+
 model Diagnosis {
   id            String               @id @default(uuid())
   name          String               @unique
@@ -250,6 +278,10 @@ model DiagnosisRegistry {
   cases                 Case[]                    @relation("CaseDiagnosisRegistry")
   caseRevisions         CaseRevision[]            @relation("CaseRevisionDiagnosisRegistry")
   education             DiagnosisEducation?
+  graphCandidates       DiagnosisGraphCandidate[] @relation("DiagnosisGraphCandidateDiagnosis")
+  targetedGraphCandidates DiagnosisGraphCandidate[] @relation("DiagnosisGraphCandidateTargetDiagnosis")
+  graphFacts            DiagnosisGraphFact[]      @relation("DiagnosisGraphFactDiagnosis")
+  targetedGraphFacts    DiagnosisGraphFact[]      @relation("DiagnosisGraphFactTargetDiagnosis")
   selectedAttempts      Attempt[]                 @relation("AttemptSelectedDiagnosisRegistry")
   strictMatchedAttempts Attempt[]                 @relation("AttemptStrictMatchedDiagnosisRegistry")
 
@@ -317,6 +349,76 @@ model DiagnosisEducationRevision {
   @@index([educationId])
   @@index([createdByUserId])
   @@index([createdAt])
+}
+
+model DiagnosisGraphCandidate {
+  id                        String                        @id @default(uuid())
+  diagnosisRegistryId       String
+  type                      DiagnosisGraphCandidateType
+  status                    DiagnosisGraphCandidateStatus @default(CANDIDATE)
+  sourceType                DiagnosisGraphSourceType
+  sourceId                  String
+  sourceVersion             Int?
+  sourcePath                String
+  rawText                   String
+  normalizedText            String
+  dedupeKey                 String                        @unique
+  payload                   Json?
+  targetDiagnosisRegistryId String?
+  unresolvedTargetText      String?
+  confidence                Float?
+  reviewedByUserId          String?
+  reviewedAt                DateTime?
+  reviewNote                String?
+  mergedIntoId              String?
+  promotedFactId            String?
+  createdAt                 DateTime                      @default(now())
+  updatedAt                 DateTime                      @updatedAt
+  diagnosisRegistry         DiagnosisRegistry             @relation("DiagnosisGraphCandidateDiagnosis", fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  targetDiagnosisRegistry   DiagnosisRegistry?            @relation("DiagnosisGraphCandidateTargetDiagnosis", fields: [targetDiagnosisRegistryId], references: [id], onDelete: SetNull)
+  reviewedBy                User?                         @relation("DiagnosisGraphCandidateReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  mergedInto                DiagnosisGraphCandidate?      @relation("DiagnosisGraphCandidateMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedCandidates          DiagnosisGraphCandidate[]     @relation("DiagnosisGraphCandidateMerge")
+  promotedFact              DiagnosisGraphFact?           @relation("DiagnosisGraphCandidatePromotedFact", fields: [promotedFactId], references: [id], onDelete: SetNull)
+  sourceFact                DiagnosisGraphFact?           @relation("DiagnosisGraphFactSourceCandidate")
+
+  @@unique([diagnosisRegistryId, type, sourceType, sourceId, sourcePath, normalizedText])
+  @@index([dedupeKey])
+  @@index([diagnosisRegistryId])
+  @@index([type])
+  @@index([status])
+  @@index([sourceType, sourceId])
+  @@index([normalizedText])
+  @@index([targetDiagnosisRegistryId])
+  @@index([reviewedByUserId])
+}
+
+model DiagnosisGraphFact {
+  id                        String                      @id @default(uuid())
+  diagnosisRegistryId       String
+  type                      DiagnosisGraphCandidateType
+  label                     String
+  normalizedLabel           String
+  dedupeKey                 String                      @unique
+  payload                   Json?
+  targetDiagnosisRegistryId String?
+  status                    DiagnosisGraphFactStatus    @default(ACTIVE)
+  sourceCandidateId         String?                     @unique
+  provenance                Json?
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime                    @updatedAt
+  diagnosisRegistry         DiagnosisRegistry           @relation("DiagnosisGraphFactDiagnosis", fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  targetDiagnosisRegistry   DiagnosisRegistry?          @relation("DiagnosisGraphFactTargetDiagnosis", fields: [targetDiagnosisRegistryId], references: [id], onDelete: SetNull)
+  sourceCandidate           DiagnosisGraphCandidate?    @relation("DiagnosisGraphFactSourceCandidate", fields: [sourceCandidateId], references: [id], onDelete: SetNull)
+  promotedCandidates        DiagnosisGraphCandidate[]   @relation("DiagnosisGraphCandidatePromotedFact")
+
+  @@unique([diagnosisRegistryId, type, normalizedLabel, targetDiagnosisRegistryId])
+  @@index([dedupeKey])
+  @@index([diagnosisRegistryId])
+  @@index([type])
+  @@index([status])
+  @@index([normalizedLabel])
+  @@index([targetDiagnosisRegistryId])
 }
 
 model DiagnosisAlias {
@@ -562,7 +664,8 @@ model User {
   id                       String                   @id
   clerkId                  String?                  @unique
   email                    String?
-  displayName              String?
+  username                 String?
+  normalizedUsername       String?                  @unique
   trainingLevel            String?
   country                  String?
   individualMode           Boolean                  @default(true)
@@ -589,6 +692,7 @@ model User {
   caseReviews              CaseReview[]             @relation("CaseReviewReviewerUser")
   reviewedDiagnosisEducation DiagnosisEducation[]    @relation("DiagnosisEducationReviewedByUser")
   createdDiagnosisEducationRevisions DiagnosisEducationRevision[] @relation("DiagnosisEducationRevisionCreatedByUser")
+  reviewedDiagnosisGraphCandidates DiagnosisGraphCandidate[] @relation("DiagnosisGraphCandidateReviewedByUser")
   primaryOrganization      Organization?            @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
   organizations            UserOrganization[]
 
@@ -596,6 +700,7 @@ model User {
   @@index([subscriptionTier])
   @@index([onboardingStatus])
   @@index([primaryOrganizationId])
+  @@index([normalizedUsername])
 }
 
 model Organization {
