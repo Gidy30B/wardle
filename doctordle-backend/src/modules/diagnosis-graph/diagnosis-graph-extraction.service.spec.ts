@@ -91,6 +91,176 @@ describe('DiagnosisGraphExtractionService', () => {
     );
   });
 
+  it('extracts reasoning-edge candidates from case differential analysis', async () => {
+    const { prisma, service } = buildService();
+    prisma.case.findFirst.mockResolvedValue({
+      id: 'case-1',
+      diagnosisRegistryId: 'registry-1',
+      editorialStatus: CaseEditorialStatus.APPROVED,
+      currentRevision: { revisionNumber: 3 },
+      clues: [],
+      differentials: [],
+      explanation: {
+        keyFindings: [],
+        reasoning: [],
+        differentialAnalysis: [
+          {
+            diagnosis: 'Pulmonary embolism',
+            whyPlausibleEarly:
+              'Acute dyspnea and tachycardia can occur in pulmonary embolism.',
+            ruledOutByClues: [
+              {
+                clueOrder: 4,
+                evidence: 'Chest X-ray demonstrates lobar consolidation.',
+                reason:
+                  'Lobar consolidation favors pneumonia over pulmonary embolism.',
+              },
+            ],
+            finalReasonLessLikely:
+              'Positive sputum culture and focal consolidation favor pneumonia.',
+          },
+        ],
+      },
+    });
+
+    await service.extractFromApprovedCase('case-1');
+
+    expect(prisma.diagnosisGraphCandidate.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.arrayContaining([
+          expect.objectContaining({
+            type: DiagnosisGraphCandidateType.MIMIC,
+            sourcePath: 'explanation.differentialAnalysis.0.diagnosis',
+            rawText: 'Pulmonary embolism',
+            unresolvedTargetText: 'Pulmonary embolism',
+            payload: expect.objectContaining({
+              relation: 'MIMICS',
+              sourceDiagnosisRegistryId: 'registry-1',
+              targetDiagnosisText: 'Pulmonary embolism',
+              source: 'case.differentialAnalysis',
+            }) as unknown,
+          }),
+          expect.objectContaining({
+            type: DiagnosisGraphCandidateType.CASE_REASONING,
+            sourcePath:
+              'explanation.differentialAnalysis.0.whyPlausibleEarly',
+            payload: expect.objectContaining({
+              relation: 'SUPPORTS',
+              targetDiagnosisText: 'Pulmonary embolism',
+            }) as unknown,
+          }),
+          expect.objectContaining({
+            type: DiagnosisGraphCandidateType.CASE_REASONING,
+            sourcePath:
+              'explanation.differentialAnalysis.0.ruledOutByClues.0',
+            rawText:
+              'Chest X-ray demonstrates lobar consolidation. - Lobar consolidation favors pneumonia over pulmonary embolism.',
+            payload: expect.objectContaining({
+              relation: 'RULES_OUT',
+              evidence: 'Chest X-ray demonstrates lobar consolidation.',
+              rationale:
+                'Lobar consolidation favors pneumonia over pulmonary embolism.',
+              clueOrder: 4,
+            }) as unknown,
+          }),
+          expect.objectContaining({
+            type: DiagnosisGraphCandidateType.CASE_REASONING,
+            sourcePath:
+              'explanation.differentialAnalysis.0.ruledOutByClues.0.supports',
+            payload: expect.objectContaining({
+              relation: 'SUPPORTS',
+              evidence: 'Chest X-ray demonstrates lobar consolidation.',
+              clueOrder: 4,
+            }) as unknown,
+          }),
+          expect.objectContaining({
+            type: DiagnosisGraphCandidateType.CASE_REASONING,
+            sourcePath:
+              'explanation.differentialAnalysis.0.finalReasonLessLikely',
+            rawText:
+              'Positive sputum culture and focal consolidation favor pneumonia.',
+            payload: expect.objectContaining({
+              relation: 'DISCRIMINATES_FROM',
+              targetDiagnosisText: 'Pulmonary embolism',
+            }) as unknown,
+          }),
+        ]) as unknown,
+      }),
+    );
+  });
+
+  it('uses stable dedupe keys for differential analysis candidates', async () => {
+    const { prisma, service } = buildService();
+    const caseRecord = {
+      id: 'case-1',
+      diagnosisRegistryId: 'registry-1',
+      editorialStatus: CaseEditorialStatus.APPROVED,
+      currentRevision: { revisionNumber: 3 },
+      clues: [],
+      differentials: [],
+      explanation: {
+        keyFindings: [],
+        reasoning: [],
+        differentialAnalysis: [
+          {
+            diagnosis: 'Pulmonary embolism',
+            ruledOutByClues: [
+              {
+                clueOrder: 4,
+                evidence: 'Chest X-ray demonstrates lobar consolidation.',
+                reason:
+                  'Lobar consolidation favors pneumonia over pulmonary embolism.',
+              },
+            ],
+          },
+        ],
+      },
+    };
+    prisma.case.findFirst.mockResolvedValue(caseRecord);
+
+    await service.extractFromApprovedCase('case-1');
+    const firstCall = prisma.diagnosisGraphCandidate.createMany.mock.calls[0][0]
+      .data as Array<{ sourcePath: string; dedupeKey: string }>;
+
+    await service.extractFromApprovedCase('case-1');
+    const secondCall = prisma.diagnosisGraphCandidate.createMany.mock.calls[1][0]
+      .data as Array<{ sourcePath: string; dedupeKey: string }>;
+
+    expect(
+      firstCall.find((candidate) =>
+        candidate.sourcePath.endsWith('ruledOutByClues.0'),
+      )?.dedupeKey,
+    ).toBe(
+      secondCall.find((candidate) =>
+        candidate.sourcePath.endsWith('ruledOutByClues.0'),
+      )?.dedupeKey,
+    );
+    expect(
+      firstCall.find((candidate) =>
+        candidate.sourcePath.endsWith('ruledOutByClues.0'),
+      )?.dedupeKey,
+    ).toContain('rules out');
+  });
+
+  it('does not crash when case differential analysis is missing', async () => {
+    const { prisma, service } = buildService();
+    prisma.case.findFirst.mockResolvedValue({
+      id: 'case-1',
+      diagnosisRegistryId: 'registry-1',
+      editorialStatus: CaseEditorialStatus.APPROVED,
+      currentRevision: { revisionNumber: 1 },
+      clues: [],
+      differentials: [],
+      explanation: { keyFindings: [], reasoning: [] },
+    });
+
+    await expect(service.extractFromApprovedCase('case-1')).resolves.toEqual(
+      expect.objectContaining({
+        candidateCount: 0,
+      }),
+    );
+  });
+
   it('extracts candidates from published diagnosis education with mixed JSON shapes', async () => {
     const { prisma, service } = buildService();
     prisma.diagnosisEducation.findFirst.mockResolvedValue({

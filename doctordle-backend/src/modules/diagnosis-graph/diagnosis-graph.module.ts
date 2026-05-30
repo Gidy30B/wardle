@@ -14,6 +14,9 @@ import { DiagnosisGraphExtractionService } from './diagnosis-graph-extraction.se
     DiagnosisGraphCandidatesService,
     DiagnosisGraphExtractionService,
   ],
-  exports: [DiagnosisGraphCandidatesService, DiagnosisGraphExtractionService],
+  exports: [
+    DiagnosisGraphCandidatesService,
+    DiagnosisGraphExtractionService,
+  ],
 })
 export class DiagnosisGraphModule {}

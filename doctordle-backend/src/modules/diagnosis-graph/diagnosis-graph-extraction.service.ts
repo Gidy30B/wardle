@@ -18,22 +18,12 @@ import {
   compactGraphText,
   normalizeGraphText,
 } from './diagnosis-graph-normalization';
+import {
+  GraphReasoningExtractorService,
+  type DiagnosisGraphCandidateDraft,
+} from './graph-reasoning-extractor.service';
 
-type CandidateDraft = {
-  diagnosisRegistryId: string;
-  type: DiagnosisGraphCandidateType;
-  sourceType: DiagnosisGraphSourceType;
-  sourceId: string;
-  sourceVersion?: number | null;
-  sourcePath: string;
-  rawText: string;
-  normalizedText: string;
-  dedupeKey: string;
-  payload?: Prisma.InputJsonValue;
-  targetDiagnosisRegistryId?: string | null;
-  unresolvedTargetText?: string | null;
-  confidence?: number | null;
-};
+type CandidateDraft = DiagnosisGraphCandidateDraft;
 
 export type DiagnosisGraphExtractionSummary = {
   sourceType: DiagnosisGraphSourceType;
@@ -64,6 +54,7 @@ type ClinicalClue = {
 @Injectable()
 export class DiagnosisGraphExtractionService {
   private readonly logger = new Logger(DiagnosisGraphExtractionService.name);
+  private readonly reasoningExtractor = new GraphReasoningExtractorService();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -182,6 +173,15 @@ export class DiagnosisGraphExtractionService {
         }),
       );
     });
+
+    candidates.push(
+      ...this.reasoningExtractor.extractCaseDifferentialAnalysis({
+        diagnosisRegistryId: caseRecord.diagnosisRegistryId,
+        sourceId: caseRecord.id,
+        sourceVersion,
+        explanation: caseRecord.explanation,
+      }),
+    );
 
     return this.persistCandidates({
       sourceType: DiagnosisGraphSourceType.CASE,

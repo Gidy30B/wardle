@@ -16,7 +16,10 @@ import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-re
 import { buildMatchedDiagnosisMappingFields } from '../diagnosis-registry/diagnosis-mapping-fields.js';
 import type {
   CaseGenerationCritique,
+  CaseGenerationFailureCategory,
+  CaseGenerationFailureSample,
   ClinicalClue,
+  DifferentialPreflightCritique,
   GenerateBatchOptions,
   GenerateBatchResult,
   GenerateCaseInput,
@@ -76,6 +79,15 @@ const registryTargetGeneratedCaseParseSchema = generatedCaseSchema.extend({
   answer: z.string().nullable().optional(),
 });
 
+const invalidReasoningEdgeSchema = z.object({
+  differential: z.string(),
+  clueOrder: z.number().int(),
+  evidence: z.string(),
+  claimedEffect: z.enum(['weakens', 'rules_out']),
+  verdict: z.enum(['valid', 'weak_or_neutral', 'backwards', 'unsupported']),
+  issue: z.string(),
+});
+
 const caseGenerationCritiqueSchema = z.object({
   passed: z.boolean(),
   score: z.number().min(0).max(100),
@@ -83,9 +95,51 @@ const caseGenerationCritiqueSchema = z.object({
   clueProgressionScore: z.number().min(0).max(100),
   differentialQualityScore: z.number().min(0).max(100),
   differentialRuleOutScore: z.number().min(0).max(100),
+  differentialPlausibilityScore: z.number().min(0).max(100),
+  differentialDiscriminationScore: z.number().min(0).max(100),
+  clinicalEdgeValidityScore: z.number().min(0).max(100),
+  invalidReasoningEdges: z.array(invalidReasoningEdgeSchema),
+  educationalValueScore: z.number().min(0).max(100),
+  graphConsistencyScore: z.number().min(0).max(100),
   ambiguitySuitabilityScore: z.number().min(0).max(100),
   issues: z.array(z.string()),
   recommendations: z.array(z.string()),
+});
+
+const differentialPreflightCategorySchema = z.enum([
+  'competing_diagnosis',
+  'subtype',
+  'cause_mechanism',
+  'complication',
+  'severity_label',
+  'synonym_or_alias',
+  'broadly_related_only',
+]);
+
+const differentialPreflightVerdictSchema = z.enum([
+  'valid',
+  'weak',
+  'invalid',
+]);
+
+const differentialPreflightAssessmentSchema = z.object({
+  diagnosis: z.string(),
+  category: differentialPreflightCategorySchema,
+  plausibleFromClues0To2: z.boolean(),
+  fitsDemographics: z.boolean(),
+  fitsTimelineAcuitySetting: z.boolean(),
+  sharesEarlyFeatures: z.boolean(),
+  separableByLaterClues: z.boolean(),
+  verdict: differentialPreflightVerdictSchema,
+  issue: z.string().nullable(),
+});
+
+const differentialPreflightCritiqueSchema = z.object({
+  passed: z.boolean(),
+  score: z.number().min(0).max(100),
+  issues: z.array(z.string()),
+  recommendations: z.array(z.string()),
+  assessments: z.array(differentialPreflightAssessmentSchema),
 });
 
 const REQUIRED_CLUE_COUNT = 6;
@@ -93,8 +147,38 @@ const MIN_DIFFERENTIAL_COUNT = 3;
 const MAX_DIFFERENTIAL_COUNT = 5;
 const MAX_GENERATION_ATTEMPTS = 3;
 const MAX_BATCH_SLOT_ATTEMPTS = 3;
-const MIN_CRITIQUE_SCORE = 80;
+const MIN_CRITIQUE_SCORE = 85;
+const MIN_DIFFERENTIAL_PREFLIGHT_SCORE = 85;
+const MAX_WEAK_DIFFERENTIAL_PREFLIGHT_ASSESSMENTS = 1;
 const MIN_BATCH_QUALITY_SCORE = 80;
+const MIN_CLINICAL_ACCURACY_SCORE = 85;
+const MIN_CLUE_PROGRESSION_SCORE = 80;
+const MIN_DIFFERENTIAL_PLAUSIBILITY_SCORE = 80;
+const MIN_DIFFERENTIAL_DISCRIMINATION_SCORE = 80;
+const MIN_CLINICAL_EDGE_VALIDITY_SCORE = 85;
+const MIN_EDUCATIONAL_VALUE_SCORE = 75;
+const MIN_GRAPH_CONSISTENCY_SCORE = 75;
+const MIN_ANY_CRITIQUE_COMPONENT_SCORE = 70;
+const FAILURE_SAMPLE_LIMIT = 20;
+const CASE_GENERATION_FAILURE_CATEGORIES: CaseGenerationFailureCategory[] = [
+  'objective_detail',
+  'demographic_incompatible_differential',
+  'answer_leakage',
+  'differential_preflight',
+  'differential_grounding',
+  'full_critique',
+  'registry_target_mismatch',
+  'duplicate_answer',
+  'duplicate_scenario',
+  'low_quality',
+  'specialty_cluster',
+  'difficulty_balance',
+  'connection_error',
+  'openai_empty_response',
+  'json_parse',
+  'schema_invalid',
+  'unknown',
+];
 const BATCH_DIFFICULTY_ROTATION = ['easy', 'medium', 'hard'] as const;
 const HIGH_ACUITY_PATTERN =
   /\b(shock|hypotension|hypoxic|hypoxia|respiratory distress|altered mental status|syncope|sepsis|unstable|crushing chest pain|acute abdomen|peritonitis)\b/i;
@@ -102,6 +186,21 @@ const LOW_ACUITY_PATTERN =
   /\b(chronic|intermittent|mild|stable|routine|gradual|months|years|well appearing)\b/i;
 const OBJECTIVE_DETAIL_PATTERN =
   /\b(\d+(\.\d+)?|positive|negative|elevated|low|high|increased|decreased|reduced|normal|abnormal|opacity|consolidation|effusion|lesion|mass|fracture|ischemia|infiltrate|dilated|enlarged)\b/i;
+const NUMERIC_OBJECTIVE_PATTERN = /\b\d+(\.\d+)?\b/;
+const VITAL_OBJECTIVE_PATTERN =
+  /\b(bp|blood pressure|hr|heart rate|rr|respiratory rate|temperature|temp|spo2|oxygen saturation|o2 sat|pulse|bpm|\/min|mmhg|°f|°c|fahrenheit|celsius)\b/i;
+const LAB_OBJECTIVE_RESULT_PATTERN =
+  /\b(positive|negative)\b.+\b(culture|test|assay|troponin|d-dimer|ketones|nitrite|leukocyte esterase|antibody|antigen|pcr)\b|\b(grows|grew|isolates|detected|undetectable)\b/i;
+const IMAGING_OBJECTIVE_FINDING_PATTERN =
+  /\b(shows|demonstrates|reveals|identifies|notable for)\b.+\b(opac\w*|consolidation|effusion|edema|fracture|mass|lesion|infiltrate|ischemia|hemorrhage|dilation|dilated|enlarged|cavitary|obstruction|stone|appendix|wall thickening|stranding|abscess)\b/i;
+const FEMALE_PATIENT_PATTERN =
+  /\b(female|woman|girl|pregnant|postpartum|mother|she|her)\b/i;
+const MALE_PATIENT_PATTERN =
+  /\b(male|man|boy|father|he|his|him)\b/i;
+const FEMALE_SPECIFIC_DIFFERENTIAL_PATTERN =
+  /\b(ovarian|uterine|endometrial|fallopian|adnexal|ectopic pregnancy|pregnancy|pregnant|gynecologic|gynaecologic|pelvic inflammatory disease|pid)\b/i;
+const MALE_SPECIFIC_DIFFERENTIAL_PATTERN =
+  /\b(prostate|prostatic|prostatitis|bph|benign prostatic hyperplasia|testicular|epididymitis|orchitis|torsion of the testis)\b/i;
 const GENERIC_DIFFERENTIAL_REASON_PATTERNS = [
   /\bless consistent with the presentation\b/i,
   /\bdoes not fit the case\b/i,
@@ -133,6 +232,12 @@ type PersistedGeneratedExplanation = GeneratedCase['explanation'] & {
     critiqueIssues: string[];
     critiqueRecommendations: string[];
     differentialRuleOutScore: number;
+    differentialPlausibilityScore?: number;
+    differentialDiscriminationScore?: number;
+    clinicalEdgeValidityScore?: number;
+    invalidReasoningEdges?: CaseGenerationCritique['invalidReasoningEdges'];
+    educationalValueScore?: number;
+    graphConsistencyScore?: number;
     estimatedDifficulty: 'easy' | 'medium' | 'hard';
     estimatedSolveClue: number;
     specialty: string | null;
@@ -168,6 +273,17 @@ type BatchQualityState = {
   acceptedDifficulties: Map<'easy' | 'medium' | 'hard', number>;
 };
 
+type BatchFailureTracker = {
+  byCategory: Record<CaseGenerationFailureCategory, number>;
+  samples: CaseGenerationFailureSample[];
+};
+
+type GenerationFailureReportingContext = {
+  tracker: BatchFailureTracker;
+  index: number;
+  plannerDiagnosis?: string | null;
+};
+
 @Injectable()
 export class CaseGeneratorService {
   private readonly logger = new Logger(CaseGeneratorService.name);
@@ -191,7 +307,10 @@ export class CaseGeneratorService {
     }
   }
 
-  async generateCase(input: GenerateCaseInput = {}): Promise<GeneratedCase> {
+  async generateCase(
+    input: GenerateCaseInput = {},
+    failureReporting?: GenerationFailureReportingContext,
+  ): Promise<GeneratedCase> {
     if (!this.openaiClient) {
       throw new ServiceUnavailableException(
         'OPENAI_API_KEY is not configured for case generation',
@@ -205,6 +324,20 @@ export class CaseGeneratorService {
         const normalizedCase = this.normalizeCase(generatedCase);
         await this.validateCaseWithRegistry(normalizedCase);
 
+        const differentialPreflight = await this.critiqueDifferentials(
+          normalizedCase,
+          null,
+        );
+        try {
+          this.assertPassingDifferentialPreflight(differentialPreflight);
+        } catch (error) {
+          this.logDifferentialPreflightFailed(
+            normalizedCase,
+            differentialPreflight,
+          );
+          throw error;
+        }
+
         const critique = await this.critiqueGeneratedCase(normalizedCase);
         if (!this.isPassingCritique(critique)) {
           throw new BadRequestException(
@@ -215,11 +348,24 @@ export class CaseGeneratorService {
         return this.attachGenerationQuality(normalizedCase, critique, input);
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
+        const failureCategory = this.classifyGenerationFailure(lastError);
+        if (failureReporting) {
+          this.recordBatchFailure(failureReporting.tracker, {
+            index: failureReporting.index,
+            answer: null,
+            plannerDiagnosis: failureReporting.plannerDiagnosis ?? null,
+            category: failureCategory,
+            message: lastError.message,
+            attempt,
+          });
+        }
         this.logger.warn(
           JSON.stringify({
             event: 'case.generate.retry',
             attempt,
             maxAttempts: MAX_GENERATION_ATTEMPTS,
+            failureCategory,
+            failureMessage: lastError.message,
             error: lastError.message,
           }),
         );
@@ -233,10 +379,13 @@ export class CaseGeneratorService {
     );
   }
 
-  async generateCaseForRegistryTarget(input: {
-    target: PlannedGenerationSlot['diagnosis'];
-    generation: GenerateCaseInput;
-  }): Promise<GeneratedCase> {
+  async generateCaseForRegistryTarget(
+    input: {
+      target: PlannedGenerationSlot['diagnosis'];
+      generation: GenerateCaseInput;
+    },
+    failureReporting?: GenerationFailureReportingContext,
+  ): Promise<GeneratedCase> {
     if (!input.target) {
       throw new BadRequestException(
         'Registry-first generation requires a planned diagnosis target',
@@ -261,6 +410,20 @@ export class CaseGeneratorService {
         const normalizedCase = this.normalizeCase(generatedCase);
         this.validateCaseForRegistryTarget(normalizedCase, input.target);
 
+        const differentialPreflight = await this.critiqueDifferentials(
+          normalizedCase,
+          input.target,
+        );
+        try {
+          this.assertPassingDifferentialPreflight(differentialPreflight);
+        } catch (error) {
+          this.logDifferentialPreflightFailed(
+            normalizedCase,
+            differentialPreflight,
+          );
+          throw error;
+        }
+
         const critique = await this.critiqueGeneratedCase(normalizedCase);
         if (!this.isPassingCritique(critique)) {
           throw new BadRequestException(
@@ -275,6 +438,18 @@ export class CaseGeneratorService {
         );
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
+        const failureCategory = this.classifyGenerationFailure(lastError);
+        if (failureReporting) {
+          this.recordBatchFailure(failureReporting.tracker, {
+            index: failureReporting.index,
+            answer: null,
+            plannerDiagnosis:
+              failureReporting.plannerDiagnosis ?? input.target.displayLabel,
+            category: failureCategory,
+            message: lastError.message,
+            attempt,
+          });
+        }
         this.logger.warn(
           JSON.stringify({
             event: 'case.generate.registry_first.retry',
@@ -282,6 +457,9 @@ export class CaseGeneratorService {
             maxAttempts: MAX_GENERATION_ATTEMPTS,
             diagnosisRegistryId: input.target.diagnosisRegistryId,
             plannerDiagnosis: input.target.displayLabel,
+            registryFirst: true,
+            failureCategory,
+            failureMessage: lastError.message,
             error: lastError.message,
           }),
         );
@@ -330,6 +508,91 @@ export class CaseGeneratorService {
     }
 
     return this.parseCritique(content);
+  }
+
+  private async critiqueDifferentials(
+    generatedCase: GeneratedCase,
+    target?: PlannedGenerationSlot['diagnosis'] | null,
+  ): Promise<DifferentialPreflightCritique> {
+    if (!this.openaiClient) {
+      throw new ServiceUnavailableException(
+        'OPENAI_API_KEY is not configured for differential preflight critique',
+      );
+    }
+
+    const orderedClues = [...generatedCase.clues].sort(
+      (left, right) => left.order - right.order,
+    );
+    const differentialAnalysisSummaries =
+      generatedCase.explanation.differentialAnalysis.map((analysis) => ({
+        diagnosis: analysis.diagnosis,
+        whyPlausibleEarly: analysis.whyPlausibleEarly,
+        ruledOutByClues: analysis.ruledOutByClues.map((ruleOut) => ({
+          clueOrder: ruleOut.clueOrder,
+          evidence: ruleOut.evidence,
+          reason: ruleOut.reason,
+        })),
+        finalReasonLessLikely: analysis.finalReasonLessLikely,
+      }));
+
+    const preflightPayload = {
+      answer: generatedCase.answer,
+      registryTarget: target
+        ? {
+            diagnosisRegistryId: target.diagnosisRegistryId,
+            displayLabel: target.displayLabel,
+            canonicalName: target.canonicalName,
+            acceptedAliases: target.acceptedAliases,
+            specialty: target.specialty,
+            category: target.category,
+            bodySystem: target.bodySystem,
+            difficultyBand: target.difficultyBand,
+          }
+        : null,
+      earlyClues: orderedClues
+        .filter((clue) => clue.order >= 0 && clue.order <= 2)
+        .map((clue) => ({
+          order: clue.order,
+          type: clue.type,
+          value: clue.value,
+        })),
+      laterClues: orderedClues
+        .filter((clue) => clue.order >= 3 && clue.order <= 5)
+        .map((clue) => ({
+          order: clue.order,
+          type: clue.type,
+          value: clue.value,
+        })),
+      differentials: generatedCase.differentials,
+      differentialAnalysisSummaries,
+    };
+
+    const completion = await this.openaiClient.chat.completions.create({
+      model: this.model,
+      messages: [
+        {
+          role: 'system',
+          content: this.buildDifferentialPreflightSystemPrompt(),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify(preflightPayload),
+        },
+      ],
+      response_format: zodResponseFormat(
+        differentialPreflightCritiqueSchema,
+        'differential_preflight_critique',
+      ),
+    });
+
+    const content = completion.choices[0]?.message?.content;
+    if (typeof content !== 'string' || content.trim().length === 0) {
+      throw new BadRequestException(
+        'OpenAI returned an empty differential preflight payload',
+      );
+    }
+
+    return this.parseDifferentialPreflight(content);
   }
 
   validateCase(generatedCase: GeneratedCase): void {
@@ -442,7 +705,7 @@ export class CaseGeneratorService {
 
       if (
         this.requiresObjectiveDetail(clue.type) &&
-        !this.hasPlausibleObjectiveDetail(clue.value)
+        !this.hasPlausibleObjectiveDetail(clue.value, clue.type)
       ) {
         throw new BadRequestException(
           `Lab, imaging, or vital clue at order ${clue.order} must include a realistic objective finding`,
@@ -476,6 +739,8 @@ export class CaseGeneratorService {
         `Generated case must include ${MIN_DIFFERENTIAL_COUNT}-${MAX_DIFFERENTIAL_COUNT} plausible differentials`,
       );
     }
+
+    this.validateDemographicCompatibleDifferentials(generatedCase);
 
     const seenDifferentials = new Set<string>();
     for (const differential of normalizedDifferentials) {
@@ -637,6 +902,75 @@ export class CaseGeneratorService {
         'Generated case differentialAnalysis is missing one or more listed differentials',
       );
     }
+  }
+
+  private validateDemographicCompatibleDifferentials(
+    generatedCase: GeneratedCase,
+  ): void {
+    const patientSex = this.inferPatientSex(generatedCase);
+
+    for (const differential of generatedCase.differentials) {
+      const isFemaleSpecific =
+        FEMALE_SPECIFIC_DIFFERENTIAL_PATTERN.test(differential);
+      const isMaleSpecific =
+        MALE_SPECIFIC_DIFFERENTIAL_PATTERN.test(differential);
+
+      if (!isFemaleSpecific && !isMaleSpecific) {
+        continue;
+      }
+
+      if (patientSex === 'male' && isFemaleSpecific) {
+        throw new BadRequestException(
+          `Demographic-incompatible differential: "${differential}" is not compatible with male patient sex`,
+        );
+      }
+
+      if (patientSex === 'female' && isMaleSpecific) {
+        throw new BadRequestException(
+          `Demographic-incompatible differential: "${differential}" is not compatible with female patient sex`,
+        );
+      }
+
+      if (patientSex === null) {
+        throw new BadRequestException(
+          `Demographic-incompatible differential: "${differential}" requires explicit compatible patient sex or anatomy`,
+        );
+      }
+    }
+  }
+
+  private inferPatientSex(
+    generatedCase: GeneratedCase,
+  ): 'male' | 'female' | null {
+    const earlyCaseText = generatedCase.clues
+      .filter((clue) => clue.order <= 2)
+      .map((clue) => clue.value)
+      .join(' ');
+    const hasFemaleSignal = FEMALE_PATIENT_PATTERN.test(earlyCaseText);
+    const hasMaleSignal = MALE_PATIENT_PATTERN.test(earlyCaseText);
+
+    if (hasFemaleSignal && !hasMaleSignal) {
+      return 'female';
+    }
+
+    if (hasMaleSignal && !hasFemaleSignal) {
+      return 'male';
+    }
+
+    return null;
+  }
+
+  private inferPatientAge(generatedCase: GeneratedCase): number | null {
+    const caseText = generatedCase.clues
+      .map((clue) => clue.value)
+      .join(' ');
+    const match = caseText.match(/\b(\d{1,3})[- ]year[- ]old\b/i);
+    if (!match) {
+      return null;
+    }
+
+    const age = Number(match[1]);
+    return Number.isFinite(age) ? age : null;
   }
 
   private assertSpecificText(value: string, message: string): void {
@@ -896,6 +1230,7 @@ export class CaseGeneratorService {
       acceptedSpecialties: new Map(),
       acceptedDifficulties: new Map(),
     };
+    const failureTracker = this.createBatchFailureTracker();
     const concurrency = Math.max(
       1,
       Math.min(5, Math.trunc(options.concurrency ?? 5)),
@@ -938,6 +1273,7 @@ export class CaseGeneratorService {
             registryFirst,
             seenAnswers,
             qualityState,
+            failureTracker,
             plannerSlot: plannerDiagnostics[currentIndex],
             onPlannerSlotUpdated: (slot) => {
               plannerDiagnostics[currentIndex] = slot;
@@ -978,6 +1314,7 @@ export class CaseGeneratorService {
       averageQualityScore,
       plannerDiagnostics,
       results,
+      failureSummary: this.toFailureSummary(failureTracker),
     };
 
     this.logger.log(
@@ -992,6 +1329,7 @@ export class CaseGeneratorService {
         skipped: summary.skipped,
         failed: summary.failed,
         averageQualityScore: summary.averageQualityScore,
+        failureSummary: summary.failureSummary,
       }),
     );
 
@@ -1006,12 +1344,16 @@ export class CaseGeneratorService {
     registryFirst: boolean;
     seenAnswers: Set<string>;
     qualityState: BatchQualityState;
+    failureTracker: BatchFailureTracker;
     plannerSlot?: PlannedGenerationSlot;
     onPlannerSlotUpdated?: (slot: PlannedGenerationSlot) => void;
   }): Promise<GenerateBatchResult['results'][number]> {
     let lastError: Error | null = null;
-    let lastRejected: { answer: string; reason: BatchRejectionReason } | null =
-      null;
+    let lastRejected: {
+      answer: string;
+      reason: BatchRejectionReason;
+      failureCategory: CaseGenerationFailureCategory;
+    } | null = null;
 
     for (let attempt = 1; attempt <= MAX_BATCH_SLOT_ATTEMPTS; attempt += 1) {
       try {
@@ -1029,8 +1371,18 @@ export class CaseGeneratorService {
             ? await this.generateCaseForRegistryTarget({
                 target: input.plannerSlot?.diagnosis ?? null,
                 generation: generationInput,
+              }, {
+                tracker: input.failureTracker,
+                index: input.index,
+                plannerDiagnosis:
+                  input.plannerSlot?.diagnosis?.displayLabel ?? null,
               })
-            : await this.generateCase(generationInput);
+            : await this.generateCase(generationInput, {
+                tracker: input.failureTracker,
+                index: input.index,
+                plannerDiagnosis:
+                  input.plannerSlot?.diagnosis?.displayLabel ?? null,
+              });
         input.qualityState.generated += 1;
 
         if (input.plannerSlot) {
@@ -1059,17 +1411,31 @@ export class CaseGeneratorService {
         });
 
         if (rejectionReason) {
+          const failureCategory = this.categoryFromBatchRejectionReason(
+            rejectionReason,
+          );
           input.qualityState.rejected += 1;
           lastRejected = {
             answer: normalizedCase.answer,
             reason: rejectionReason,
+            failureCategory,
           };
+          this.recordBatchFailure(input.failureTracker, {
+            index: input.index,
+            answer: normalizedCase.answer,
+            plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
+            category: failureCategory,
+            message: rejectionReason,
+            attempt,
+          });
           this.logBatchRejectedAttempt({
             batchId: input.batchId,
             index: input.index,
             attempt,
             answer: normalizedCase.answer,
             reason: rejectionReason,
+            failureCategory,
+            failureMessage: rejectionReason,
             qualityScore,
             specialty: quality?.specialty ?? null,
             estimatedDifficulty: quality?.estimatedDifficulty ?? null,
@@ -1107,6 +1473,8 @@ export class CaseGeneratorService {
               });
 
         if (!savedCase) {
+          const failureCategory: CaseGenerationFailureCategory =
+            input.registryFirst ? 'duplicate_scenario' : 'duplicate_answer';
           input.qualityState.rejected += 1;
           this.deleteAcceptedBatchKey({
             state: input.qualityState,
@@ -1118,7 +1486,16 @@ export class CaseGeneratorService {
             reason: input.registryFirst
               ? 'duplicate_scenario'
               : 'duplicate_answer',
+            failureCategory,
           };
+          this.recordBatchFailure(input.failureTracker, {
+            index: input.index,
+            answer: normalizedCase.answer,
+            plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
+            category: failureCategory,
+            message: failureCategory,
+            attempt,
+          });
           this.logBatchRejectedAttempt({
             batchId: input.batchId,
             index: input.index,
@@ -1127,6 +1504,8 @@ export class CaseGeneratorService {
             reason: input.registryFirst
               ? 'duplicate_scenario'
               : 'duplicate_answer',
+            failureCategory,
+            failureMessage: failureCategory,
             qualityScore,
             specialty: quality?.specialty ?? null,
             estimatedDifficulty: quality?.estimatedDifficulty ?? null,
@@ -1168,6 +1547,18 @@ export class CaseGeneratorService {
         };
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
+        const failureCategory = this.classifyGenerationFailure(lastError);
+        if (!lastError.message.startsWith('Failed to generate')) {
+          this.recordBatchFailure(input.failureTracker, {
+            index: input.index,
+            answer: null,
+            plannerDiagnosis:
+              input.plannerSlot?.diagnosis?.displayLabel ?? null,
+            category: failureCategory,
+            message: lastError.message,
+            attempt,
+          });
+        }
         this.logger.error(
           JSON.stringify({
             event: 'case.generate.failed_attempt',
@@ -1175,6 +1566,8 @@ export class CaseGeneratorService {
             index: input.index,
             attempt,
             error: lastError.message,
+            failureCategory,
+            failureMessage: lastError.message,
             registryFirst: input.registryFirst,
             plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
             rejectionReason: lastError.message,
@@ -1191,6 +1584,7 @@ export class CaseGeneratorService {
         status: 'skipped',
         reason: lastRejected.reason,
         answer: lastRejected.answer,
+        failureCategory: lastRejected.failureCategory,
       };
     }
 
@@ -1198,6 +1592,43 @@ export class CaseGeneratorService {
       index: input.index,
       status: 'failed',
       error: lastError?.message ?? 'Unknown generation error',
+      failureCategory: lastError
+        ? this.classifyGenerationFailure(lastError)
+        : 'unknown',
+    };
+  }
+
+  private createBatchFailureTracker(): BatchFailureTracker {
+    return {
+      byCategory: Object.fromEntries(
+        CASE_GENERATION_FAILURE_CATEGORIES.map((category) => [category, 0]),
+      ) as Record<CaseGenerationFailureCategory, number>,
+      samples: [],
+    };
+  }
+
+  private recordBatchFailure(
+    tracker: BatchFailureTracker,
+    sample: CaseGenerationFailureSample,
+  ): void {
+    tracker.byCategory[sample.category] += 1;
+
+    if (tracker.samples.length >= FAILURE_SAMPLE_LIMIT) {
+      return;
+    }
+
+    tracker.samples.push({
+      ...sample,
+      message: sample.message.slice(0, 500),
+    });
+  }
+
+  private toFailureSummary(
+    tracker: BatchFailureTracker,
+  ): GenerateBatchResult['failureSummary'] {
+    return {
+      byCategory: tracker.byCategory,
+      samples: tracker.samples,
     };
   }
 
@@ -1314,13 +1745,13 @@ export class CaseGeneratorService {
     return [
       sequenceLabel,
       attempt > 1
-        ? `Regeneration attempt ${attempt}: correct prior quality failures by producing a fresh case.`
+        ? `Regeneration attempt ${attempt}: correct prior quality failures by producing a fresh case. Previous attempt likely failed because differentials were not true competing diagnoses; replace mechanisms/subtypes with realistic competing diagnoses.`
         : undefined,
       'Generate one clinically consistent USMLE-style diagnostic case using differential-first reasoning.',
       '',
       'Required reasoning plan before writing JSON:',
       'Step 1: define the correct diagnosis.',
-      'Step 2: define 3-5 plausible differentials that could fit the early presentation.',
+      'Step 2: define 3-5 plausible differentials that are true competing diagnoses from clues 0-2.',
       'Step 3: generate exactly 6 clues that progressively eliminate differentials.',
       'Step 4: generate an explanation that includes why the correct diagnosis fits and why the differentials are less likely.',
       '',
@@ -1356,10 +1787,35 @@ export class CaseGeneratorService {
       `* ${difficulty} difficulty`,
       '* exactly 6 clues with orders 0 through 5',
       '* 3-5 plausible differentials',
+      '* a valid differential is a true competing diagnosis a clinician would consider from clues 0-2',
+      '* each differential must fit age, sex, timeline, acuity, and setting',
+      '* do not include sex-specific differentials unless compatible with the patient sex and anatomy',
+      '* do not include ovarian, uterine, pregnancy-related, or gynecologic diagnoses for male patients',
+      '* do not include prostate or testicular diagnoses for female patients',
+      '* if sex is unspecified or relevant anatomy is unclear, avoid sex-specific differentials unless the case explicitly supports them',
+      '* age-specific differentials must be plausible for the stated age group',
+      '* each differential must share early features with the final diagnosis and be separable by later clues',
+      '* differentials must not be a subtype, cause/mechanism, complication, severity label, synonym, accepted alias, or broad semantic neighbor',
+      '* differentials must not be ruled out immediately by demographics or by clue 0 unless intentionally used as a weak distractor',
+      '* differentials must teach a useful distinction and remain meaningful until later clues',
+      '* invalid differential example: Acute Kidney Injury with Prerenal Azotemia as a competing differential',
+      '* invalid differential example: Asthma with Asthma Exacerbation',
+      '* invalid differential example: pediatric asthma with COPD unless strong rare-context evidence exists',
+      '* invalid differential example: male appendicitis with ovarian torsion or ectopic pregnancy',
+      '* valid differential example: pneumonia with pulmonary embolism when early dyspnea/hypoxia/tachycardia exists and later consolidation separates them',
+      '* valid differential example: asthma with vocal cord dysfunction when early exercise-related dyspnea/wheeze exists and spirometry/bronchodilator response separates them',
+      '* appendicitis competitors: gastroenteritis, renal colic, mesenteric adenitis, right-sided diverticulitis, Crohn disease; ovarian torsion only if female; ectopic pregnancy only if reproductive-age female; testicular torsion only if male with scrotal/groin symptoms',
+      '* heart failure competitors: pneumonia, COPD exacerbation, pulmonary embolism, acute coronary syndrome, renal failure/fluid overload',
+      '* type 2 diabetes mellitus competitors: type 1 diabetes mellitus, Cushing syndrome, steroid-induced hyperglycemia, metabolic syndrome; hyperthyroidism only if weight loss/tachycardia prominent; diabetes insipidus only if polyuria/polydipsia dominate without hyperglycemia',
+      '* pneumonia competitors: acute bronchitis, pulmonary embolism, heart failure, COPD exacerbation; tuberculosis only when chronicity supports it; lung abscess only if cavitation, foul sputum, or aspiration risk supports it',
+      '* for broad syndrome diagnoses, choose competing diagnoses that mimic the syndrome, not etiologic subtypes of that syndrome',
+      '* if etiologic discrimination is desired, the final answer should be the etiologic subtype, e.g. Prerenal AKI, not generic Acute Kidney Injury',
       '* each clue introduces new information',
       '* clues become stronger from broad to confirmatory',
       '* clues 0-4 must not name or abbreviate the final diagnosis or its common aliases',
-      '* labs and imaging must use realistic objective findings',
+      '* every lab clue must include at least one realistic numeric value with units or a clearly interpretable objective result; write BNP is 1,250 pg/mL, not BNP is elevated',
+      '* every vital clue must include realistic vital sign values; write BP is 88/54 mmHg, HR 124/min, RR 28/min, not vitals are unstable',
+      '* every imaging clue must include a specific objective finding; write chest X-ray shows bilateral perihilar opacities and small pleural effusions, not chest X-ray is abnormal',
       '* maintain age, sex, timeline, vitals, labs, and imaging consistency',
       '* no duplicate clues',
       '* no fluff',
@@ -1393,7 +1849,7 @@ export class CaseGeneratorService {
     return [
       sequenceLabel,
       attempt > 1
-        ? `Regeneration attempt ${attempt}: correct prior fidelity or quality failures while keeping the same fixed diagnosis.`
+        ? `Regeneration attempt ${attempt}: correct prior fidelity or quality failures while keeping the same fixed diagnosis. Previous attempt likely failed because differentials were not true competing diagnoses; replace mechanisms/subtypes with realistic competing diagnoses.`
         : undefined,
       'Generate one clinically consistent USMLE-style diagnostic case for a fixed final diagnosis.',
       '',
@@ -1411,13 +1867,14 @@ export class CaseGeneratorService {
       '* Do not broaden or narrow the diagnosis.',
       '* Do not invent a more descriptive final answer.',
       '* Do not include the final diagnosis, canonical name, or accepted aliases in differentials.',
+      '* Differentials must be true competing diagnoses, not subtypes, causes/mechanisms, complications, severity labels, synonyms, aliases, or broad semantic neighbors.',
       '* Do not name or abbreviate the final diagnosis or aliases in clues 0 through 4.',
       '* If lab, imaging, or vitals clues are used, include concrete objective values or findings.',
       '* Return clinical content for the fixed diagnosis only.',
       '',
       'Required reasoning plan before writing JSON:',
       'Step 1: use the fixed diagnosis as the answer.',
-      'Step 2: define 3-5 plausible differentials that are not the fixed diagnosis or aliases.',
+      'Step 2: define 3-5 plausible differentials that are true competing diagnoses from clues 0-2 and are not the fixed diagnosis or aliases.',
       'Step 3: generate exactly 6 clues that progressively eliminate differentials.',
       'Step 4: generate an explanation that names the fixed diagnosis and distinguishes it from the differentials.',
       '',
@@ -1453,8 +1910,34 @@ export class CaseGeneratorService {
       `* ${difficulty} difficulty`,
       '* exactly 6 clues with orders 0 through 5',
       '* 3-5 plausible differentials',
+      '* a valid differential is a true competing diagnosis a clinician would consider from clues 0-2',
+      '* each differential must fit age, sex, timeline, acuity, and setting',
+      '* do not include sex-specific differentials unless compatible with the patient sex and anatomy',
+      '* do not include ovarian, uterine, pregnancy-related, or gynecologic diagnoses for male patients',
+      '* do not include prostate or testicular diagnoses for female patients',
+      '* if sex is unspecified or relevant anatomy is unclear, avoid sex-specific differentials unless the case explicitly supports them',
+      '* age-specific differentials must be plausible for the stated age group',
+      '* each differential must share early features with the fixed final diagnosis and be separable by later clues',
+      '* differentials must not be a subtype, cause/mechanism, complication, severity label, synonym, accepted alias, or broad semantic neighbor',
+      '* differentials must not be ruled out immediately by demographics or by clue 0 unless intentionally used as a weak distractor',
+      '* differentials must teach a useful distinction and remain meaningful until later clues',
+      '* invalid differential example: Acute Kidney Injury with Prerenal Azotemia as a competing differential',
+      '* invalid differential example: Asthma with Asthma Exacerbation',
+      '* invalid differential example: pediatric asthma with COPD unless strong rare-context evidence exists',
+      '* invalid differential example: male appendicitis with ovarian torsion or ectopic pregnancy',
+      '* valid differential example: pneumonia with pulmonary embolism when early dyspnea/hypoxia/tachycardia exists and later consolidation separates them',
+      '* valid differential example: asthma with vocal cord dysfunction when early exercise-related dyspnea/wheeze exists and spirometry/bronchodilator response separates them',
+      '* appendicitis competitors: gastroenteritis, renal colic, mesenteric adenitis, right-sided diverticulitis, Crohn disease; ovarian torsion only if female; ectopic pregnancy only if reproductive-age female; testicular torsion only if male with scrotal/groin symptoms',
+      '* heart failure competitors: pneumonia, COPD exacerbation, pulmonary embolism, acute coronary syndrome, renal failure/fluid overload',
+      '* type 2 diabetes mellitus competitors: type 1 diabetes mellitus, Cushing syndrome, steroid-induced hyperglycemia, metabolic syndrome; hyperthyroidism only if weight loss/tachycardia prominent; diabetes insipidus only if polyuria/polydipsia dominate without hyperglycemia',
+      '* pneumonia competitors: acute bronchitis, pulmonary embolism, heart failure, COPD exacerbation; tuberculosis only when chronicity supports it; lung abscess only if cavitation, foul sputum, or aspiration risk supports it',
+      '* for broad syndrome diagnoses, choose competing diagnoses that mimic the syndrome, not etiologic subtypes of that syndrome',
+      '* if etiologic discrimination is desired, the final answer should be the etiologic subtype, e.g. Prerenal AKI, not generic Acute Kidney Injury',
       '* each clue introduces new information',
       '* clues become stronger from broad to confirmatory',
+      '* every lab clue must include at least one realistic numeric value with units or a clearly interpretable objective result; write BNP is 1,250 pg/mL, not BNP is elevated',
+      '* every vital clue must include realistic vital sign values; write BP is 88/54 mmHg, HR 124/min, RR 28/min, not vitals are unstable',
+      '* every imaging clue must include a specific objective finding; write chest X-ray shows bilateral perihilar opacities and small pleural effusions, not chest X-ray is abnormal',
       '* maintain age, sex, timeline, vitals, labs, and imaging consistency',
       '* no duplicate clues',
       '* no fluff',
@@ -1499,14 +1982,47 @@ export class CaseGeneratorService {
     ].join('\n');
   }
 
+  private buildDifferentialPreflightSystemPrompt(): string {
+    return [
+      'You are a strict clinical reviewer for differential diagnosis selection in generated Wardle cases.',
+      'Return valid JSON only.',
+      'Assess only the proposed differential list before the full case critique.',
+      'For each differential, decide whether it is a genuine competing diagnosis for the final answer.',
+      'A valid differential must be clinically plausible from clues 0-2, fit the patient age, sex, timeline, acuity, and setting, share key early features with the final diagnosis, and be separable by clues 3-5.',
+      'Reject sex-specific differentials that are incompatible with the stated patient sex or anatomy. Ovarian, uterine, pregnancy-related, and gynecologic diagnoses are invalid for male patients. Prostate and testicular diagnoses are invalid for female patients. If sex or relevant anatomy is unclear, sex-specific differentials should be weak or invalid unless explicitly supported.',
+      'Reject age-specific differentials that are implausible for the stated age group.',
+      'Reject differentials that are ruled out immediately by demographics or clue 0 unless the case explicitly frames them as weak distractors.',
+      'Reject items that are a subtype, cause/mechanism, complication, severity label, synonym/alias, or merely broadly related to the final diagnosis.',
+      'Use the registry target metadata and accepted aliases when provided.',
+      'Hard examples: male appendicitis plus ovarian torsion or ectopic pregnancy is invalid; female abdominal pain plus ovarian torsion can be valid when reproductive anatomy/sex is compatible; 25-year-old asthma plus COPD is invalid or weak unless strong smoking, alpha-1, or chronic history supports it; 12-year-old asthma plus COPD is invalid; AKI plus prerenal azotemia as a competing differential is invalid cause/mechanism/subtype; asthma plus asthma exacerbation is invalid subtype/severity label; pneumonia plus pulmonary embolism is valid if acute dyspnea, hypoxia, or tachycardia appears early and later clues separate it; COPD in an older smoker with chronic exertional dyspnea is valid.',
+      'Diagnosis-specific competitors: appendicitis should prefer gastroenteritis, renal colic, mesenteric adenitis, right-sided diverticulitis, Crohn disease, and sex-compatible torsion/pregnancy mimics; heart failure should prefer pneumonia, COPD exacerbation, pulmonary embolism, acute coronary syndrome, renal failure/fluid overload; type 2 diabetes should prefer type 1 diabetes, Cushing syndrome, steroid-induced hyperglycemia, metabolic syndrome, and only context-supported hyperthyroidism or diabetes insipidus; pneumonia should prefer acute bronchitis, pulmonary embolism, heart failure, COPD exacerbation, chronicity-supported tuberculosis, or context-supported lung abscess.',
+      'Score from 0 to 100. Pass only if all differentials are acceptable competing diagnoses and the list is ready for the full case critique.',
+      'Each assessment must classify category as one of: competing_diagnosis, subtype, cause_mechanism, complication, severity_label, synonym_or_alias, broadly_related_only.',
+      'Each assessment verdict must be valid, weak, or invalid.',
+      'Each assessment issue must be a concise string when there is a problem, otherwise null.',
+      'Use empty issues and recommendations arrays when none.',
+    ].join('\n');
+  }
+
   private buildCritiqueSystemPrompt(): string {
     return [
       'You are a strict clinical education reviewer for generated diagnostic cases.',
       'Return valid JSON only.',
       'Pass only cases that are clinically consistent, have exactly 6 progressive clues, include 3-5 plausible differentials, avoid answer leakage before the confirmatory clue, and have realistic labs/imaging when present.',
       'Score from 0 to 100. A case should pass only when it is ready to save as a draft for editorial review.',
-      'Provide clinicalAccuracyScore, clueProgressionScore, differentialQualityScore, differentialRuleOutScore, and ambiguitySuitabilityScore from 0 to 100.',
+      'Provide clinicalAccuracyScore, clueProgressionScore, differentialQualityScore, differentialRuleOutScore, differentialPlausibilityScore, differentialDiscriminationScore, clinicalEdgeValidityScore, educationalValueScore, graphConsistencyScore, and ambiguitySuitabilityScore from 0 to 100.',
+      'Return invalidReasoningEdges as an array. Each item must include differential, clueOrder, evidence, claimedEffect ("weakens" or "rules_out"), verdict ("valid", "weak_or_neutral", "backwards", or "unsupported"), and issue.',
+      'Assess differential plausibility using age, sex, epidemiology, acuity, timeline, and presenting syndrome. Penalize unrealistic mimics such as COPD in a 12-year-old asthma case.',
+      'Detect hierarchy and mechanism errors. Penalize parent/subtype/mechanism entries listed as competing differentials, such as AKI versus prerenal azotemia, asthma versus asthma exacerbation, or a mechanism instead of a diagnosis.',
       'Critique differentialAnalysis strictly: can each differential actually be ruled out using the supplied clues, does every differential have a specific clue-grounded reason, and are the rule-outs clinically valid?',
+      'Verify that cited evidence medically weakens the differential, not merely that the evidence is copied from a clue. Penalize copied but medically invalid rule-out evidence.',
+      'For every differentialAnalysis.ruledOutByClues entry, decide whether the evidence genuinely decreases the probability of that differential, is neutral or weak, is unsupported by the case, or is clinically backwards.',
+      'Ask whether a consultant physician would accept each reasoning edge, and whether the cited clue is the best available discriminator or a weaker/irrelevant clue when a better discriminator exists.',
+      'Hard fail if any reasoning edge is backwards or unsupported, if cited evidence actually supports the differential, or if more than one edge is weak_or_neutral.',
+      'Examples: hypoxia weakening pulmonary embolism is backwards; bronchodilator reversibility weakening asthma is backwards; lobar consolidation weakening pulmonary embolism is valid; bronchodilator response weakening vocal cord dysfunction is valid; normal renal ultrasound ruling out prerenal azotemia is backwards or unsupported; concentrated urine plus low urine sodium weakening ATN is valid.',
+      'Penalize cases that are effectively solved before clue 4 unless the requested difficulty is clearly easy and the remaining clues still teach discriminators.',
+      'Penalize explanations that only restate clue text. Reward explanations that teach discriminators between the final diagnosis and each differential.',
+      'Assess graphConsistencyScore by asking whether differentialAnalysis would create clinically valid graph edges between diagnoses, findings, investigations, and rule-out evidence.',
       'Fail if differentialAnalysis is missing, any differential is unmatched, any rule-out is not grounded in a clue, rule-out evidence is hallucinated, or the explanation says a differential is ruled out without enough case evidence.',
       'Fail generic, invented, or unsupported rule-out reasoning.',
       'List concrete issues and recommendations. Use empty arrays when none.',
@@ -1592,12 +2108,161 @@ export class CaseGeneratorService {
     return caseGenerationCritiqueSchema.parse(parsed);
   }
 
+  private parseDifferentialPreflight(
+    rawContent: string,
+  ): DifferentialPreflightCritique {
+    const sanitized = rawContent
+      .trim()
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/\s*```$/i, '');
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(sanitized);
+    } catch (error) {
+      throw new BadRequestException(
+        `Failed to parse differential preflight critique JSON: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    return differentialPreflightCritiqueSchema.parse(parsed);
+  }
+
+  private assertPassingDifferentialPreflight(
+    critique: DifferentialPreflightCritique,
+  ): void {
+    const invalidDifferentials = critique.assessments.filter(
+      (assessment) =>
+        assessment.verdict === 'invalid' ||
+        assessment.category !== 'competing_diagnosis' ||
+        !assessment.plausibleFromClues0To2 ||
+        !assessment.fitsDemographics ||
+        !assessment.fitsTimelineAcuitySetting ||
+        !assessment.separableByLaterClues,
+    );
+    const weakAssessmentCount = critique.assessments.filter(
+      (assessment) => assessment.verdict === 'weak',
+    ).length;
+
+    if (
+      critique.passed &&
+      critique.score >= MIN_DIFFERENTIAL_PREFLIGHT_SCORE &&
+      critique.issues.length === 0 &&
+      invalidDifferentials.length === 0 &&
+      weakAssessmentCount <= MAX_WEAK_DIFFERENTIAL_PREFLIGHT_ASSESSMENTS
+    ) {
+      return;
+    }
+
+    const issueSummary = [
+      ...critique.issues,
+      ...invalidDifferentials.map((assessment) =>
+        [
+          assessment.diagnosis,
+          assessment.issue ??
+            `classified as ${assessment.category} with ${assessment.verdict} verdict`,
+        ].join(': '),
+      ),
+      ...(weakAssessmentCount > MAX_WEAK_DIFFERENTIAL_PREFLIGHT_ASSESSMENTS
+        ? [`Too many weak differentials: ${weakAssessmentCount}`]
+        : []),
+    ]
+      .filter((issue) => issue.trim().length > 0)
+      .slice(0, 5);
+
+    throw new BadRequestException(
+      `Generated case failed differential preflight: ${
+        issueSummary.length > 0 ? issueSummary.join('; ') : 'quality gate failed'
+      }`,
+    );
+  }
+
+  private logDifferentialPreflightFailed(
+    generatedCase: GeneratedCase,
+    critique: DifferentialPreflightCritique,
+  ): void {
+    const failureCategory: CaseGenerationFailureCategory =
+      'differential_preflight';
+    this.logger.warn(
+      JSON.stringify({
+        event: 'case.generate.differential_preflight_failed',
+        answer: generatedCase.answer,
+        patientSex: this.inferPatientSex(generatedCase),
+        patientAge: this.inferPatientAge(generatedCase),
+        score: critique.score,
+        issues: critique.issues,
+        failureCategory,
+        failureMessage:
+          critique.issues[0] ?? 'Generated case failed differential preflight',
+        invalidDifferentials: critique.assessments
+          .filter(
+            (assessment) =>
+              assessment.verdict === 'invalid' ||
+              assessment.category !== 'competing_diagnosis' ||
+              !assessment.plausibleFromClues0To2 ||
+              !assessment.fitsDemographics ||
+              !assessment.fitsTimelineAcuitySetting ||
+              !assessment.separableByLaterClues,
+          )
+          .map((assessment) => ({
+            diagnosis: assessment.diagnosis,
+            category: assessment.category,
+            verdict: assessment.verdict,
+            issue: assessment.issue ?? null,
+          })),
+      }),
+    );
+  }
+
   private isPassingCritique(critique: CaseGenerationCritique): boolean {
+    const componentScores = this.getAvailableCritiqueComponentScores(critique);
+    const weakOrNeutralEdgeCount = critique.invalidReasoningEdges.filter(
+      (edge) => edge.verdict === 'weak_or_neutral',
+    ).length;
+    const hasHardInvalidEdge = critique.invalidReasoningEdges.some(
+      (edge) => edge.verdict === 'backwards' || edge.verdict === 'unsupported',
+    );
+
     return (
       critique.passed &&
       critique.score >= MIN_CRITIQUE_SCORE &&
-      critique.issues.length === 0
+      critique.issues.length === 0 &&
+      critique.invalidReasoningEdges.length === 0 &&
+      !hasHardInvalidEdge &&
+      weakOrNeutralEdgeCount <= 1 &&
+      critique.clinicalAccuracyScore >= MIN_CLINICAL_ACCURACY_SCORE &&
+      critique.clueProgressionScore >= MIN_CLUE_PROGRESSION_SCORE &&
+      critique.differentialPlausibilityScore >=
+        MIN_DIFFERENTIAL_PLAUSIBILITY_SCORE &&
+      critique.differentialDiscriminationScore >=
+        MIN_DIFFERENTIAL_DISCRIMINATION_SCORE &&
+      critique.clinicalEdgeValidityScore >= MIN_CLINICAL_EDGE_VALIDITY_SCORE &&
+      critique.educationalValueScore >= MIN_EDUCATIONAL_VALUE_SCORE &&
+      critique.graphConsistencyScore >= MIN_GRAPH_CONSISTENCY_SCORE &&
+      componentScores.every(
+        (score) => score >= MIN_ANY_CRITIQUE_COMPONENT_SCORE,
+      )
     );
+  }
+
+  private getAvailableCritiqueComponentScores(
+    critique: Partial<CaseGenerationCritique>,
+  ): number[] {
+    return [
+      critique.clinicalAccuracyScore,
+      critique.clueProgressionScore,
+      critique.differentialQualityScore,
+      critique.differentialRuleOutScore,
+      critique.differentialPlausibilityScore,
+      critique.differentialDiscriminationScore,
+      critique.clinicalEdgeValidityScore,
+      critique.educationalValueScore,
+      critique.graphConsistencyScore,
+      critique.ambiguitySuitabilityScore,
+    ].filter((score): score is number => typeof score === 'number');
   }
 
   private attachGenerationQuality(
@@ -1622,6 +2287,14 @@ export class CaseGeneratorService {
         critiqueIssues: critique.issues,
         critiqueRecommendations: critique.recommendations,
         differentialRuleOutScore: critique.differentialRuleOutScore,
+        differentialPlausibilityScore:
+          critique.differentialPlausibilityScore,
+        differentialDiscriminationScore:
+          critique.differentialDiscriminationScore,
+        clinicalEdgeValidityScore: critique.clinicalEdgeValidityScore,
+        invalidReasoningEdges: critique.invalidReasoningEdges,
+        educationalValueScore: critique.educationalValueScore,
+        graphConsistencyScore: critique.graphConsistencyScore,
         ...metadata,
       },
       },
@@ -1640,6 +2313,12 @@ export class CaseGeneratorService {
     | 'critiqueIssues'
     | 'critiqueRecommendations'
     | 'differentialRuleOutScore'
+    | 'differentialPlausibilityScore'
+    | 'differentialDiscriminationScore'
+    | 'clinicalEdgeValidityScore'
+    | 'invalidReasoningEdges'
+    | 'educationalValueScore'
+    | 'graphConsistencyScore'
   > {
     const hasLabs = generatedCase.clues.some((clue) => clue.type === 'lab');
     const hasImaging = generatedCase.clues.some(
@@ -1736,12 +2415,29 @@ export class CaseGeneratorService {
   }
 
   private computeQualityScore(critique: CaseGenerationCritique): number {
+    const differentialPlausibilityScore =
+      critique.differentialPlausibilityScore ??
+      critique.differentialQualityScore;
+    const differentialDiscriminationScore =
+      critique.differentialDiscriminationScore ??
+      critique.differentialRuleOutScore ??
+      critique.differentialQualityScore;
+    const clinicalEdgeValidityScore =
+      critique.clinicalEdgeValidityScore ??
+      critique.differentialDiscriminationScore ??
+      critique.differentialRuleOutScore;
+    const educationalValueScore =
+      critique.educationalValueScore ?? critique.ambiguitySuitabilityScore;
+    const graphConsistencyScore =
+      critique.graphConsistencyScore ?? critique.differentialRuleOutScore;
     const weightedScore =
-      critique.clinicalAccuracyScore * 0.3 +
-      critique.clueProgressionScore * 0.2 +
-      critique.differentialQualityScore * 0.2 +
-      critique.differentialRuleOutScore * 0.2 +
-      critique.ambiguitySuitabilityScore * 0.1;
+      critique.clinicalAccuracyScore * 0.22 +
+      critique.clueProgressionScore * 0.13 +
+      differentialPlausibilityScore * 0.18 +
+      differentialDiscriminationScore * 0.17 +
+      clinicalEdgeValidityScore * 0.15 +
+      educationalValueScore * 0.08 +
+      graphConsistencyScore * 0.07;
 
     return Math.round(this.clampScore(weightedScore));
   }
@@ -1900,6 +2596,8 @@ export class CaseGeneratorService {
     attempt: number;
     answer: string;
     reason: BatchRejectionReason;
+    failureCategory: CaseGenerationFailureCategory;
+    failureMessage: string;
     qualityScore: number | null;
     specialty: string | null;
     estimatedDifficulty: string | null;
@@ -1914,6 +2612,8 @@ export class CaseGeneratorService {
         attempt: input.attempt,
         answer: input.answer,
         reason: input.reason,
+        failureCategory: input.failureCategory,
+        failureMessage: input.failureMessage,
         qualityScore: input.qualityScore,
         specialty: input.specialty,
         estimatedDifficulty: input.estimatedDifficulty,
@@ -1921,6 +2621,82 @@ export class CaseGeneratorService {
         plannerDiagnosis: input.plannerDiagnosis ?? null,
       }),
     );
+  }
+
+  private categoryFromBatchRejectionReason(
+    reason: BatchRejectionReason,
+  ): CaseGenerationFailureCategory {
+    return reason;
+  }
+
+  private classifyGenerationFailure(
+    error: Error,
+  ): CaseGenerationFailureCategory {
+    const message = error.message.toLowerCase();
+
+    if (message.includes('must include a realistic objective finding')) {
+      return 'objective_detail';
+    }
+
+    if (message.includes('demographic-incompatible differential')) {
+      return 'demographic_incompatible_differential';
+    }
+
+    if (message.includes('leaks the final diagnosis')) {
+      return 'answer_leakage';
+    }
+
+    if (message.includes('failed differential preflight')) {
+      return 'differential_preflight';
+    }
+
+    if (
+      message.includes('rule-out evidence must be copied or tightly paraphrased')
+    ) {
+      return 'differential_grounding';
+    }
+
+    if (message.includes('generated case failed critique')) {
+      return 'full_critique';
+    }
+
+    if (message.includes('does not match fixed diagnosis')) {
+      return 'registry_target_mismatch';
+    }
+
+    if (message.includes('openai returned an empty')) {
+      return 'openai_empty_response';
+    }
+
+    if (
+      message.includes('connection error') ||
+      message.includes('network error') ||
+      message.includes('fetch failed') ||
+      message.includes('socket hang up') ||
+      message.includes('econnreset') ||
+      message.includes('etimedout') ||
+      message.includes('timeout') ||
+      message.includes('rate limit') ||
+      message.includes('429') ||
+      message.includes('503') ||
+      message.includes('502')
+    ) {
+      return 'connection_error';
+    }
+
+    if (message.includes('failed to parse')) {
+      return 'json_parse';
+    }
+
+    if (
+      message.includes('schema is invalid') ||
+      message.includes('invalid_type') ||
+      message.includes('invalid input')
+    ) {
+      return 'schema_invalid';
+    }
+
+    return 'unknown';
   }
 
   private clampScore(value: number): number {
@@ -2118,7 +2894,28 @@ export class CaseGeneratorService {
     return type === 'lab' || type === 'imaging' || type === 'vital';
   }
 
-  private hasPlausibleObjectiveDetail(value: string): boolean {
+  private hasPlausibleObjectiveDetail(
+    value: string,
+    type?: ClinicalClue['type'],
+  ): boolean {
+    if (type === 'vital') {
+      return (
+        NUMERIC_OBJECTIVE_PATTERN.test(value) &&
+        VITAL_OBJECTIVE_PATTERN.test(value)
+      );
+    }
+
+    if (type === 'lab') {
+      return (
+        NUMERIC_OBJECTIVE_PATTERN.test(value) ||
+        LAB_OBJECTIVE_RESULT_PATTERN.test(value)
+      );
+    }
+
+    if (type === 'imaging') {
+      return IMAGING_OBJECTIVE_FINDING_PATTERN.test(value);
+    }
+
     return OBJECTIVE_DETAIL_PATTERN.test(value);
   }
 

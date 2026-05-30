@@ -18,6 +18,13 @@ type GenerationQualityMetadata = {
   critiquePassed?: boolean;
   critiqueIssues: string[];
   critiqueRecommendations: string[];
+  differentialRuleOutScore?: number;
+  differentialPlausibilityScore?: number;
+  differentialDiscriminationScore?: number;
+  clinicalEdgeValidityScore?: number;
+  invalidReasoningEdges: InvalidReasoningEdge[];
+  educationalValueScore?: number;
+  graphConsistencyScore?: number;
   estimatedDifficulty?: 'easy' | 'medium' | 'hard';
   estimatedSolveClue?: number;
   specialty?: string | null;
@@ -27,6 +34,15 @@ type GenerationQualityMetadata = {
   hasVitals?: boolean;
   differentialCount?: number;
   qualityScore?: number;
+};
+
+type InvalidReasoningEdge = {
+  differential: string;
+  clueOrder: number;
+  evidence: string;
+  claimedEffect: 'weakens' | 'rules_out';
+  verdict: 'valid' | 'weak_or_neutral' | 'backwards' | 'unsupported';
+  issue: string;
 };
 
 type ValidationIssueBuckets = {
@@ -138,6 +154,33 @@ export function parseGenerationQuality(
         : undefined,
     critiqueIssues: parseStringArray(quality.critiqueIssues),
     critiqueRecommendations: parseStringArray(quality.critiqueRecommendations),
+    differentialRuleOutScore:
+      typeof quality.differentialRuleOutScore === 'number'
+        ? quality.differentialRuleOutScore
+        : undefined,
+    differentialPlausibilityScore:
+      typeof quality.differentialPlausibilityScore === 'number'
+        ? quality.differentialPlausibilityScore
+        : undefined,
+    differentialDiscriminationScore:
+      typeof quality.differentialDiscriminationScore === 'number'
+        ? quality.differentialDiscriminationScore
+        : undefined,
+    clinicalEdgeValidityScore:
+      typeof quality.clinicalEdgeValidityScore === 'number'
+        ? quality.clinicalEdgeValidityScore
+        : undefined,
+    invalidReasoningEdges: parseInvalidReasoningEdges(
+      quality.invalidReasoningEdges,
+    ),
+    educationalValueScore:
+      typeof quality.educationalValueScore === 'number'
+        ? quality.educationalValueScore
+        : undefined,
+    graphConsistencyScore:
+      typeof quality.graphConsistencyScore === 'number'
+        ? quality.graphConsistencyScore
+        : undefined,
     estimatedDifficulty: parseDifficulty(quality.estimatedDifficulty),
     estimatedSolveClue:
       typeof quality.estimatedSolveClue === 'number'
@@ -182,6 +225,55 @@ function parseStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string');
 }
 
+function parseInvalidReasoningEdges(value: unknown): InvalidReasoningEdge[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const parsed: InvalidReasoningEdge[] = [];
+  for (const item of value) {
+    const candidate = asRecord(item);
+    if (
+      !candidate ||
+      typeof candidate.differential !== 'string' ||
+      typeof candidate.clueOrder !== 'number' ||
+      typeof candidate.evidence !== 'string' ||
+      typeof candidate.claimedEffect !== 'string' ||
+      typeof candidate.verdict !== 'string' ||
+      typeof candidate.issue !== 'string'
+    ) {
+      continue;
+    }
+
+    if (
+      candidate.claimedEffect !== 'weakens' &&
+      candidate.claimedEffect !== 'rules_out'
+    ) {
+      continue;
+    }
+
+    if (
+      candidate.verdict !== 'valid' &&
+      candidate.verdict !== 'weak_or_neutral' &&
+      candidate.verdict !== 'backwards' &&
+      candidate.verdict !== 'unsupported'
+    ) {
+      continue;
+    }
+
+    parsed.push({
+      differential: candidate.differential,
+      clueOrder: candidate.clueOrder,
+      evidence: candidate.evidence,
+      claimedEffect: candidate.claimedEffect,
+      verdict: candidate.verdict,
+      issue: candidate.issue,
+    });
+  }
+
+  return parsed;
+}
+
 function parseDifficulty(
   value: unknown,
 ): GenerationQualityMetadata['estimatedDifficulty'] {
@@ -201,6 +293,7 @@ function parseAcuity(value: unknown): GenerationQualityMetadata['acuity'] {
 export type {
   CaseClue,
   GenerationQualityMetadata,
+  InvalidReasoningEdge,
   ValidationFindingIssue,
   ValidationIssueBuckets,
 };

@@ -77,6 +77,47 @@ function BulletList({ title, items }: { title: string; items: string[] }) {
   );
 }
 
+function InvalidReasoningEdgesList({
+  quality,
+}: {
+  quality: GenerationQualityMetadata;
+}) {
+  if (quality.invalidReasoningEdges.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-3">
+      <p className="text-sm font-semibold text-rose-950">
+        Invalid reasoning edges
+      </p>
+      <div className="mt-3 space-y-3">
+        {quality.invalidReasoningEdges.map((edge, index) => (
+          <div
+            key={`${edge.differential}-${edge.clueOrder}-${index}`}
+            className="rounded-md border border-rose-200 bg-white px-3 py-3"
+          >
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-rose-700">
+              <span>{formatLabel(edge.verdict)}</span>
+              <span>Clue {edge.clueOrder}</span>
+              <span>{formatLabel(edge.claimedEffect)}</span>
+            </div>
+            <p className="mt-2 text-sm font-semibold text-slate-950">
+              {edge.differential}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-slate-700">
+              {edge.evidence}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-rose-800">
+              {edge.issue}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function CaseGenerationQualitySection({
   quality,
 }: CaseGenerationQualitySectionProps) {
@@ -121,6 +162,30 @@ export default function CaseGenerationQualitySection({
               }
             />
             <MetricCard label="Critique score" value={quality.critiqueScore} />
+            <MetricCard
+              label="Differential plausibility"
+              value={quality.differentialPlausibilityScore}
+            />
+            <MetricCard
+              label="Differential discrimination"
+              value={quality.differentialDiscriminationScore}
+            />
+            <MetricCard
+              label="Clinical edge validity"
+              value={quality.clinicalEdgeValidityScore}
+            />
+            <MetricCard
+              label="Rule-out score"
+              value={quality.differentialRuleOutScore}
+            />
+            <MetricCard
+              label="Educational value"
+              value={quality.educationalValueScore}
+            />
+            <MetricCard
+              label="Graph consistency"
+              value={quality.graphConsistencyScore}
+            />
             <MetricCard label="Difficulty" value={quality.estimatedDifficulty} />
             <MetricCard label="Solve clue" value={quality.estimatedSolveClue} />
             <MetricCard label="Specialty" value={quality.specialty} />
@@ -138,6 +203,8 @@ export default function CaseGenerationQualitySection({
               items={quality.critiqueRecommendations}
             />
           </div>
+
+          <InvalidReasoningEdgesList quality={quality} />
         </div>
       ) : (
         <EmptyState
