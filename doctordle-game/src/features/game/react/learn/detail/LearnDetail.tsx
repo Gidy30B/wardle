@@ -33,6 +33,7 @@ type EducationState = {
 type CompareItem = {
   name: string;
   status: "ruled out" | "competing early" | "less likely";
+  hasStructuredReasoning: boolean;
   casePoint?: string;
   ruleOuts?: Array<{
     clueOrder: number;
@@ -145,6 +146,7 @@ function buildCompareItems({
     items.push({
       name,
       status: analysis?.ruledOutByClues.length ? "ruled out" : "less likely",
+      hasStructuredReasoning: analysis !== undefined,
       casePoint: analysis?.whyPlausibleEarly,
       ruleOuts: analysis?.ruledOutByClues,
       finalReasonLessLikely: analysis?.finalReasonLessLikely,
@@ -158,6 +160,7 @@ function buildCompareItems({
     items.push({
       name: analysis.diagnosis,
       status: analysis.ruledOutByClues.length ? "ruled out" : "less likely",
+      hasStructuredReasoning: true,
       casePoint: analysis.whyPlausibleEarly,
       ruleOuts: analysis.ruledOutByClues,
       finalReasonLessLikely: analysis.finalReasonLessLikely,
@@ -214,6 +217,7 @@ function buildCompareItems({
     items.push({
       name,
       status: whyConfused ? "competing early" : "less likely",
+      hasStructuredReasoning: false,
       whyConfused,
       generalPoint,
       keySeparator,
@@ -847,89 +851,131 @@ function CompareDifferentialsList({ items }: { items: CompareItem[] }) {
   }
 
   return (
-    <div className="grid gap-2 xl:grid-cols-2">
+    <div className="grid gap-2 min-[560px]:grid-cols-2">
       {items.map((item) => (
-        <div
+        <CompareDifferentialCard
           key={normalizeDiagnosisName(item.name)}
-          className="rounded-[14px] border border-white/[0.06] bg-white/[0.025] px-4 py-3.5"
-        >
-          <div className="flex min-w-0 items-start justify-between gap-3">
-            <p className="min-w-0 break-words text-sm font-bold text-[var(--wardle-color-mint)]">
-              {item.name}
-            </p>
-            <span className="shrink-0 rounded-full border border-rose-400/[0.18] bg-rose-400/[0.08] px-2.5 py-1 font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-rose-300">
-              {item.status}
-            </span>
-          </div>
-
-          {item.ruleOuts?.length ? (
-            <div className="mt-3 space-y-2">
-              {item.ruleOuts.map((ruleOut, index) => (
-                <div
-                  key={`${ruleOut.clueOrder}-${index}-${ruleOut.evidence}`}
-                  className="rounded-[12px] border border-[rgba(0,180,166,0.12)] bg-[rgba(0,180,166,0.035)] px-3 py-2.5"
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <p className="font-brand-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--wardle-color-teal)]/65">
-                      Clue {ruleOut.clueOrder}
-                    </p>
-                    <div className="h-px min-w-4 flex-1 bg-white/[0.06]" />
-                  </div>
-                  <p className="mt-2 break-words text-sm font-semibold leading-6 text-white/72">
-                    {ruleOut.reason}
-                  </p>
-                  <p className="mt-1 break-words text-[13px] leading-5 text-white/46">
-                    {ruleOut.evidence}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : item.keySeparator || item.generalPoint ? (
-            <div className="mt-3 rounded-[12px] border border-[rgba(0,180,166,0.12)] bg-[rgba(0,180,166,0.035)] px-3 py-2.5">
-              <p className="font-brand-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--wardle-color-teal)]/65">
-                Key separator
-              </p>
-              <p className="mt-1 break-words text-sm font-medium leading-6 text-white/68">
-                {item.keySeparator ?? item.generalPoint}
-              </p>
-            </div>
-          ) : null}
-
-          {item.casePoint ||
-          item.whyConfused ||
-          item.finalReasonLessLikely ||
-          item.classicTrap ? (
-            <div className="mt-3 space-y-1.5">
-              {item.casePoint ? (
-                <ComparisonLine label="early" tone="amber">
-                  {item.casePoint}
-                </ComparisonLine>
-              ) : null}
-              {item.whyConfused ? (
-                <ComparisonLine label="confusable" tone="muted">
-                  {item.whyConfused}
-                </ComparisonLine>
-              ) : null}
-              {item.finalReasonLessLikely ? (
-                <ComparisonLine label="why not" tone="muted">
-                  {item.finalReasonLessLikely}
-                </ComparisonLine>
-              ) : null}
-              {item.classicTrap ? (
-                <ComparisonLine label="trap" tone="amber">
-                  {item.classicTrap}
-                </ComparisonLine>
-              ) : null}
-            </div>
-          ) : (
-            <p className="mt-2 text-sm leading-6 text-white/44">
-              Stored as a ruled-out alternative for this case.
-            </p>
-          )}
-        </div>
+          item={item}
+        />
       ))}
     </div>
   );
+}
+
+function CompareDifferentialCard({ item }: { item: CompareItem }) {
+  const separator = item.finalReasonLessLikely ?? item.keySeparator ?? item.generalPoint;
+  const showFallback =
+    !item.hasStructuredReasoning &&
+    !separator &&
+    !item.casePoint &&
+    !item.whyConfused &&
+    !item.classicTrap;
+
+  return (
+    <div className="overflow-hidden rounded-[16px] border border-white/[0.06] bg-white/[0.03]">
+      <div className="flex min-w-0 items-start justify-between gap-3 px-4 pb-2.5 pt-3.5">
+        <p className="min-w-0 break-words text-[15px] font-bold leading-snug text-[var(--wardle-color-mint)]">
+          {item.name}
+        </p>
+        <span
+          className={`shrink-0 rounded-full border px-2.5 py-1 font-brand-mono text-[9px] font-bold uppercase tracking-[0.12em] ${getCompareStatusClass(
+            item.status,
+          )}`}
+        >
+          {item.status}
+        </span>
+      </div>
+
+      {item.casePoint ? (
+        <div className="mx-4 mb-2.5 grid grid-cols-[56px_minmax(0,1fr)] items-baseline gap-2">
+          <p className="pt-px font-brand-mono text-[9px] font-bold uppercase tracking-[0.14em] text-white/26">
+            Early
+          </p>
+          <p className="break-words text-[13px] leading-5 text-white/50">
+            {item.casePoint}
+          </p>
+        </div>
+      ) : null}
+
+      {item.ruleOuts?.length ? (
+        <div className="mx-2.5 mb-2.5 overflow-hidden rounded-[12px] border border-[rgba(29,158,117,0.18)] bg-[rgba(29,158,117,0.07)]">
+          <p className="border-b border-[rgba(29,158,117,0.1)] px-3 py-1.5 font-brand-mono text-[9px] font-bold uppercase tracking-[0.15em] text-[rgba(29,158,117,0.6)]">
+            Eliminated by clues
+          </p>
+          <div className="py-1">
+            {item.ruleOuts.map((ruleOut, index) => (
+              <div
+                key={`${ruleOut.clueOrder}-${index}-${ruleOut.evidence}`}
+                className="relative flex gap-2.5 px-3 py-2"
+              >
+                {index < (item.ruleOuts?.length ?? 0) - 1 ? (
+                  <span className="absolute bottom-[-4px] left-[21px] top-7 w-px bg-[rgba(29,158,117,0.15)]" />
+                ) : null}
+                <span className="relative z-[1] mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-[rgba(29,158,117,0.28)] bg-[rgba(29,158,117,0.12)] font-brand-mono text-[8px] font-black text-[rgba(29,158,117,0.7)]">
+                  {ruleOut.clueOrder}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="mb-0.5 font-brand-mono text-[8px] font-bold uppercase tracking-[0.14em] text-[rgba(29,158,117,0.6)]">
+                    Clue {ruleOut.clueOrder}
+                  </p>
+                  <p className="break-words text-[13px] font-semibold leading-5 text-white/72">
+                    {ruleOut.reason}
+                  </p>
+                  <p className="mt-0.5 break-words text-xs leading-5 text-white/40">
+                    {ruleOut.evidence}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {separator ? (
+        <div className="mx-2.5 mb-2.5 rounded-[12px] border border-[rgba(29,158,117,0.13)] bg-[rgba(29,158,117,0.04)] px-3 py-2.5">
+          <p className="mb-1 font-brand-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[rgba(29,158,117,0.6)]">
+            Key separator
+          </p>
+          <p className="break-words text-[13px] font-medium leading-6 text-white/68">
+            {separator}
+          </p>
+        </div>
+      ) : null}
+
+      {item.whyConfused || item.classicTrap ? (
+        <div className="flex flex-wrap gap-2 border-t border-white/[0.04] px-4 py-2">
+          {item.whyConfused ? (
+            <ComparisonLine label="confusable" tone="muted">
+              {item.whyConfused}
+            </ComparisonLine>
+          ) : null}
+          {item.classicTrap ? (
+            <ComparisonLine label="trap" tone="amber">
+              {item.classicTrap}
+            </ComparisonLine>
+          ) : null}
+        </div>
+      ) : null}
+
+      {showFallback ? (
+        <p className="px-4 pb-3 text-sm leading-6 text-white/44">
+          Stored as a ruled-out alternative for this case.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function getCompareStatusClass(status: CompareItem["status"]) {
+  if (status === "ruled out") {
+    return "border-rose-400/[0.2] bg-rose-400/[0.07] text-rose-300/90";
+  }
+
+  if (status === "competing early") {
+    return "border-sky-300/[0.18] bg-sky-300/[0.06] text-sky-200/80";
+  }
+
+  return "border-white/[0.1] bg-white/[0.04] text-white/38";
 }
 
 function ComparisonLine({
@@ -945,11 +991,11 @@ function ComparisonLine({
     tone === "amber" ? "text-[var(--wardle-color-amber)]/72" : "text-white/32";
 
   return (
-    <div className="grid grid-cols-[74px_minmax(0,1fr)] gap-2">
+    <div className="flex min-w-0 flex-1 basis-full items-baseline gap-1.5 text-xs text-white/40">
       <p className={`font-brand-mono text-[9px] font-bold uppercase tracking-[0.14em] ${labelClass}`}>
         {label}
       </p>
-      <p className="break-words text-[13px] leading-5 text-white/50">
+      <p className="min-w-0 break-words text-xs leading-5 text-white/40">
         {children}
       </p>
     </div>
