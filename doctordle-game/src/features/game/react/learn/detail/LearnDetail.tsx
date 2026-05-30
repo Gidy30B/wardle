@@ -32,7 +32,14 @@ type EducationState = {
 
 type CompareItem = {
   name: string;
+  status: "ruled out" | "competing early" | "less likely";
   casePoint?: string;
+  ruleOuts?: Array<{
+    clueOrder: number;
+    evidence: string;
+    reason: string;
+  }>;
+  finalReasonLessLikely?: string;
   whyConfused?: string;
   generalPoint?: string;
   keySeparator?: string;
@@ -54,7 +61,7 @@ type InsightDetail = {
 const DETAIL_TABS: Array<{ id: DetailTab; label: string }> = [
   { id: "case", label: "Case" },
   { id: "diagnosis", label: "Diagnosis" },
-  { id: "compare", label: "Compare" },
+  { id: "compare", label: "Differentials" },
 ];
 
 function getDiagnosisRegistryId(item: LearnLibraryCase): string | null {
@@ -114,19 +121,47 @@ function getEducationSummary(education: DiagnosisEducation | null) {
 
 function buildCompareItems({
   caseDifferentials,
+  differentialAnalysis,
   education,
 }: {
   caseDifferentials: string[];
+  differentialAnalysis: NonNullable<StructuredExplanation>["differentialAnalysis"];
   education: DiagnosisEducation | null;
 }): CompareItem[] {
   const items: CompareItem[] = [];
   const indexByName = new Map<string, number>();
+  const analysisByName = new Map(
+    differentialAnalysis.map((analysis) => [
+      normalizeDiagnosisName(analysis.diagnosis),
+      analysis,
+    ]),
+  );
 
   caseDifferentials.forEach((name) => {
     const normalized = normalizeDiagnosisName(name);
     if (!normalized || indexByName.has(normalized)) return;
+    const analysis = analysisByName.get(normalized);
     indexByName.set(normalized, items.length);
-    items.push({ name, casePoint: "Considered in this case, but the clue pattern favored the final diagnosis." });
+    items.push({
+      name,
+      status: analysis?.ruledOutByClues.length ? "ruled out" : "less likely",
+      casePoint: analysis?.whyPlausibleEarly,
+      ruleOuts: analysis?.ruledOutByClues,
+      finalReasonLessLikely: analysis?.finalReasonLessLikely,
+    });
+  });
+
+  differentialAnalysis.forEach((analysis) => {
+    const normalized = normalizeDiagnosisName(analysis.diagnosis);
+    if (!normalized || indexByName.has(normalized)) return;
+    indexByName.set(normalized, items.length);
+    items.push({
+      name: analysis.diagnosis,
+      status: analysis.ruledOutByClues.length ? "ruled out" : "less likely",
+      casePoint: analysis.whyPlausibleEarly,
+      ruleOuts: analysis.ruledOutByClues,
+      finalReasonLessLikely: analysis.finalReasonLessLikely,
+    });
   });
 
   education?.differentialDistinguishers?.forEach((entry) => {
@@ -176,7 +211,14 @@ function buildCompareItems({
     }
 
     indexByName.set(normalized, items.length);
-    items.push({ name, whyConfused, generalPoint, keySeparator, classicTrap });
+    items.push({
+      name,
+      status: whyConfused ? "competing early" : "less likely",
+      whyConfused,
+      generalPoint,
+      keySeparator,
+      classicTrap,
+    });
   });
 
   return items;
@@ -772,6 +814,7 @@ export function CompareTab({
 }) {
   const items = buildCompareItems({
     caseDifferentials: explanation?.differentials ?? [],
+    differentialAnalysis: explanation?.differentialAnalysis ?? [],
     education,
   });
 
@@ -815,11 +858,33 @@ function CompareDifferentialsList({ items }: { items: CompareItem[] }) {
               {item.name}
             </p>
             <span className="shrink-0 rounded-full border border-rose-400/[0.18] bg-rose-400/[0.08] px-2.5 py-1 font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-rose-300">
-              Ruled out
+              {item.status}
             </span>
           </div>
 
-          {item.keySeparator || item.generalPoint ? (
+          {item.ruleOuts?.length ? (
+            <div className="mt-3 space-y-2">
+              {item.ruleOuts.map((ruleOut, index) => (
+                <div
+                  key={`${ruleOut.clueOrder}-${index}-${ruleOut.evidence}`}
+                  className="rounded-[12px] border border-[rgba(0,180,166,0.12)] bg-[rgba(0,180,166,0.035)] px-3 py-2.5"
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <p className="font-brand-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--wardle-color-teal)]/65">
+                      Clue {ruleOut.clueOrder}
+                    </p>
+                    <div className="h-px min-w-4 flex-1 bg-white/[0.06]" />
+                  </div>
+                  <p className="mt-2 break-words text-sm font-semibold leading-6 text-white/72">
+                    {ruleOut.reason}
+                  </p>
+                  <p className="mt-1 break-words text-[13px] leading-5 text-white/46">
+                    {ruleOut.evidence}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : item.keySeparator || item.generalPoint ? (
             <div className="mt-3 rounded-[12px] border border-[rgba(0,180,166,0.12)] bg-[rgba(0,180,166,0.035)] px-3 py-2.5">
               <p className="font-brand-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--wardle-color-teal)]/65">
                 Key separator
@@ -830,16 +895,24 @@ function CompareDifferentialsList({ items }: { items: CompareItem[] }) {
             </div>
           ) : null}
 
-          {item.casePoint || item.whyConfused || item.classicTrap ? (
+          {item.casePoint ||
+          item.whyConfused ||
+          item.finalReasonLessLikely ||
+          item.classicTrap ? (
             <div className="mt-3 space-y-1.5">
               {item.casePoint ? (
-                <ComparisonLine label="case" tone="amber">
+                <ComparisonLine label="early" tone="amber">
                   {item.casePoint}
                 </ComparisonLine>
               ) : null}
               {item.whyConfused ? (
                 <ComparisonLine label="confusable" tone="muted">
                   {item.whyConfused}
+                </ComparisonLine>
+              ) : null}
+              {item.finalReasonLessLikely ? (
+                <ComparisonLine label="why not" tone="muted">
+                  {item.finalReasonLessLikely}
                 </ComparisonLine>
               ) : null}
               {item.classicTrap ? (

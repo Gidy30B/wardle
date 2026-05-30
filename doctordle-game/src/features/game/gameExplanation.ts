@@ -5,7 +5,19 @@ export type NormalizedStructuredExplanation = {
   keyFindings: string[]
   reasoning: string | null
   differentials: string[]
+  differentialAnalysis: NormalizedDifferentialAnalysis[]
   clinicalPearl: string | null
+}
+
+export type NormalizedDifferentialAnalysis = {
+  diagnosis: string
+  whyPlausibleEarly: string
+  ruledOutByClues: Array<{
+    clueOrder: number
+    evidence: string
+    reason: string
+  }>
+  finalReasonLessLikely: string
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -23,6 +35,56 @@ function getTrimmedString(value: unknown): string | null {
 
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
+}
+
+function getNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function normalizeDifferentialAnalysis(value: unknown): NormalizedDifferentialAnalysis[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((item) => {
+      const record = asRecord(item)
+      if (!record) return null
+
+      const diagnosis = getTrimmedString(record.diagnosis)
+      const whyPlausibleEarly = getTrimmedString(record.whyPlausibleEarly)
+      const finalReasonLessLikely = getTrimmedString(record.finalReasonLessLikely)
+      if (!diagnosis || !whyPlausibleEarly || !finalReasonLessLikely) {
+        return null
+      }
+
+      const ruledOutByClues = Array.isArray(record.ruledOutByClues)
+        ? record.ruledOutByClues
+            .map((ruleOut) => {
+              const ruleOutRecord = asRecord(ruleOut)
+              if (!ruleOutRecord) return null
+              const clueOrder = getNumber(ruleOutRecord.clueOrder)
+              const evidence = getTrimmedString(ruleOutRecord.evidence)
+              const reason = getTrimmedString(ruleOutRecord.reason)
+              if (clueOrder === null || !evidence || !reason) return null
+              return { clueOrder, evidence, reason }
+            })
+            .filter(
+              (
+                ruleOut,
+              ): ruleOut is NormalizedDifferentialAnalysis['ruledOutByClues'][number] =>
+                ruleOut !== null,
+            )
+        : []
+
+      return {
+        diagnosis,
+        whyPlausibleEarly,
+        ruledOutByClues,
+        finalReasonLessLikely,
+      }
+    })
+    .filter((item): item is NormalizedDifferentialAnalysis => item !== null)
 }
 
 export function normalizeStructuredExplanation(
@@ -46,12 +108,14 @@ export function normalizeStructuredExplanation(
         .map((item) => getTrimmedString(item))
         .filter((item): item is string => item !== null)
     : []
+  const differentialAnalysis = normalizeDifferentialAnalysis(candidate.differentialAnalysis)
 
   if (
     !summary &&
     keyFindings.length === 0 &&
     !reasoning &&
     differentials.length === 0 &&
+    differentialAnalysis.length === 0 &&
     !clinicalPearl
   ) {
     return null
@@ -62,6 +126,7 @@ export function normalizeStructuredExplanation(
     keyFindings,
     reasoning,
     differentials,
+    differentialAnalysis,
     clinicalPearl,
   }
 }

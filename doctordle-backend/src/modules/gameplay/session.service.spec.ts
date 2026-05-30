@@ -199,6 +199,23 @@ describe('SessionService gameplay registry correctness', () => {
             summary: 'Acute bronchospasm with reversible airflow obstruction.',
             keyFindings: ['Wheeze'],
             reasoning: ['Wheeze and dyspnea support asthma.'],
+            differentialAnalysis: [
+              {
+                diagnosis: 'COPD',
+                whyPlausibleEarly:
+                  'Both COPD and asthma can present with wheeze and dyspnea.',
+                ruledOutByClues: [
+                  {
+                    clueOrder: 4,
+                    evidence: 'Spirometry improves after bronchodilator.',
+                    reason:
+                      'Reversible airflow obstruction is more characteristic of asthma than COPD.',
+                  },
+                ],
+                finalReasonLessLikely:
+                  'The reversible pattern favors asthma over fixed chronic obstruction.',
+              },
+            ],
           },
           differentials: ['COPD'],
           diagnosis: {
@@ -271,6 +288,23 @@ describe('SessionService gameplay registry correctness', () => {
           explanation: expect.objectContaining({
             summary: 'Acute bronchospasm with reversible airflow obstruction.',
             differentials: ['COPD'],
+            differentialAnalysis: [
+              {
+                diagnosis: 'COPD',
+                whyPlausibleEarly:
+                  'Both COPD and asthma can present with wheeze and dyspnea.',
+                ruledOutByClues: [
+                  {
+                    clueOrder: 4,
+                    evidence: 'Spirometry improves after bronchodilator.',
+                    reason:
+                      'Reversible airflow obstruction is more characteristic of asthma than COPD.',
+                  },
+                ],
+                finalReasonLessLikely:
+                  'The reversible pattern favors asthma over fixed chronic obstruction.',
+              },
+            ],
           }),
         }),
       }),

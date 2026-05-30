@@ -46,6 +46,16 @@ export type CaseExplanation = {
   keyFindings?: string[] | null
   reasoning?: string | null
   differentials?: string[] | null
+  differentialAnalysis?: Array<{
+    diagnosis: string
+    whyPlausibleEarly: string
+    ruledOutByClues: Array<{
+      clueOrder: number
+      evidence: string
+      reason: string
+    }>
+    finalReasonLessLikely: string
+  }> | null
   clinicalPearl?: string | null
 }
 

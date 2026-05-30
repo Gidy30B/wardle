@@ -1697,12 +1697,16 @@ export class SessionService {
         ? reasoningSegments.join('\n\n')
         : this.normalizeOptionalText(explanationRecord?.reasoning);
     const differentials = this.normalizeStringArray(input.differentials);
+    const differentialAnalysis = this.normalizeDifferentialAnalysis(
+      explanationRecord?.differentialAnalysis,
+    );
 
     if (
       !summary &&
       keyFindings.length === 0 &&
       !reasoning &&
-      differentials.length === 0
+      differentials.length === 0 &&
+      differentialAnalysis.length === 0
     ) {
       return null;
     }
@@ -1712,7 +1716,94 @@ export class SessionService {
       keyFindings: keyFindings.length > 0 ? keyFindings : null,
       reasoning: reasoning ?? null,
       differentials: differentials.length > 0 ? differentials : null,
+      differentialAnalysis:
+        differentialAnalysis.length > 0 ? differentialAnalysis : null,
     };
+  }
+
+  private normalizeDifferentialAnalysis(value: unknown): NonNullable<
+    GameplayCaseExplanation['differentialAnalysis']
+  > {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .map((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+          return null;
+        }
+
+        const record = item as Record<string, unknown>;
+        const diagnosis = this.normalizeOptionalText(record.diagnosis);
+        const whyPlausibleEarly = this.normalizeOptionalText(
+          record.whyPlausibleEarly,
+        );
+        const finalReasonLessLikely = this.normalizeOptionalText(
+          record.finalReasonLessLikely,
+        );
+
+        if (!diagnosis || !whyPlausibleEarly || !finalReasonLessLikely) {
+          return null;
+        }
+
+        const ruledOutByClues = Array.isArray(record.ruledOutByClues)
+          ? record.ruledOutByClues
+              .map((ruleOut) => {
+                if (
+                  !ruleOut ||
+                  typeof ruleOut !== 'object' ||
+                  Array.isArray(ruleOut)
+                ) {
+                  return null;
+                }
+
+                const ruleOutRecord = ruleOut as Record<string, unknown>;
+                const clueOrder =
+                  typeof ruleOutRecord.clueOrder === 'number' &&
+                  Number.isFinite(ruleOutRecord.clueOrder)
+                    ? ruleOutRecord.clueOrder
+                    : null;
+                const evidence = this.normalizeOptionalText(
+                  ruleOutRecord.evidence,
+                );
+                const reason = this.normalizeOptionalText(
+                  ruleOutRecord.reason,
+                );
+
+                if (clueOrder === null || !evidence || !reason) {
+                  return null;
+                }
+
+                return {
+                  clueOrder,
+                  evidence,
+                  reason,
+                };
+              })
+              .filter(
+                (
+                  ruleOut,
+                ): ruleOut is NonNullable<
+                  GameplayCaseExplanation['differentialAnalysis']
+                >[number]['ruledOutByClues'][number] => ruleOut !== null,
+              )
+          : [];
+
+        return {
+          diagnosis,
+          whyPlausibleEarly,
+          ruledOutByClues,
+          finalReasonLessLikely,
+        };
+      })
+      .filter(
+        (
+          item,
+        ): item is NonNullable<
+          GameplayCaseExplanation['differentialAnalysis']
+        >[number] => item !== null,
+      );
   }
 
   private buildCasePayload(selectedCase: GameplayCaseView) {
