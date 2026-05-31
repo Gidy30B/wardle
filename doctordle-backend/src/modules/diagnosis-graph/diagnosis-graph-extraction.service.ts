@@ -51,6 +51,12 @@ type ClinicalClue = {
   order?: unknown;
 };
 
+const GRAPH_EXTRACTABLE_CASE_STATUSES = [
+  CaseEditorialStatus.APPROVED,
+  CaseEditorialStatus.READY_TO_PUBLISH,
+  CaseEditorialStatus.PUBLISHED,
+];
+
 @Injectable()
 export class DiagnosisGraphExtractionService {
   private readonly logger = new Logger(DiagnosisGraphExtractionService.name);
@@ -64,7 +70,7 @@ export class DiagnosisGraphExtractionService {
     const caseRecord = await this.prisma.case.findFirst({
       where: {
         id: caseId,
-        editorialStatus: CaseEditorialStatus.APPROVED,
+        editorialStatus: { in: GRAPH_EXTRACTABLE_CASE_STATUSES },
         diagnosisRegistryId: { not: null },
       },
       select: {
@@ -368,7 +374,9 @@ export class DiagnosisGraphExtractionService {
         displayLabel: true,
         cases: includeCases
           ? {
-              where: { editorialStatus: CaseEditorialStatus.APPROVED },
+              where: {
+                editorialStatus: { in: GRAPH_EXTRACTABLE_CASE_STATUSES },
+              },
               select: { id: true },
             }
           : false,

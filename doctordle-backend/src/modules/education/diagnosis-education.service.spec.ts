@@ -105,9 +105,33 @@ function buildRegistryForGeneration() {
     cases: [
       {
         title: 'Appendicitis',
-        clues: [],
+        clues: [
+          { type: 'history', value: 'Periumbilical pain migrated to RLQ' },
+          { type: 'exam', value: 'Rovsing sign is present' },
+          { type: 'lab', value: 'Mild leukocytosis' },
+          { type: 'imaging', value: 'RAW_FOURTH_CLUE_SHOULD_NOT_BE_SENT' },
+        ],
         explanation: {
           summary: 'Migratory right lower quadrant pain.',
+          rawNarrative:
+            'FULL_RAW_CASE_PAYLOAD_SHOULD_NOT_BE_SENT because it is too large.',
+          differentialAnalysis: [
+            {
+              diagnosis: 'Gastroenteritis',
+              whyPlausibleEarly:
+                'Early abdominal pain and nausea overlap with gastroenteritis.',
+              ruledOutByClues: [
+                {
+                  clueOrder: 2,
+                  evidence: 'Rovsing sign is present',
+                  reason:
+                    'Peritoneal irritation favors appendicitis over gastroenteritis.',
+                },
+              ],
+              finalReasonLessLikely:
+                'Localized peritoneal signs argue against gastroenteritis.',
+            },
+          ],
         },
         differentials: ['Gastroenteritis'],
       },
@@ -453,7 +477,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function buildService() {
+function buildService(overrides: { generationContextBuilder?: unknown } = {}) {
   const tx = {
     diagnosisEducation: {
       update: jest.fn(),
@@ -496,7 +520,13 @@ function buildService() {
   return {
     prisma,
     tx,
-    service: new DiagnosisEducationService(prisma as never),
+    service: new DiagnosisEducationService(
+      prisma as never,
+      undefined,
+      undefined,
+      undefined,
+      overrides.generationContextBuilder as never,
+    ),
   };
 }
 
@@ -1027,7 +1057,7 @@ describe('DiagnosisEducationService', () => {
     expect(retryDelay).toHaveBeenNthCalledWith(1, 500);
     expect(retryDelay).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][1]).toEqual(
-      expect.objectContaining({ maxRetries: 0, timeout: 20_000 }),
+      expect.objectContaining({ maxRetries: 0, timeout: 45_000 }),
     );
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
@@ -1201,53 +1231,199 @@ describe('DiagnosisEducationService', () => {
     expect(request.messages[0].content).toContain(
       'Use differentials, not differentialDistinguishers.',
     );
-    expect(request.messages[1].content).toContain('"clinicalPattern"');
-    expect(request.messages[1].content).toContain('"differentials"');
+    expect(request.messages[1].content).toContain('clinicalPattern');
+    expect(request.messages[1].content).toContain('differentials');
     expect(request.messages[1].content).toContain('typedPearlContract');
+    expect(request.messages[1].content).toContain(
+      'diagnosisSpecificGuidance',
+    );
+    expect(request.messages[1].content).toContain('expectedNamedSigns');
+    expect(request.messages[1].content).toContain('expectedMimics');
+    expect(request.messages[1].content).toContain('expectedPitfalls');
+    expect(request.messages[1].content).toContain(
+      'expectedManagementAnchors',
+    );
+    expect(request.messages[1].content).toContain('atomicityGuidance');
     expect(request.messages[1].content).toContain('HIGH_YIELD_DISCRIMINATOR');
     expect(request.messages[1].content).toContain(
-      'Typed pearl content must be 18-45 words',
+      '18-45 words, max 2 sentences',
     );
-    expect(request.messages[0].content).toContain('named signs');
+    expect(request.messages[0].content).toContain('expected signs');
     expect(request.messages[0].content).toContain('senior clinician');
     expect(request.messages[0].content).toContain(
       'why it matters diagnostically',
     );
-    expect(request.messages[0].content).toContain(
-      'what diagnostic probability changes',
-    );
-    expect(request.messages[0].content).toContain(
-      'finding -> significance -> discriminator',
-    );
-    expect(request.messages[0].content).toContain('operational reasoning');
+    expect(request.messages[0].content).toContain('probability shift');
+    expect(request.messages[1].content).toContain('Avoid broad syndrome paragraphs');
     expect(request.messages[0].content).toContain('not trivia');
-    expect(request.messages[0].content).toContain(
-      'differentials are not comparative',
-    );
-    expect(request.messages[0].content).toContain('pitfalls are vague');
+    expect(request.messages[0].content).toContain('Differentials must compare');
     expect(request.messages[1].content).toContain('McBurney point tenderness');
     expect(request.messages[1].content).toContain('Rovsing sign');
-    expect(request.messages[1].content).toContain('Psoas sign');
-    expect(request.messages[1].content).toContain('Obturator sign');
+    expect(request.messages[1].content).toContain('psoas sign');
+    expect(request.messages[1].content).toContain('obturator sign');
     expect(request.messages[1].content).toContain('rebound');
-    expect(request.messages[1].content).toContain('MANTRELS / Alvarado score');
-    expect(request.messages[1].content).toContain(
-      'Gastroenteritis usually has prominent diarrhea/vomiting',
-    );
-    expect(request.messages[1].content).toContain(
-      'A normal white blood cell count does not exclude',
-    );
-    expect(request.messages[1].content).toContain('BMJ Best Practice');
+    expect(request.messages[1].content).toContain('MANTRELS');
     expect(request.messages[1].content).toContain('WHY_IT_MATTERS');
-    expect(request.messages[1].content).toContain('badExamples');
+    expect(request.messages[1].content).toContain('Periumbilical pain migrated to RLQ');
+    expect(request.messages[1].content).toContain('Rovsing sign is present');
+    expect(request.messages[1].content).toContain('Mild leukocytosis');
     expect(request.messages[1].content).toContain(
-      'Important for early diagnosis.',
+      'Localized peritoneal signs argue against gastroenteritis.',
+    );
+    expect(request.messages[1].content).not.toContain(
+      'RAW_FOURTH_CLUE_SHOULD_NOT_BE_SENT',
+    );
+    expect(request.messages[1].content).not.toContain(
+      'FULL_RAW_CASE_PAYLOAD_SHOULD_NOT_BE_SENT',
+    );
+    expect(request.messages[1].content).not.toContain('badExamples');
+    expect(create.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        timeout: 45_000,
+        maxRetries: 0,
+      }),
+    );
+  });
+
+  it('generateDraft calls GenerationContextBuilder', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
+    resetEnvCacheForTests();
+    const generationContextBuilder = {
+      build: jest.fn().mockResolvedValue({
+        diagnosis: {
+          id: 'registry-1',
+          displayLabel: 'Appendicitis',
+          canonicalName: 'appendicitis',
+          specialty: 'General Surgery',
+          category: 'Inflammatory',
+          bodySystem: 'Gastrointestinal',
+          clinicalSetting: 'EMERGENCY',
+          difficultyBand: 'BASIC',
+          aliases: ['Acute appendicitis'],
+        },
+        conciseClinicalContext: 'Appendicitis | General Surgery',
+        learningGoals: ['Teach peritoneal irritation.'],
+        mustInclude: ['McBurney point tenderness', 'Rovsing sign'],
+        avoid: [],
+        mimics: [{ diagnosis: 'gastroenteritis' }],
+        discriminators: [
+          {
+            finding:
+              'Localized peritoneal signs argue against gastroenteritis.',
+            discriminatesFrom: 'gastroenteritis',
+            rationale:
+              'Unlike gastroenteritis, appendicitis causes focal peritonism.',
+          },
+        ],
+        pitfalls: ['Normal early WBC'],
+        investigations: ['CT abdomen'],
+        scoringSystems: ['Alvarado score'],
+        managementAnchors: ['surgical consultation'],
+        difficultyGuidance: {
+          baselineDifficulty: 'BASIC',
+          targetDifficulty: null,
+          targetSolveClue: null,
+          forbiddenEarlyClues: [],
+          keepAliveDifferentials: ['gastroenteritis'],
+        },
+        sourceSummary: {
+          hasEducation: false,
+          hasCases: false,
+          hasRules: true,
+          hasGraphFacts: false,
+        },
+      }),
+    };
+    const { prisma, tx, service } = buildService({
+      generationContextBuilder,
+    });
+    prisma.diagnosisRegistry.findUnique.mockResolvedValue(
+      buildRegistryForGeneration(),
+    );
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
+    tx.diagnosisEducation.create.mockResolvedValue(
+      buildEducation({
+        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+        source: DiagnosisEducationSource.AI_ASSISTED,
+        reviewedAt: null,
+        reviewedByUserId: null,
+        publishedAt: null,
+      }),
+    );
+    const create = mockOpenAiDraft(
+      service,
+      JSON.stringify(buildValidGeneratedDraft()),
+    );
+
+    await service.generateDraft('registry-1', 'admin-1');
+
+    expect(generationContextBuilder.build).toHaveBeenCalledWith({
+      diagnosisRegistryId: 'registry-1',
+      purpose: 'education',
+    });
+    const request = create.mock.calls[0][0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(request.messages[1].content).toContain('generationContext');
+    expect(request.messages[1].content).toContain(
+      'McBurney point tenderness',
     );
     expect(request.messages[1].content).toContain(
-      'Kussmaul respirations indicate clinically significant metabolic acidosis',
+      'Localized peritoneal signs argue against gastroenteritis.',
     );
-    expect(request.messages[1].content).toContain(
-      'Hypokalemia risk changes insulin timing.',
+  });
+
+  it('logs compact generation context metrics', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
+    resetEnvCacheForTests();
+    const { prisma, tx, service } = buildService();
+    prisma.diagnosisRegistry.findUnique.mockResolvedValue(
+      buildRegistryForGeneration(),
+    );
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
+    tx.diagnosisEducation.create.mockResolvedValue(
+      buildEducation({
+        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+        source: DiagnosisEducationSource.AI_ASSISTED,
+        reviewedAt: null,
+        reviewedByUserId: null,
+        publishedAt: null,
+      }),
+    );
+    mockOpenAiDraft(service, JSON.stringify(buildValidGeneratedDraft()));
+    const log = jest
+      .spyOn(
+        (
+          service as unknown as {
+            logger: { log: (message: string) => void };
+          }
+        ).logger,
+        'log',
+      )
+      .mockImplementation(() => undefined);
+
+    await service.generateDraft('registry-1', 'admin-1');
+
+    const contextPayload = log.mock.calls
+      .map(([message]) => JSON.parse(message) as Record<string, unknown>)
+      .find(
+        (payload) =>
+          payload.event === 'diagnosis_education.generate.context_built',
+      );
+    expect(contextPayload).toEqual(
+      expect.objectContaining({
+        diagnosisRegistryId: 'registry-1',
+        purpose: 'education',
+        contextChars: expect.any(Number),
+        learningGoalCount: expect.any(Number),
+        mimicCount: expect.any(Number),
+        discriminatorCount: expect.any(Number),
+        sourceSummary: expect.objectContaining({
+          hasRules: true,
+        }) as unknown,
+      }),
     );
   });
 
@@ -1283,6 +1459,57 @@ describe('DiagnosisEducationService', () => {
     };
 
     assertStrictOpenAiSchema(request.response_format.json_schema?.schema);
+  });
+
+  it('logs prompt metrics before the OpenAI draft call', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
+    resetEnvCacheForTests();
+    const { prisma, tx, service } = buildService();
+    prisma.diagnosisRegistry.findUnique.mockResolvedValue(
+      buildRegistryForGeneration(),
+    );
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
+    tx.diagnosisEducation.create.mockResolvedValue(
+      buildEducation({
+        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+        source: DiagnosisEducationSource.AI_ASSISTED,
+        reviewedAt: null,
+        reviewedByUserId: null,
+        publishedAt: null,
+      }),
+    );
+    mockOpenAiDraft(service, JSON.stringify(buildValidGeneratedDraft()));
+    const log = jest
+      .spyOn(
+        (
+          service as unknown as {
+            logger: { log: (message: string) => void };
+          }
+        ).logger,
+        'log',
+      )
+      .mockImplementation(() => undefined);
+
+    await service.generateDraft('registry-1', 'admin-1');
+
+    const promptMetricPayload = log.mock.calls
+      .map(([message]) => JSON.parse(message) as Record<string, unknown>)
+      .find(
+        (payload) =>
+          payload.event === 'diagnosis_education.generate.prompt_metrics',
+      );
+    expect(promptMetricPayload).toEqual(
+      expect.objectContaining({
+        diagnosisRegistryId: 'registry-1',
+        model: 'gpt-4o-mini',
+        timeoutMs: 45_000,
+        promptCharacterCount: expect.any(Number),
+        approximatePromptTokenCount: expect.any(Number),
+        systemMessageLength: expect.any(Number),
+        userMessageLength: expect.any(Number),
+      }),
+    );
   });
 
   it('collects quality warnings for generic low-density education', () => {

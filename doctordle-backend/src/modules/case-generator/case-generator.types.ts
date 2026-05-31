@@ -1,4 +1,5 @@
 import type { Case as PrismaCase } from '@prisma/client';
+import type { GenerationContext } from '../editorial/generation-context-builder.service';
 
 export type ClinicalClue = {
   type: 'history' | 'symptom' | 'vital' | 'lab' | 'exam' | 'imaging';
@@ -87,6 +88,7 @@ export type GenerateCaseInput = {
   difficulty?: string;
   batchId?: string;
   sequence?: number;
+  generationContext?: GenerationContext;
 };
 
 export type SaveGeneratedCaseOptions = {

@@ -57,7 +57,13 @@ describe('DiagnosisGraphExtractionService', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           id: 'case-1',
-          editorialStatus: CaseEditorialStatus.APPROVED,
+          editorialStatus: {
+            in: [
+              CaseEditorialStatus.APPROVED,
+              CaseEditorialStatus.READY_TO_PUBLISH,
+              CaseEditorialStatus.PUBLISHED,
+            ],
+          },
         }) as unknown,
       }),
     );
@@ -89,6 +95,67 @@ describe('DiagnosisGraphExtractionService', () => {
         ]) as unknown,
       }),
     );
+  });
+
+  it('extracts candidates from published cases', async () => {
+    const { prisma, service } = buildService();
+    prisma.case.findFirst.mockResolvedValue({
+      id: 'case-published',
+      diagnosisRegistryId: 'registry-1',
+      editorialStatus: CaseEditorialStatus.PUBLISHED,
+      currentRevision: { revisionNumber: 5 },
+      clues: [{ type: 'exam', value: 'Right lower quadrant tenderness', order: 2 }],
+      differentials: ['Renal colic'],
+      explanation: {
+        keyFindings: ['Migration of pain to the right lower quadrant'],
+        reasoning: ['Localized peritoneal signs support appendicitis.'],
+      },
+    });
+    prisma.diagnosisGraphCandidate.createMany.mockResolvedValue({ count: 4 });
+
+    const result = await service.extractFromApprovedCase('case-published');
+
+    expect(result.createdCount).toBe(4);
+    expect(prisma.case.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: 'case-published',
+          editorialStatus: {
+            in: [
+              CaseEditorialStatus.APPROVED,
+              CaseEditorialStatus.READY_TO_PUBLISH,
+              CaseEditorialStatus.PUBLISHED,
+            ],
+          },
+        }) as unknown,
+      }),
+    );
+  });
+
+  it('does not extract draft or rejected cases', async () => {
+    const { prisma, service } = buildService();
+    prisma.case.findFirst.mockResolvedValue(null);
+
+    await expect(service.extractFromApprovedCase('case-draft')).resolves.toEqual(
+      expect.objectContaining({
+        candidateCount: 0,
+        createdCount: 0,
+      }),
+    );
+    expect(prisma.case.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          editorialStatus: {
+            in: [
+              CaseEditorialStatus.APPROVED,
+              CaseEditorialStatus.READY_TO_PUBLISH,
+              CaseEditorialStatus.PUBLISHED,
+            ],
+          },
+        }) as unknown,
+      }),
+    );
+    expect(prisma.diagnosisGraphCandidate.createMany).not.toHaveBeenCalled();
   });
 
   it('extracts reasoning-edge candidates from case differential analysis', async () => {
@@ -185,6 +252,131 @@ describe('DiagnosisGraphExtractionService', () => {
             }) as unknown,
           }),
         ]) as unknown,
+      }),
+    );
+  });
+
+  it('extracts reasoning-edge candidates from published case differential analysis', async () => {
+    const { prisma, service } = buildService();
+    prisma.case.findFirst.mockResolvedValue({
+      id: 'case-published',
+      diagnosisRegistryId: 'registry-1',
+      editorialStatus: CaseEditorialStatus.PUBLISHED,
+      currentRevision: { revisionNumber: 6 },
+      clues: [],
+      differentials: [],
+      explanation: {
+        keyFindings: [],
+        reasoning: [],
+        differentialAnalysis: [
+          {
+            diagnosis: 'Renal colic',
+            whyPlausibleEarly:
+              'Right-sided abdominal pain can overlap with renal colic early.',
+            ruledOutByClues: [
+              {
+                clueOrder: 4,
+                evidence: 'CT abdomen shows an inflamed appendix.',
+                reason:
+                  'Appendiceal inflammation directly supports appendicitis over renal colic.',
+              },
+            ],
+            finalReasonLessLikely:
+              'No ureteral stone or hematuria pattern is present.',
+          },
+        ],
+      },
+    });
+
+    await service.extractFromApprovedCase('case-published');
+
+    expect(prisma.diagnosisGraphCandidate.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.arrayContaining([
+          expect.objectContaining({
+            type: DiagnosisGraphCandidateType.CASE_REASONING,
+            sourcePath:
+              'explanation.differentialAnalysis.0.ruledOutByClues.0',
+            payload: expect.objectContaining({
+              relation: 'RULES_OUT',
+              evidence: 'CT abdomen shows an inflamed appendix.',
+              rationale:
+                'Appendiceal inflammation directly supports appendicitis over renal colic.',
+              clueOrder: 4,
+            }) as unknown,
+          }),
+          expect.objectContaining({
+            type: DiagnosisGraphCandidateType.CASE_REASONING,
+            sourcePath:
+              'explanation.differentialAnalysis.0.finalReasonLessLikely',
+            payload: expect.objectContaining({
+              relation: 'DISCRIMINATES_FROM',
+              targetDiagnosisText: 'Renal colic',
+            }) as unknown,
+          }),
+        ]) as unknown,
+      }),
+    );
+  });
+
+  it('smoke extraction selects approved, ready-to-publish, and published cases only', async () => {
+    const { prisma, service } = buildService();
+    prisma.diagnosisRegistry.findMany.mockResolvedValue([
+      {
+        id: 'registry-1',
+        displayLabel: 'Appendicitis',
+        cases: [{ id: 'case-approved' }, { id: 'case-published' }],
+        education: null,
+      },
+    ]);
+    prisma.case.findFirst
+      .mockResolvedValueOnce({
+        id: 'case-approved',
+        diagnosisRegistryId: 'registry-1',
+        editorialStatus: CaseEditorialStatus.APPROVED,
+        currentRevision: { revisionNumber: 1 },
+        clues: [],
+        differentials: [],
+        explanation: { keyFindings: [], reasoning: [] },
+      })
+      .mockResolvedValueOnce({
+        id: 'case-published',
+        diagnosisRegistryId: 'registry-1',
+        editorialStatus: CaseEditorialStatus.PUBLISHED,
+        currentRevision: { revisionNumber: 2 },
+        clues: [],
+        differentials: [],
+        explanation: { keyFindings: [], reasoning: [] },
+      });
+
+    const result = await service.runSmokeExtraction({
+      diagnosisRegistryIds: ['registry-1'],
+      includeEducation: false,
+    });
+
+    expect(prisma.diagnosisRegistry.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { in: ['registry-1'] } },
+        select: expect.objectContaining({
+          cases: {
+            where: {
+              editorialStatus: {
+                in: [
+                  CaseEditorialStatus.APPROVED,
+                  CaseEditorialStatus.READY_TO_PUBLISH,
+                  CaseEditorialStatus.PUBLISHED,
+                ],
+              },
+            },
+            select: { id: true },
+          },
+        }) as unknown,
+      }),
+    );
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        casesProcessed: 2,
+        educationProcessed: 0,
       }),
     );
   });
