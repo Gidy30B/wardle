@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -322,6 +323,11 @@ export class DiagnosisRegistryEditorialService {
   ): Promise<CreateEditorialDiagnosisResult> {
     const canonicalName = this.requireCanonicalName(input.canonicalName);
     const canonicalNormalized = normalizeDiagnosisTerm(canonicalName);
+    await this.assertNoStrongDuplicate(
+      canonicalName,
+      canonicalNormalized,
+      client,
+    );
     await this.assertNoDuplicateCandidate(
       canonicalName,
       canonicalNormalized,
@@ -574,6 +580,73 @@ export class DiagnosisRegistryEditorialService {
     throw new BadRequestException(
       `Possible duplicate diagnosis registry entry for "${canonicalName}". Use existing registry "${duplicate.canonicalName}" (${duplicate.id}) or add an alias instead.`,
     );
+  }
+
+  private async assertNoStrongDuplicate(
+    canonicalName: string,
+    canonicalNormalized: string,
+    client: DiagnosisRegistryEditorialClient,
+  ) {
+    const duplicateRows = (await (
+      client as PrismaService
+    ).diagnosisRegistry.findMany({
+      where: {
+        OR: [
+          { canonicalNormalized },
+          {
+            aliases: {
+              some: {
+                active: true,
+                normalizedTerm: canonicalNormalized,
+              },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        canonicalName: true,
+        status: true,
+        aliases: {
+          where: {
+            active: true,
+            normalizedTerm: canonicalNormalized,
+          },
+          select: {
+            kind: true,
+            acceptedForMatch: true,
+          },
+        },
+      },
+      take: 5,
+    })) as Array<{
+      id: string;
+      canonicalName: string;
+      status: DiagnosisRegistryStatus;
+      aliases: Array<{
+        kind: DiagnosisAliasKind;
+        acceptedForMatch: boolean;
+      }>;
+    }>;
+
+    if (!duplicateRows.length) {
+      return;
+    }
+
+    throw new ConflictException({
+      message: `Diagnosis "${canonicalName}" already matches an existing registry entry. Link the existing diagnosis instead of creating a duplicate.`,
+      suggestions: duplicateRows.map((row) => ({
+        diagnosisRegistryId: row.id,
+        displayLabel: row.canonicalName,
+        canonicalName: row.canonicalName,
+        status: row.status,
+        matchType:
+          normalizeDiagnosisTerm(row.canonicalName) === canonicalNormalized
+            ? 'canonical'
+            : 'alias',
+        confidence: 1,
+      })),
+    });
   }
 
   private rankSearchResult(

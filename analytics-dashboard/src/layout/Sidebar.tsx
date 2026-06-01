@@ -1,6 +1,10 @@
 import { NavLink } from 'react-router-dom';
 
-const navigationItems = [
+const editorialNavigationItems = [
+  { to: '/editorial', label: 'Editorial', icon: 'E' },
+];
+
+const administrationNavigationItems = [
   { to: '/', label: 'Overview', icon: 'O', end: true },
   { to: '/cases', label: 'Cases', icon: 'C' },
   { to: '/generate', label: 'Generate Cases', icon: 'G' },
@@ -12,9 +16,73 @@ const navigationItems = [
 type SidebarProps = {
   collapsed: boolean;
   onToggle: () => void;
+  canAccessEditorial: boolean;
+  canAccessAdminOps: boolean;
 };
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+function NavigationGroup({
+  title,
+  collapsed,
+  items,
+}: {
+  title: string;
+  collapsed: boolean;
+  items: Array<{ to: string; label: string; icon: string; end?: boolean }>;
+}) {
+  if (!items.length) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-1">
+      {!collapsed ? (
+        <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+          {title}
+        </p>
+      ) : null}
+      {items.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          end={item.end}
+          className={({ isActive }) =>
+            [
+              'flex items-center rounded-lg px-3 py-2 text-sm font-medium transition',
+              collapsed ? 'justify-center' : 'gap-3',
+              isActive
+                ? 'bg-slate-900 text-white'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+            ].join(' ')
+          }
+        >
+          <span
+            className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs font-semibold ${
+              collapsed
+                ? 'border-slate-300 bg-slate-100 text-slate-700'
+                : 'border-slate-200 bg-slate-50 text-slate-700'
+            }`}
+            aria-hidden="true"
+          >
+            {item.icon}
+          </span>
+          {!collapsed && <span>{item.label}</span>}
+        </NavLink>
+      ))}
+    </div>
+  );
+}
+
+export default function Sidebar({
+  collapsed,
+  onToggle,
+  canAccessEditorial,
+  canAccessAdminOps,
+}: SidebarProps) {
+  const editorialItems = canAccessEditorial ? editorialNavigationItems : [];
+  const administrationItems = canAccessAdminOps
+    ? administrationNavigationItems
+    : [];
+
   return (
     <aside
       className={`shrink-0 border-r border-slate-200 bg-white transition-all duration-200 ${
@@ -45,35 +113,17 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
       </div>
 
-      <nav className="space-y-1 px-3 py-4">
-        {navigationItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) =>
-              [
-                'flex items-center rounded-lg px-3 py-2 text-sm font-medium transition',
-                collapsed ? 'justify-center' : 'gap-3',
-                isActive
-                  ? 'bg-slate-900 text-white'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
-              ].join(' ')
-            }
-          >
-            <span
-              className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs font-semibold ${
-                collapsed
-                  ? 'border-slate-300 bg-slate-100 text-slate-700'
-                  : 'border-slate-200 bg-slate-50 text-slate-700'
-              }`}
-              aria-hidden="true"
-            >
-              {item.icon}
-            </span>
-            {!collapsed && <span>{item.label}</span>}
-          </NavLink>
-        ))}
+      <nav className="space-y-4 px-3 py-4">
+        <NavigationGroup
+          title="Editorial"
+          collapsed={collapsed}
+          items={editorialItems}
+        />
+        <NavigationGroup
+          title="Administration"
+          collapsed={collapsed}
+          items={administrationItems}
+        />
       </nav>
     </aside>
   );

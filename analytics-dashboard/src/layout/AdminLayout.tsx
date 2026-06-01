@@ -11,6 +11,10 @@ type AdminLayoutProps = {
     email: string;
     role: string;
   };
+  access: {
+    canAccessEditorial: boolean;
+    canAccessAdminOps: boolean;
+  };
 };
 
 export default function AdminLayout({
@@ -18,6 +22,7 @@ export default function AdminLayout({
   title,
   subtitle,
   user,
+  access,
 }: AdminLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -26,6 +31,8 @@ export default function AdminLayout({
       <Sidebar
         collapsed={collapsed}
         onToggle={() => setCollapsed((previous) => !previous)}
+        canAccessEditorial={access.canAccessEditorial}
+        canAccessAdminOps={access.canAccessAdminOps}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">

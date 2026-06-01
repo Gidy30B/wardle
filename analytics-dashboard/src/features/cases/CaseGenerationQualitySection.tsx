@@ -118,6 +118,82 @@ function InvalidReasoningEdgesList({
   );
 }
 
+function TeachingAlignmentSummary({
+  quality,
+}: {
+  quality: GenerationQualityMetadata;
+}) {
+  const alignment = quality.teachingAlignment;
+  if (!alignment) {
+    return null;
+  }
+
+  const coveredCount = alignment.selectedUnits.filter((unit) => unit.covered).length;
+  const warningCount = alignment.warnings.length;
+  const visibleUnits = alignment.selectedUnits.slice(0, 4);
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">
+            Teaching alignment
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            {coveredCount} of {alignment.selectedUnits.length} selected units covered
+          </p>
+        </div>
+        <div
+          className={[
+            'rounded-full border px-3 py-1.5 text-sm font-semibold',
+            scoreTone(alignment.playability.score),
+          ].join(' ')}
+        >
+          Playability {alignment.playability.score}
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        <MetricCard
+          label="Difficulty fit"
+          value={formatLabel(alignment.playability.difficultyFit)}
+        />
+        <MetricCard label="Warnings" value={warningCount} />
+        <MetricCard
+          label="Mimic alive until"
+          value={alignment.mimicPersistence.mimicsStillPlausibleUntilClue}
+        />
+      </div>
+
+      {visibleUnits.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {visibleUnits.map((unit) => (
+            <span
+              key={unit.id}
+              className={[
+                'rounded-full border px-2.5 py-1 text-xs font-semibold',
+                unit.covered
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                  : 'border-amber-200 bg-amber-50 text-amber-800',
+              ].join(' ')}
+            >
+              {unit.covered ? 'Covered' : 'Missing'}: {unit.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {alignment.warnings.length > 0 ? (
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-6 text-amber-800">
+          {alignment.warnings.slice(0, 3).map((warning) => (
+            <li key={warning}>{formatLabel(warning)}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export default function CaseGenerationQualitySection({
   quality,
 }: CaseGenerationQualitySectionProps) {
@@ -203,6 +279,8 @@ export default function CaseGenerationQualitySection({
               items={quality.critiqueRecommendations}
             />
           </div>
+
+          <TeachingAlignmentSummary quality={quality} />
 
           <InvalidReasoningEdgesList quality={quality} />
         </div>

@@ -3,6 +3,16 @@ import {
   EditorialIntentProjectionService,
   type EditorialIntentProjection,
 } from './editorial-intent-projection.service';
+import {
+  type DifficultyStrategy,
+  type ManifestationOption,
+  type TeachingUnit,
+} from '../education/education-teaching-rules.service';
+import { DiagnosisCurriculumProviderService } from '../education/diagnosis-curriculum-provider.service';
+import {
+  DiagnosisEditorialBriefService,
+  type EditorialBriefContext,
+} from '../education/diagnosis-editorial-brief.service';
 
 export type GenerationPurpose = 'education' | 'case' | 'difficulty' | 'graph';
 
@@ -26,12 +36,17 @@ export type GenerationContext = {
   investigations: string[];
   scoringSystems: string[];
   managementAnchors: string[];
+  requiredTeachingUnits: TeachingUnit[];
+  suggestedManifestations: ManifestationOption[];
+  editorialBrief: EditorialBriefContext | null;
+  difficultyStrategy: DifficultyStrategy;
   difficultyGuidance: EditorialIntentProjection['difficultyGuidance'];
   sourceSummary: {
     hasEducation: boolean;
     hasCases: boolean;
     hasRules: boolean;
     hasGraphFacts: boolean;
+    hasEditorialBrief: boolean;
   };
 };
 
@@ -41,6 +56,8 @@ export class GenerationContextBuilder {
 
   constructor(
     private readonly editorialIntentProjectionService: EditorialIntentProjectionService,
+    private readonly diagnosisCurriculumProviderService: DiagnosisCurriculumProviderService = new DiagnosisCurriculumProviderService(),
+    private readonly diagnosisEditorialBriefService?: DiagnosisEditorialBriefService,
   ) {}
 
   async build(input: {
@@ -50,11 +67,38 @@ export class GenerationContextBuilder {
     const projection = await this.editorialIntentProjectionService.build(
       input.diagnosisRegistryId,
     );
+    const teachingRules = await this.diagnosisCurriculumProviderService.getRules(
+      projection.diagnosis,
+    );
+    const editorialBrief =
+      await this.diagnosisEditorialBriefService?.getApprovedBriefContext(
+        input.diagnosisRegistryId,
+      ) ?? null;
+    const difficultyStrategy = this.buildDifficultyStrategy({
+      projection,
+      rules: teachingRules,
+      purpose: input.purpose,
+      editorialBrief,
+    });
+    const requiredTeachingUnits = this.limit(
+      (teachingRules?.teachingUnits ?? []).filter((unit) =>
+        input.purpose === 'case'
+          ? unit.appliesToCaseGeneration
+          : unit.appliesToEducation,
+      ),
+      input.purpose === 'case' ? 8 : 16,
+    );
 
     const context: GenerationContext = {
       diagnosis: projection.diagnosis,
       conciseClinicalContext: this.buildClinicalContext(projection),
-      learningGoals: this.limit(projection.learningGoals, 6),
+      learningGoals: this.limit(
+        [
+          ...(editorialBrief?.learningGoals ?? []),
+          ...projection.learningGoals,
+        ],
+        8,
+      ),
       mustInclude: this.limit(
         [
           ...projection.requiredSigns,
@@ -85,14 +129,43 @@ export class GenerationContextBuilder {
       investigations: this.limit(projection.requiredInvestigations, 10),
       scoringSystems: this.limit(projection.requiredScoringSystems, 6),
       managementAnchors: this.limit(projection.managementAnchors, 8),
+      requiredTeachingUnits,
+      editorialBrief,
+      suggestedManifestations: this.limit(
+        this.diagnosisCurriculumProviderService.getManifestationOptions({
+          ...(teachingRules ?? {
+            diagnosisKey: '',
+            teachingUnits: [],
+            difficultyStrategy,
+            requiredDifferentials: [],
+            requiredPitfalls: [],
+            requiredFindings: [],
+            requiredInvestigations: [],
+            requiredExamMechanisms: [],
+            requiredManagementAnchors: [],
+            requiredRecallConcepts: [],
+          }),
+          teachingUnits: requiredTeachingUnits,
+        }),
+        input.purpose === 'case' ? 24 : 48,
+      ),
+      difficultyStrategy,
       difficultyGuidance: {
         ...projection.difficultyGuidance,
         forbiddenEarlyClues: this.limit(
-          projection.difficultyGuidance.forbiddenEarlyClues,
+          [
+            ...projection.difficultyGuidance.forbiddenEarlyClues,
+            ...this.guidanceItems(editorialBrief?.difficultyGuidance).filter(
+              (item) => /\b(?:avoid|early|reveal)\b/i.test(item),
+            ),
+          ],
           8,
         ),
         keepAliveDifferentials: this.limit(
-          projection.difficultyGuidance.keepAliveDifferentials,
+          [
+            ...projection.difficultyGuidance.keepAliveDifferentials,
+            ...(editorialBrief?.requiredMimicIds ?? []),
+          ],
           8,
         ),
       },
@@ -101,6 +174,7 @@ export class GenerationContextBuilder {
         hasCases: projection.completeness.hasCases,
         hasRules: projection.completeness.hasRules,
         hasGraphFacts: projection.completeness.hasGraphFacts,
+        hasEditorialBrief: Boolean(editorialBrief),
       },
     };
 
@@ -114,6 +188,45 @@ export class GenerationContextBuilder {
     );
 
     return context;
+  }
+
+  private buildDifficultyStrategy(input: {
+    projection: EditorialIntentProjection;
+    rules: Awaited<ReturnType<DiagnosisCurriculumProviderService['getRules']>>;
+    purpose: GenerationPurpose;
+    editorialBrief: EditorialBriefContext | null;
+  }): DifficultyStrategy {
+    const targetDifficulty = this.normalizeDifficulty(
+      input.projection.difficultyGuidance.targetDifficulty ??
+        input.projection.diagnosis.difficultyBand ??
+        input.rules?.difficultyStrategy.targetDifficulty ??
+        null,
+    );
+    const revealCoreUnitByClue =
+      input.purpose === 'case'
+        ? targetDifficulty === 'hard'
+          ? 4
+          : targetDifficulty === 'easy'
+            ? 2
+            : 3
+        : input.rules?.difficultyStrategy.revealCoreUnitByClue;
+
+    return {
+      targetDifficulty,
+      ...(revealCoreUnitByClue ? { revealCoreUnitByClue } : {}),
+      avoidTooEarly: this.limit(
+        [
+          ...(input.rules?.difficultyStrategy.avoidTooEarly ?? []),
+          ...input.projection.difficultyGuidance.forbiddenEarlyClues,
+          ...this.guidanceItems(input.editorialBrief?.difficultyGuidance).filter(
+            (item) => /\b(?:avoid|early|reveal)\b/i.test(item),
+          ),
+        ],
+        12,
+      ),
+      allowAlternativeManifestations:
+        input.rules?.difficultyStrategy.allowAlternativeManifestations ?? true,
+    };
   }
 
   private buildClinicalContext(
@@ -160,6 +273,10 @@ export class GenerationContextBuilder {
     return values.slice(0, count);
   }
 
+  private guidanceItems(values: string[] | null | undefined): string[] {
+    return values ?? [];
+  }
+
   private compact(value: string, maxLength: number): string {
     const compacted = value.replace(/\s+/g, ' ').trim();
     return compacted.length > maxLength
@@ -173,5 +290,18 @@ export class GenerationContextBuilder {
       .replace(/[^a-z0-9]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
+  }
+
+  private normalizeDifficulty(
+    value: string | null | undefined,
+  ): DifficultyStrategy['targetDifficulty'] {
+    const normalized = this.normalize(value ?? '');
+    if (normalized.includes('hard') || normalized.includes('advanced')) {
+      return 'hard';
+    }
+    if (normalized.includes('easy') || normalized.includes('basic')) {
+      return 'easy';
+    }
+    return 'medium';
   }
 }

@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import {
+  EducationEditorialPatternsService,
+  type EducationEditorialPatternComplianceScores,
+} from './education-editorial-patterns.service';
 import type { EducationKnowledgeRulePack } from './education-knowledge-rules.service';
+import { EducationSchemaContractService } from './education-schema-contract.service';
+import type { EducationTeachingRulePack } from './education-teaching-rules.service';
 
 export type EducationDraftQualityScores = {
   clinicalSpecificityScore: number;
@@ -21,16 +27,50 @@ export type EducationDraftSectionScores = {
   recallPrompts: number;
 };
 
+export type EducationTeachingCoverageScores = {
+  differentials: number;
+  pitfalls: number;
+  findings: number;
+  investigations: number;
+  examMechanisms: number;
+  managementAnchors: number;
+  recallConcepts: number;
+  overall: number;
+};
+
+export type EducationCoverageWarning = {
+  code:
+    | 'missing_required_differential'
+    | 'missing_required_pitfall'
+    | 'missing_required_investigation'
+    | 'missing_required_exam_mechanism'
+    | 'missing_required_management_anchor'
+    | 'missing_required_recall_concept';
+  item: string;
+  section:
+    | 'differentials'
+    | 'pitfalls'
+    | 'investigations'
+    | 'examPearls'
+    | 'management'
+    | 'recallPrompts';
+  severity: 'warning';
+};
+
 export type EducationDraftQualityResult = {
   warnings: string[];
   blockers: string[];
+  coverageWarnings: EducationCoverageWarning[];
   scores: EducationDraftQualityScores;
   sectionScores: EducationDraftSectionScores;
+  coverageScores: EducationTeachingCoverageScores;
+  patternComplianceScores: EducationEditorialPatternComplianceScores;
 };
 
 type ValidatorInput = {
   draft: Partial<Record<string, unknown>>;
   guidance?: EducationKnowledgeRulePack | null;
+  teachingRules?: EducationTeachingRulePack | null;
 };
 
 const DIFFERENTIAL_COMPARISON_PATTERN =
@@ -63,6 +103,15 @@ const SYMPTOM_AS_EXAM_PATTERN =
 const LAB_AS_EXAM_PATTERN =
   /\b(?:cbc|wbc|white blood cell|leukocytosis|troponin|ketone|glucose|lactate|crp|esr|bnp|creatinine|sodium|potassium)\b/i;
 
+const OVERLAP_REASONING_PATTERN =
+  /\b(?:both|overlap|mimic|confused|similar|shared|common alternative|can resemble|same early)\b/i;
+
+const OBJECTIVE_FINDING_PATTERN =
+  /\b(?:shows?|finding|findings|positive|negative|elevated|reduced|low|high|normal|abnormal|leukocytosis|ketone|ketones|acidosis|consolidation|infiltrate|troponin|lactate|bnp|wbc|ph|bicarbonate|creatinine|score)\b/i;
+
+const MANAGEMENT_INDICATION_PATTERN =
+  /\b(?:when|if|for|with|suspected|confirmed|severe|high risk|high-risk|unstable|focal|persistent|progressive|peritonism|shock|hypoxia)\b/i;
+
 const GENERIC_FILLER_PATTERNS = [
   /\bmay present with\b/i,
   /\bcan present with\b/i,
@@ -77,11 +126,18 @@ const GENERIC_FILLER_PATTERNS = [
 
 @Injectable()
 export class EducationDraftQualityValidator {
+  constructor(
+    private readonly educationEditorialPatternsService: EducationEditorialPatternsService = new EducationEditorialPatternsService(),
+    private readonly educationSchemaContractService: EducationSchemaContractService = new EducationSchemaContractService(),
+  ) {}
+
   validate(input: ValidatorInput): EducationDraftQualityResult {
     const warnings = new Set<string>();
     const blockers: string[] = [];
+    const coverageWarnings: EducationCoverageWarning[] = [];
     const draft = input.draft;
     const guidance = input.guidance ?? null;
+    const teachingRules = input.teachingRules ?? null;
     const fullText = this.textFrom(draft);
     const normalizedFullText = this.normalize(fullText);
 
@@ -89,6 +145,12 @@ export class EducationDraftQualityValidator {
       guidance,
       normalizedFullText,
       warnings,
+    });
+    const coverageScores = this.collectTeachingCoverageWarnings({
+      draft,
+      rules: teachingRules,
+      warnings,
+      coverageWarnings,
     });
 
     const atomicityScore = this.scoreAtomicity(draft, warnings);
@@ -114,6 +176,8 @@ export class EducationDraftQualityValidator {
       blockers,
     );
     const recallReasoningScore = this.scoreRecallPrompts(draft, warnings);
+    const patternComplianceScores =
+      this.educationEditorialPatternsService.scoreDraft(draft);
     const genericScore = this.scoreGenericFiller(fullText, warnings);
     const clinicalSpecificityScore = this.scoreClinicalSpecificity({
       guidance,
@@ -137,6 +201,7 @@ export class EducationDraftQualityValidator {
     return {
       warnings: [...warnings].sort(),
       blockers,
+      coverageWarnings,
       scores: {
         clinicalSpecificityScore,
         atomicityScore,
@@ -155,6 +220,8 @@ export class EducationDraftQualityValidator {
         management: managementAnchorScore,
         recallPrompts: recallReasoningScore,
       },
+      coverageScores,
+      patternComplianceScores,
     };
   }
 
@@ -223,6 +290,303 @@ export class EducationDraftQualityValidator {
     }
   }
 
+  private collectTeachingCoverageWarnings(input: {
+    draft: Partial<Record<string, unknown>>;
+    rules: EducationTeachingRulePack | null;
+    warnings: Set<string>;
+    coverageWarnings: EducationCoverageWarning[];
+  }): EducationTeachingCoverageScores {
+    if (!input.rules) {
+      return this.emptyCoverageScores();
+    }
+
+    const usesTeachingUnits = input.rules.teachingUnits.length > 0;
+    const scores = {
+      differentials: usesTeachingUnits
+        ? this.unitCoverageScore(
+            this.textFrom(input.draft.differentials),
+            input.rules.teachingUnits,
+            'differential_concept',
+          )
+        : this.coverageScore(
+            this.textFrom(input.draft.differentials),
+            input.rules.requiredDifferentials,
+          ),
+      pitfalls: usesTeachingUnits
+        ? this.unitCoverageScore(
+            this.textFrom(input.draft.pitfalls),
+            input.rules.teachingUnits,
+            'pitfall_concept',
+          )
+        : this.coverageScore(
+            this.textFrom(input.draft.pitfalls),
+            input.rules.requiredPitfalls,
+          ),
+      findings: usesTeachingUnits
+        ? this.unitCoverageScore(
+            this.textFrom([
+              input.draft.clinicalPattern,
+              input.draft.keySymptoms,
+              input.draft.keySigns,
+              input.draft.examPearls,
+            ]),
+            input.rules.teachingUnits,
+            'finding_concept',
+          )
+        : this.coverageScore(
+            this.textFrom([
+              input.draft.clinicalPattern,
+              input.draft.keySymptoms,
+              input.draft.keySigns,
+              input.draft.examPearls,
+            ]),
+            input.rules.requiredFindings,
+          ),
+      investigations: usesTeachingUnits
+        ? this.unitCoverageScore(
+            this.textFrom([
+              input.draft.investigations,
+              input.draft.scoringSystems,
+            ]),
+            input.rules.teachingUnits,
+            'investigation_concept',
+          )
+        : this.coverageScore(
+            this.textFrom([
+              input.draft.investigations,
+              input.draft.scoringSystems,
+            ]),
+            input.rules.requiredInvestigations,
+          ),
+      examMechanisms: usesTeachingUnits
+        ? this.unitCoverageScore(
+            this.textFrom(input.draft.examPearls),
+            input.rules.teachingUnits,
+            'exam_mechanism',
+          )
+        : this.coverageScore(
+            this.textFrom(input.draft.examPearls),
+            input.rules.requiredExamMechanisms,
+          ),
+      managementAnchors: usesTeachingUnits
+        ? this.unitCoverageScore(
+            this.textFrom(input.draft.management),
+            input.rules.teachingUnits,
+            'management_concept',
+          )
+        : this.coverageScore(
+            this.textFrom(input.draft.management),
+            input.rules.requiredManagementAnchors,
+          ),
+      recallConcepts: usesTeachingUnits
+        ? this.unitCoverageScore(
+            this.textFrom(input.draft.recallPrompts),
+            input.rules.teachingUnits,
+            'recall_concept',
+          )
+        : this.coverageScore(
+            this.textFrom(input.draft.recallPrompts),
+            input.rules.requiredRecallConcepts,
+          ),
+    };
+
+    if (scores.differentials < 1) {
+      input.warnings.add('missing_required_differential');
+      if (usesTeachingUnits) {
+        this.addUnitCoverageWarnings({
+          coverageWarnings: input.coverageWarnings,
+          sectionText: this.textFrom(input.draft.differentials),
+          teachingUnits: input.rules.teachingUnits,
+          category: 'differential_concept',
+          code: 'missing_required_differential',
+          section: 'differentials',
+        });
+      } else {
+        this.addCoverageWarnings({
+          coverageWarnings: input.coverageWarnings,
+          sectionText: this.textFrom(input.draft.differentials),
+          requiredItems: input.rules.requiredDifferentials,
+          code: 'missing_required_differential',
+          section: 'differentials',
+        });
+      }
+    }
+    if (scores.pitfalls < 1) {
+      input.warnings.add('missing_required_pitfall');
+      if (usesTeachingUnits) {
+        this.addUnitCoverageWarnings({
+          coverageWarnings: input.coverageWarnings,
+          sectionText: this.textFrom(input.draft.pitfalls),
+          teachingUnits: input.rules.teachingUnits,
+          category: 'pitfall_concept',
+          code: 'missing_required_pitfall',
+          section: 'pitfalls',
+        });
+      } else {
+        this.addCoverageWarnings({
+          coverageWarnings: input.coverageWarnings,
+          sectionText: this.textFrom(input.draft.pitfalls),
+          requiredItems: input.rules.requiredPitfalls,
+          code: 'missing_required_pitfall',
+          section: 'pitfalls',
+        });
+      }
+    }
+    if (scores.investigations < 1) {
+      input.warnings.add('missing_required_investigation');
+      if (usesTeachingUnits) {
+        this.addUnitCoverageWarnings({
+          coverageWarnings: input.coverageWarnings,
+          sectionText: this.textFrom([
+            input.draft.investigations,
+            input.draft.scoringSystems,
+          ]),
+          teachingUnits: input.rules.teachingUnits,
+          category: 'investigation_concept',
+          code: 'missing_required_investigation',
+          section: 'investigations',
+        });
+      } else {
+        this.addCoverageWarnings({
+          coverageWarnings: input.coverageWarnings,
+          sectionText: this.textFrom([
+            input.draft.investigations,
+            input.draft.scoringSystems,
+          ]),
+          requiredItems: input.rules.requiredInvestigations,
+          code: 'missing_required_investigation',
+          section: 'investigations',
+        });
+      }
+    }
+    if (scores.examMechanisms < 1) {
+      input.warnings.add('missing_required_exam_mechanism');
+      if (usesTeachingUnits) {
+        this.addUnitCoverageWarnings({
+          coverageWarnings: input.coverageWarnings,
+          sectionText: this.textFrom(input.draft.examPearls),
+          teachingUnits: input.rules.teachingUnits,
+          category: 'exam_mechanism',
+          code: 'missing_required_exam_mechanism',
+          section: 'examPearls',
+        });
+      } else {
+        this.addCoverageWarnings({
+          coverageWarnings: input.coverageWarnings,
+          sectionText: this.textFrom(input.draft.examPearls),
+          requiredItems: input.rules.requiredExamMechanisms,
+          code: 'missing_required_exam_mechanism',
+          section: 'examPearls',
+        });
+      }
+    }
+    if (scores.managementAnchors < 1) {
+      input.warnings.add('missing_required_management_anchor');
+      if (usesTeachingUnits) {
+        this.addUnitCoverageWarnings({
+          coverageWarnings: input.coverageWarnings,
+          sectionText: this.textFrom(input.draft.management),
+          teachingUnits: input.rules.teachingUnits,
+          category: 'management_concept',
+          code: 'missing_required_management_anchor',
+          section: 'management',
+        });
+      } else {
+        this.addCoverageWarnings({
+          coverageWarnings: input.coverageWarnings,
+          sectionText: this.textFrom(input.draft.management),
+          requiredItems: input.rules.requiredManagementAnchors,
+          code: 'missing_required_management_anchor',
+          section: 'management',
+        });
+      }
+    }
+    if (scores.recallConcepts < 1) {
+      input.warnings.add('missing_required_recall_concept');
+      if (usesTeachingUnits) {
+        this.addUnitCoverageWarnings({
+          coverageWarnings: input.coverageWarnings,
+          sectionText: this.textFrom(input.draft.recallPrompts),
+          teachingUnits: input.rules.teachingUnits,
+          category: 'recall_concept',
+          code: 'missing_required_recall_concept',
+          section: 'recallPrompts',
+        });
+      } else {
+        this.addCoverageWarnings({
+          coverageWarnings: input.coverageWarnings,
+          sectionText: this.textFrom(input.draft.recallPrompts),
+          requiredItems: input.rules.requiredRecallConcepts,
+          code: 'missing_required_recall_concept',
+          section: 'recallPrompts',
+        });
+      }
+    }
+
+    return {
+      ...scores,
+      overall: this.average(Object.values(scores)),
+    };
+  }
+
+  private addCoverageWarnings(input: {
+    coverageWarnings: EducationCoverageWarning[];
+    sectionText: string;
+    requiredItems: string[];
+    code: EducationCoverageWarning['code'];
+    section: EducationCoverageWarning['section'];
+  }): void {
+    const normalizedText = this.expandClinicalShorthand(
+      this.normalize(input.sectionText),
+    );
+
+    for (const item of input.requiredItems) {
+      if (this.hasRequiredTeachingConcept(normalizedText, item)) {
+        continue;
+      }
+
+      input.coverageWarnings.push({
+        code: input.code,
+        item,
+        section: input.section,
+        severity: 'warning',
+      });
+    }
+  }
+
+  private addUnitCoverageWarnings(input: {
+    coverageWarnings: EducationCoverageWarning[];
+    sectionText: string;
+    teachingUnits: EducationTeachingRulePack['teachingUnits'];
+    code: EducationCoverageWarning['code'];
+    section: EducationCoverageWarning['section'];
+    category?: EducationTeachingRulePack['teachingUnits'][number]['category'];
+  }): void {
+    const normalizedText = this.expandClinicalShorthand(
+      this.normalize(input.sectionText),
+    );
+    const teachingUnits = input.category
+      ? input.teachingUnits.filter((unit) => unit.category === input.category)
+      : input.teachingUnits;
+
+    for (const teachingUnit of teachingUnits) {
+      if (!teachingUnit.appliesToEducation) {
+        continue;
+      }
+
+      if (this.hasTeachingUnitCoverage(normalizedText, teachingUnit)) {
+        continue;
+      }
+
+      input.coverageWarnings.push({
+        code: input.code,
+        item: teachingUnit.label,
+        section: input.section,
+        severity: 'warning',
+      });
+    }
+  }
+
   private scoreAtomicity(
     draft: Partial<Record<string, unknown>>,
     warnings: Set<string>,
@@ -265,31 +629,29 @@ export class EducationDraftQualityValidator {
 
     let strongComparativeCount = 0;
     const scores = items.map((item) => {
-      const text = this.textFrom(item);
-      const object = this.asObject(item);
-      const mimic =
-        this.cleanString(object.mimic) ||
-        this.cleanString(object.diagnosis) ||
-        this.cleanString(object.title);
-      const whyConfused = this.cleanString(object.whyConfused);
-      const keySeparator =
-        this.cleanString(object.keySeparator) ||
-        this.cleanString(object.discriminator) ||
-        this.cleanString(object.distinguishingPoint);
-      const managementConsequence =
-        this.cleanString(object.managementConsequence) ||
-        this.cleanString(object.managementImplication);
-      const hasTarget =
-        Boolean(mimic);
+      const pearl = this.educationSchemaContractService.readTypedPearl(item);
+      const text = this.educationSchemaContractService.canonicalText(item);
+      const overlapText = [
+        pearl.content,
+        pearl.whyItMatters,
+        pearl.trapAvoided,
+      ]
+        .filter(Boolean)
+        .join(' ');
+      const hasTarget = Boolean(pearl.title || pearl.content);
+      const whyConfused = OVERLAP_REASONING_PATTERN.test(overlapText);
       const hasComparison = DIFFERENTIAL_COMPARISON_PATTERN.test(text);
-      const hasStructuredDiscriminator = Boolean(keySeparator);
-      const separatorText = keySeparator ?? text;
+      const hasStructuredDiscriminator = Boolean(pearl.discriminator);
+      const separatorText = pearl.discriminator ?? text;
       const hasGenericSeparator = this.isGenericSeparator(separatorText);
+      const managementConsequence = Boolean(
+        pearl.managementImplication || pearl.trapAvoided,
+      );
 
       if (!whyConfused) {
         warnings.add('differential_missing_why_confused');
       }
-      if (!keySeparator) {
+      if (!pearl.discriminator) {
         warnings.add('differential_missing_key_separator');
       }
       if (hasGenericSeparator) {
@@ -313,11 +675,11 @@ export class EducationDraftQualityValidator {
 
       return this.scoreParts([
         hasTarget,
-        Boolean(whyConfused),
+        whyConfused,
         hasComparison,
         hasStructuredDiscriminator,
         !hasGenericSeparator,
-        Boolean(managementConsequence),
+        managementConsequence,
       ]);
     });
     const score = this.average(scores);
@@ -347,38 +709,37 @@ export class EducationDraftQualityValidator {
 
     let interpretedCount = 0;
     const scores = items.map((item) => {
-      const text = this.textFrom(item);
       const object = this.asObject(item);
-      const test =
-        this.cleanString(object.test) ||
-        this.cleanString(object.title) ||
-        this.cleanString(object.name);
-      const expectedFinding =
-        this.cleanString(object.expectedFinding) ||
-        this.cleanString(object.finding) ||
-        this.cleanString(object.result);
-      const interpretation =
-        this.cleanString(object.interpretation) ||
-        this.cleanString(object.significance) ||
-        this.cleanString(object.use) ||
-        this.cleanString(object.whyItMatters);
-      const limitation =
-        this.cleanString(object.limitation) ||
-        this.cleanString(object.caution) ||
-        this.cleanString(object.trapAvoided);
+      const pearl = this.educationSchemaContractService.readTypedPearl(item);
+      const canonicalText = this.educationSchemaContractService.canonicalText(
+        item,
+        ['content', 'whyItMatters', 'managementImplication'],
+      );
+      const text =
+        canonicalText || [object.name, object.use, object.caution].join(' ');
+      const scoringSystemUse = this.cleanString(object.use);
+      const scoringSystemComponents = this.asArray(object.components);
+      const scoringSystemCaution = this.cleanString(object.caution);
+      const test = pearl.title || this.cleanString(object.name) || pearl.content;
+      const expectedFinding = OBJECTIVE_FINDING_PATTERN.test(
+        pearl.content ?? text,
+      ) || scoringSystemComponents.length > 0;
+      const interpretation = pearl.whyItMatters || scoringSystemUse;
+      const operationalUse =
+        pearl.managementImplication || scoringSystemCaution || scoringSystemUse;
       const hasInterpretation =
-        Boolean(interpretation) && INTERPRETATION_PATTERN.test(text);
+        interpretation !== null && INTERPRETATION_PATTERN.test(interpretation);
 
       if (!expectedFinding) {
         warnings.add('investigation_missing_expected_finding');
       }
-      if (!interpretation || !INTERPRETATION_PATTERN.test(interpretation)) {
+      if (!hasInterpretation) {
         warnings.add('investigation_missing_interpretation');
       }
       if (GENERIC_TEST_USEFULNESS_PATTERN.test(text)) {
         warnings.add('investigation_vague_test_usefulness');
       }
-      if (!limitation && /\b(?:cbc|wbc|ct|ultrasound|x-ray|crp|procalcitonin|score)\b/i.test(text)) {
+      if (!operationalUse && /\b(?:cbc|wbc|ct|ultrasound|x-ray|crp|procalcitonin|score)\b/i.test(text)) {
         warnings.add('investigation_missing_limitation');
       }
       if (hasInterpretation) {
@@ -387,11 +748,11 @@ export class EducationDraftQualityValidator {
 
       return this.scoreParts([
         Boolean(test || this.cleanString(object.content)),
-        Boolean(expectedFinding),
-        Boolean(interpretation),
+        expectedFinding,
+        hasInterpretation,
         INTERPRETATION_PATTERN.test(text),
         !GENERIC_TEST_USEFULNESS_PATTERN.test(text),
-        Boolean(limitation || this.cleanString(object.discriminator)),
+        Boolean(operationalUse),
       ]);
     });
     const score = this.average(scores);
@@ -416,17 +777,15 @@ export class EducationDraftQualityValidator {
     }
 
     const scores = items.map((item) => {
-      const text = this.textFrom(item);
-      const object = this.asObject(item);
-      const trap =
-        this.cleanString(object.trap) ||
-        this.cleanString(object.pitfall) ||
-        this.cleanString(object.title) ||
-        this.cleanString(object.content);
-      const consequence =
-        this.cleanString(object.consequence) ||
-        this.cleanString(object.whyItMatters);
-      const saferHeuristic = this.cleanString(object.saferHeuristic);
+      const pearl = this.educationSchemaContractService.readTypedPearl(item);
+      const text = this.educationSchemaContractService.canonicalText(item, [
+        'content',
+        'whyItMatters',
+        'trapAvoided',
+      ]);
+      const trap = pearl.title || pearl.content;
+      const consequence = pearl.whyItMatters;
+      const saferHeuristic = pearl.trapAvoided;
       if (text.split(/\s+/).filter(Boolean).length < 8) {
         warnings.add('pitfall_too_short');
       }
@@ -436,15 +795,15 @@ export class EducationDraftQualityValidator {
       if (!consequence) {
         warnings.add('pitfall_missing_consequence');
       }
-      if (!saferHeuristic && !this.cleanString(object.trapAvoided)) {
+      if (!saferHeuristic) {
         warnings.add('pitfall_missing_safer_heuristic');
       }
 
       return this.scoreParts([
         Boolean(trap),
-        Boolean(this.cleanString(object.whyMissed) || this.cleanString(object.content)),
+        Boolean(pearl.content),
         Boolean(consequence),
-        Boolean(saferHeuristic || this.cleanString(object.trapAvoided)),
+        Boolean(saferHeuristic),
         PITFALL_SPECIFICITY_PATTERN.test(text),
       ]);
     });
@@ -469,21 +828,19 @@ export class EducationDraftQualityValidator {
 
     let usefulCount = 0;
     const scores = items.map((item) => {
-      const text = this.textFrom(item);
-      const object = this.asObject(item);
-      const action =
-        this.cleanString(object.action) ||
-        this.cleanString(object.step) ||
-        this.cleanString(object.title) ||
-        this.cleanString(object.content);
-      const indication = this.cleanString(object.indication);
-      const rationale =
-        this.cleanString(object.rationale) ||
-        this.cleanString(object.whyItMatters) ||
-        this.cleanString(object.managementImplication);
-      const consequence =
-        this.cleanString(object.consequenceIfDelayed) ||
-        this.cleanString(object.escalationImplication);
+      const pearl = this.educationSchemaContractService.readTypedPearl(item);
+      const text = this.educationSchemaContractService.canonicalText(item, [
+        'content',
+        'whyItMatters',
+        'managementImplication',
+        'escalationImplication',
+      ]);
+      const action = pearl.title || pearl.content;
+      const indication = Boolean(
+        pearl.content && MANAGEMENT_INDICATION_PATTERN.test(pearl.content),
+      );
+      const rationale = pearl.whyItMatters || pearl.managementImplication;
+      const consequence = pearl.escalationImplication;
       const generic = GENERIC_MANAGEMENT_PATTERN.test(text) && !indication && !rationale;
 
       if (GENERIC_MANAGEMENT_PATTERN.test(text)) {
@@ -504,7 +861,7 @@ export class EducationDraftQualityValidator {
 
       return this.scoreParts([
         Boolean(action),
-        Boolean(indication),
+        indication,
         Boolean(rationale),
         MANAGEMENT_ANCHOR_PATTERN.test(text),
         !generic,
@@ -535,19 +892,15 @@ export class EducationDraftQualityValidator {
 
     let mechanismCount = 0;
     const scores = items.map((item) => {
-      const text = this.textFrom(item);
-      const object = this.asObject(item);
-      const finding =
-        this.cleanString(object.finding) ||
-        this.cleanString(object.title) ||
-        this.cleanString(object.label);
-      const mechanism =
-        this.cleanString(object.mechanism) ||
-        this.cleanString(object.explanation) ||
-        this.cleanString(object.content);
-      const diagnosticImpact =
-        this.cleanString(object.diagnosticImpact) ||
-        this.cleanString(object.whyItMatters);
+      const pearl = this.educationSchemaContractService.readTypedPearl(item);
+      const text = this.educationSchemaContractService.canonicalText(item, [
+        'content',
+        'whyItMatters',
+        'discriminator',
+      ]);
+      const finding = pearl.title || pearl.content;
+      const mechanism = pearl.content;
+      const diagnosticImpact = pearl.whyItMatters;
       const genericSupport = /\bsupports (?:the )?diagnosis\b/i.test(text);
       const symptomAsExam = finding ? SYMPTOM_AS_EXAM_PATTERN.test(finding) : false;
       const labAsExam = finding ? LAB_AS_EXAM_PATTERN.test(finding) : false;
@@ -582,7 +935,7 @@ export class EducationDraftQualityValidator {
         !genericSupport,
         !symptomAsExam,
         !labAsExam,
-        Boolean(this.cleanString(object.discriminator) || DIFFERENTIAL_COMPARISON_PATTERN.test(text)),
+        Boolean(pearl.discriminator || DIFFERENTIAL_COMPARISON_PATTERN.test(text)),
       ]);
     });
 
@@ -719,6 +1072,123 @@ export class EducationDraftQualityValidator {
     const minimumRatio = terms.length <= 3 ? 1 / terms.length : 0.25;
 
     return hits >= minimumHits || hits / terms.length >= minimumRatio;
+  }
+
+  private coverageScore(text: string, terms: string[]): number {
+    if (!terms.length) {
+      return 1;
+    }
+
+    const normalizedText = this.expandClinicalShorthand(this.normalize(text));
+    const hits = terms.filter((term) =>
+      this.hasRequiredTeachingConcept(normalizedText, term),
+    ).length;
+
+    return this.roundScore(hits / terms.length);
+  }
+
+  private unitCoverageScore(
+    text: string,
+    teachingUnits: EducationTeachingRulePack['teachingUnits'],
+    category?: EducationTeachingRulePack['teachingUnits'][number]['category'],
+  ): number {
+    const relevantUnits = (category
+      ? teachingUnits.filter((unit) => unit.category === category)
+      : teachingUnits
+    ).filter((unit) => unit.appliesToEducation);
+
+    if (!relevantUnits.length) {
+      return 1;
+    }
+
+    const normalizedText = this.expandClinicalShorthand(this.normalize(text));
+    const hits = relevantUnits.filter((unit) =>
+      this.hasTeachingUnitCoverage(normalizedText, unit),
+    ).length;
+
+    return this.roundScore(hits / relevantUnits.length);
+  }
+
+  private hasTeachingUnitCoverage(
+    normalizedText: string,
+    teachingUnit: EducationTeachingRulePack['teachingUnits'][number],
+  ): boolean {
+    return teachingUnit.acceptableManifestations.some((manifestation) =>
+      this.hasRequiredTeachingConcept(normalizedText, manifestation),
+    );
+  }
+
+  private hasRequiredTeachingConcept(
+    normalizedText: string,
+    term: string,
+  ): boolean {
+    const normalizedTerm = this.expandClinicalShorthand(this.normalize(term));
+    if (!normalizedTerm) {
+      return true;
+    }
+
+    if (normalizedText.includes(normalizedTerm)) {
+      return true;
+    }
+
+    const termTokens = normalizedTerm
+      .split(' ')
+      .filter((token) => !this.isCoverageStopword(token));
+    if (!termTokens.length) {
+      return true;
+    }
+
+    const hitCount = termTokens.filter((token) =>
+      normalizedText.includes(token),
+    ).length;
+    const requiredHits = Math.min(
+      termTokens.length,
+      Math.max(1, Math.ceil(termTokens.length * 0.6)),
+    );
+
+    return hitCount >= requiredHits;
+  }
+
+  private expandClinicalShorthand(value: string): string {
+    return value
+      .replace(/\bwbc\b/g, 'white blood cell')
+      .replace(/\brlq\b/g, 'right lower quadrant')
+      .replace(/\bllq\b/g, 'left lower quadrant')
+      .replace(/\bct\b/g, 'computed tomography')
+      .replace(/\becg\b/g, 'electrocardiogram')
+      .replace(/\bnpo\b/g, 'nothing by mouth');
+  }
+
+  private isCoverageStopword(token: string): boolean {
+    return [
+      'a',
+      'an',
+      'and',
+      'before',
+      'can',
+      'does',
+      'for',
+      'from',
+      'in',
+      'of',
+      'or',
+      'the',
+      'to',
+      'with',
+    ].includes(token);
+  }
+
+  private emptyCoverageScores(): EducationTeachingCoverageScores {
+    return {
+      differentials: 1,
+      pitfalls: 1,
+      findings: 1,
+      investigations: 1,
+      examMechanisms: 1,
+      managementAnchors: 1,
+      recallConcepts: 1,
+      overall: 1,
+    };
   }
 
   private scoreParts(parts: Array<boolean | string | null | undefined>): number {

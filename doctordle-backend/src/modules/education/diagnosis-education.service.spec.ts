@@ -91,6 +91,94 @@ function buildEducation(
   };
 }
 
+function buildPublishableEducationSections() {
+  return {
+    examPearls: [
+      {
+        id: 'rovsing-sign',
+        type: 'EXAM',
+        title: 'Rovsing sign',
+        content:
+          'Left-sided palpation produces right-sided pain because inflamed peritoneum is irritated across the abdomen.',
+        whyItMatters:
+          'This favors appendicitis over gastroenteritis because diffuse mucosal illness should not cause focal contralateral peritoneal pain.',
+        discriminator:
+          'Focal contralateral peritoneal pain rather than diffuse cramps.',
+      },
+    ],
+    investigations: [
+      {
+        id: 'cbc',
+        type: 'INVESTIGATION',
+        title: 'CBC',
+        content:
+          'CBC may show neutrophilic leukocytosis as supportive evidence of appendiceal inflammation.',
+        whyItMatters:
+          'Leukocytosis supports inflammation, but a normal early WBC does not exclude appendicitis.',
+        managementImplication:
+          'Interpret alongside evolving focal signs rather than using it as a standalone rule-out.',
+      },
+    ],
+    differentials: [
+      {
+        id: 'gastroenteritis',
+        type: 'HIGH_YIELD_DISCRIMINATOR',
+        title: 'Gastroenteritis',
+        content:
+          'Both can cause early abdominal pain and vomiting, but progressive RLQ localization favors appendicitis whereas diffuse cramps with diarrhea favor gastroenteritis.',
+        whyItMatters:
+          'The separator changes urgency because missed appendicitis delays surgical evaluation.',
+        discriminator:
+          'RLQ peritonism rather than diffuse cramping with prominent diarrhea.',
+        managementImplication:
+          'Escalate toward surgical evaluation when focal peritoneal findings emerge.',
+      },
+    ],
+    management: [
+      {
+        id: 'early-surgical-consult',
+        type: 'MANAGEMENT',
+        title: 'Early surgical consultation',
+        content:
+          'Request early surgical consultation when focal peritonism or high clinical suspicion suggests appendicitis.',
+        whyItMatters:
+          'Source control planning is needed because appendiceal inflammation can progress to perforation.',
+        managementImplication:
+          'Keep the patient NPO and align imaging, analgesia, and operative planning.',
+        escalationImplication:
+          'Delay increases perforation risk and broadens operative complexity.',
+      },
+    ],
+    pitfalls: [
+      {
+        id: 'normal-early-wbc',
+        type: 'PITFALL',
+        title: 'Normal early WBC',
+        content:
+          'A normal early WBC can falsely reassure before appendiceal inflammation evolves.',
+        whyItMatters:
+          'Overweighting the lab lowers suspicion incorrectly and can delay reassessment.',
+        trapAvoided:
+          'Do not use a normal early WBC to rule out appendicitis when focal pain is evolving.',
+      },
+    ],
+    recallPrompts: [
+      {
+        id: 'why-rovsing',
+        type: 'WHY_IT_MATTERS',
+        prompt: 'Why does Rovsing sign increase concern for appendicitis?',
+        answer:
+          'It reflects peritoneal irritation, which favors appendiceal inflammation.',
+        explanation:
+          'The prompt tests mechanism and probability shift rather than a definition.',
+        linkedConcept: 'peritoneal irritation',
+        sourceSection: 'examPearls',
+        difficulty: 'INTERMEDIATE',
+      },
+    ],
+  };
+}
+
 function buildRegistryForGeneration() {
   return {
     id: 'registry-1',
@@ -484,6 +572,7 @@ function buildService(overrides: { generationContextBuilder?: unknown } = {}) {
       create: jest.fn(),
     },
     diagnosisEducationRevision: {
+      findUnique: jest.fn().mockResolvedValue({ id: 'revision-existing' }),
       create: jest.fn().mockResolvedValue({ id: 'revision-1' }),
     },
   };
@@ -522,6 +611,7 @@ function buildService(overrides: { generationContextBuilder?: unknown } = {}) {
     tx,
     service: new DiagnosisEducationService(
       prisma as never,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -746,6 +836,7 @@ describe('DiagnosisEducationService', () => {
   it('makes published education visible to players immediately after review publish', async () => {
     const { prisma, tx, service } = buildService();
     let education = buildEducation({
+      ...buildPublishableEducationSections(),
       editorialStatus: DiagnosisEducationStatus.APPROVED,
       publishedAt: null,
       references: ['reviewed source'],
@@ -1234,6 +1325,13 @@ describe('DiagnosisEducationService', () => {
     expect(request.messages[1].content).toContain('clinicalPattern');
     expect(request.messages[1].content).toContain('differentials');
     expect(request.messages[1].content).toContain('typedPearlContract');
+    expect(request.messages[0].content).toContain('schemaContract');
+    expect(request.messages[1].content).toContain('schemaContract');
+    expect(request.messages[1].content).toContain('editorialPatterns');
+    expect(request.messages[1].content).toContain('Differential comparison');
+    expect(request.messages[1].content).toContain(
+      'content names test plus expected finding',
+    );
     expect(request.messages[1].content).toContain(
       'diagnosisSpecificGuidance',
     );
@@ -1277,6 +1375,10 @@ describe('DiagnosisEducationService', () => {
       'FULL_RAW_CASE_PAYLOAD_SHOULD_NOT_BE_SENT',
     );
     expect(request.messages[1].content).not.toContain('badExamples');
+    expect(request.messages[1].content).not.toContain('sectionContracts');
+    expect(request.messages[1].content).not.toContain('whyConfused');
+    expect(request.messages[1].content).not.toContain('expectedFinding');
+    expect(request.messages[1].content).not.toContain('consequenceIfDelayed');
     expect(create.mock.calls[0][1]).toEqual(
       expect.objectContaining({
         timeout: 45_000,
@@ -1365,7 +1467,7 @@ describe('DiagnosisEducationService', () => {
     const request = create.mock.calls[0][0] as {
       messages: Array<{ role: string; content: string }>;
     };
-    expect(request.messages[1].content).toContain('generationContext');
+    expect(request.messages[1].content).toContain('compactGenerationContext');
     expect(request.messages[1].content).toContain(
       'McBurney point tenderness',
     );
@@ -1509,6 +1611,12 @@ describe('DiagnosisEducationService', () => {
         systemMessageLength: expect.any(Number),
         userMessageLength: expect.any(Number),
       }),
+    );
+    expect(Number(promptMetricPayload?.promptCharacterCount)).toBeLessThan(
+      18_000,
+    );
+    expect(Number(promptMetricPayload?.approximatePromptTokenCount)).toBeLessThan(
+      4_500,
     );
   });
 
@@ -1700,30 +1808,124 @@ describe('DiagnosisEducationService', () => {
     );
   });
 
-  it('does not overwrite published education with an AI draft', async () => {
+  it('serves the latest published revision while a regenerated draft is in review', async () => {
+    const { prisma, service } = buildService();
+    prisma.diagnosisEducation.findFirst.mockResolvedValue(null);
+    prisma.diagnosisEducation.findUnique.mockResolvedValue({
+      ...buildEducation({
+        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+        version: 4,
+        title: 'Draft Appendicitis',
+      }),
+      diagnosisRegistry: {
+        id: 'registry-1',
+        displayLabel: 'Appendicitis',
+        canonicalName: 'appendicitis',
+        specialty: 'General Surgery',
+        category: 'Inflammatory',
+        bodySystem: 'Gastrointestinal',
+        clinicalSetting: 'EMERGENCY',
+        difficultyBand: 'BASIC',
+      },
+      revisions: [
+        {
+          id: 'revision-published',
+          educationId: 'education-1',
+          version: 3,
+          editorialStatus: DiagnosisEducationStatus.PUBLISHED,
+          source: DiagnosisEducationSource.MANUAL,
+          createdByUserId: 'admin-1',
+          createdAt: new Date('2026-05-01T00:00:00.000Z'),
+          snapshot: {
+            title: 'Published Appendicitis',
+            summary: {
+              definition: 'Published definition.',
+            },
+            clinicalPattern: ['Published pattern'],
+            keySymptoms: ['Published symptom'],
+            keySigns: ['Published sign'],
+            examPearls: ['Published pearl'],
+            investigations: ['Published investigation'],
+            differentials: ['Published differential'],
+            management: ['Published management'],
+            complications: ['Published complication'],
+            pitfalls: ['Published pitfall'],
+            recallPrompts: ['Published recall'],
+            reviewedAt: '2026-05-01T00:00:00.000Z',
+          },
+        },
+      ],
+    });
+
+    const result = await service.getPublishedForUser({
+      userId: 'user-1',
+      diagnosisRegistryId: 'registry-1',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        title: 'Published Appendicitis',
+        summary: { definition: 'Published definition.' },
+        recognitionPattern: ['Published pattern'],
+        version: 3,
+      }),
+    );
+  });
+
+  it('regenerates published education as a new needs-review revision', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
     process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
     resetEnvCacheForTests();
-    const { prisma, service } = buildService();
+    const { prisma, tx, service } = buildService();
     prisma.diagnosisRegistry.findUnique.mockResolvedValue(
       buildRegistryForGeneration(),
     );
+    const existing = buildEducation({
+      editorialStatus: DiagnosisEducationStatus.PUBLISHED,
+      version: 3,
+    });
+    const saved = buildEducation({
+      editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+      source: DiagnosisEducationSource.AI_ASSISTED,
+      version: 4,
+      reviewedAt: null,
+      reviewedByUserId: null,
+      publishedAt: null,
+      generatedAt: new Date('2026-05-02T00:00:00.000Z'),
+    });
     prisma.diagnosisEducation.findUnique.mockResolvedValue(
-      buildEducation({
-        editorialStatus: DiagnosisEducationStatus.PUBLISHED,
-      }),
+      existing,
     );
+    tx.diagnosisEducation.update.mockResolvedValue(saved);
     const create = mockOpenAiDraft(
       service,
       JSON.stringify(buildValidGeneratedDraft()),
     );
 
-    await expect(
-      service.generateDraft('registry-1', 'admin-1'),
-    ).rejects.toThrow(
-      'Cannot generate over published education. Archive or create draft manually first.',
+    const result = await service.generateDraft('registry-1', 'admin-1');
+
+    expect(create).toHaveBeenCalled();
+    expect(result).toEqual(saved);
+    expect(tx.diagnosisEducation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+          source: DiagnosisEducationSource.AI_ASSISTED,
+          version: 4,
+          reviewedAt: null,
+          reviewedByUserId: null,
+          publishedAt: null,
+        }),
+      }),
     );
-    expect(create).not.toHaveBeenCalled();
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(tx.diagnosisEducationRevision.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          educationId: 'education-1',
+          version: 4,
+          editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+        }),
+      }),
+    );
   });
 });

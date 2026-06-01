@@ -12,7 +12,6 @@ import {
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
-import { normalizeDiagnosisTerm } from '../diagnosis-registry/diagnosis-term-normalizer';
 import {
   buildGraphDedupeKey,
   compactGraphText,
@@ -22,6 +21,7 @@ import {
   GraphReasoningExtractorService,
   type DiagnosisGraphCandidateDraft,
 } from './graph-reasoning-extractor.service';
+import { DifferentialRegistryResolutionService } from './differential-registry-resolution.service';
 
 type CandidateDraft = DiagnosisGraphCandidateDraft;
 
@@ -62,7 +62,10 @@ export class DiagnosisGraphExtractionService {
   private readonly logger = new Logger(DiagnosisGraphExtractionService.name);
   private readonly reasoningExtractor = new GraphReasoningExtractorService();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly differentialRegistryResolutionService: DifferentialRegistryResolutionService,
+  ) {}
 
   async extractFromApprovedCase(
     caseId: string,
@@ -470,15 +473,25 @@ export class DiagnosisGraphExtractionService {
         continue;
       }
 
-      const target = await this.findDiagnosisRegistryByText(
-        candidate.diagnosisRegistryId,
-        candidate.unresolvedTargetText,
-      );
-      const unresolvedTargetText = target ? null : candidate.unresolvedTargetText;
+      const resolution =
+        await this.differentialRegistryResolutionService.resolve({
+          rawText: candidate.unresolvedTargetText,
+          contextDiagnosisRegistryId: candidate.diagnosisRegistryId,
+        });
+      const targetDiagnosisRegistryId =
+        resolution.status === 'resolved' ? resolution.resolvedRegistryId : null;
+      const unresolvedTargetText = targetDiagnosisRegistryId
+        ? null
+        : candidate.unresolvedTargetText;
       resolved.push({
         ...candidate,
-        targetDiagnosisRegistryId: target?.id ?? null,
+        targetDiagnosisRegistryId,
         unresolvedTargetText,
+        payload: this.mergePayload(
+          candidate.payload,
+          this.differentialRegistryResolutionService.toPayload(resolution),
+        ),
+        confidence: candidate.confidence ?? resolution.confidence,
         dedupeKey: buildGraphDedupeKey([
           candidate.diagnosisRegistryId,
           candidate.type,
@@ -486,43 +499,12 @@ export class DiagnosisGraphExtractionService {
           candidate.sourceId,
           candidate.sourcePath,
           candidate.normalizedText,
-          target?.id ?? unresolvedTargetText ?? '',
+          targetDiagnosisRegistryId ?? unresolvedTargetText ?? '',
         ]),
       });
     }
 
     return resolved;
-  }
-
-  private async findDiagnosisRegistryByText(
-    sourceDiagnosisRegistryId: string,
-    text: string,
-  ): Promise<{ id: string } | null> {
-    const normalized = normalizeDiagnosisTerm(text);
-    if (!normalized) {
-      return null;
-    }
-
-    return this.prisma.diagnosisRegistry.findFirst({
-      where: {
-        active: true,
-        id: { not: sourceDiagnosisRegistryId },
-        OR: [
-          { displayLabel: { equals: text.trim(), mode: 'insensitive' } },
-          { canonicalNormalized: normalized },
-          { canonicalName: { equals: text.trim(), mode: 'insensitive' } },
-          {
-            aliases: {
-              some: {
-                active: true,
-                normalizedTerm: normalized,
-              },
-            },
-          },
-        ],
-      },
-      select: { id: true },
-    });
   }
 
   private async persistCandidates(input: {
@@ -665,5 +647,19 @@ export class DiagnosisGraphExtractionService {
 
   private toPayload(value: unknown): Prisma.InputJsonValue {
     return value as Prisma.InputJsonValue;
+  }
+
+  private mergePayload(
+    current: Prisma.InputJsonValue | undefined,
+    next: Prisma.InputJsonObject,
+  ): Prisma.InputJsonObject {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      return next;
+    }
+
+    return {
+      ...(current as Prisma.InputJsonObject),
+      ...next,
+    };
   }
 }

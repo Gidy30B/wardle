@@ -34,6 +34,35 @@ type GenerationQualityMetadata = {
   hasVitals?: boolean;
   differentialCount?: number;
   qualityScore?: number;
+  teachingAlignment?: TeachingAlignmentMetadata;
+};
+
+type TeachingAlignmentMetadata = {
+  selectedUnits: Array<{
+    id: string;
+    label: string;
+    importance: string;
+    covered: boolean;
+    matchedManifestations: string[];
+    firstClueIndex?: number;
+    evidence: string[];
+  }>;
+  revealTiming: {
+    earliestCoreRevealClue?: number;
+    giveawayTooEarly: boolean;
+    issues: string[];
+  };
+  mimicPersistence: {
+    earlyMimicsPresent: string[];
+    mimicsStillPlausibleUntilClue?: number;
+    issues: string[];
+  };
+  playability: {
+    score: number;
+    difficultyFit: 'too_easy' | 'fits' | 'too_hard' | 'unclear';
+    issues: string[];
+  };
+  warnings: string[];
 };
 
 type InvalidReasoningEdge = {
@@ -204,6 +233,7 @@ export function parseGenerationQuality(
         : undefined,
     qualityScore:
       typeof quality.qualityScore === 'number' ? quality.qualityScore : undefined,
+    teachingAlignment: parseTeachingAlignment(quality.teachingAlignment),
   };
 }
 
@@ -274,6 +304,89 @@ function parseInvalidReasoningEdges(value: unknown): InvalidReasoningEdge[] {
   return parsed;
 }
 
+function parseTeachingAlignment(value: unknown): TeachingAlignmentMetadata | undefined {
+  const candidate = asRecord(value);
+  if (!candidate) {
+    return undefined;
+  }
+
+  const playability = asRecord(candidate.playability);
+  if (!playability || typeof playability.score !== 'number') {
+    return undefined;
+  }
+
+  const revealTiming = asRecord(candidate.revealTiming);
+  const mimicPersistence = asRecord(candidate.mimicPersistence);
+
+  return {
+    selectedUnits: parseTeachingAlignmentUnits(candidate.selectedUnits),
+    revealTiming: {
+      earliestCoreRevealClue:
+        revealTiming && typeof revealTiming.earliestCoreRevealClue === 'number'
+          ? revealTiming.earliestCoreRevealClue
+          : undefined,
+      giveawayTooEarly:
+        revealTiming && typeof revealTiming.giveawayTooEarly === 'boolean'
+          ? revealTiming.giveawayTooEarly
+          : false,
+      issues: parseStringArray(revealTiming?.issues),
+    },
+    mimicPersistence: {
+      earlyMimicsPresent: parseStringArray(mimicPersistence?.earlyMimicsPresent),
+      mimicsStillPlausibleUntilClue:
+        mimicPersistence &&
+        typeof mimicPersistence.mimicsStillPlausibleUntilClue === 'number'
+          ? mimicPersistence.mimicsStillPlausibleUntilClue
+          : undefined,
+      issues: parseStringArray(mimicPersistence?.issues),
+    },
+    playability: {
+      score: playability.score,
+      difficultyFit: parseDifficultyFit(playability.difficultyFit),
+      issues: parseStringArray(playability.issues),
+    },
+    warnings: parseStringArray(candidate.warnings),
+  };
+}
+
+function parseTeachingAlignmentUnits(
+  value: unknown,
+): TeachingAlignmentMetadata['selectedUnits'] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    const candidate = asRecord(item);
+    if (
+      !candidate ||
+      typeof candidate.id !== 'string' ||
+      typeof candidate.label !== 'string' ||
+      typeof candidate.covered !== 'boolean'
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        id: candidate.id,
+        label: candidate.label,
+        importance:
+          typeof candidate.importance === 'string'
+            ? candidate.importance
+            : 'unknown',
+        covered: candidate.covered,
+        matchedManifestations: parseStringArray(candidate.matchedManifestations),
+        firstClueIndex:
+          typeof candidate.firstClueIndex === 'number'
+            ? candidate.firstClueIndex
+            : undefined,
+        evidence: parseStringArray(candidate.evidence),
+      },
+    ];
+  });
+}
+
 function parseDifficulty(
   value: unknown,
 ): GenerationQualityMetadata['estimatedDifficulty'] {
@@ -290,10 +403,22 @@ function parseAcuity(value: unknown): GenerationQualityMetadata['acuity'] {
       : undefined;
 }
 
+function parseDifficultyFit(
+  value: unknown,
+): TeachingAlignmentMetadata['playability']['difficultyFit'] {
+  return value === 'too_easy' ||
+    value === 'fits' ||
+    value === 'too_hard' ||
+    value === 'unclear'
+    ? value
+    : 'unclear';
+}
+
 export type {
   CaseClue,
   GenerationQualityMetadata,
   InvalidReasoningEdge,
+  TeachingAlignmentMetadata,
   ValidationFindingIssue,
   ValidationIssueBuckets,
 };

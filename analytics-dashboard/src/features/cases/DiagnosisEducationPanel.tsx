@@ -1,14 +1,48 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  compareDiagnosisEducationRevisions,
   createDiagnosisEducationForAdmin,
+  createDiagnosisEditorialBrief,
+  createDiagnosisTeachingRule,
+  generateDiagnosisEditorialBrief,
   generateDiagnosisEducationDraft,
+  generateDiagnosisTeachingRuleCandidates,
+  generateTargetedDiagnosisCase,
+  getDiagnosisEditorialBrief,
   getDiagnosisEducationForAdmin,
+  getDiagnosisEducationRevisions,
+  getDiagnosisGraphCandidates,
+  getDiagnosisTeachingRules,
+  getDiagnosisTeachingUnitCoverage,
+  getDiagnosisWorkspaceProjection,
+  getDiagnosisWorkspaceQualitySummary,
+  regenerateDiagnosisEducationSection,
+  reviewDiagnosisEditorialBrief,
+  reviewDiagnosisTeachingRule,
+  seedLegacyDiagnosisTeachingRules,
   reviewDiagnosisEducationForAdmin,
+  updateDiagnosisEditorialBrief,
+  updateDiagnosisTeachingRule,
   updateDiagnosisEducationForAdmin,
+  type DiagnosisEditorialBriefResponse,
+  type DiagnosisEditorialBriefReviewAction,
+  type DiagnosisEditorialBriefWritePayload,
+  type DiagnosisTeachingRuleReviewAction,
+  type DiagnosisTeachingRulesResponse,
+  type DiagnosisTeachingRuleWritePayload,
+  type DiagnosisEducationRevisionCompareResult,
+  type DiagnosisEducationRevisionAnalysis,
+  type EducationRegenerableSection,
   type DiagnosisEducationDifferential,
   type DiagnosisEducationPearl,
   type DiagnosisEducationRecord,
   type DiagnosisEducationStatus,
+  type DiagnosisGraphCandidate,
+  type DiagnosisWorkspaceProjection,
+  type DiagnosisWorkspaceQualitySummary,
+  type GenerateTargetedCaseResult,
+  type GenerateTargetedCasePayload,
+  type TeachingUnitCoverageMap,
   type JsonValue,
   type UpsertDiagnosisEducationPayload,
 } from '../../api/admin';
@@ -19,6 +53,14 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import { useActionFeedback } from '../../hooks/useActionFeedback';
 import CaseDetailSection from './CaseDetailSection';
 import { formatDateLabel } from './cases.helpers';
+import DiagnosisWorkspaceSummaryCard from './education/DiagnosisWorkspaceSummaryCard';
+import EditorialBriefCard from './education/EditorialBriefCard';
+import RevisionCompareCard from './education/RevisionCompareCard';
+import RevisionHistoryCard from './education/RevisionHistoryCard';
+import TargetedCaseGenerationCard from './education/TargetedCaseGenerationCard';
+import TeachingRulesCard from './education/TeachingRulesCard';
+import TeachingUnitCoverageCard from './education/TeachingUnitCoverageCard';
+import WorkspaceQualityCard from './education/WorkspaceQualityCard';
 
 type DiagnosisEducationPanelProps = {
   client: ApiClient;
@@ -80,13 +122,65 @@ export default function DiagnosisEducationPanel({
   const [form, setForm] = useState<EducationFormState>(emptyForm);
   const [qualityWarnings, setQualityWarnings] = useState<string[]>([]);
   const [publishBlockers, setPublishBlockers] = useState<string[]>([]);
+  const [workspaceProjection, setWorkspaceProjection] =
+    useState<DiagnosisWorkspaceProjection | null>(null);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [workspaceSummary, setWorkspaceSummary] =
+    useState<DiagnosisWorkspaceQualitySummary | null>(null);
+  const [workspaceSummaryLoading, setWorkspaceSummaryLoading] = useState(false);
+  const [workspaceSummaryError, setWorkspaceSummaryError] = useState<string | null>(
+    null,
+  );
+  const [teachingUnitCoverage, setTeachingUnitCoverage] =
+    useState<TeachingUnitCoverageMap | null>(null);
+  const [teachingUnitCoverageLoading, setTeachingUnitCoverageLoading] =
+    useState(false);
+  const [teachingUnitCoverageError, setTeachingUnitCoverageError] = useState<
+    string | null
+  >(null);
+  const [teachingRules, setTeachingRules] =
+    useState<DiagnosisTeachingRulesResponse | null>(null);
+  const [teachingRulesLoading, setTeachingRulesLoading] = useState(false);
+  const [teachingRulesError, setTeachingRulesError] = useState<string | null>(
+    null,
+  );
+  const [editorialBrief, setEditorialBrief] =
+    useState<DiagnosisEditorialBriefResponse | null>(null);
+  const [editorialBriefLoading, setEditorialBriefLoading] = useState(false);
+  const [editorialBriefError, setEditorialBriefError] = useState<string | null>(
+    null,
+  );
+  const [mimicCandidates, setMimicCandidates] = useState<
+    DiagnosisGraphCandidate[]
+  >([]);
+  const [generatedTargetedCase, setGeneratedTargetedCase] =
+    useState<GenerateTargetedCaseResult['generatedCase'] | null>(null);
+  const [revisionHistory, setRevisionHistory] = useState<
+    DiagnosisEducationRevisionAnalysis[]
+  >([]);
+  const [revisionHistoryLoading, setRevisionHistoryLoading] = useState(false);
+  const [revisionHistoryError, setRevisionHistoryError] = useState<string | null>(
+    null,
+  );
+  const [revisionCompare, setRevisionCompare] =
+    useState<DiagnosisEducationRevisionCompareResult | null>(null);
+  const [revisionCompareLoading, setRevisionCompareLoading] = useState(false);
+  const [revisionCompareError, setRevisionCompareError] = useState<string | null>(
+    null,
+  );
+  const [compareFromVersion, setCompareFromVersion] = useState<number | null>(
+    null,
+  );
+  const [compareToVersion, setCompareToVersion] = useState<number | null>(null);
   const generateInFlightRef = useRef(false);
   const { feedback, clear, showError, showPending, showSuccess } =
     useActionFeedback();
 
   const isPublished = education?.editorialStatus === 'PUBLISHED';
   const canEdit = !isPublished;
-  const canGenerate = Boolean(diagnosisRegistryId && !isPublished);
+  const canGenerate = Boolean(diagnosisRegistryId);
+  const generateLabel = getGenerateActionLabel(education);
 
   useEffect(() => {
     if (!diagnosisRegistryId) {
@@ -96,6 +190,27 @@ export default function DiagnosisEducationPanel({
       setForm({ ...emptyForm, title: diagnosisLabel });
       setQualityWarnings([]);
       setPublishBlockers([]);
+      setWorkspaceProjection(null);
+      setWorkspaceLoading(false);
+      setWorkspaceError(null);
+      setWorkspaceSummary(null);
+      setWorkspaceSummaryLoading(false);
+      setWorkspaceSummaryError(null);
+      setTeachingUnitCoverage(null);
+      setTeachingUnitCoverageLoading(false);
+      setTeachingUnitCoverageError(null);
+      setTeachingRules(null);
+      setTeachingRulesLoading(false);
+      setTeachingRulesError(null);
+      setEditorialBrief(null);
+      setEditorialBriefLoading(false);
+      setEditorialBriefError(null);
+      setMimicCandidates([]);
+      setGeneratedTargetedCase(null);
+      setRevisionHistory([]);
+      setRevisionHistoryLoading(false);
+      setRevisionHistoryError(null);
+      resetRevisionCompare();
       setEditorOpen(false);
       return;
     }
@@ -106,11 +221,20 @@ export default function DiagnosisEducationPanel({
     async function loadEducation() {
       try {
         setLoading(true);
+        setWorkspaceLoading(true);
+        setWorkspaceSummaryLoading(true);
+        setTeachingUnitCoverageLoading(true);
+        setTeachingRulesLoading(true);
+        setEditorialBriefLoading(true);
+        setRevisionHistoryLoading(true);
         setLoadError(null);
-        const response = await getDiagnosisEducationForAdmin(
-          client,
-          registryId,
-        );
+        setWorkspaceError(null);
+        setWorkspaceSummaryError(null);
+        setTeachingUnitCoverageError(null);
+        setTeachingRulesError(null);
+        setEditorialBriefError(null);
+        setRevisionHistoryError(null);
+        const response = await getDiagnosisEducationForAdmin(client, registryId);
         if (!active) {
           return;
         }
@@ -120,6 +244,149 @@ export default function DiagnosisEducationPanel({
         setPublishBlockers(response.publishBlockers ?? []);
         setForm(toFormState(response.education, response.diagnosisRegistry.canonicalName));
         setEditorOpen(!response.education);
+
+        try {
+          const projection = await getDiagnosisWorkspaceProjection(client, registryId);
+          if (!active) {
+            return;
+          }
+
+          setWorkspaceProjection(projection);
+        } catch (error) {
+          if (!active) {
+            return;
+          }
+
+          setWorkspaceProjection(null);
+          setWorkspaceError(
+            error instanceof Error
+              ? error.message
+            : 'Failed to load editorial quality projection.',
+          );
+        }
+
+        try {
+          const summary = await getDiagnosisWorkspaceQualitySummary(
+            client,
+            registryId,
+          );
+          if (!active) {
+            return;
+          }
+
+          setWorkspaceSummary(summary);
+        } catch (error) {
+          if (!active) {
+            return;
+          }
+
+          setWorkspaceSummary(null);
+          setWorkspaceSummaryError(
+            error instanceof Error
+              ? error.message
+              : 'Failed to load workspace quality summary.',
+          );
+        }
+
+        try {
+          const coverage = await getDiagnosisTeachingUnitCoverage(
+            client,
+            registryId,
+          );
+          if (!active) {
+            return;
+          }
+          setTeachingUnitCoverage(coverage);
+        } catch (error) {
+          if (!active) {
+            return;
+          }
+          setTeachingUnitCoverage(null);
+          setTeachingUnitCoverageError(
+            error instanceof Error
+              ? error.message
+              : 'Failed to load teaching unit coverage.',
+          );
+        }
+
+        try {
+          const rules = await getDiagnosisTeachingRules(client, registryId);
+          if (!active) {
+            return;
+          }
+          setTeachingRules(rules);
+        } catch (error) {
+          if (!active) {
+            return;
+          }
+          setTeachingRules(null);
+          setTeachingRulesError(
+            error instanceof Error
+              ? error.message
+              : 'Failed to load teaching rules.',
+          );
+        }
+
+        try {
+          const brief = await getDiagnosisEditorialBrief(client, registryId);
+          if (!active) {
+            return;
+          }
+          setEditorialBrief(brief);
+        } catch (error) {
+          if (!active) {
+            return;
+          }
+          setEditorialBrief(null);
+          setEditorialBriefError(
+            error instanceof Error
+              ? error.message
+              : 'Failed to load editorial brief.',
+          );
+        }
+
+        try {
+          const mimics = await getDiagnosisGraphCandidates(client, {
+            diagnosisRegistryId: registryId,
+            type: 'MIMIC',
+          });
+          if (!active) {
+            return;
+          }
+          setMimicCandidates(
+            mimics.filter(
+              (candidate) =>
+                candidate.status === 'CANDIDATE' ||
+                candidate.status === 'APPROVED',
+            ),
+          );
+        } catch {
+          if (!active) {
+            return;
+          }
+          setMimicCandidates([]);
+        }
+
+        try {
+          const revisions = await getDiagnosisEducationRevisions(client, registryId);
+          if (!active) {
+            return;
+          }
+
+          applyRevisionHistory(revisions.revisions);
+        } catch (error) {
+          if (!active) {
+            return;
+          }
+
+          setRevisionHistory([]);
+          setRevisionHistoryError(
+            error instanceof Error
+              ? error.message
+              : 'Failed to load revision history.',
+          );
+          resetRevisionCompare();
+        }
       } catch (error) {
         if (!active) {
           return;
@@ -134,6 +401,20 @@ export default function DiagnosisEducationPanel({
           setForm({ ...emptyForm, title: diagnosisLabel });
           setQualityWarnings([]);
           setPublishBlockers([]);
+          setWorkspaceProjection(null);
+          setWorkspaceError(null);
+          setWorkspaceSummary(null);
+          setWorkspaceSummaryError(null);
+          setTeachingUnitCoverage(null);
+          setTeachingUnitCoverageError(null);
+          setTeachingRules(null);
+          setTeachingRulesError(null);
+          setEditorialBrief(null);
+          setEditorialBriefError(null);
+          setMimicCandidates([]);
+          setRevisionHistory([]);
+          setRevisionHistoryError(null);
+          resetRevisionCompare();
           setEditorOpen(true);
           return;
         }
@@ -146,6 +427,12 @@ export default function DiagnosisEducationPanel({
       } finally {
         if (active) {
           setLoading(false);
+          setWorkspaceLoading(false);
+          setWorkspaceSummaryLoading(false);
+          setTeachingUnitCoverageLoading(false);
+          setTeachingRulesLoading(false);
+          setEditorialBriefLoading(false);
+          setRevisionHistoryLoading(false);
         }
       }
     }
@@ -159,20 +446,230 @@ export default function DiagnosisEducationPanel({
 
   const preview = useMemo(() => toPreview(form, education), [education, form]);
 
+  useEffect(() => {
+    if (
+      !diagnosisRegistryId ||
+      compareFromVersion === null ||
+      compareToVersion === null ||
+      revisionHistory.length < 2
+    ) {
+      setRevisionCompare(null);
+      setRevisionCompareLoading(false);
+      setRevisionCompareError(null);
+      return;
+    }
+
+    if (compareFromVersion === compareToVersion) {
+      setRevisionCompare(null);
+      setRevisionCompareLoading(false);
+      setRevisionCompareError('Choose two different revisions to compare.');
+      return;
+    }
+
+    let active = true;
+    const registryId = diagnosisRegistryId;
+    const fromVersion = compareFromVersion;
+    const toVersion = compareToVersion;
+
+    async function loadRevisionCompare() {
+      try {
+        setRevisionCompareLoading(true);
+        setRevisionCompareError(null);
+        const result = await compareDiagnosisEducationRevisions(
+          client,
+          registryId,
+          fromVersion,
+          toVersion,
+        );
+
+        if (!active) {
+          return;
+        }
+
+        setRevisionCompare(result);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setRevisionCompare(null);
+        setRevisionCompareError(
+          error instanceof Error
+            ? error.message
+            : 'Failed to compare education revisions.',
+        );
+      } finally {
+        if (active) {
+          setRevisionCompareLoading(false);
+        }
+      }
+    }
+
+    void loadRevisionCompare();
+
+    return () => {
+      active = false;
+    };
+  }, [
+    client,
+    compareFromVersion,
+    compareToVersion,
+    diagnosisRegistryId,
+    revisionHistory.length,
+  ]);
+
+  function applyRevisionHistory(
+    revisions: DiagnosisEducationRevisionAnalysis[],
+  ) {
+    const sorted = sortRevisionsNewestFirst(revisions);
+    setRevisionHistory(sorted);
+
+    if (sorted.length >= 2) {
+      setCompareFromVersion(sorted[1].version);
+      setCompareToVersion(sorted[0].version);
+    } else {
+      resetRevisionCompare();
+    }
+  }
+
+  function resetRevisionCompare() {
+    setRevisionCompare(null);
+    setRevisionCompareLoading(false);
+    setRevisionCompareError(null);
+    setCompareFromVersion(null);
+    setCompareToVersion(null);
+  }
+
   async function refreshEducation() {
     if (!diagnosisRegistryId) {
       return;
     }
 
-    const response = await getDiagnosisEducationForAdmin(
-      client,
-      diagnosisRegistryId,
-    );
-    setEducation(response.education);
-    setQualityWarnings(response.qualityWarnings ?? []);
-    setPublishBlockers(response.publishBlockers ?? []);
-    setForm(toFormState(response.education, response.diagnosisRegistry.canonicalName));
-    setEditorOpen(!response.education);
+    setWorkspaceLoading(true);
+    setWorkspaceSummaryLoading(true);
+    setTeachingUnitCoverageLoading(true);
+    setTeachingRulesLoading(true);
+    setEditorialBriefLoading(true);
+    setRevisionHistoryLoading(true);
+    setWorkspaceError(null);
+    setWorkspaceSummaryError(null);
+    setTeachingUnitCoverageError(null);
+    setTeachingRulesError(null);
+    setEditorialBriefError(null);
+    setRevisionHistoryError(null);
+    try {
+      const response = await getDiagnosisEducationForAdmin(
+        client,
+        diagnosisRegistryId,
+      );
+      setEducation(response.education);
+      setQualityWarnings(response.qualityWarnings ?? []);
+      setPublishBlockers(response.publishBlockers ?? []);
+      setForm(toFormState(response.education, response.diagnosisRegistry.canonicalName));
+      setEditorOpen(!response.education);
+
+      try {
+        const projection = await getDiagnosisWorkspaceProjection(
+          client,
+          diagnosisRegistryId,
+        );
+        setWorkspaceProjection(projection);
+      } catch (error) {
+        setWorkspaceProjection(null);
+        setWorkspaceError(
+          error instanceof Error
+            ? error.message
+            : 'Failed to load editorial quality projection.',
+        );
+      }
+
+      try {
+        const summary = await getDiagnosisWorkspaceQualitySummary(
+          client,
+          diagnosisRegistryId,
+        );
+        setWorkspaceSummary(summary);
+      } catch (error) {
+        setWorkspaceSummary(null);
+        setWorkspaceSummaryError(
+          error instanceof Error
+            ? error.message
+            : 'Failed to load workspace quality summary.',
+        );
+      }
+
+      try {
+        const coverage = await getDiagnosisTeachingUnitCoverage(
+          client,
+          diagnosisRegistryId,
+        );
+        setTeachingUnitCoverage(coverage);
+      } catch (error) {
+        setTeachingUnitCoverage(null);
+        setTeachingUnitCoverageError(
+          error instanceof Error
+            ? error.message
+          : 'Failed to load teaching unit coverage.',
+        );
+      }
+
+      try {
+        const rules = await getDiagnosisTeachingRules(client, diagnosisRegistryId);
+        setTeachingRules(rules);
+      } catch (error) {
+        setTeachingRules(null);
+        setTeachingRulesError(
+          error instanceof Error ? error.message : 'Failed to load teaching rules.',
+        );
+      }
+
+      try {
+        const brief = await getDiagnosisEditorialBrief(client, diagnosisRegistryId);
+        setEditorialBrief(brief);
+      } catch (error) {
+        setEditorialBrief(null);
+        setEditorialBriefError(
+          error instanceof Error ? error.message : 'Failed to load editorial brief.',
+        );
+      }
+
+      try {
+        const mimics = await getDiagnosisGraphCandidates(client, {
+          diagnosisRegistryId,
+          type: 'MIMIC',
+        });
+        setMimicCandidates(
+          mimics.filter(
+            (candidate) =>
+              candidate.status === 'CANDIDATE' ||
+              candidate.status === 'APPROVED',
+          ),
+        );
+      } catch {
+        setMimicCandidates([]);
+      }
+
+      try {
+        const revisions = await getDiagnosisEducationRevisions(
+          client,
+          diagnosisRegistryId,
+        );
+        applyRevisionHistory(revisions.revisions);
+      } catch (error) {
+        setRevisionHistory([]);
+        setRevisionHistoryError(
+          error instanceof Error ? error.message : 'Failed to load revision history.',
+        );
+        resetRevisionCompare();
+      }
+    } finally {
+      setWorkspaceLoading(false);
+      setWorkspaceSummaryLoading(false);
+      setTeachingUnitCoverageLoading(false);
+      setTeachingRulesLoading(false);
+      setEditorialBriefLoading(false);
+      setRevisionHistoryLoading(false);
+    }
   }
 
   async function runAction(config: {
@@ -209,7 +706,7 @@ export default function DiagnosisEducationPanel({
     generateInFlightRef.current = true;
     setPendingAction('generate');
     const confirmed = window.confirm(
-      `Generate an AI-assisted education draft for ${diagnosisLabel}? The draft will require review before learners can see it.`,
+      getGenerateConfirmationMessage(education, diagnosisLabel),
     );
     if (!confirmed) {
       generateInFlightRef.current = false;
@@ -220,13 +717,175 @@ export default function DiagnosisEducationPanel({
     try {
       await runAction({
         id: 'generate',
-        pending: 'Generating education draft...',
-        success: 'Education draft generated for review.',
+        pending: education
+          ? 'Regenerating education draft...'
+          : 'Generating education draft...',
+        success: 'New education draft version generated for review.',
         action: () => generateDiagnosisEducationDraft(client, diagnosisRegistryId),
       });
     } finally {
       generateInFlightRef.current = false;
     }
+  }
+
+  async function handleGenerateTargetedCase(payload: GenerateTargetedCasePayload) {
+    if (!diagnosisRegistryId || pendingAction !== null) {
+      return;
+    }
+
+    try {
+      setPendingAction('targeted-case');
+      showPending('Generating targeted case...');
+      const result = await generateTargetedDiagnosisCase(
+        client,
+        diagnosisRegistryId,
+        payload,
+      );
+      setGeneratedTargetedCase(result.generatedCase);
+      await refreshEducation();
+      showSuccess('Targeted case generated for review.');
+    } catch (error) {
+      showError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to generate targeted case.',
+      );
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function handleGenerateTeachingRuleCandidates() {
+    if (!diagnosisRegistryId || pendingAction !== null) {
+      return false;
+    }
+
+    return runAction({
+      id: 'teaching-rule-generate',
+      pending: 'Generating teaching rule candidates...',
+      success: 'Teaching rule candidates generated for review.',
+      action: () =>
+        generateDiagnosisTeachingRuleCandidates(client, diagnosisRegistryId),
+    });
+  }
+
+  async function handleSeedLegacyTeachingRules() {
+    if (!diagnosisRegistryId || pendingAction !== null) {
+      return false;
+    }
+
+    return runAction({
+      id: 'teaching-rule-seed',
+      pending: 'Seeding legacy teaching rules...',
+      success: 'Legacy teaching rules seeded for this diagnosis.',
+      action: () => seedLegacyDiagnosisTeachingRules(client, diagnosisRegistryId),
+    });
+  }
+
+  async function handleCreateTeachingRule(
+    payload: DiagnosisTeachingRuleWritePayload,
+  ) {
+    if (!diagnosisRegistryId || pendingAction !== null) {
+      return false;
+    }
+
+    return runAction({
+      id: 'teaching-rule-create',
+      pending: 'Creating teaching rule...',
+      success: 'Teaching rule created.',
+      action: () =>
+        createDiagnosisTeachingRule(client, diagnosisRegistryId, payload),
+    });
+  }
+
+  async function handleUpdateTeachingRule(
+    ruleId: string,
+    payload: DiagnosisTeachingRuleWritePayload,
+  ) {
+    if (pendingAction !== null) {
+      return false;
+    }
+
+    return runAction({
+      id: 'teaching-rule-update',
+      pending: 'Updating teaching rule...',
+      success: 'Teaching rule updated.',
+      action: () => updateDiagnosisTeachingRule(client, ruleId, payload),
+    });
+  }
+
+  async function handleReviewTeachingRule(
+    ruleId: string,
+    action: DiagnosisTeachingRuleReviewAction,
+  ) {
+    if (pendingAction !== null) {
+      return false;
+    }
+
+    return runAction({
+      id: `teaching-rule-${action}`,
+      pending: 'Updating teaching rule status...',
+      success: 'Teaching rule status updated.',
+      action: () => reviewDiagnosisTeachingRule(client, ruleId, action),
+    });
+  }
+
+  async function handleGenerateEditorialBrief() {
+    if (!diagnosisRegistryId || pendingAction !== null) {
+      return false;
+    }
+
+    return runAction({
+      id: 'editorial-brief-generate',
+      pending: 'Generating editorial brief...',
+      success: 'Editorial brief draft generated for review.',
+      action: () => generateDiagnosisEditorialBrief(client, diagnosisRegistryId),
+    });
+  }
+
+  async function handleCreateEditorialBrief(
+    payload: DiagnosisEditorialBriefWritePayload,
+  ) {
+    if (!diagnosisRegistryId || pendingAction !== null) {
+      return false;
+    }
+
+    return runAction({
+      id: 'editorial-brief-create',
+      pending: 'Creating editorial brief...',
+      success: 'Editorial brief created.',
+      action: () => createDiagnosisEditorialBrief(client, diagnosisRegistryId, payload),
+    });
+  }
+
+  async function handleUpdateEditorialBrief(
+    payload: DiagnosisEditorialBriefWritePayload,
+  ) {
+    if (!diagnosisRegistryId || pendingAction !== null) {
+      return false;
+    }
+
+    return runAction({
+      id: 'editorial-brief-update',
+      pending: 'Updating editorial brief...',
+      success: 'Editorial brief updated.',
+      action: () => updateDiagnosisEditorialBrief(client, diagnosisRegistryId, payload),
+    });
+  }
+
+  async function handleReviewEditorialBrief(
+    action: DiagnosisEditorialBriefReviewAction,
+  ) {
+    if (!diagnosisRegistryId || pendingAction !== null) {
+      return false;
+    }
+
+    return runAction({
+      id: `editorial-brief-${action}`,
+      pending: 'Updating editorial brief status...',
+      success: 'Editorial brief status updated.',
+      action: () => reviewDiagnosisEditorialBrief(client, diagnosisRegistryId, action),
+    });
   }
 
   async function handleSave() {
@@ -264,6 +923,29 @@ export default function DiagnosisEducationPanel({
           : 'Education review status updated.',
       action: () =>
         reviewDiagnosisEducationForAdmin(client, education.id, { status }),
+    });
+  }
+
+  async function handleRegenerateSection(section: EducationRegenerableSection) {
+    if (!diagnosisRegistryId || pendingAction !== null) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Regenerate only ${formatSectionActionLabel(section)} for ${diagnosisLabel}? All other education sections will be preserved and a new draft version will be created.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    await runAction({
+      id: `regenerate-${section}`,
+      pending: `Regenerating ${formatSectionActionLabel(section)}...`,
+      success: `${formatSectionActionLabel(section)} regenerated for review.`,
+      action: () =>
+        regenerateDiagnosisEducationSection(client, diagnosisRegistryId, {
+          section,
+        }),
     });
   }
 
@@ -388,19 +1070,102 @@ export default function DiagnosisEducationPanel({
               onCreateManually={() => setEditorOpen(true)}
               onGenerate={() => void handleGenerate()}
               generateDisabled={!canGenerate || pendingAction !== null}
+              generateLabel={generateLabel}
               pendingAction={pendingAction}
             />
 
             {isPublished ? (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                Published education cannot be overwritten by AI generation.
-                Archive or edit manually first.
+                Published education stays visible to learners while a regenerated
+                draft version is reviewed.
               </div>
             ) : null}
 
-            <QualityWarningsBox
-              warnings={qualityWarnings}
-              blockers={publishBlockers}
+            <DiagnosisWorkspaceSummaryCard
+              summary={workspaceSummary}
+              loading={workspaceSummaryLoading}
+              error={workspaceSummaryError}
+            />
+
+            <EditorialBriefCard
+              briefResponse={editorialBrief}
+              teachingRules={teachingRules}
+              loading={editorialBriefLoading}
+              error={editorialBriefError}
+              pendingAction={pendingAction}
+              onGenerate={() => void handleGenerateEditorialBrief()}
+              onCreate={(payload) => handleCreateEditorialBrief(payload)}
+              onUpdate={(payload) => handleUpdateEditorialBrief(payload)}
+              onReview={(action) => void handleReviewEditorialBrief(action)}
+            />
+
+            <TeachingRulesCard
+              rules={teachingRules}
+              loading={teachingRulesLoading}
+              error={teachingRulesError}
+              pendingAction={pendingAction}
+              onGenerateCandidates={() =>
+                void handleGenerateTeachingRuleCandidates()
+              }
+              onSeedLegacy={() => void handleSeedLegacyTeachingRules()}
+              onCreateRule={(payload) => handleCreateTeachingRule(payload)}
+              onUpdateRule={(ruleId, payload) =>
+                handleUpdateTeachingRule(ruleId, payload)
+              }
+              onReviewRule={(ruleId, action) =>
+                void handleReviewTeachingRule(ruleId, action)
+              }
+            />
+
+            <TeachingUnitCoverageCard
+              coverage={teachingUnitCoverage}
+              loading={teachingUnitCoverageLoading}
+              error={teachingUnitCoverageError}
+            />
+
+            <TargetedCaseGenerationCard
+              coverage={teachingUnitCoverage}
+              mimicCandidates={mimicCandidates}
+              disabled={!diagnosisRegistryId || pendingAction !== null}
+              pending={pendingAction === 'targeted-case'}
+              generatedCase={generatedTargetedCase}
+              onGenerate={(payload) => void handleGenerateTargetedCase(payload)}
+            />
+
+            <WorkspaceQualityCard
+              projection={workspaceProjection}
+              loading={workspaceLoading}
+              error={workspaceError}
+              legacyWarnings={qualityWarnings}
+              legacyBlockers={publishBlockers}
+              pendingAction={pendingAction}
+              onRegenerateSection={(section) =>
+                void handleRegenerateSection(section)
+              }
+            />
+
+            {!workspaceProjection ? (
+              <QualityWarningsBox
+                warnings={qualityWarnings}
+                blockers={publishBlockers}
+              />
+            ) : null}
+
+            <RevisionHistoryCard
+              revisions={revisionHistory}
+              loading={revisionHistoryLoading}
+              error={revisionHistoryError}
+            />
+
+            <RevisionCompareCard
+              revisions={revisionHistory}
+              selectedFromVersion={compareFromVersion}
+              selectedToVersion={compareToVersion}
+              comparison={revisionCompare}
+              loading={revisionCompareLoading}
+              error={revisionCompareError}
+              onFromVersionChange={setCompareFromVersion}
+              onToVersionChange={setCompareToVersion}
             />
 
             <EducationPreview preview={preview} />
@@ -481,6 +1246,7 @@ function HeaderState({
   education,
   diagnosisLabel,
   generateDisabled,
+  generateLabel,
   pendingAction,
   onCreateManually,
   onGenerate,
@@ -488,6 +1254,7 @@ function HeaderState({
   education: DiagnosisEducationRecord | null;
   diagnosisLabel: string;
   generateDisabled: boolean;
+  generateLabel: string;
   pendingAction: string | null;
   onCreateManually: () => void;
   onGenerate: () => void;
@@ -508,7 +1275,7 @@ function HeaderState({
             disabled={generateDisabled}
             className="rounded-xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {pendingAction === 'generate' ? 'Generating...' : 'Generate Draft'}
+            {pendingAction === 'generate' ? 'Generating...' : generateLabel}
           </button>
           <button
             type="button"
@@ -523,14 +1290,70 @@ function HeaderState({
   }
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-      <MetaTile label="Version" value={`v${education.version}`} />
-      <MetaTile label="Generated" value={formatDateLabel(education.generatedAt)} />
-      <MetaTile label="Reviewed" value={formatDateLabel(education.reviewedAt)} />
-      <MetaTile label="Published" value={formatDateLabel(education.publishedAt)} />
-      <MetaTile label="Updated" value={formatDateLabel(education.updatedAt)} />
+    <div className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <MetaTile label="Version" value={`v${education.version}`} />
+        <MetaTile label="Generated" value={formatDateLabel(education.generatedAt)} />
+        <MetaTile label="Reviewed" value={formatDateLabel(education.reviewedAt)} />
+        <MetaTile label="Published" value={formatDateLabel(education.publishedAt)} />
+        <MetaTile label="Updated" value={formatDateLabel(education.updatedAt)} />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={generateDisabled}
+          className="rounded-xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {pendingAction === 'generate' ? 'Generating...' : generateLabel}
+        </button>
+      </div>
     </div>
   );
+}
+
+function getGenerateActionLabel(
+  education: DiagnosisEducationRecord | null,
+): string {
+  if (!education) {
+    return 'Generate draft';
+  }
+
+  if (education.editorialStatus === 'PUBLISHED') {
+    return 'Regenerate new draft version';
+  }
+
+  return 'Regenerate draft';
+}
+
+function getGenerateConfirmationMessage(
+  education: DiagnosisEducationRecord | null,
+  diagnosisLabel: string,
+): string {
+  if (!education) {
+    return `Generate an AI-assisted education draft for ${diagnosisLabel}? The draft will require review before learners can see it.`;
+  }
+
+  if (education.editorialStatus === 'PUBLISHED') {
+    return `Generate a new AI-assisted draft version for ${diagnosisLabel}? The currently published version will stay visible to learners until the new draft is reviewed and published.`;
+  }
+
+  if (education.editorialStatus === 'APPROVED') {
+    return `Regenerate the approved education draft for ${diagnosisLabel}? This creates a new version for review and will replace the current editable draft.`;
+  }
+
+  return `Regenerate the AI-assisted education draft for ${diagnosisLabel}? This creates a new version and preserves the current content in revision history.`;
+}
+
+function formatSectionActionLabel(section: EducationRegenerableSection) {
+  const labels: Record<EducationRegenerableSection, string> = {
+    differentials: 'Differentials',
+    investigations: 'Investigations',
+    examPearls: 'Exam Pearls',
+    management: 'Management',
+  };
+
+  return labels[section];
 }
 
 function MetaTile({ label, value }: { label: string; value: string }) {
@@ -1247,6 +2070,20 @@ function stringField(record: Record<string, unknown>, key: string): string | nul
 
 function replaceAt<T>(items: T[], index: number, value: T): T[] {
   return items.map((item, itemIndex) => (itemIndex === index ? value : item));
+}
+
+function sortRevisionsNewestFirst(
+  revisions: DiagnosisEducationRevisionAnalysis[],
+) {
+  return [...revisions].sort((left, right) => {
+    if (right.version !== left.version) {
+      return right.version - left.version;
+    }
+
+    return (
+      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+    );
+  });
 }
 
 function qualityWarningCopy(warning: string): string {

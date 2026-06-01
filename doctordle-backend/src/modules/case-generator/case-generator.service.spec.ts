@@ -359,6 +359,34 @@ describe('CaseGeneratorService', () => {
       },
       diagnosisRegistry: {
         findFirst: jest.fn().mockResolvedValue(buildRegistryFindResult()),
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            legacyDiagnosisId: 'diagnosis-1',
+            displayLabel: 'Asthma',
+            canonicalName: 'asthma',
+            aliases: [{ term: 'Reactive airway disease' }],
+            specialty: 'Pulmonology',
+            category: 'Obstructive',
+            bodySystem: 'Respiratory',
+            difficultyBand: 'INTERMEDIATE',
+            _count: { cases: 0 },
+            cases: [],
+          },
+          {
+            id: '22222222-2222-4222-8222-222222222222',
+            legacyDiagnosisId: 'diagnosis-2',
+            displayLabel: 'Appendicitis',
+            canonicalName: 'appendicitis',
+            aliases: [],
+            specialty: 'General Surgery',
+            category: 'Inflammatory',
+            bodySystem: 'Gastrointestinal',
+            difficultyBand: 'BASIC',
+            _count: { cases: 0 },
+            cases: [],
+          },
+        ]),
       },
       $transaction: jest.fn(
         (handler: (transaction: TransactionMock) => unknown) => handler(tx),
@@ -450,12 +478,38 @@ describe('CaseGeneratorService', () => {
         },
       ),
     };
+    const generationContextBuilder = {
+      build: jest.fn().mockResolvedValue({
+        diagnosis: {
+          id: '11111111-1111-4111-8111-111111111111',
+          displayLabel: 'Asthma',
+          canonicalName: 'asthma',
+          aliases: ['Reactive airway disease'],
+        },
+        requiredTeachingUnits: [],
+        suggestedManifestations: [],
+        difficultyStrategy: {
+          targetDifficulty: 'medium',
+          revealCoreUnitByClue: 3,
+          avoidTooEarly: [],
+          allowAlternativeManifestations: true,
+        },
+        difficultyGuidance: {
+          baselineDifficulty: 'INTERMEDIATE',
+          targetDifficulty: 'medium',
+          targetSolveClue: null,
+          forbiddenEarlyClues: [],
+          keepAliveDifferentials: [],
+        },
+      }),
+    };
 
     const service = new CaseGeneratorService(
       prisma as never,
       caseValidationOrchestrator as never,
       diagnosisRegistryLinkService as never,
       generationPlannerService as never,
+      generationContextBuilder as never,
     );
 
     return {
@@ -464,6 +518,7 @@ describe('CaseGeneratorService', () => {
       caseValidationOrchestrator,
       diagnosisRegistryLinkService,
       generationPlannerService,
+      generationContextBuilder,
       service,
     };
   };
@@ -1337,6 +1392,178 @@ describe('CaseGeneratorService', () => {
         hasVitals: true,
         differentialCount: 3,
         qualityScore: 89,
+      }),
+    );
+  });
+
+  it('attaches teaching alignment metadata when generation context selects units', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    resetEnvCacheForTests();
+    const { service } = buildService();
+    const generatedCase = buildGeneratedCase();
+    const create = mockRepeatedGenerationCritique(
+      generatedCase,
+      buildCritique(),
+    );
+
+    Object.defineProperty(service, 'openaiClient', {
+      value: {
+        chat: {
+          completions: {
+            create,
+          },
+        },
+      },
+    });
+
+    const result = await service.generateCase({
+      difficulty: 'medium',
+      generationContext: {
+        diagnosis: {
+          id: 'registry-asthma',
+          displayLabel: 'Asthma',
+          canonicalName: 'asthma',
+          aliases: [],
+        },
+        requiredTeachingUnits: [
+          {
+            id: 'reversible_airflow_obstruction',
+            label: 'Reversible airflow obstruction',
+            category: 'investigation_concept',
+            importance: 'critical',
+            rationale: 'Bronchodilator response supports asthma.',
+            acceptableManifestations: [
+              'bronchodilator response',
+              'reversible airflow obstruction',
+            ],
+            appliesToEducation: true,
+            appliesToCaseGeneration: true,
+          },
+        ],
+        difficultyStrategy: {
+          targetDifficulty: 'medium',
+          revealCoreUnitByClue: 3,
+          avoidTooEarly: [],
+          allowAlternativeManifestations: true,
+        },
+        difficultyGuidance: {
+          baselineDifficulty: 'INTERMEDIATE',
+          targetDifficulty: 'medium',
+          targetSolveClue: null,
+          forbiddenEarlyClues: [],
+          keepAliveDifferentials: ['Vocal cord dysfunction'],
+        },
+      } as never,
+    });
+    const explanation = result.explanation as GeneratedCase['explanation'] & {
+      generationQuality?: {
+        teachingAlignment?: {
+          selectedUnits: Array<{ id: string; covered: boolean }>;
+          playability: { score: number; difficultyFit: string };
+          warnings: string[];
+        };
+      };
+    };
+
+    expect(explanation.generationQuality?.teachingAlignment).toEqual(
+      expect.objectContaining({
+        selectedUnits: [
+          expect.objectContaining({
+            id: 'reversible_airflow_obstruction',
+            covered: true,
+          }),
+        ],
+        playability: expect.objectContaining({
+          score: expect.any(Number),
+        }),
+      }),
+    );
+  });
+
+  it('persists targeted teaching unit and mimic metadata', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    resetEnvCacheForTests();
+    const { service } = buildService();
+    const generatedCase = buildGeneratedCase();
+    const create = mockRepeatedGenerationCritique(
+      generatedCase,
+      buildCritique(),
+    );
+
+    Object.defineProperty(service, 'openaiClient', {
+      value: {
+        chat: {
+          completions: {
+            create,
+          },
+        },
+      },
+    });
+
+    const result = await service.generateCase({
+      difficulty: 'medium',
+      targetedTeachingUnitIds: ['reversible_airflow_obstruction'],
+      targetedMimics: [
+        {
+          diagnosisRegistryId: '22222222-2222-4222-8222-222222222222',
+          diagnosis: 'Vocal cord dysfunction',
+        },
+      ],
+      clueRevealStrategy: 'late_discriminator',
+      generationContext: {
+        diagnosis: {
+          id: 'registry-asthma',
+          displayLabel: 'Asthma',
+          canonicalName: 'asthma',
+          aliases: [],
+        },
+        requiredTeachingUnits: [
+          {
+            id: 'reversible_airflow_obstruction',
+            label: 'Reversible airflow obstruction',
+            category: 'investigation_concept',
+            importance: 'critical',
+            rationale: 'Bronchodilator response supports asthma.',
+            acceptableManifestations: [
+              'bronchodilator response',
+              'reversible airflow obstruction',
+            ],
+            appliesToEducation: true,
+            appliesToCaseGeneration: true,
+          },
+        ],
+        difficultyStrategy: {
+          targetDifficulty: 'medium',
+          revealCoreUnitByClue: 3,
+          avoidTooEarly: [],
+          allowAlternativeManifestations: true,
+        },
+        difficultyGuidance: {
+          baselineDifficulty: 'INTERMEDIATE',
+          targetDifficulty: 'medium',
+          targetSolveClue: null,
+          forbiddenEarlyClues: [],
+          keepAliveDifferentials: ['Vocal cord dysfunction'],
+        },
+      } as never,
+    });
+    const explanation = result.explanation as GeneratedCase['explanation'] & {
+      generationQuality?: {
+        targetedGeneration?: {
+          teachingUnitIds: string[];
+          mimicDiagnosisIds: string[];
+          mimics: string[];
+          clueRevealStrategy: string;
+        };
+      };
+    };
+
+    expect(explanation.generationQuality?.targetedGeneration).toEqual(
+      expect.objectContaining({
+        teachingUnitIds: ['reversible_airflow_obstruction'],
+        mimicDiagnosisIds: ['22222222-2222-4222-8222-222222222222'],
+        mimics: ['Vocal cord dysfunction'],
+        clueRevealStrategy: 'late_discriminator',
       }),
     );
   });
@@ -2532,6 +2759,95 @@ describe('CaseGeneratorService', () => {
     expect(result.plannerDiagnostics[0].diagnosis?.displayLabel).toBe(
       'Asthma',
     );
+  });
+
+  it('generates a targeted registry-first case for one diagnosisRegistryId', async () => {
+    const { generationContextBuilder, generationPlannerService, service } =
+      buildService();
+    const saveCaseSpy = jest.spyOn(service, 'saveCaseForRegistryTarget');
+    const legacySaveSpy = jest.spyOn(service, 'saveCase');
+    const generateTargetSpy = jest
+      .spyOn(service, 'generateCaseForRegistryTarget')
+      .mockResolvedValueOnce(withGenerationQuality(buildGeneratedCase()));
+
+    const result = await service.generateBatch({
+      count: 1,
+      concurrency: 1,
+      diagnosisRegistryIds: ['11111111-1111-4111-8111-111111111111'],
+    });
+
+    expect(generationPlannerService.createShadowPlan).not.toHaveBeenCalled();
+    expect(generateTargetSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: expect.objectContaining({
+          diagnosisRegistryId: '11111111-1111-4111-8111-111111111111',
+          displayLabel: 'Asthma',
+        }),
+        generation: expect.objectContaining({
+          generationContext: expect.any(Object),
+        }),
+      }),
+      expect.any(Object),
+    );
+    expect(generationContextBuilder.build).toHaveBeenCalledWith({
+      diagnosisRegistryId: '11111111-1111-4111-8111-111111111111',
+      purpose: 'case',
+    });
+    expect(saveCaseSpy).toHaveBeenCalledTimes(1);
+    expect(legacySaveSpy).not.toHaveBeenCalled();
+    expect(result.created).toBe(1);
+    expect(result.plannerDiagnostics[0].diagnosis?.diagnosisRegistryId).toBe(
+      '11111111-1111-4111-8111-111111111111',
+    );
+  });
+
+  it('generates only supplied targeted diagnoses for multiple diagnosisRegistryIds', async () => {
+    const { service } = buildService();
+    jest
+      .spyOn(service, 'generateCaseForRegistryTarget')
+      .mockImplementation(async ({ target }) =>
+        withGenerationQuality(
+          buildGeneratedCase({
+            answer: target?.displayLabel ?? 'Asthma',
+            explanation: {
+              ...buildGeneratedCase().explanation,
+              diagnosis: target?.displayLabel ?? 'Asthma',
+            },
+          }),
+        ),
+      );
+
+    const result = await service.generateBatch({
+      count: 2,
+      concurrency: 1,
+      diagnosisRegistryIds: [
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ],
+    });
+
+    expect(result.created).toBe(2);
+    expect(
+      result.plannerDiagnostics.map(
+        (slot) => slot.diagnosis?.diagnosisRegistryId,
+      ),
+    ).toEqual([
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+    ]);
+  });
+
+  it('rejects inactive or nonexistent targeted diagnosisRegistryIds', async () => {
+    const { prisma, service } = buildService();
+    prisma.diagnosisRegistry.findMany.mockResolvedValueOnce([]);
+
+    await expect(
+      service.generateBatch({
+        count: 1,
+        concurrency: 1,
+        diagnosisRegistryIds: ['11111111-1111-4111-8111-111111111111'],
+      }),
+    ).rejects.toThrow('Diagnosis registry IDs are not active or do not exist');
   });
 
   it('keeps the legacy generator and save path when registryFirst is false', async () => {

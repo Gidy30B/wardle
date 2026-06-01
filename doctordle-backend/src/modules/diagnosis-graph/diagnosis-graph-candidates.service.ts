@@ -7,19 +7,26 @@ import {
   DiagnosisGraphCandidateStatus,
   DiagnosisGraphCandidateType,
   DiagnosisGraphFactStatus,
+  DiagnosisAliasKind,
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
+import { normalizeDiagnosisTerm } from '../diagnosis-registry/diagnosis-term-normalizer';
 import type { ListGraphCandidatesDto } from './dto/list-graph-candidates.dto';
 import type {
   MergeGraphCandidateDto,
   RejectGraphCandidateDto,
+  ResolveMimicCandidateDto,
 } from './dto/review-graph-candidate.dto';
 import { buildGraphDedupeKey } from './diagnosis-graph-normalization';
+import { DifferentialRegistryResolutionService } from './differential-registry-resolution.service';
 
 @Injectable()
 export class DiagnosisGraphCandidatesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly differentialRegistryResolutionService: DifferentialRegistryResolutionService,
+  ) {}
 
   async listCandidates(filters: ListGraphCandidatesDto) {
     return this.prisma.diagnosisGraphCandidate.findMany({
@@ -69,6 +76,57 @@ export class DiagnosisGraphCandidatesService {
     return candidate;
   }
 
+  async listUnresolvedMimicCandidates() {
+    const rows = await this.prisma.diagnosisGraphCandidate.findMany({
+      where: {
+        type: DiagnosisGraphCandidateType.MIMIC,
+        status: DiagnosisGraphCandidateStatus.CANDIDATE,
+        targetDiagnosisRegistryId: null,
+      },
+      orderBy: [{ createdAt: 'desc' }],
+      take: 200,
+      include: {
+        diagnosisRegistry: {
+          select: { id: true, displayLabel: true, canonicalName: true },
+        },
+        targetDiagnosisRegistry: {
+          select: { id: true, displayLabel: true },
+        },
+      },
+    });
+
+    return Promise.all(
+      rows.map(async (candidate) => {
+        const payloadSuggestions =
+          this.getResolutionSuggestions(candidate.payload) ?? [];
+        const resolution =
+          payloadSuggestions.length > 0
+            ? null
+            : await this.differentialRegistryResolutionService.resolve({
+                rawText: candidate.unresolvedTargetText ?? candidate.rawText,
+                contextDiagnosisRegistryId: candidate.diagnosisRegistryId,
+              });
+
+        return {
+          id: candidate.id,
+          rawText: candidate.rawText,
+          normalizedText: candidate.normalizedText,
+          contextDiagnosis: candidate.diagnosisRegistry,
+          diagnosisRegistryId: candidate.diagnosisRegistryId,
+          sourceType: candidate.sourceType,
+          sourceId: candidate.sourceId,
+          sourcePath: candidate.sourcePath,
+          payload: candidate.payload,
+          suggestions: payloadSuggestions.length
+            ? payloadSuggestions
+            : (resolution?.suggestions ?? []),
+          createdAt: candidate.createdAt,
+          status: candidate.status,
+        };
+      }),
+    );
+  }
+
   async approveCandidate(id: string, reviewerUserId: string) {
     return this.prisma.$transaction(async (tx) => {
       const candidate = await tx.diagnosisGraphCandidate.findUnique({
@@ -79,6 +137,7 @@ export class DiagnosisGraphCandidatesService {
         throw new NotFoundException('Diagnosis graph candidate not found');
       }
 
+      this.assertCanPromoteCandidate(candidate);
       const fact = await this.upsertFactForCandidate(tx, candidate);
       const reviewedAt = new Date();
       const updatedCandidate = await tx.diagnosisGraphCandidate.update({
@@ -183,6 +242,104 @@ export class DiagnosisGraphCandidatesService {
     });
   }
 
+  async resolveMimicCandidate(
+    id: string,
+    reviewerUserId: string,
+    input: ResolveMimicCandidateDto,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const candidate = await tx.diagnosisGraphCandidate.findUnique({
+        where: { id },
+      });
+
+      if (!candidate) {
+        throw new NotFoundException('Diagnosis graph candidate not found');
+      }
+
+      if (candidate.type !== DiagnosisGraphCandidateType.MIMIC) {
+        throw new BadRequestException('Only MIMIC candidates can be resolved');
+      }
+
+      if (input.action === 'reject') {
+        return tx.diagnosisGraphCandidate.update({
+          where: { id },
+          data: {
+            status: DiagnosisGraphCandidateStatus.REJECTED,
+            reviewedByUserId: reviewerUserId,
+            reviewedAt: new Date(),
+            reviewNote: input.reason?.trim() || 'Rejected during mimic resolution',
+          },
+        });
+      }
+
+      const targetDiagnosisRegistryId = input.targetDiagnosisRegistryId;
+      if (!targetDiagnosisRegistryId) {
+        throw new BadRequestException('targetDiagnosisRegistryId is required');
+      }
+
+      const target = await tx.diagnosisRegistry.findUnique({
+        where: { id: targetDiagnosisRegistryId },
+        select: {
+          id: true,
+          canonicalNormalized: true,
+          displayLabel: true,
+          active: true,
+        },
+      });
+
+      if (!target?.active) {
+        throw new BadRequestException('Target diagnosis registry entry is not active');
+      }
+
+      if (target.id === candidate.diagnosisRegistryId) {
+        throw new BadRequestException('Mimic target cannot be the source diagnosis');
+      }
+
+      if (input.action === 'add_alias_to_existing') {
+        await this.addSafeAcceptedAlias(tx, {
+          diagnosisRegistryId: target.id,
+          aliasText: input.aliasText ?? candidate.unresolvedTargetText ?? candidate.rawText,
+          targetCanonicalNormalized: target.canonicalNormalized,
+        });
+      }
+
+      const resolution =
+        await this.differentialRegistryResolutionService.resolve({
+          rawText: candidate.unresolvedTargetText ?? candidate.rawText,
+          contextDiagnosisRegistryId: candidate.diagnosisRegistryId,
+        });
+
+      return tx.diagnosisGraphCandidate.update({
+        where: { id },
+        data: {
+          targetDiagnosisRegistryId: target.id,
+          unresolvedTargetText: null,
+          payload: this.toJsonInput(
+            this.mergePayload(candidate.payload, {
+              registryResolution: {
+                rawText: resolution.rawText,
+                normalizedText: resolution.normalizedText,
+                status: 'resolved',
+                resolvedRegistryId: target.id,
+                resolvedDisplayLabel: target.displayLabel,
+                matchType:
+                  input.action === 'add_alias_to_existing'
+                    ? 'alias'
+                    : (resolution.matchType ?? 'canonical'),
+                confidence: Math.max(resolution.confidence, 0.95),
+                suggestions: resolution.suggestions,
+                resolvedByAction: input.action,
+              },
+            }),
+          ),
+          reviewedByUserId: reviewerUserId,
+          reviewedAt: new Date(),
+          reviewNote: input.reason?.trim() || null,
+        },
+      });
+    });
+  }
+
   async getActiveGraph(diagnosisRegistryId: string) {
     return this.prisma.diagnosisGraphFact.findMany({
       where: {
@@ -277,6 +434,94 @@ export class DiagnosisGraphCandidatesService {
     });
   }
 
+  private assertCanPromoteCandidate(candidate: {
+    type: DiagnosisGraphCandidateType;
+    targetDiagnosisRegistryId: string | null;
+  }): void {
+    if (
+      candidate.type === DiagnosisGraphCandidateType.MIMIC &&
+      !candidate.targetDiagnosisRegistryId
+    ) {
+      throw new BadRequestException(
+        'Resolve this mimic to a diagnosis registry entry before approval.',
+      );
+    }
+  }
+
+  private async addSafeAcceptedAlias(
+    tx: Prisma.TransactionClient,
+    input: {
+      diagnosisRegistryId: string;
+      aliasText: string;
+      targetCanonicalNormalized: string;
+    },
+  ): Promise<void> {
+    const alias = input.aliasText.replace(/\s+/g, ' ').trim();
+    const normalizedAlias = normalizeDiagnosisTerm(alias);
+    if (!alias || !normalizedAlias) {
+      throw new BadRequestException('Alias text is required');
+    }
+
+    if (normalizedAlias === input.targetCanonicalNormalized) {
+      return;
+    }
+
+    const canonicalConflict = await tx.diagnosisRegistry.findFirst({
+      where: {
+        id: { not: input.diagnosisRegistryId },
+        canonicalNormalized: normalizedAlias,
+      },
+      select: { id: true, displayLabel: true },
+    });
+
+    if (canonicalConflict) {
+      throw new BadRequestException(
+        `Alias "${alias}" conflicts with existing diagnosis "${canonicalConflict.displayLabel}"`,
+      );
+    }
+
+    const aliasConflict = await tx.diagnosisAlias.findFirst({
+      where: {
+        diagnosisRegistryId: { not: input.diagnosisRegistryId },
+        normalizedTerm: normalizedAlias,
+        active: true,
+        acceptedForMatch: true,
+      },
+      select: { id: true },
+    });
+
+    if (aliasConflict) {
+      throw new BadRequestException(`Accepted alias collision for "${alias}"`);
+    }
+
+    await tx.diagnosisAlias.upsert({
+      where: {
+        diagnosisRegistryId_normalizedTerm: {
+          diagnosisRegistryId: input.diagnosisRegistryId,
+          normalizedTerm: normalizedAlias,
+        },
+      },
+      update: {
+        term: alias,
+        kind: DiagnosisAliasKind.ACCEPTED,
+        acceptedForMatch: true,
+        rank: 10,
+        active: true,
+        source: 'editorial_mimic_resolution',
+      },
+      create: {
+        diagnosisRegistryId: input.diagnosisRegistryId,
+        term: alias,
+        normalizedTerm: normalizedAlias,
+        kind: DiagnosisAliasKind.ACCEPTED,
+        acceptedForMatch: true,
+        rank: 10,
+        active: true,
+        source: 'editorial_mimic_resolution',
+      },
+    });
+  }
+
   private buildProvenance(
     candidate: {
       id: string;
@@ -320,8 +565,36 @@ export class DiagnosisGraphCandidatesService {
   }
 
   private toJsonInput(
-    value: Prisma.JsonValue | null,
+    value: Prisma.JsonValue | Prisma.InputJsonValue | null,
   ): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput | undefined {
     return value === null ? undefined : (value as Prisma.InputJsonValue);
+  }
+
+  private mergePayload(
+    current: Prisma.JsonValue | null,
+    next: Prisma.InputJsonObject,
+  ): Prisma.InputJsonObject {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      return next;
+    }
+
+    return {
+      ...(current as Prisma.InputJsonObject),
+      ...next,
+    };
+  }
+
+  private getResolutionSuggestions(value: Prisma.JsonValue | null) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null;
+    }
+
+    const resolution = (value as Record<string, unknown>).registryResolution;
+    if (!resolution || typeof resolution !== 'object' || Array.isArray(resolution)) {
+      return null;
+    }
+
+    const suggestions = (resolution as Record<string, unknown>).suggestions;
+    return Array.isArray(suggestions) ? suggestions : null;
   }
 }

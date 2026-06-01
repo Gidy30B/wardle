@@ -41,6 +41,19 @@ describe('DiagnosisGraphCandidatesService', () => {
           Promise.resolve({ id: 'fact-1', ...data }),
         ),
       },
+      diagnosisRegistry: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'target-1',
+          canonicalNormalized: 'copd',
+          displayLabel: 'COPD',
+          active: true,
+        }),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+      diagnosisAlias: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        upsert: jest.fn().mockResolvedValue({ id: 'alias-1' }),
+      },
     };
     const prisma = {
       diagnosisGraphCandidate: {
@@ -61,7 +74,18 @@ describe('DiagnosisGraphCandidatesService', () => {
     return {
       prisma,
       tx,
-      service: new DiagnosisGraphCandidatesService(prisma as never),
+      service: new DiagnosisGraphCandidatesService(prisma as never, {
+        resolve: jest.fn().mockResolvedValue({
+          rawText: 'COPD',
+          normalizedText: 'copd',
+          status: 'resolved',
+          resolvedRegistryId: 'target-1',
+          resolvedDisplayLabel: 'COPD',
+          matchType: 'canonical',
+          confidence: 1,
+          suggestions: [],
+        }),
+      } as never),
     };
   };
 
@@ -191,5 +215,70 @@ describe('DiagnosisGraphCandidatesService', () => {
     const first = tx.diagnosisGraphFact.create.mock.calls[0][0].data.dedupeKey;
     const second = tx.diagnosisGraphFact.create.mock.calls[1][0].data.dedupeKey;
     expect(first).not.toBe(second);
+  });
+
+  it('blocks unresolved mimic promotion', async () => {
+    const { tx, service } = buildService();
+    tx.diagnosisGraphCandidate.findUnique.mockResolvedValue({
+      ...candidate,
+      type: DiagnosisGraphCandidateType.MIMIC,
+      unresolvedTargetText: 'Rare mimic text',
+    });
+
+    await expect(
+      service.approveCandidate('candidate-1', 'user-1'),
+    ).rejects.toThrow(
+      'Resolve this mimic to a diagnosis registry entry before approval.',
+    );
+    expect(tx.diagnosisGraphFact.create).not.toHaveBeenCalled();
+  });
+
+  it('resolves a mimic by linking an existing registry target', async () => {
+    const { tx, service } = buildService();
+    tx.diagnosisGraphCandidate.findUnique.mockResolvedValue({
+      ...candidate,
+      type: DiagnosisGraphCandidateType.MIMIC,
+      unresolvedTargetText: 'COPD',
+    });
+
+    await service.resolveMimicCandidate('candidate-1', 'user-1', {
+      action: 'link_existing',
+      targetDiagnosisRegistryId: 'target-1',
+    });
+
+    expect(tx.diagnosisGraphCandidate.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          targetDiagnosisRegistryId: 'target-1',
+          unresolvedTargetText: null,
+          reviewedByUserId: 'user-1',
+        }),
+      }),
+    );
+  });
+
+  it('adds a safe alias when resolving a mimic by alias', async () => {
+    const { tx, service } = buildService();
+    tx.diagnosisGraphCandidate.findUnique.mockResolvedValue({
+      ...candidate,
+      type: DiagnosisGraphCandidateType.MIMIC,
+      unresolvedTargetText: 'Chronic obstructive pulmonary disease',
+    });
+
+    await service.resolveMimicCandidate('candidate-1', 'user-1', {
+      action: 'add_alias_to_existing',
+      targetDiagnosisRegistryId: 'target-1',
+      aliasText: 'Chronic obstructive pulmonary disease',
+    });
+
+    expect(tx.diagnosisAlias.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          diagnosisRegistryId: 'target-1',
+          normalizedTerm: 'chronic obstructive pulmonary disease',
+          acceptedForMatch: true,
+        }),
+      }),
+    );
   });
 });

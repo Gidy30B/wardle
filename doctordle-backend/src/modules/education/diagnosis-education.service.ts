@@ -28,7 +28,10 @@ import type { UpsertDiagnosisEducationDto } from './dto/upsert-diagnosis-educati
 import {
   EducationDraftQualityValidator,
 } from './education-draft-quality-validator.service';
+import { EducationEditorialPatternsService } from './education-editorial-patterns.service';
 import { EducationKnowledgeRulesService } from './education-knowledge-rules.service';
+import { EducationSchemaContractService } from './education-schema-contract.service';
+import { DiagnosisCurriculumProviderService } from './diagnosis-curriculum-provider.service';
 
 type EducationJsonField =
   | 'summary'
@@ -421,10 +424,13 @@ export class DiagnosisEducationService {
     private readonly prisma: PrismaService,
     private readonly diagnosisGraphExtractionService?: DiagnosisGraphExtractionService,
     private readonly educationKnowledgeRulesService: EducationKnowledgeRulesService = new EducationKnowledgeRulesService(),
+    private readonly diagnosisCurriculumProviderService: DiagnosisCurriculumProviderService = new DiagnosisCurriculumProviderService(),
     private readonly educationDraftQualityValidator: EducationDraftQualityValidator = new EducationDraftQualityValidator(),
     private readonly generationContextBuilder: GenerationContextBuilder = new GenerationContextBuilder(
       new EditorialIntentProjectionService(prisma),
     ),
+    private readonly educationEditorialPatternsService: EducationEditorialPatternsService = new EducationEditorialPatternsService(),
+    private readonly educationSchemaContractService: EducationSchemaContractService = new EducationSchemaContractService(),
   ) {
     const env = getEnv();
     if (env.OPENAI_API_KEY) {
@@ -489,6 +495,27 @@ export class DiagnosisEducationService {
     });
 
     if (!education) {
+      const currentEducation =
+        await this.prisma.diagnosisEducation.findUnique({
+          where: { diagnosisRegistryId: input.diagnosisRegistryId },
+          include: {
+            diagnosisRegistry: { select: this.registrySelect() },
+            revisions: {
+              where: { editorialStatus: DiagnosisEducationStatus.PUBLISHED },
+              orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
+              take: 1,
+            },
+          },
+        });
+      const publishedRevision = currentEducation?.revisions[0];
+
+      if (currentEducation && publishedRevision) {
+        return this.toPlayerDtoFromPublishedRevision(
+          currentEducation,
+          publishedRevision,
+        );
+      }
+
       await this.logPlayerEducationMiss({
         reason: 'missing_published_education',
         userId: input.userId,
@@ -804,6 +831,16 @@ export class DiagnosisEducationService {
             orderBy: [{ acceptedForMatch: 'desc' }, { rank: 'asc' }],
             take: 20,
           },
+          cases: {
+            select: {
+              title: true,
+              clues: true,
+              explanation: true,
+              differentials: true,
+            },
+            orderBy: { date: 'desc' },
+            take: 3,
+          },
         },
       });
 
@@ -815,18 +852,18 @@ export class DiagnosisEducationService {
         where: { diagnosisRegistryId },
       });
 
-      if (existing?.editorialStatus === DiagnosisEducationStatus.PUBLISHED) {
-        throw new BadRequestException(
-          'Cannot generate over published education. Archive or create draft manually first.',
-        );
-      }
-
       const knowledgeGuidance =
         this.educationKnowledgeRulesService.getGuidance(registry);
+      const teachingRules =
+        await this.diagnosisCurriculumProviderService.getRules(registry);
       const generationContext = await this.generationContextBuilder.build({
         diagnosisRegistryId,
         purpose: 'education',
       });
+      const compactGenerationContext =
+        this.educationSchemaContractService.compactGenerationContext(
+          generationContext as unknown as Record<string, unknown>,
+        );
       const contextChars = JSON.stringify(generationContext).length;
       this.logger.log(
         JSON.stringify({
@@ -867,7 +904,9 @@ export class DiagnosisEducationService {
               'Each typed pearl must include id, type, title, content, and whyItMatters.',
               'Typed pearl content must be 18-45 words and no more than 2 sentences.',
               'Every whyItMatters line must name the probability shift, discriminator, management change, risk, or trap avoided.',
-              'Use the compact GenerationContext for expected signs, scores, investigations, mimics, pitfalls, and management anchors unless clinically irrelevant.',
+              'Follow schemaContract/editorialPatterns exactly: they use only schema-allowed fields.',
+              'Use compactGenerationContext for expected signs, scores, investigations, mimics, pitfalls, management anchors, and critical teaching units unless clinically irrelevant.',
+              'Cover every critical requiredTeachingUnit for education. Explain its rationale, discriminator, and operational implication; do not merely mention the term.',
               'Differentials must compare explicitly using language such as unlike, rather than, favors, argues against, or distinguishes.',
               'Recall prompts must test reasoning or discrimination, not trivia.',
               'Do not include drug doses, patient-specific advice, or unsupported guideline claims.',
@@ -898,18 +937,17 @@ export class DiagnosisEducationService {
                   'Avoid textbook introductions and generic urgency statements.',
                 ],
               },
-              generationContext,
+              compactGenerationContext,
+              exampleCases: this.toEducationExampleCaseSummaries(
+                this.asArray((registry as Record<string, unknown>).cases),
+                registry.displayLabel,
+              ),
+              schemaContract:
+                this.educationSchemaContractService.getPromptContract(),
+              editorialPatterns:
+                this.educationEditorialPatternsService.getPromptGuidance(),
               diagnosis: generationContext.diagnosis,
               diagnosisSpecificGuidance: {
-                expectedNamedSigns: generationContext.mustInclude,
-                expectedScoringSystems: generationContext.scoringSystems,
-                expectedInvestigations: generationContext.investigations,
-                expectedMimics: generationContext.mimics.map(
-                  (mimic) => mimic.diagnosis,
-                ),
-                expectedPitfalls: generationContext.pitfalls,
-                expectedManagementAnchors:
-                  generationContext.managementAnchors,
                 forbiddenGenericPatterns:
                   knowledgeGuidance?.forbiddenGenericPatterns.slice(0, 5) ??
                   [],
@@ -917,20 +955,6 @@ export class DiagnosisEducationService {
                   knowledgeGuidance?.atomicityGuidance.slice(0, 3) ?? [],
                 discriminatorStyle:
                   'Use unlike/rather than/favors/argues against/distinguishes.',
-              },
-              sectionContracts: {
-                differentials:
-                  'For each mimic, include whyConfused, keySeparator, and managementConsequence. Explain shared early features and the separator in comparative language.',
-                investigations:
-                  'For each test, include expectedFinding, interpretation, and a limitation or trap when relevant.',
-                examPearls:
-                  'For each exam pearl, include finding, mechanism, diagnosticImpact, and discriminator when possible. Do not list symptoms or labs as exam pearls.',
-                pitfalls:
-                  'For each pitfall, include trap, whyMissed, consequence, and saferHeuristic.',
-                management:
-                  'For each management anchor, include action, indication, rationale, and consequenceIfDelayed when meaningful.',
-                recallPrompts:
-                  'Include WHY_IT_MATTERS and DISTINGUISH prompts; add TRAP or NEXT_STEP style prompts when pitfalls or management anchors are central.',
               },
               constraints: [
                 'Return JSON object only.',
@@ -986,6 +1010,7 @@ export class DiagnosisEducationService {
       const draftQuality = this.educationDraftQualityValidator.validate({
         draft: validatedDraft,
         guidance: knowledgeGuidance,
+        teachingRules,
       });
       this.logger.log(
         JSON.stringify({
@@ -1014,6 +1039,10 @@ export class DiagnosisEducationService {
       }
 
       const education = await this.prisma.$transaction(async (tx) => {
+        if (existing?.editorialStatus === DiagnosisEducationStatus.PUBLISHED) {
+          await this.createRevisionIfMissing(tx, existing, userId);
+        }
+
         const saved = existing
           ? await tx.diagnosisEducation.update({
               where: { id: existing.id },
@@ -2373,6 +2402,25 @@ export class DiagnosisEducationService {
     });
   }
 
+  private async createRevisionIfMissing(
+    tx: Prisma.TransactionClient,
+    education: DiagnosisEducation,
+    userId: string,
+  ) {
+    const existingRevision = await tx.diagnosisEducationRevision.findUnique({
+      where: {
+        educationId_version: {
+          educationId: education.id,
+          version: education.version,
+        },
+      },
+    });
+
+    if (!existingRevision) {
+      await this.createRevision(tx, education, userId);
+    }
+  }
+
   private toRevisionSnapshot(
     education: DiagnosisEducation,
   ): Prisma.InputJsonObject {
@@ -2486,5 +2534,62 @@ export class DiagnosisEducationService {
       reviewedAt: education.reviewedAt?.toISOString() ?? null,
       version: education.version,
     };
+  }
+
+  private toPlayerDtoFromPublishedRevision(
+    education: DiagnosisEducationWithRegistry,
+    revision: {
+      version: number;
+      snapshot: Prisma.JsonValue;
+    },
+  ) {
+    const snapshot = this.isPlainObject(revision.snapshot)
+      ? revision.snapshot
+      : {};
+
+    return {
+      diagnosisRegistryId: education.diagnosisRegistryId,
+      title:
+        typeof snapshot.title === 'string' && snapshot.title.trim()
+          ? snapshot.title
+          : education.title,
+      diagnosis: education.diagnosisRegistry,
+      summary: this.snapshotValue(snapshot.summary, education.summary),
+      recognitionPattern: this.snapshotValue(
+        snapshot.clinicalPattern,
+        education.clinicalPattern,
+      ),
+      keySymptoms: this.snapshotValue(snapshot.keySymptoms, education.keySymptoms),
+      keySigns: this.snapshotValue(snapshot.keySigns, education.keySigns),
+      examPearls: this.snapshotValue(snapshot.examPearls, education.examPearls),
+      investigations: this.snapshotValue(
+        snapshot.investigations,
+        education.investigations,
+      ),
+      differentialDistinguishers: this.snapshotValue(
+        snapshot.differentials,
+        education.differentials,
+      ),
+      pitfalls: this.snapshotValue(snapshot.pitfalls, education.pitfalls),
+      managementOverview: this.snapshotValue(
+        snapshot.management,
+        education.management,
+      ),
+      complications: this.snapshotValue(
+        snapshot.complications,
+        education.complications,
+      ),
+      recallPrompts: this.snapshotValue(
+        snapshot.recallPrompts,
+        education.recallPrompts,
+      ),
+      reviewedAt:
+        typeof snapshot.reviewedAt === 'string' ? snapshot.reviewedAt : null,
+      version: revision.version,
+    };
+  }
+
+  private snapshotValue<T>(value: unknown, fallback: T): Prisma.JsonValue | T {
+    return value === undefined ? fallback : (value as Prisma.JsonValue);
   }
 }

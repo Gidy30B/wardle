@@ -1,5 +1,6 @@
 import { GenerationContextBuilder } from './generation-context-builder.service';
 import type { EditorialIntentProjection } from './editorial-intent-projection.service';
+import { EducationTeachingRulesService } from '../education/education-teaching-rules.service';
 
 function buildProjection(
   overrides: Partial<EditorialIntentProjection> = {},
@@ -62,9 +63,17 @@ function buildService(projection = buildProjection()) {
   const projectionService = {
     build: jest.fn().mockResolvedValue(projection),
   };
+  const editorialBriefService = {
+    getApprovedBriefContext: jest.fn().mockResolvedValue(null),
+  };
   return {
     projectionService,
-    service: new GenerationContextBuilder(projectionService as never),
+    editorialBriefService,
+    service: new GenerationContextBuilder(
+      projectionService as never,
+      undefined,
+      editorialBriefService as never,
+    ),
   };
 }
 
@@ -110,6 +119,9 @@ describe('GenerationContextBuilder', () => {
 
   it('includes required rule pack guidance', async () => {
     const { service } = buildService();
+    const legacyRules = new EducationTeachingRulesService().getRules({
+      canonicalName: 'appendicitis',
+    });
 
     const context = await service.build({
       diagnosisRegistryId: 'registry-1',
@@ -120,6 +132,25 @@ describe('GenerationContextBuilder', () => {
     expect(context.investigations).toContain('CT abdomen');
     expect(context.pitfalls).toContain('Normal early WBC');
     expect(context.managementAnchors).toContain('surgical consultation');
+    expect(context.requiredTeachingUnits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'peritoneal_irritation',
+          label: 'Peritoneal irritation',
+        }),
+      ]),
+    );
+    expect(context.suggestedManifestations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          teachingUnitId: 'peritoneal_irritation',
+          manifestation: 'Rovsing sign',
+        }),
+      ]),
+    );
+    expect(context.requiredTeachingUnits.map((unit) => unit.id)).toEqual(
+      legacyRules?.teachingUnits.map((unit) => unit.id),
+    );
   });
 
   it('includes published education concepts when present', async () => {
@@ -136,6 +167,51 @@ describe('GenerationContextBuilder', () => {
 
     expect(context.learningGoals).toContain('Education-derived learning goal');
     expect(context.sourceSummary.hasEducation).toBe(true);
+  });
+
+  it('includes approved editorial brief context when present', async () => {
+    const { service, editorialBriefService } = buildService();
+    editorialBriefService.getApprovedBriefContext.mockResolvedValueOnce({
+      id: 'brief-1',
+      status: 'APPROVED',
+      version: 2,
+      summary: 'Teach appendicitis with staged mimic persistence.',
+      learningGoals: ['Use staged RLQ reasoning.'],
+      requiredTeachingRuleIds: ['rule-1'],
+      requiredMimicIds: ['mimic-1'],
+      requiredPitfalls: ['Do not overtrust normal WBC.'],
+      keyInvestigations: ['CT interpretation'],
+      managementAnchors: ['early surgical consult'],
+      difficultyGuidance: ['Avoid early CT reveal.'],
+      caseGenerationGuidance: ['Preserve gastroenteritis early.'],
+      educationGuidance: ['Emphasize discriminators.'],
+      graphGuidance: ['Promote mechanism facts.'],
+    });
+
+    const context = await service.build({
+      diagnosisRegistryId: 'registry-1',
+      purpose: 'case',
+    });
+
+    expect(context.editorialBrief?.id).toBe('brief-1');
+    expect(context.learningGoals).toContain('Use staged RLQ reasoning.');
+    expect(context.difficultyGuidance.forbiddenEarlyClues).toContain(
+      'Avoid early CT reveal.',
+    );
+    expect(context.sourceSummary.hasEditorialBrief).toBe(true);
+  });
+
+  it('excludes inactive editorial brief context', async () => {
+    const { service, editorialBriefService } = buildService();
+    editorialBriefService.getApprovedBriefContext.mockResolvedValueOnce(null);
+
+    const context = await service.build({
+      diagnosisRegistryId: 'registry-1',
+      purpose: 'education',
+    });
+
+    expect(context.editorialBrief).toBeNull();
+    expect(context.sourceSummary.hasEditorialBrief).toBe(false);
   });
 
   it('includes case-derived mimics and discriminators when present', async () => {
@@ -171,5 +247,78 @@ describe('GenerationContextBuilder', () => {
     });
 
     expect(second).toEqual(first);
+  });
+
+  it('includes DKA concept-guided generation units and manifestations', async () => {
+    const { service } = buildService(
+      buildProjection({
+        diagnosis: {
+          ...buildProjection().diagnosis,
+          displayLabel: 'Diabetic ketoacidosis',
+          canonicalName: 'diabetic ketoacidosis',
+          aliases: ['DKA'],
+        },
+      }),
+    );
+
+    const context = await service.build({
+      diagnosisRegistryId: 'registry-1',
+      purpose: 'education',
+    });
+
+    expect(context.requiredTeachingUnits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'potassium_before_insulin',
+          importance: 'critical',
+        }),
+        expect.objectContaining({
+          id: 'metabolic_acidosis_compensation',
+        }),
+      ]),
+    );
+    expect(context.suggestedManifestations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          manifestation: 'deep labored breathing',
+        }),
+      ]),
+    );
+  });
+
+  it('uses hard difficulty to delay giveaway manifestations in case context', async () => {
+    const { service } = buildService(
+      buildProjection({
+        diagnosis: {
+          ...buildProjection().diagnosis,
+          displayLabel: 'Diabetic ketoacidosis',
+          canonicalName: 'diabetic ketoacidosis',
+          difficultyBand: 'ADVANCED',
+          aliases: ['DKA'],
+        },
+        difficultyGuidance: {
+          baselineDifficulty: 'ADVANCED',
+          targetDifficulty: 'hard',
+          targetSolveClue: null,
+          forbiddenEarlyClues: ['ketones and acidosis together'],
+          keepAliveDifferentials: ['sepsis', 'gastroenteritis'],
+        },
+      }),
+    );
+
+    const context = await service.build({
+      diagnosisRegistryId: 'registry-1',
+      purpose: 'case',
+    });
+
+    expect(context.difficultyStrategy.targetDifficulty).toBe('hard');
+    expect(context.difficultyStrategy.revealCoreUnitByClue).toBe(4);
+    expect(context.difficultyStrategy.avoidTooEarly).toEqual(
+      expect.arrayContaining([
+        'diabetic ketoacidosis',
+        'DKA',
+        'ketones and acidosis together',
+      ]),
+    );
   });
 });

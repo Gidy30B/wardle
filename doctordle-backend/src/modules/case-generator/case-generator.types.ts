@@ -89,6 +89,16 @@ export type GenerateCaseInput = {
   batchId?: string;
   sequence?: number;
   generationContext?: GenerationContext;
+  targetedTeachingUnitIds?: string[];
+  targetedMimics?: Array<{
+    diagnosisRegistryId?: string;
+    diagnosis: string;
+  }>;
+  clueRevealStrategy?:
+    | 'classic'
+    | 'early_anchor'
+    | 'late_discriminator'
+    | 'progressive_narrowing';
 };
 
 export type SaveGeneratedCaseOptions = {
@@ -105,6 +115,15 @@ export type GenerateBatchOptions = {
   difficulty?: string;
   concurrency?: number;
   registryFirst?: boolean;
+  diagnosisRegistryIds?: string[];
+  targetedCase?: {
+    teachingUnitIds?: string[];
+    mimics?: Array<{
+      diagnosisRegistryId?: string;
+      diagnosis: string;
+    }>;
+    clueRevealStrategy?: GenerateCaseInput['clueRevealStrategy'];
+  };
 };
 
 export type CaseGenerationFailureCategory =

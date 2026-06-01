@@ -9,6 +9,22 @@ import type {
   CreateDiagnosisRegistryPayload,
   CreateDiagnosisRegistryResult,
   DashboardPayload,
+  DiagnosisEditorialBrief,
+  DiagnosisEditorialWorkspace,
+  DiagnosisEditorialBriefResponse,
+  DiagnosisEditorialBriefReviewAction,
+  DiagnosisEditorialBriefWritePayload,
+  DiagnosisTeachingRule,
+  DiagnosisTeachingRuleGenerateResult,
+  DiagnosisTeachingRuleReviewAction,
+  DiagnosisTeachingRulesResponse,
+  DiagnosisTeachingRuleSeedResult,
+  DiagnosisTeachingRuleWritePayload,
+  DiagnosisWorkspaceProjection,
+  DiagnosisWorkspaceQualitySummary,
+  DiagnosisEducationRevisionAnalysis,
+  DiagnosisEducationRevisionCompareResult,
+  DiagnosisEducationRevisionListResponse,
   DiagnosisRegistrySearchItem,
   EditorialCaseDetail,
   EditorialCaseRevision,
@@ -17,6 +33,8 @@ import type {
   EditorialStatusSummary,
   GenerateCasesPayload,
   GenerateCasesResult,
+  GenerateTargetedCasePayload,
+  GenerateTargetedCaseResult,
   LinkCaseDiagnosisPayload,
   MarkCaseReadyToPublishResult,
   PublishResultsSummary,
@@ -26,9 +44,13 @@ import type {
   StartCaseReviewResult,
   SubmitCaseReviewPayload,
   SubmitCaseReviewResult,
+  TeachingUnitCoverageMap,
   ReviewDiagnosisEducationPayload,
+  RegenerateEducationSectionPayload,
   RejectDiagnosisGraphCandidatePayload,
   MergeDiagnosisGraphCandidatePayload,
+  ResolveMimicCandidatePayload,
+  UnresolvedMimicCandidate,
   UpdateCaseDiagnosisPayload,
   UpsertDiagnosisEducationPayload,
   ValidationOutcomeSummary,
@@ -68,6 +90,12 @@ export function getDiagnosisGraphCandidates(
   );
 }
 
+export function getUnresolvedMimicCandidates(client: ApiClient) {
+  return client.get<UnresolvedMimicCandidate[]>(
+    '/admin/diagnosis-graph/candidates/unresolved-mimics',
+  );
+}
+
 export function approveDiagnosisGraphCandidate(client: ApiClient, id: string) {
   return client.post(`/admin/diagnosis-graph/candidates/${id}/approve`);
 }
@@ -86,6 +114,17 @@ export function mergeDiagnosisGraphCandidate(
   payload: MergeDiagnosisGraphCandidatePayload,
 ) {
   return client.post(`/admin/diagnosis-graph/candidates/${id}/merge`, payload);
+}
+
+export function resolveMimicCandidate(
+  client: ApiClient,
+  id: string,
+  payload: ResolveMimicCandidatePayload,
+) {
+  return client.post(
+    `/admin/diagnosis-graph/candidates/${id}/resolve-mimic`,
+    payload,
+  );
 }
 
 export function fetchAdminViewer(client: ApiClient) {
@@ -166,6 +205,197 @@ export function getDiagnosisEducationForAdmin(
   );
 }
 
+export function getDiagnosisWorkspaceProjection(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.get<DiagnosisWorkspaceProjection>(
+    `/admin/education/diagnoses/${diagnosisRegistryId}/workspace`,
+  );
+}
+
+export function getDiagnosisWorkspaceQualitySummary(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.get<DiagnosisWorkspaceQualitySummary>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}`,
+  );
+}
+
+export function getDiagnosisEditorialWorkspace(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.get<DiagnosisEditorialWorkspace>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/full`,
+  );
+}
+
+export function getDiagnosisTeachingUnitCoverage(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.get<TeachingUnitCoverageMap>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/teaching-units`,
+  );
+}
+
+export function getDiagnosisEditorialBrief(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.get<DiagnosisEditorialBriefResponse>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/editorial-brief`,
+  );
+}
+
+export function generateDiagnosisEditorialBrief(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.post<DiagnosisEditorialBrief>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/editorial-brief/generate`,
+  );
+}
+
+export function createDiagnosisEditorialBrief(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  payload: DiagnosisEditorialBriefWritePayload,
+) {
+  return client.post<DiagnosisEditorialBrief>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/editorial-brief`,
+    payload,
+  );
+}
+
+export function updateDiagnosisEditorialBrief(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  payload: DiagnosisEditorialBriefWritePayload,
+) {
+  return client.patch<DiagnosisEditorialBrief>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/editorial-brief`,
+    payload,
+  );
+}
+
+export function reviewDiagnosisEditorialBrief(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  action: DiagnosisEditorialBriefReviewAction,
+) {
+  return client.post<DiagnosisEditorialBrief>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/editorial-brief/review`,
+    { action },
+  );
+}
+
+export function generateTargetedDiagnosisCase(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  payload: GenerateTargetedCasePayload,
+) {
+  return client.post<GenerateTargetedCaseResult>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/generate-case`,
+    payload,
+  );
+}
+
+export function getDiagnosisTeachingRules(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.get<DiagnosisTeachingRulesResponse>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/teaching-rules`,
+  );
+}
+
+export function createDiagnosisTeachingRule(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  payload: DiagnosisTeachingRuleWritePayload,
+) {
+  return client.post<DiagnosisTeachingRule>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/teaching-rules`,
+    payload,
+  );
+}
+
+export function generateDiagnosisTeachingRuleCandidates(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.post<DiagnosisTeachingRuleGenerateResult>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/teaching-rules/generate`,
+  );
+}
+
+export function seedLegacyDiagnosisTeachingRules(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.post<DiagnosisTeachingRuleSeedResult>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/teaching-rules/seed-legacy`,
+  );
+}
+
+export function updateDiagnosisTeachingRule(
+  client: ApiClient,
+  ruleId: string,
+  payload: DiagnosisTeachingRuleWritePayload,
+) {
+  return client.patch<DiagnosisTeachingRule>(
+    `/admin/teaching-rules/${ruleId}`,
+    payload,
+  );
+}
+
+export function reviewDiagnosisTeachingRule(
+  client: ApiClient,
+  ruleId: string,
+  action: DiagnosisTeachingRuleReviewAction,
+) {
+  return client.post<DiagnosisTeachingRule>(
+    `/admin/teaching-rules/${ruleId}/review`,
+    { action },
+  );
+}
+
+export function getDiagnosisEducationRevisions(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.get<DiagnosisEducationRevisionListResponse>(
+    `/admin/education/diagnoses/${diagnosisRegistryId}/revisions`,
+  );
+}
+
+export function getDiagnosisEducationRevision(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  version: number,
+) {
+  return client.get<DiagnosisEducationRevisionAnalysis>(
+    `/admin/education/diagnoses/${diagnosisRegistryId}/revisions/${version}`,
+  );
+}
+
+export function compareDiagnosisEducationRevisions(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  v1: number,
+  v2: number,
+) {
+  return client.get<DiagnosisEducationRevisionCompareResult>(
+    withQuery(
+      `/admin/education/diagnoses/${diagnosisRegistryId}/revisions/compare`,
+      { v1, v2 },
+    ),
+  );
+}
+
 export function createDiagnosisEducationForAdmin(
   client: ApiClient,
   diagnosisRegistryId: string,
@@ -183,6 +413,17 @@ export function generateDiagnosisEducationDraft(
 ) {
   return client.post(
     `/admin/education/diagnoses/${diagnosisRegistryId}/generate`,
+  );
+}
+
+export function regenerateDiagnosisEducationSection(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  payload: RegenerateEducationSectionPayload,
+) {
+  return client.post(
+    `/admin/education/diagnoses/${diagnosisRegistryId}/regenerate-section`,
+    payload,
   );
 }
 

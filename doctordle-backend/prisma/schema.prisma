@@ -282,6 +282,8 @@ model DiagnosisRegistry {
   targetedGraphCandidates DiagnosisGraphCandidate[] @relation("DiagnosisGraphCandidateTargetDiagnosis")
   graphFacts            DiagnosisGraphFact[]      @relation("DiagnosisGraphFactDiagnosis")
   targetedGraphFacts    DiagnosisGraphFact[]      @relation("DiagnosisGraphFactTargetDiagnosis")
+  teachingRules         DiagnosisTeachingRule[]
+  editorialBrief        DiagnosisEditorialBrief?
   selectedAttempts      Attempt[]                 @relation("AttemptSelectedDiagnosisRegistry")
   strictMatchedAttempts Attempt[]                 @relation("AttemptStrictMatchedDiagnosisRegistry")
 
@@ -295,6 +297,59 @@ model DiagnosisRegistry {
   @@index([difficultyBand])
   @@index([rarityBand])
   @@index([clinicalSetting])
+}
+
+model DiagnosisTeachingRule {
+  id                         String            @id @default(uuid())
+  diagnosisRegistryId        String
+  stableKey                  String
+  title                      String
+  category                   String
+  importance                 String
+  rationale                  String?
+  acceptableManifestations   Json?
+  requiredDifferentials      Json?
+  expectedEvidence           Json?
+  difficultyHints            Json?
+  avoidTooEarly              Boolean           @default(false)
+  appliesToEducation         Boolean           @default(true)
+  appliesToCaseGeneration    Boolean           @default(true)
+  appliesToGraph             Boolean           @default(false)
+  status                     String
+  source                     String
+  version                    Int               @default(1)
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+  diagnosisRegistry          DiagnosisRegistry @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+
+  @@unique([diagnosisRegistryId, stableKey])
+  @@index([diagnosisRegistryId])
+  @@index([status])
+  @@index([category])
+}
+
+model DiagnosisEditorialBrief {
+  id                      String            @id @default(uuid())
+  diagnosisRegistryId     String            @unique
+  summary                 String
+  learningGoals           Json
+  requiredTeachingRuleIds Json
+  requiredMimicIds        Json?
+  requiredPitfalls        Json?
+  keyInvestigations       Json?
+  managementAnchors       Json?
+  difficultyGuidance      Json?
+  caseGenerationGuidance  Json?
+  educationGuidance       Json?
+  graphGuidance           Json?
+  status                  String
+  version                 Int               @default(1)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  diagnosisRegistry       DiagnosisRegistry @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([diagnosisRegistryId])
 }
 
 model DiagnosisEducation {

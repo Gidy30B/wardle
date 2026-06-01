@@ -3,16 +3,21 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   approveDiagnosisGraphCandidate,
   getDiagnosisGraphCandidates,
+  getUnresolvedMimicCandidates,
   mergeDiagnosisGraphCandidate,
   rejectDiagnosisGraphCandidate,
+  resolveMimicCandidate,
   type DiagnosisGraphCandidate,
+  type DiagnosisGraphResolutionSuggestion,
   type DiagnosisGraphCandidateStatus,
   type DiagnosisGraphCandidateType,
   type DiagnosisGraphSourceType,
+  type UnresolvedMimicCandidate,
 } from '../../api/admin';
 import { createApiClient } from '../../api/client';
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
+import { useConsoleAccess } from '../../hooks/useConsoleAccess';
 
 const typeOptions: DiagnosisGraphCandidateType[] = [
   'FINDING',
@@ -44,10 +49,18 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function isUnresolvedMimic(candidate: DiagnosisGraphCandidate) {
+  return candidate.type === 'MIMIC' && !candidate.targetDiagnosisRegistryId;
+}
+
 export default function DiagnosisGraphCandidatesPage() {
   const { getToken } = useAuth();
+  const access = useConsoleAccess();
   const client = useMemo(() => createApiClient(getToken), [getToken]);
   const [rows, setRows] = useState<DiagnosisGraphCandidate[]>([]);
+  const [unresolvedMimics, setUnresolvedMimics] = useState<
+    UnresolvedMimicCandidate[]
+  >([]);
   const [diagnosisRegistryId, setDiagnosisRegistryId] = useState('');
   const [type, setType] = useState<DiagnosisGraphCandidateType | ''>('');
   const [status, setStatus] = useState<DiagnosisGraphCandidateStatus | ''>(
@@ -58,18 +71,33 @@ export default function DiagnosisGraphCandidatesPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [resolvingCandidate, setResolvingCandidate] =
+    useState<DiagnosisGraphCandidate | null>(null);
+  const [resolveTargetId, setResolveTargetId] = useState('');
+  const [resolveAliasText, setResolveAliasText] = useState('');
+  const [resolveReason, setResolveReason] = useState('');
+  const canReviewCandidates = access.canPublishEditorial;
+  const seniorDisabledReason = 'Requires senior editor';
+  const unresolvedById = useMemo(
+    () => new Map(unresolvedMimics.map((candidate) => [candidate.id, candidate])),
+    [unresolvedMimics],
+  );
 
   async function load() {
     try {
       setLoading(true);
       setError(null);
-      const data = await getDiagnosisGraphCandidates(client, {
-        diagnosisRegistryId: diagnosisRegistryId || undefined,
-        type: type || undefined,
-        status: status || undefined,
-        sourceType: sourceType || undefined,
-      });
+      const [data, unresolved] = await Promise.all([
+        getDiagnosisGraphCandidates(client, {
+          diagnosisRegistryId: diagnosisRegistryId || undefined,
+          type: type || undefined,
+          status: status || undefined,
+          sourceType: sourceType || undefined,
+        }),
+        getUnresolvedMimicCandidates(client),
+      ]);
       setRows(data);
+      setUnresolvedMimics(unresolved);
     } catch (loadError) {
       setError(
         loadError instanceof Error
@@ -107,6 +135,11 @@ export default function DiagnosisGraphCandidatesPage() {
   }
 
   function rejectCandidate(candidate: DiagnosisGraphCandidate) {
+    if (!canReviewCandidates) {
+      setActionError(seniorDisabledReason);
+      return;
+    }
+
     const note = window.prompt('Reject note', candidate.reviewNote ?? '');
     if (note === null) {
       return;
@@ -118,6 +151,11 @@ export default function DiagnosisGraphCandidatesPage() {
   }
 
   function mergeCandidate(candidate: DiagnosisGraphCandidate) {
+    if (!canReviewCandidates) {
+      setActionError(seniorDisabledReason);
+      return;
+    }
+
     const target = window.prompt(
       'Target candidate ID or fact ID. Prefix fact IDs with fact:',
     );
@@ -134,6 +172,70 @@ export default function DiagnosisGraphCandidatesPage() {
           : { targetCandidateId: trimmed }),
         note,
       }),
+    );
+  }
+
+  function openResolve(candidate: DiagnosisGraphCandidate) {
+    if (!canReviewCandidates) {
+      setActionError(seniorDisabledReason);
+      return;
+    }
+
+    const firstSuggestion = unresolvedById.get(candidate.id)?.suggestions[0];
+    setResolvingCandidate(candidate);
+    setResolveTargetId(firstSuggestion?.diagnosisRegistryId ?? '');
+    setResolveAliasText(candidate.unresolvedTargetText ?? candidate.rawText);
+    setResolveReason('');
+  }
+
+  async function submitResolve(action: 'link_existing' | 'add_alias_to_existing') {
+    if (!resolvingCandidate) {
+      return;
+    }
+
+    await runAction(resolvingCandidate.id, () =>
+      resolveMimicCandidate(client, resolvingCandidate.id, {
+        action,
+        targetDiagnosisRegistryId: resolveTargetId.trim(),
+        aliasText:
+          action === 'add_alias_to_existing'
+            ? resolveAliasText.trim()
+            : undefined,
+        reason: resolveReason.trim() || undefined,
+      }),
+    );
+    setResolvingCandidate(null);
+  }
+
+  async function rejectResolvingCandidate() {
+    if (!resolvingCandidate) {
+      return;
+    }
+
+    await runAction(resolvingCandidate.id, () =>
+      resolveMimicCandidate(client, resolvingCandidate.id, {
+        action: 'reject',
+        reason: resolveReason.trim() || undefined,
+      }),
+    );
+    setResolvingCandidate(null);
+  }
+
+  const resolvingSuggestions: DiagnosisGraphResolutionSuggestion[] =
+    resolvingCandidate
+      ? (unresolvedById.get(resolvingCandidate.id)?.suggestions ?? [])
+      : [];
+
+  if (access.status === 'loading') {
+    return <LoadingState title="Checking editorial access" />;
+  }
+
+  if (!access.canAccessEditorial) {
+    return (
+      <ErrorState
+        title="Editorial access required"
+        message="Graph candidate review is available to editor, senior_editor, and admin roles."
+      />
     );
   }
 
@@ -212,6 +314,18 @@ export default function DiagnosisGraphCandidatesPage() {
       </section>
 
       {actionError ? <ErrorState message={actionError} /> : null}
+      {unresolvedMimics.length ? (
+        <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="font-semibold">
+            {unresolvedMimics.length} unresolved MIMIC candidate
+            {unresolvedMimics.length === 1 ? '' : 's'}
+          </div>
+          <div className="mt-1">
+            Resolve registry identity before approval so text-only differentials do
+            not become graph facts.
+          </div>
+        </section>
+      ) : null}
       {loading ? <LoadingState title="Loading graph candidates" /> : null}
       {error ? <ErrorState message={error} /> : null}
 
@@ -233,14 +347,25 @@ export default function DiagnosisGraphCandidatesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map((candidate) => (
+                {rows.map((candidate) => {
+                  const unresolvedMimic = isUnresolvedMimic(candidate);
+                  const approveDisabled =
+                    busyId === candidate.id ||
+                    !canReviewCandidates ||
+                    unresolvedMimic;
+                  return (
                   <tr key={candidate.id} className="align-top">
                     <td className="px-4 py-3 text-slate-700">
                       {candidate.diagnosisRegistry?.displayLabel ??
                         candidate.diagnosisRegistryId}
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-900">
-                      {candidate.type}
+                      <div>{candidate.type}</div>
+                      {unresolvedMimic ? (
+                        <div className="mt-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                          Unresolved registry
+                        </div>
+                      ) : null}
                     </td>
                     <td className="max-w-md px-4 py-3 text-slate-700">
                       {candidate.rawText}
@@ -265,19 +390,42 @@ export default function DiagnosisGraphCandidatesPage() {
                     <td className="space-y-2 px-4 py-3">
                       <button
                         type="button"
-                        disabled={busyId === candidate.id}
+                        disabled={approveDisabled}
+                        title={
+                          unresolvedMimic
+                            ? 'Resolve registry identity before approval.'
+                            : !canReviewCandidates
+                              ? seniorDisabledReason
+                              : undefined
+                        }
                         onClick={() =>
-                          void runAction(candidate.id, () =>
-                            approveDiagnosisGraphCandidate(client, candidate.id),
-                          )
+                          canReviewCandidates
+                            ? void runAction(candidate.id, () =>
+                                approveDiagnosisGraphCandidate(client, candidate.id),
+                              )
+                            : setActionError(seniorDisabledReason)
                         }
                         className="block rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 disabled:opacity-50"
                       >
                         Approve
                       </button>
+                      {unresolvedMimic ? (
+                        <button
+                          type="button"
+                          disabled={busyId === candidate.id || !canReviewCandidates}
+                          title={
+                            !canReviewCandidates ? seniorDisabledReason : undefined
+                          }
+                          onClick={() => openResolve(candidate)}
+                          className="block rounded-md border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-800 disabled:opacity-50"
+                        >
+                          Resolve mimic
+                        </button>
+                      ) : null}
                       <button
                         type="button"
-                        disabled={busyId === candidate.id}
+                        disabled={busyId === candidate.id || !canReviewCandidates}
+                        title={!canReviewCandidates ? seniorDisabledReason : undefined}
                         onClick={() => rejectCandidate(candidate)}
                         className="block rounded-md border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 disabled:opacity-50"
                       >
@@ -285,7 +433,8 @@ export default function DiagnosisGraphCandidatesPage() {
                       </button>
                       <button
                         type="button"
-                        disabled={busyId === candidate.id}
+                        disabled={busyId === candidate.id || !canReviewCandidates}
+                        title={!canReviewCandidates ? seniorDisabledReason : undefined}
                         onClick={() => mergeCandidate(candidate)}
                         className="block rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 disabled:opacity-50"
                       >
@@ -293,7 +442,8 @@ export default function DiagnosisGraphCandidatesPage() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {rows.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
@@ -305,6 +455,118 @@ export default function DiagnosisGraphCandidatesPage() {
             </table>
           </div>
         </section>
+      ) : null}
+
+      {resolvingCandidate ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+          <section className="w-full max-w-2xl rounded-lg bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-950">
+                  Resolve mimic
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  {resolvingCandidate.rawText}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResolvingCandidate(null)}
+                className="rounded-md border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-700"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {resolvingSuggestions.length ? (
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Suggested registry matches
+                  </div>
+                  {resolvingSuggestions.map((suggestion) => (
+                    <button
+                      key={suggestion.diagnosisRegistryId}
+                      type="button"
+                      onClick={() =>
+                        setResolveTargetId(suggestion.diagnosisRegistryId)
+                      }
+                      className={`block w-full rounded-md border p-3 text-left text-sm ${
+                        resolveTargetId === suggestion.diagnosisRegistryId
+                          ? 'border-slate-900 bg-slate-50'
+                          : 'border-slate-200'
+                      }`}
+                    >
+                      <div className="font-semibold text-slate-950">
+                        {suggestion.displayLabel}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {suggestion.canonicalName} · {suggestion.matchType} ·{' '}
+                        {Math.round(suggestion.confidence * 100)}%
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-md border border-slate-200 p-3 text-sm text-slate-600">
+                  No automatic suggestions found. Paste an existing registry ID to
+                  link this mimic, or reject the candidate.
+                </div>
+              )}
+
+              <label className="block space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Target registry ID
+                <input
+                  value={resolveTargetId}
+                  onChange={(event) => setResolveTargetId(event.target.value)}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-900"
+                />
+              </label>
+              <label className="block space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Alias text
+                <input
+                  value={resolveAliasText}
+                  onChange={(event) => setResolveAliasText(event.target.value)}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-900"
+                />
+              </label>
+              <label className="block space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Reason
+                <textarea
+                  value={resolveReason}
+                  onChange={(event) => setResolveReason(event.target.value)}
+                  className="min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-900"
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => void rejectResolvingCandidate()}
+                className="rounded-md border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700"
+              >
+                Reject
+              </button>
+              <button
+                type="button"
+                disabled={!resolveTargetId.trim()}
+                onClick={() => void submitResolve('link_existing')}
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
+              >
+                Link existing
+              </button>
+              <button
+                type="button"
+                disabled={!resolveTargetId.trim() || !resolveAliasText.trim()}
+                onClick={() => void submitResolve('add_alias_to_existing')}
+                className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Add alias and link
+              </button>
+            </div>
+          </section>
+        </div>
       ) : null}
     </div>
   );

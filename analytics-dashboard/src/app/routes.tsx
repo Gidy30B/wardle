@@ -4,9 +4,11 @@ import AnalyticsPage from '../features/analytics/AnalyticsPage';
 import CasesPage from '../features/cases/CasesPage';
 import DashboardPage from '../features/dashboard/DashboardPage';
 import DiagnosisGraphCandidatesPage from '../features/diagnosis-graph/DiagnosisGraphCandidatesPage';
+import EditorialDiagnosisWorkspacePage from '../features/editorial/EditorialDiagnosisWorkspacePage';
+import EditorialHomePage from '../features/editorial/EditorialHomePage';
 import GeneratePage from '../features/generation/GeneratePage';
 import PublishPage from '../features/publish/PublishPage';
-import { useAdmin } from '../hooks/useAdmin';
+import { useConsoleAccess } from '../hooks/useConsoleAccess';
 import AdminLayout from '../layout/AdminLayout';
 
 const routeContext: Record<string, { title: string; subtitle: string }> = {
@@ -38,12 +40,16 @@ const routeContext: Record<string, { title: string; subtitle: string }> = {
     title: 'Publish',
     subtitle: 'Publish readiness and distribution health',
   },
+  '/editorial': {
+    title: 'Editorial',
+    subtitle: 'Diagnosis-centered editorial workspace foundation',
+  },
 };
 
 function SignInScreen({
   path,
 }: {
-  path: '/' | '/cases' | '/generate' | '/analytics' | '/publish';
+  path: '/' | '/cases' | '/generate' | '/analytics' | '/publish' | '/editorial';
 }) {
   const redirectUrl = new URL(path, window.location.origin).toString();
 
@@ -63,15 +69,33 @@ function SignInScreen({
 
 function AdminShell() {
   const location = useLocation();
-  const admin = useAdmin();
+  const access = useConsoleAccess();
   const isCasesPath =
     location.pathname === '/cases' || location.pathname.startsWith('/cases/');
+  const isEditorialPath =
+    location.pathname === '/editorial' ||
+    location.pathname.startsWith('/editorial/');
+  const isEditorialAccessPath =
+    isEditorialPath ||
+    isCasesPath ||
+    location.pathname === '/diagnosis-graph/candidates' ||
+    location.pathname === '/publish';
   const context = isCasesPath
     ? routeContext['/cases']
+    : isEditorialPath
+      ? routeContext['/editorial']
     : routeContext[location.pathname] ?? routeContext['/'];
-  const signInPath: '/' | '/cases' | '/generate' | '/analytics' | '/publish' =
+  const signInPath:
+    | '/'
+    | '/cases'
+    | '/generate'
+    | '/analytics'
+    | '/publish'
+    | '/editorial' =
     isCasesPath
       ? '/cases'
+      : isEditorialPath
+        ? '/editorial'
       : location.pathname === '/generate'
         ? '/generate'
         : location.pathname === '/analytics'
@@ -80,23 +104,27 @@ function AdminShell() {
             ? '/publish'
             : '/';
 
-  if (admin.status === 'loading') {
+  if (access.status === 'loading') {
     return <p className="p-6 text-sm text-slate-600">Loading admin console...</p>;
   }
 
-  if (admin.status === 'signed-out') {
+  if (access.status === 'signed-out') {
     return <SignInScreen path={signInPath} />;
   }
 
-  if (admin.status === 'error') {
+  if (access.status === 'error') {
     return (
       <div className="p-6 text-sm text-red-600">
-        {admin.error ?? 'Unable to verify admin access'}
+        {access.error ?? 'Unable to verify console access'}
       </div>
     );
   }
 
-  if (admin.status === 'unauthorized') {
+  if (
+    access.status === 'unauthorized' ||
+    (isEditorialAccessPath && !access.canAccessEditorial) ||
+    (!isEditorialAccessPath && !access.canAccessAdminOps)
+  ) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
         <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
@@ -104,10 +132,11 @@ function AdminShell() {
             Access Restricted
           </p>
           <h1 className="mt-2 text-2xl font-semibold text-slate-900">
-            Admin privileges required
+            Access privileges required
           </h1>
           <p className="mt-2 text-sm text-slate-600">
-            Your signed-in account does not have the admin role needed to view this console.
+            Your signed-in account does not have the role needed to view this
+            console area.
           </p>
         </div>
       </div>
@@ -119,9 +148,13 @@ function AdminShell() {
       title={context.title}
       subtitle={context.subtitle}
       user={{
-        displayName: admin.displayName,
-        email: admin.email,
-        role: admin.role,
+        displayName: access.displayName,
+        email: access.email,
+        role: access.role,
+      }}
+      access={{
+        canAccessEditorial: access.canAccessEditorial,
+        canAccessAdminOps: access.canAccessAdminOps,
       }}
     >
       <Outlet />
@@ -148,6 +181,11 @@ export default function AppRoutes() {
         <Route path="/generate" element={<GeneratePage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/publish" element={<PublishPage />} />
+        <Route path="/editorial" element={<EditorialHomePage />} />
+        <Route
+          path="/editorial/diagnoses/:diagnosisRegistryId"
+          element={<EditorialDiagnosisWorkspacePage />}
+        />
         <Route
           path="/diagnosis-graph/candidates"
           element={<DiagnosisGraphCandidatesPage />}

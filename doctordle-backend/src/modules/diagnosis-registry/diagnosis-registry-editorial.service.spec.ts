@@ -15,7 +15,7 @@ describe('DiagnosisRegistryEditorialService', () => {
   function createFixture() {
     const prisma: any = {
       diagnosisRegistry: {
-        findMany: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn(),
         findFirst: jest.fn(),
       },
@@ -202,6 +202,27 @@ describe('DiagnosisRegistryEditorialService', () => {
         aliasPreview: ['MI'],
       }),
     });
+  });
+
+  it('rejects free-text create when an exact registry match already exists', async () => {
+    const fixture = createFixture();
+    fixture.prisma.diagnosisRegistry.findMany.mockResolvedValue([
+      {
+        id: 'registry-1',
+        canonicalName: 'Asthma',
+        status: DiagnosisRegistryStatus.ACTIVE,
+        aliases: [],
+      },
+    ]);
+
+    await expect(
+      fixture.service.createDiagnosis({ canonicalName: 'Asthma' }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        message: expect.stringContaining('already matches'),
+      }),
+    });
+    expect(importDiagnosisRegistryRecords).not.toHaveBeenCalled();
   });
 
   it('blocks parenthetical duplicate creation when the core term already exists', async () => {

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import {
   createAndLinkDiagnosis,
   getEditorialCaseRevisions,
+  getDiagnosisWorkspaceQualitySummary,
   linkCaseDiagnosis,
   markCaseReadyToPublish,
   rerunCaseValidation,
@@ -13,6 +15,7 @@ import {
   type EditorialCaseDetail,
   type EditorialCaseListItem,
   type EditorialCaseRevision,
+  type DiagnosisWorkspaceQualitySummary,
   type LinkCaseDiagnosisPayload,
   type ReviewDecision,
   type UpdateCaseDiagnosisPayload,
@@ -29,6 +32,7 @@ import { useActionFeedback } from '../../hooks/useActionFeedback';
 import CaseClinicalSection from './CaseClinicalSection';
 import CaseDiagnosisSection from './CaseDiagnosisSection';
 import CaseGenerationQualitySection from './CaseGenerationQualitySection';
+import CaseQualityCard from './CaseQualityCard';
 import CaseHistorySection from './CaseHistorySection';
 import DiagnosisEducationPanel from './DiagnosisEducationPanel';
 import CaseValidationSection from './CaseValidationSection';
@@ -72,6 +76,8 @@ type ConfirmActionConfig = {
   run: () => Promise<unknown>;
 };
 
+const SHOW_LEGACY_DIAGNOSIS_EDUCATION_PANEL_BY_DEFAULT = false;
+
 function SummaryStat({
   label,
   value,
@@ -93,6 +99,134 @@ function SummaryStat({
   );
 }
 
+function DiagnosisEditorialSummaryCard({
+  detail,
+  diagnosisName,
+  workspaceSummary,
+  workspaceSummaryLoading,
+  workspaceSummaryError,
+  showLegacyEducationPanel,
+  onToggleLegacyEducationPanel,
+}: {
+  detail: EditorialCaseDetail;
+  diagnosisName: string;
+  workspaceSummary: DiagnosisWorkspaceQualitySummary | null;
+  workspaceSummaryLoading: boolean;
+  workspaceSummaryError: string | null;
+  showLegacyEducationPanel: boolean;
+  onToggleLegacyEducationPanel: () => void;
+}) {
+  const registry = detail.diagnosisRegistrySummary;
+  const registryId = detail.diagnosisRegistryId;
+  const canonicalName =
+    registry?.canonicalName && registry.canonicalName !== diagnosisName
+      ? registry.canonicalName
+      : null;
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Diagnosis editorial workspace
+          </p>
+          <h3 className="mt-2 text-base font-semibold text-slate-900">
+            {diagnosisName}
+          </h3>
+          {canonicalName ? (
+            <p className="mt-1 text-sm text-slate-600">{canonicalName}</p>
+          ) : null}
+          {registryId ? (
+            <p className="mt-2 font-mono text-xs text-slate-500">
+              {shortId(registryId)}
+            </p>
+          ) : (
+            <p className="mt-2 text-sm text-slate-600">
+              Link this case to a diagnosis registry entry to open the editorial
+              workspace.
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {registryId ? (
+            <Link
+              to={`/editorial/diagnoses/${registryId}`}
+              className="rounded-xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Open Editorial Workspace
+            </Link>
+          ) : null}
+          <button
+            type="button"
+            disabled={!registryId}
+            onClick={onToggleLegacyEducationPanel}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {showLegacyEducationPanel
+              ? 'Hide legacy education panel'
+              : 'Open legacy education panel'}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-4">
+        <SummaryStat
+          label="Workspace status"
+          valueNode={
+            workspaceSummaryLoading ? (
+              'Loading...'
+            ) : workspaceSummary ? (
+              <StatusBadge status={workspaceSummary.overallWorkspaceStatus} />
+            ) : (
+              'Unavailable'
+            )
+          }
+        />
+        <SummaryStat
+          label="Education"
+          valueNode={
+            workspaceSummary ? (
+              <StatusBadge status={workspaceSummary.educationQuality.status} />
+            ) : (
+              'Unknown'
+            )
+          }
+        />
+        <SummaryStat
+          label="Coverage"
+          value={formatPercent(workspaceSummary?.teachingCoverage.overall)}
+        />
+        <SummaryStat
+          label="Readiness"
+          value={
+            workspaceSummary
+              ? `${workspaceSummary.graphReadiness.factCount} facts / ${workspaceSummary.graphReadiness.reviewableCandidateCount} review`
+              : 'Unknown'
+          }
+        />
+      </div>
+
+      <p className="mt-3 text-sm text-slate-600">
+        CaseDetail is for reviewing this specific case. Diagnosis-level
+        curriculum, education, graph, and coverage work now lives in the
+        Editorial Workspace.
+      </p>
+      {workspaceSummaryError ? (
+        <p className="mt-2 text-sm text-amber-700">{workspaceSummaryError}</p>
+      ) : null}
+    </section>
+  );
+}
+
+function shortId(value: string) {
+  return value.length > 12 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
+}
+
+function formatPercent(value: number | null | undefined) {
+  return typeof value === 'number' ? `${Math.round(value * 100)}%` : 'Unknown';
+}
+
 export default function CaseDetail({
   row,
   detail,
@@ -109,6 +243,15 @@ export default function CaseDetail({
   const [reviewNotes, setReviewNotes] = useState('');
   const [confirmAction, setConfirmAction] = useState<ConfirmActionConfig | null>(null);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [workspaceSummary, setWorkspaceSummary] =
+    useState<DiagnosisWorkspaceQualitySummary | null>(null);
+  const [workspaceSummaryError, setWorkspaceSummaryError] = useState<string | null>(
+    null,
+  );
+  const [workspaceSummaryLoading, setWorkspaceSummaryLoading] = useState(false);
+  const [showLegacyEducationPanel, setShowLegacyEducationPanel] = useState(
+    SHOW_LEGACY_DIAGNOSIS_EDUCATION_PANEL_BY_DEFAULT,
+  );
   const { feedback, clear, showError, showPending, showSuccess } =
     useActionFeedback();
 
@@ -119,11 +262,20 @@ export default function CaseDetail({
       setRevisionsLoading(false);
       setReviewNotes('');
       setConfirmAction(null);
+      setWorkspaceSummary(null);
+      setWorkspaceSummaryError(null);
+      setWorkspaceSummaryLoading(false);
+      setShowLegacyEducationPanel(
+        SHOW_LEGACY_DIAGNOSIS_EDUCATION_PANEL_BY_DEFAULT,
+      );
       return;
     }
 
     const latestReview = getCaseDisplaySummary(detail).latestReview;
     setReviewNotes(latestReview?.notes ?? '');
+    setShowLegacyEducationPanel(
+      SHOW_LEGACY_DIAGNOSIS_EDUCATION_PANEL_BY_DEFAULT,
+    );
   }, [detail]);
 
   useEffect(() => {
@@ -169,6 +321,53 @@ export default function CaseDetail({
       active = false;
     };
   }, [client, detail, refreshSignal]);
+
+  useEffect(() => {
+    if (!detail?.diagnosisRegistryId) {
+      setWorkspaceSummary(null);
+      setWorkspaceSummaryError(null);
+      setWorkspaceSummaryLoading(false);
+      return;
+    }
+
+    let active = true;
+    const registryId = detail.diagnosisRegistryId;
+
+    async function loadWorkspaceSummary() {
+      try {
+        setWorkspaceSummaryLoading(true);
+        setWorkspaceSummaryError(null);
+        const response = await getDiagnosisWorkspaceQualitySummary(client, registryId);
+
+        if (!active) {
+          return;
+        }
+
+        setWorkspaceSummary(response);
+      } catch (loadError) {
+        if (!active) {
+          return;
+        }
+
+        setWorkspaceSummary(null);
+        setWorkspaceSummaryError(
+          loadError instanceof Error
+            ? loadError.message
+            : 'Unable to load editorial workspace status.',
+        );
+      } finally {
+        if (active) {
+          setWorkspaceSummaryLoading(false);
+        }
+      }
+    }
+
+    void loadWorkspaceSummary();
+
+    return () => {
+      active = false;
+    };
+  }, [client, detail?.diagnosisRegistryId, refreshSignal]);
 
   const detailSummary = useMemo(
     () => (detail ? getCaseDisplaySummary(detail) : null),
@@ -453,6 +652,7 @@ export default function CaseDetail({
   }
 
   const diagnosisName =
+    detail.diagnosisRegistrySummary?.displayLabel ??
     detail.diagnosisRegistrySummary?.canonicalName ??
     detail.proposedDiagnosisText ??
     detail.diagnosis?.name ??
@@ -550,17 +750,39 @@ export default function CaseDetail({
           onCreateAndLinkDiagnosis={handleCreateAndLinkDiagnosis}
         />
 
-        <DiagnosisEducationPanel
-          client={client}
-          diagnosisRegistryId={detail.diagnosisRegistryId}
-          diagnosisLabel={diagnosisName}
+        <DiagnosisEditorialSummaryCard
+          detail={detail}
+          diagnosisName={diagnosisName}
+          workspaceSummary={workspaceSummary}
+          workspaceSummaryLoading={workspaceSummaryLoading}
+          workspaceSummaryError={workspaceSummaryError}
+          showLegacyEducationPanel={showLegacyEducationPanel}
+          onToggleLegacyEducationPanel={() =>
+            setShowLegacyEducationPanel((isOpen) => !isOpen)
+          }
         />
+
+        {showLegacyEducationPanel ? (
+          <section className="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+            <div className="mb-3 rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-amber-900">
+              This compatibility panel is temporary. Diagnosis-level editorial
+              work should happen in the Editorial Workspace.
+            </div>
+            <DiagnosisEducationPanel
+              client={client}
+              diagnosisRegistryId={detail.diagnosisRegistryId}
+              diagnosisLabel={diagnosisName}
+            />
+          </section>
+        ) : null}
 
         <CaseClinicalSection
           detail={detail}
           clues={clues}
           showLegacyFallback={showLegacyFallback}
         />
+
+        <CaseQualityCard projection={detail.qualityProjection} />
 
         <CaseGenerationQualitySection quality={generationQuality} />
 

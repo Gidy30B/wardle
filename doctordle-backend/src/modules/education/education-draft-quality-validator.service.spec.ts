@@ -1,8 +1,11 @@
 import { EducationDraftQualityValidator } from './education-draft-quality-validator.service';
+import { EducationEditorialPatternsService } from './education-editorial-patterns.service';
 import { EducationKnowledgeRulesService } from './education-knowledge-rules.service';
+import { EducationTeachingRulesService } from './education-teaching-rules.service';
 
 describe('EducationDraftQualityValidator', () => {
   const rules = new EducationKnowledgeRulesService();
+  const teachingRules = new EducationTeachingRulesService();
   const validator = new EducationDraftQualityValidator();
 
   it('warns when appendicitis draft misses expected named signs', () => {
@@ -142,13 +145,17 @@ describe('EducationDraftQualityValidator', () => {
       draft: buildQualityDraft({
         differentials: [
           {
-            mimic: 'Right-sided diverticulitis',
-            whyConfused:
+            id: 'right-sided-diverticulitis',
+            type: 'HIGH_YIELD_DISCRIMINATOR',
+            title: 'Right-sided diverticulitis',
+            content:
               'Both can cause right lower quadrant pain and inflammatory markers.',
-            keySeparator:
+            discriminator:
               'CT imaging can help distinguish right-sided diverticulitis from appendicitis.',
-            managementConsequence:
+            managementImplication:
               'The distinction changes operative versus nonoperative planning.',
+            whyItMatters:
+              'The overlap can misdirect early management before focal imaging is interpreted.',
           },
         ],
       }),
@@ -179,8 +186,10 @@ describe('EducationDraftQualityValidator', () => {
       draft: buildQualityDraft({
         investigations: [
           {
-            test: 'CBC',
-            content: 'Look for leukocytosis.',
+            id: 'cbc',
+            type: 'INVESTIGATION',
+            title: 'CBC',
+            content: 'Order CBC to evaluate suspected disease.',
           },
         ],
       }),
@@ -248,13 +257,20 @@ describe('EducationDraftQualityValidator', () => {
       draft: buildQualityDraft({
         differentials: [
           {
-            mimic: 'Gastroenteritis',
-            whyConfused:
-              'Both can cause abdominal pain, nausea, and vomiting early.',
-            keySeparator:
-              'Progressive right lower quadrant localization with rebound or guarding favors appendicitis, whereas diffuse cramping with prominent diarrhea favors gastroenteritis.',
-            managementConsequence:
+            id: 'gastroenteritis',
+            type: 'HIGH_YIELD_DISCRIMINATOR',
+            title: 'Gastroenteritis',
+            content:
+              'Both can cause abdominal pain, nausea, and vomiting early, but progressive right lower quadrant localization with guarding favors appendicitis whereas diffuse cramps with diarrhea favor gastroenteritis.',
+            whyItMatters:
+              'This overlap makes vomiting an unsafe anchor unless localization and peritoneal findings are tracked.',
+            discriminator:
+              'Progressive RLQ guarding rather than diffuse cramping with prominent diarrhea.',
+            managementImplication:
               'Missing this separator can delay surgical evaluation and increase perforation risk.',
+            escalationImplication: null,
+            trapAvoided:
+              'Anchoring on gastroenteritis when focal peritoneal signs emerge.',
           },
         ],
       }),
@@ -263,6 +279,9 @@ describe('EducationDraftQualityValidator', () => {
     expect(result.warnings).not.toContain('differential_missing_key_separator');
     expect(result.warnings).not.toContain('differential_generic_separator');
     expect(result.sectionScores.differentials).toBeGreaterThanOrEqual(0.8);
+    expect(result.patternComplianceScores.differential).toBeGreaterThanOrEqual(
+      0.8,
+    );
   });
 
   it('passes a strong investigation', () => {
@@ -270,12 +289,18 @@ describe('EducationDraftQualityValidator', () => {
       draft: buildQualityDraft({
         investigations: [
           {
-            test: 'CBC',
-            expectedFinding: 'Neutrophilic leukocytosis',
-            interpretation:
+            id: 'cbc',
+            type: 'INVESTIGATION',
+            title: 'CBC',
+            content:
+              'CBC may show neutrophilic leukocytosis as supportive evidence of appendiceal inflammation.',
+            whyItMatters:
               'Leukocytosis supports inflammation, but a normal WBC does not exclude early appendicitis.',
-            limitation:
+            discriminator: null,
+            managementImplication:
               'CBC is supportive rather than definitive and must be interpreted with evolving focal signs.',
+            escalationImplication: null,
+            trapAvoided: 'Treating a normal early WBC as reassuring.',
           },
         ],
       }),
@@ -283,6 +308,7 @@ describe('EducationDraftQualityValidator', () => {
 
     expect(result.warnings).not.toContain('investigation_missing_interpretation');
     expect(result.sectionScores.investigations).toBeGreaterThanOrEqual(0.8);
+    expect(result.patternComplianceScores.investigation).toBe(1);
   });
 
   it('passes a strong exam pearl', () => {
@@ -290,13 +316,18 @@ describe('EducationDraftQualityValidator', () => {
       draft: buildQualityDraft({
         examPearls: [
           {
-            finding: 'Rovsing sign',
-            mechanism:
+            id: 'rovsing-sign',
+            type: 'EXAM',
+            title: 'Rovsing sign',
+            content:
               'Left-sided palpation produces right-sided pain because inflamed peritoneum is irritated across the abdomen.',
-            diagnosticImpact:
+            whyItMatters:
               'This favors appendicitis over uncomplicated gastroenteritis.',
             discriminator:
               'Diffuse gastroenteritis should not produce focal contralateral peritoneal pain.',
+            managementImplication: null,
+            escalationImplication: null,
+            trapAvoided: null,
           },
         ],
       }),
@@ -305,6 +336,57 @@ describe('EducationDraftQualityValidator', () => {
     expect(result.warnings).not.toContain('exam_missing_mechanism');
     expect(result.warnings).not.toContain('exam_missing_diagnostic_impact');
     expect(result.sectionScores.examPearls).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it('recognizes a strong management anchor pattern', () => {
+    const result = validator.validate({
+      draft: buildQualityDraft({
+        management: [
+          {
+            id: 'early-surgical-consult',
+            type: 'MANAGEMENT',
+            title: 'Early surgical consultation',
+            content:
+              'Request early surgical consultation when focal peritonism or high clinical suspicion suggests appendicitis.',
+            whyItMatters:
+              'Source control planning is needed because appendiceal inflammation can progress to perforation.',
+            discriminator: null,
+            managementImplication:
+              'Keep the patient NPO and align imaging, analgesia, and operative planning.',
+            escalationImplication:
+              'Delay increases perforation risk and broadens operative complexity.',
+            trapAvoided: null,
+          },
+        ],
+      }),
+    });
+
+    expect(result.warnings).not.toContain('management_missing_indication');
+    expect(result.patternComplianceScores.managementAnchor).toBe(1);
+  });
+
+  it('uses schema-compatible editorial pattern examples', () => {
+    const service = new EducationEditorialPatternsService();
+    const forbiddenKeys = [
+      'whyConfused',
+      'keySeparator',
+      'managementConsequence',
+      'expectedFinding',
+      'interpretation',
+      'limitation',
+      'mechanism',
+      'diagnosticImpact',
+      'indication',
+      'rationale',
+      'consequenceIfDelayed',
+      'saferHeuristic',
+    ];
+
+    for (const pattern of service.getPromptGuidance()) {
+      for (const key of forbiddenKeys) {
+        expect(pattern.goodExample).not.toHaveProperty(key);
+      }
+    }
   });
 
   it('gives a high-quality appendicitis draft improved section scores', () => {
@@ -326,6 +408,209 @@ describe('EducationDraftQualityValidator', () => {
     expect(result.sectionScores.differentials).toBeGreaterThanOrEqual(0.8);
     expect(result.sectionScores.investigations).toBeGreaterThanOrEqual(0.8);
     expect(result.sectionScores.examPearls).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it('warns when appendicitis is missing required gastroenteritis and renal colic comparisons', () => {
+    const result = validator.validate({
+      teachingRules: teachingRules.getRules({ canonicalName: 'appendicitis' }),
+      draft: buildHighQualityAppendicitisDraft({
+        differentials: [
+          {
+            mimic: 'Ectopic pregnancy',
+            whyConfused:
+              'Both can cause lower abdominal pain in patients who can become pregnant.',
+            keySeparator:
+              'Positive pregnancy testing and adnexal features favor ectopic pregnancy rather than appendicitis.',
+            managementConsequence:
+              'The distinction changes imaging sequence and gynecology involvement.',
+          },
+        ],
+      }),
+    });
+
+    expect(result.warnings).toContain('missing_required_differential');
+    expect(result.coverageWarnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'missing_required_differential',
+          item: 'Gastroenteritis discriminator',
+          section: 'differentials',
+          severity: 'warning',
+        }),
+        expect.objectContaining({
+          code: 'missing_required_differential',
+          item: 'Renal colic discriminator',
+        }),
+      ]),
+    );
+    expect(result.coverageScores.differentials).toBeLessThan(1);
+  });
+
+  it('warns when DKA is missing the required potassium pitfall', () => {
+    const result = validator.validate({
+      teachingRules: teachingRules.getRules({
+        canonicalName: 'diabetic ketoacidosis',
+      }),
+      draft: buildQualityDraft({
+        investigations: [
+          {
+            test: 'Venous blood gas',
+            expectedFinding: 'Metabolic acidosis with low bicarbonate.',
+            interpretation:
+              'Acidosis supports DKA rather than uncomplicated hyperglycemia.',
+            limitation:
+              'Severity must be interpreted alongside anion gap and mental status.',
+          },
+          {
+            test: 'Blood ketones',
+            expectedFinding: 'Elevated beta-hydroxybutyrate.',
+            interpretation:
+              'Ketones distinguish DKA from isolated dehydration or stress hyperglycemia.',
+            limitation:
+              'Urine ketones can lag behind clinical improvement.',
+          },
+        ],
+        pitfalls: [
+          {
+            trap: 'Missing infection trigger',
+            whyMissed:
+              'Vomiting and dehydration can distract from the precipitating source.',
+            consequence:
+              'Untreated infection can sustain acidosis and clinical instability.',
+            saferHeuristic:
+              'Search for infection or missed insulin while correcting the metabolic emergency.',
+          },
+        ],
+      }),
+    });
+
+    expect(result.warnings).toContain('missing_required_pitfall');
+    expect(result.coverageWarnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'missing_required_pitfall',
+          item: 'Potassium before insulin',
+          section: 'pitfalls',
+          severity: 'warning',
+        }),
+      ]),
+    );
+    expect(result.coverageScores.pitfalls).toBeLessThan(1);
+  });
+
+  it('allows different DKA manifestations to satisfy the same teaching unit', () => {
+    const result = validator.validate({
+      teachingRules: teachingRules.getRules({
+        canonicalName: 'diabetic ketoacidosis',
+      }),
+      draft: buildQualityDraft({
+        investigations: [
+          {
+            test: 'Venous blood gas and beta-hydroxybutyrate',
+            expectedFinding:
+              'Low bicarbonate with elevated beta-hydroxybutyrate and an anion gap.',
+            interpretation:
+              'Blood ketones with metabolic acidosis distinguish DKA from isolated hyperglycemia or HHS.',
+            limitation:
+              'Severity still depends on mental status, potassium, and perfusion.',
+          },
+        ],
+        examPearls: [
+          {
+            finding: 'Deep labored breathing',
+            mechanism:
+              'Deep labored breathing reflects respiratory compensation for metabolic acidosis.',
+            diagnosticImpact:
+              'This supports DKA over uncomplicated dehydration.',
+          },
+        ],
+        management: [
+          {
+            action: 'Check potassium before insulin',
+            indication:
+              'Suspected DKA with acidosis and dehydration.',
+            rationale:
+              'Insulin shifts potassium intracellularly, so normal serum potassium may hide total body depletion.',
+            consequenceIfDelayed:
+              'Starting insulin before potassium safety can precipitate dangerous hypokalemia.',
+          },
+          {
+            action: 'Initial isotonic fluids',
+            indication: 'Hypovolemia from osmotic diuresis.',
+            rationale:
+              'Fluids restore perfusion before insulin is layered in safely.',
+            consequenceIfDelayed:
+              'Poor perfusion delays correction of the metabolic emergency.',
+          },
+        ],
+        differentials: [
+          {
+            mimic: 'Hyperosmolar hyperglycemic state',
+            whyConfused:
+              'Both can cause severe hyperglycemia and dehydration.',
+            keySeparator:
+              'Ketosis with acidosis favors DKA, whereas hyperosmolarity without marked ketones favors HHS.',
+            managementConsequence:
+              'The distinction changes insulin timing and electrolyte monitoring intensity.',
+          },
+        ],
+      }),
+    });
+
+    expect(result.coverageWarnings).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ item: 'Potassium before insulin' }),
+        expect.objectContaining({
+          item: 'Respiratory compensation for metabolic acidosis',
+        }),
+      ]),
+    );
+    expect(result.coverageScores.managementAnchors).toBe(1);
+    expect(result.coverageScores.examMechanisms).toBe(1);
+  });
+
+  it('allows appendicitis peritoneal irritation through alternative manifestations', () => {
+    const result = validator.validate({
+      teachingRules: teachingRules.getRules({ canonicalName: 'appendicitis' }),
+      draft: buildHighQualityAppendicitisDraft({
+        examPearls: [
+          {
+            finding: 'Guarding',
+            mechanism:
+              'Guarding reflects peritoneal irritation as localized appendiceal inflammation involves the parietal peritoneum.',
+            diagnosticImpact:
+              'This favors appendicitis over uncomplicated gastroenteritis.',
+            discriminator:
+              'Diffuse cramps should not produce focal guarding or rebound.',
+          },
+        ],
+      }),
+    });
+
+    expect(result.coverageWarnings).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ item: 'Peritoneal irritation' }),
+      ]),
+    );
+  });
+
+  it('passes required teaching coverage for a strong appendicitis draft', () => {
+    const result = validator.validate({
+      guidance: rules.getGuidance({ canonicalName: 'appendicitis' }),
+      teachingRules: teachingRules.getRules({ canonicalName: 'appendicitis' }),
+      draft: buildHighQualityAppendicitisDraft(),
+    });
+
+    expect(result.warnings).not.toContain('missing_required_differential');
+    expect(result.warnings).not.toContain('missing_required_pitfall');
+    expect(result.warnings).not.toContain('missing_required_exam_mechanism');
+    expect(result.warnings).not.toContain('missing_required_investigation');
+    expect(result.warnings).not.toContain(
+      'missing_required_management_anchor',
+    );
+    expect(result.warnings).not.toContain('missing_required_recall_concept');
+    expect(result.coverageWarnings).toEqual([]);
+    expect(result.coverageScores.overall).toBe(1);
   });
 });
 
@@ -373,6 +658,8 @@ function buildQualityDraft(overrides: Record<string, unknown> = {}) {
           'A focused bedside sign supports local pathology over a diffuse mimic when it reproduces the expected anatomic pain pattern.',
         whyItMatters:
           'Anatomic reproduction changes probability and avoids nonspecific symptom anchoring.',
+        discriminator:
+          'Reproduced anatomic pain rather than diffuse symptom reporting.',
       },
     ],
     scoringSystems: [],
@@ -382,9 +669,11 @@ function buildQualityDraft(overrides: Record<string, unknown> = {}) {
         type: 'INVESTIGATION',
         title: 'Targeted imaging',
         content:
-          'Targeted imaging supports the diagnosis when it identifies anatomy-specific inflammation rather than nonspecific symptoms.',
+          'Targeted imaging showing anatomy-specific inflammation supports the diagnosis rather than nonspecific symptoms.',
         whyItMatters:
           'Imaging interpretation distinguishes focal disease from mimics.',
+        managementImplication:
+          'Use the result to decide reassessment, consultation, or alternate workup.',
       },
     ],
     differentials: [
@@ -396,6 +685,10 @@ function buildQualityDraft(overrides: Record<string, unknown> = {}) {
           'The mimic may overlap early, unlike the target diagnosis which develops localizing signs and a more specific progression.',
         whyItMatters:
           'Explicit contrast prevents anchoring on shared symptoms.',
+        discriminator:
+          'Localizing progression rather than persistent diffuse symptoms.',
+        managementImplication:
+          'Escalate evaluation when the localizing pattern emerges.',
       },
     ],
     management: [
@@ -404,9 +697,13 @@ function buildQualityDraft(overrides: Record<string, unknown> = {}) {
         type: 'MANAGEMENT',
         title: 'Severity-based plan',
         content:
-          'Use severity and diagnostic certainty to decide monitoring, imaging, consultation, and treatment urgency.',
+          'Use severity and diagnostic certainty when deciding monitoring, imaging, consultation, and treatment urgency.',
         whyItMatters:
           'A concrete management anchor changes escalation rather than offering generic reassurance.',
+        managementImplication:
+          'Tie each next step to a finding, risk threshold, or diagnostic uncertainty.',
+        escalationImplication:
+          'Delayed escalation can miss the window for safer definitive care.',
       },
     ],
     complications: ['Delayed recognition can increase morbidity.'],
@@ -419,6 +716,8 @@ function buildQualityDraft(overrides: Record<string, unknown> = {}) {
           'A normal early test can be falsely reassuring when symptoms are evolving before objective findings peak.',
         whyItMatters:
           'The trap delays reassessment and increases missed-diagnosis risk.',
+        trapAvoided:
+          'Reassess the clinical trajectory instead of ruling out disease from one early normal test.',
       },
     ],
     recallPrompts: [
@@ -440,7 +739,9 @@ function buildQualityDraft(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function buildHighQualityAppendicitisDraft() {
+function buildHighQualityAppendicitisDraft(
+  overrides: Record<string, unknown> = {},
+) {
   return buildQualityDraft({
     clinicalPattern: [
       {
@@ -490,6 +791,9 @@ function buildHighQualityAppendicitisDraft() {
           'Favors appendicitis over diffuse gastroenteritis when symptoms are localizing.',
         discriminator:
           'Diffuse gastroenteritis should not reproduce focal contralateral peritoneal pain.',
+        managementImplication: null,
+        escalationImplication: null,
+        trapAvoided: null,
         whyItMatters:
           'Contralateral provocation turns vague abdominal pain into localizing peritoneal evidence.',
       },
@@ -506,6 +810,9 @@ function buildHighQualityAppendicitisDraft() {
           'Favors retrocecal appendicitis when anterior McBurney tenderness is muted.',
         discriminator:
           'Isolated bowel cramps should not be provoked by hip extension.',
+        managementImplication: null,
+        escalationImplication: null,
+        trapAvoided: null,
         whyItMatters:
           'The maneuver prevents false reassurance when McBurney tenderness is muted.',
       },
@@ -522,6 +829,27 @@ function buildHighQualityAppendicitisDraft() {
     ],
     investigations: [
       {
+        id: 'cbc',
+        type: 'INVESTIGATION',
+        title: 'CBC',
+        test: 'CBC',
+        expectedFinding: 'Neutrophilic leukocytosis.',
+        interpretation:
+          'Leukocytosis supports appendiceal inflammation when paired with migratory focal pain.',
+        limitation:
+          'A normal early white blood cell count does not exclude appendicitis.',
+        content:
+          'CBC showing neutrophilic leukocytosis supports appendiceal inflammation when paired with migratory focal pain.',
+        whyItMatters:
+          'A normal early white blood cell count should not override evolving peritoneal signs.',
+        discriminator: null,
+        managementImplication:
+          'Interpret CBC as supportive evidence and keep reassessing focal signs.',
+        escalationImplication: null,
+        trapAvoided:
+          'Treating a normal early white blood cell count as exclusionary.',
+      },
+      {
         id: 'ct-abdomen',
         type: 'INVESTIGATION',
         title: 'CT abdomen',
@@ -536,6 +864,12 @@ function buildHighQualityAppendicitisDraft() {
           'CT abdomen showing appendiceal enlargement or periappendiceal inflammation supports appendicitis over renal colic or gastroenteritis.',
         whyItMatters:
           'Imaging interpretation confirms anatomy-specific inflammation when bedside findings are equivocal.',
+        discriminator: null,
+        managementImplication:
+          'Use anatomy-specific inflammation to align surgical consultation and operative planning.',
+        escalationImplication: null,
+        trapAvoided:
+          'Using nonspecific abdominal symptoms instead of anatomy-specific imaging findings.',
       },
       {
         id: 'pregnancy-test',
@@ -549,9 +883,15 @@ function buildHighQualityAppendicitisDraft() {
         limitation:
           'A negative test does not exclude appendicitis or other non-gynecologic mimics.',
         content:
-          'Pregnancy testing helps distinguish appendicitis from ectopic pregnancy before imaging and operative planning.',
+          'Pregnancy testing showing positive or negative status helps distinguish appendicitis from ectopic pregnancy before imaging and operative planning.',
         whyItMatters:
           'The result changes diagnostic risk and imaging choices.',
+        discriminator: null,
+        managementImplication:
+          'Use pregnancy status to choose safer imaging and gynecology involvement when appropriate.',
+        escalationImplication: null,
+        trapAvoided:
+          'Missing ectopic pregnancy in a patient with right lower quadrant pain.',
       },
     ],
     differentials: [
@@ -567,10 +907,16 @@ function buildHighQualityAppendicitisDraft() {
         managementConsequence:
           'Peritoneal signs should prompt surgical evaluation rather than hydration-only management.',
         content:
-          'Gastroenteritis favors diffuse cramping and diarrhea, unlike appendicitis which develops migratory focal right lower quadrant tenderness.',
+          'Both can cause early abdominal pain and vomiting, but gastroenteritis favors diffuse cramping and diarrhea unlike appendicitis which develops migratory focal right lower quadrant tenderness.',
         whyItMatters:
           'The contrast prevents anchoring on vomiting alone.',
-        discriminator: 'Localized peritonism argues against gastroenteritis.',
+        discriminator:
+          'Localized peritonism rather than diffuse cramping with diarrhea.',
+        managementImplication:
+          'Peritoneal signs should prompt surgical evaluation rather than hydration-only management.',
+        escalationImplication: null,
+        trapAvoided:
+          'Anchoring on gastroenteritis when focal peritoneal signs emerge.',
       },
       {
         id: 'renal-colic',
@@ -584,9 +930,16 @@ function buildHighQualityAppendicitisDraft() {
         managementConsequence:
           'Separating urinary obstruction from appendiceal inflammation changes imaging, analgesia, and surgical urgency.',
         content:
-          'Renal colic favors flank-to-groin pain and hematuria rather than progressive McBurney point tenderness or Rovsing sign.',
+          'Both can cause severe right-sided abdominal pain, but renal colic favors flank-to-groin pain and hematuria rather than progressive McBurney point tenderness or Rovsing sign.',
         whyItMatters:
           'Pain radiation and urine findings separate urinary from appendiceal pathology.',
+        discriminator:
+          'Flank-to-groin radiation and hematuria rather than McBurney tenderness or Rovsing sign.',
+        managementImplication:
+          'Separating urinary obstruction from appendiceal inflammation changes imaging, analgesia, and surgical urgency.',
+        escalationImplication: null,
+        trapAvoided:
+          'Treating appendiceal peritonism as urinary colic without reassessment.',
       },
     ],
     management: [
@@ -602,9 +955,15 @@ function buildHighQualityAppendicitisDraft() {
         consequenceIfDelayed:
           'Delay increases perforation and abscess risk.',
         content:
-          'Surgical consultation anchors management when exam, Alvarado score, or CT abdomen supports appendicitis rather than a benign mimic.',
+          'Request surgical consultation when exam, Alvarado score, or CT abdomen supports appendicitis rather than a benign mimic.',
         whyItMatters:
           'Early consultation changes timing of definitive care and reduces perforation risk.',
+        discriminator: null,
+        managementImplication:
+          'Coordinate NPO status, imaging interpretation, analgesia, and operative planning.',
+        escalationImplication:
+          'Delay increases perforation and abscess risk.',
+        trapAvoided: null,
       },
       {
         id: 'npo-fluids-analgesia',
@@ -618,9 +977,15 @@ function buildHighQualityAppendicitisDraft() {
         consequenceIfDelayed:
           'Poor preparation can slow definitive care if appendicitis is confirmed.',
         content:
-          'NPO status, IV fluids, and analgesia support operative readiness without masking meaningful peritoneal findings.',
+          'Use NPO status, IV fluids, and analgesia when suspected appendicitis is awaiting imaging, reassessment, or operative planning.',
         whyItMatters:
           'These anchors stabilize the patient while the diagnostic pathway is completed.',
+        discriminator: null,
+        managementImplication:
+          'Preserve operative readiness while continuing serial abdominal exams.',
+        escalationImplication:
+          'Poor preparation can slow definitive care if appendicitis is confirmed.',
+        trapAvoided: null,
       },
     ],
     pitfalls: [
@@ -639,6 +1004,8 @@ function buildHighQualityAppendicitisDraft() {
           'A normal white blood cell count early can falsely reassure when migratory pain and peritoneal signs are evolving.',
         whyItMatters:
           'The trap delays reassessment and can increase perforation risk.',
+        trapAvoided:
+          'Reassess evolving focal tenderness even when early labs are normal.',
       },
       {
         id: 'retrocecal-appendix',
@@ -655,6 +1022,8 @@ function buildHighQualityAppendicitisDraft() {
           'Retrocecal appendicitis can mute McBurney tenderness and produce psoas irritation rather than classic anterior guarding.',
         whyItMatters:
           'Atypical anatomy prevents false reassurance from an incomplete abdominal exam.',
+        trapAvoided:
+          'Use psoas irritation and pain progression when classic McBurney tenderness is absent.',
       },
     ],
     recallPrompts: [
@@ -684,5 +1053,6 @@ function buildHighQualityAppendicitisDraft() {
         difficulty: 'INTERMEDIATE',
       },
     ],
+    ...overrides,
   });
 }

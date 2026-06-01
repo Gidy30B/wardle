@@ -10,6 +10,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { AuthenticatedRequest } from '../../auth/authenticated-request.interface';
+import {
+  EditorialAccess,
+  SeniorEditorialAccess,
+} from '../../auth/editorial-permission.decorator';
 import { AdminGuard } from '../admin/admin.guard';
 import { DiagnosisGraphCandidatesService } from './diagnosis-graph-candidates.service';
 import { DiagnosisGraphExtractionService } from './diagnosis-graph-extraction.service';
@@ -17,6 +21,7 @@ import { ListGraphCandidatesDto } from './dto/list-graph-candidates.dto';
 import {
   MergeGraphCandidateDto,
   RejectGraphCandidateDto,
+  ResolveMimicCandidateDto,
 } from './dto/review-graph-candidate.dto';
 import { SmokeExtractGraphDto } from './dto/smoke-extract-graph.dto';
 
@@ -29,16 +34,25 @@ export class AdminDiagnosisGraphController {
   ) {}
 
   @Get('candidates')
+  @EditorialAccess()
   async listCandidates(@Query() query: ListGraphCandidatesDto) {
     return this.candidatesService.listCandidates(query);
   }
 
+  @Get('candidates/unresolved-mimics')
+  @EditorialAccess()
+  async listUnresolvedMimicCandidates() {
+    return this.candidatesService.listUnresolvedMimicCandidates();
+  }
+
   @Get('candidates/:id')
+  @EditorialAccess()
   async getCandidate(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.candidatesService.getCandidate(id);
   }
 
   @Post('candidates/:id/approve')
+  @SeniorEditorialAccess()
   async approveCandidate(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
@@ -47,6 +61,7 @@ export class AdminDiagnosisGraphController {
   }
 
   @Post('candidates/:id/reject')
+  @SeniorEditorialAccess()
   async rejectCandidate(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
@@ -56,12 +71,27 @@ export class AdminDiagnosisGraphController {
   }
 
   @Post('candidates/:id/merge')
+  @SeniorEditorialAccess()
   async mergeCandidate(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: AuthenticatedRequest,
     @Body() body: MergeGraphCandidateDto,
   ) {
     return this.candidatesService.mergeCandidate(id, request.user.id, body);
+  }
+
+  @Post('candidates/:id/resolve-mimic')
+  @SeniorEditorialAccess()
+  async resolveMimicCandidate(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: ResolveMimicCandidateDto,
+  ) {
+    return this.candidatesService.resolveMimicCandidate(
+      id,
+      request.user.id,
+      body,
+    );
   }
 
   @Post('extract/smoke')

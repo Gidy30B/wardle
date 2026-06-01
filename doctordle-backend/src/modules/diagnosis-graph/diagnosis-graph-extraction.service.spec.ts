@@ -26,7 +26,53 @@ describe('DiagnosisGraphExtractionService', () => {
 
     return {
       prisma,
-      service: new DiagnosisGraphExtractionService(prisma as never),
+      service: new DiagnosisGraphExtractionService(prisma as never, {
+        resolve: jest.fn().mockImplementation(async ({ rawText }) => {
+          const text = String(rawText).trim();
+          const normalizedText = text.toLowerCase();
+          const target = await prisma.diagnosisRegistry.findFirst({
+            where: {
+              active: true,
+              id: { not: 'registry-1' },
+              OR: [
+                { displayLabel: { equals: text, mode: 'insensitive' } },
+                { canonicalNormalized: normalizedText },
+                { canonicalName: { equals: text, mode: 'insensitive' } },
+                {
+                  aliases: {
+                    some: {
+                      active: true,
+                      normalizedTerm: normalizedText,
+                    },
+                  },
+                },
+              ],
+            },
+            select: { id: true },
+          });
+          return target
+            ? {
+                rawText,
+                normalizedText,
+                status: 'resolved',
+                resolvedRegistryId: target.id,
+                resolvedDisplayLabel: rawText,
+                matchType: 'canonical',
+                confidence: 1,
+                suggestions: [],
+              }
+            : {
+                rawText,
+                normalizedText,
+                status: 'unresolved',
+                confidence: 0,
+                suggestions: [],
+              };
+        }),
+        toPayload: jest.fn((result) => ({
+          registryResolution: result,
+        })),
+      } as never),
     };
   };
 

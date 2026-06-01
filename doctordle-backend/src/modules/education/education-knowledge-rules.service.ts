@@ -13,6 +13,7 @@ export type EducationKnowledgeRulePack = {
 };
 
 export type EducationRuleRegistryMetadata = {
+  id?: string | null;
   canonicalName?: string | null;
   displayLabel?: string | null;
   aliases?: Array<{ term?: string | null } | string> | null;

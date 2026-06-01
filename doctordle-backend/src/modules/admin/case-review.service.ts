@@ -42,6 +42,7 @@ import type { ListEditorialCasesDto } from './dto/list-editorial-cases.dto.js';
 import type { SearchDiagnosisRegistryDto } from './dto/search-diagnosis-registry.dto.js';
 import type { SubmitCaseReviewDto } from './dto/submit-case-review.dto.js';
 import type { UpdateCaseDiagnosisDto } from './dto/update-case-diagnosis.dto.js';
+import { CaseQualityProjectionService } from './case-quality-projection.service.js';
 
 type ReviewTransactionClient = Prisma.TransactionClient | PrismaClient;
 
@@ -233,6 +234,7 @@ export class CaseReviewService {
     private readonly diagnosisRegistryLinkService: DiagnosisRegistryLinkService,
     private readonly diagnosisRegistryEditorialService: DiagnosisRegistryEditorialService,
     private readonly diagnosisGraphExtractionService?: DiagnosisGraphExtractionService,
+    private readonly caseQualityProjectionService: CaseQualityProjectionService = new CaseQualityProjectionService(),
   ) {}
 
   async listEditorialCases(query: ListEditorialCasesDto) {
@@ -1535,7 +1537,11 @@ export class CaseReviewService {
       throw new NotFoundException(`Case not found: ${caseId}`);
     }
 
-    return this.attachDiagnosisEditorialSummary(caseRecord);
+    return {
+      ...this.attachDiagnosisEditorialSummary(caseRecord),
+      qualityProjection:
+        this.caseQualityProjectionService.buildProjection(caseRecord),
+    };
   }
 
   private attachDiagnosisEditorialSummary<

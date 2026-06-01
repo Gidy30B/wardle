@@ -5,7 +5,7 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { DiagnosisRegistryStatus, Prisma } from '@prisma/client';
 import OpenAI from 'openai';
 import { zodResponseFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
@@ -14,6 +14,7 @@ import { PrismaService } from '../../core/db/prisma.service.js';
 import { CaseValidationOrchestrator } from '../case-validation/case-validation.orchestrator.js';
 import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
 import { buildMatchedDiagnosisMappingFields } from '../diagnosis-registry/diagnosis-mapping-fields.js';
+import { GenerationContextBuilder } from '../editorial/generation-context-builder.service.js';
 import type {
   CaseGenerationCritique,
   CaseGenerationFailureCategory,
@@ -28,6 +29,10 @@ import type {
   SaveGeneratedCaseOptions,
   SavedGeneratedCase,
 } from './case-generator.types.js';
+import {
+  CaseTeachingAlignmentService,
+  type CaseTeachingAlignmentReport,
+} from './case-teaching-alignment.service.js';
 import { GenerationPlannerService } from './generation-planner.service.js';
 
 const clueTypeSchema = z.enum([
@@ -247,6 +252,19 @@ type PersistedGeneratedExplanation = GeneratedCase['explanation'] & {
     hasVitals: boolean;
     differentialCount: number;
     qualityScore: number;
+    teachingAlignment?: CaseTeachingAlignmentReport;
+    targetedGeneration?: {
+      teachingUnitIds: string[];
+      teachingUnits: Array<{
+        id: string;
+        label: string;
+        category: string;
+        importance: string;
+      }>;
+      mimicDiagnosisIds: string[];
+      mimics: string[];
+      clueRevealStrategy: NonNullable<GenerateCaseInput['clueRevealStrategy']> | null;
+    };
   };
 };
 
@@ -299,6 +317,8 @@ export class CaseGeneratorService {
     private readonly caseValidationOrchestrator: CaseValidationOrchestrator,
     private readonly diagnosisRegistryLinkService: DiagnosisRegistryLinkService,
     private readonly generationPlannerService: GenerationPlannerService,
+    private readonly generationContextBuilder?: GenerationContextBuilder,
+    private readonly caseTeachingAlignmentService: CaseTeachingAlignmentService = new CaseTeachingAlignmentService(),
   ) {
     if (this.env.OPENAI_API_KEY) {
       this.openaiClient = new OpenAI({
@@ -1218,7 +1238,11 @@ export class CaseGeneratorService {
 
     const batchId = randomUUID();
     const seenAnswers = new Set<string>();
-    const registryFirst = options.registryFirst !== false;
+    const requestedDiagnosisRegistryIds = this.uniqueStrings(
+      options.diagnosisRegistryIds ?? [],
+    );
+    const targetedGeneration = requestedDiagnosisRegistryIds.length > 0;
+    const registryFirst = targetedGeneration || options.registryFirst !== false;
     const qualityState: BatchQualityState = {
       generated: 0,
       accepted: 0,
@@ -1239,7 +1263,11 @@ export class CaseGeneratorService {
     const plannerDiagnostics = await this.createPlannerDiagnostics({
       batchId,
       options,
+      requestedDiagnosisRegistryIds,
     });
+    const selectedDiagnosisRegistryIds = plannerDiagnostics
+      .map((slot) => slot.diagnosis?.diagnosisRegistryId)
+      .filter((id): id is string => Boolean(id));
     let nextIndex = 0;
 
     this.logger.log(
@@ -1251,6 +1279,9 @@ export class CaseGeneratorService {
         difficulty: this.normalizeDifficulty(options.difficulty),
         concurrency,
         registryFirst,
+        targetedGeneration,
+        requestedDiagnosisRegistryIds,
+        selectedDiagnosisRegistryIds,
       }),
     );
 
@@ -1329,6 +1360,9 @@ export class CaseGeneratorService {
         skipped: summary.skipped,
         failed: summary.failed,
         averageQualityScore: summary.averageQualityScore,
+        targetedGeneration,
+        requestedDiagnosisRegistryIds,
+        selectedDiagnosisRegistryIds,
         failureSummary: summary.failureSummary,
       }),
     );
@@ -1356,15 +1390,27 @@ export class CaseGeneratorService {
     } | null = null;
 
     for (let attempt = 1; attempt <= MAX_BATCH_SLOT_ATTEMPTS; attempt += 1) {
+      let generationContextBuilt = false;
       try {
         const difficulty =
           this.normalizeOptionalString(input.options.difficulty) ??
           this.getBalancedBatchDifficulty(input.index, attempt);
+        const generationContext = await this.buildGenerationContextForSlot({
+          diagnosisRegistryId:
+            input.plannerSlot?.diagnosis?.diagnosisRegistryId ?? null,
+          registryFirst: input.registryFirst,
+        });
+        generationContextBuilt = Boolean(generationContext);
         const generationInput = {
           track: input.options.track,
           difficulty,
           batchId: input.batchId,
           sequence: input.index + 1,
+          generationContext,
+          targetedTeachingUnitIds:
+            input.options.targetedCase?.teachingUnitIds,
+          targetedMimics: input.options.targetedCase?.mimics,
+          clueRevealStrategy: input.options.targetedCase?.clueRevealStrategy,
         };
         const generatedCase =
           input.registryFirst
@@ -1441,6 +1487,7 @@ export class CaseGeneratorService {
             estimatedDifficulty: quality?.estimatedDifficulty ?? null,
             registryFirst: input.registryFirst,
             plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
+            generationContextBuilt,
           });
           continue;
         }
@@ -1511,6 +1558,7 @@ export class CaseGeneratorService {
             estimatedDifficulty: quality?.estimatedDifficulty ?? null,
             registryFirst: input.registryFirst,
             plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
+            generationContextBuilt,
           });
           continue;
         }
@@ -1534,6 +1582,7 @@ export class CaseGeneratorService {
             estimatedDifficulty: quality?.estimatedDifficulty ?? null,
             registryFirst: input.registryFirst,
             plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
+            generationContextBuilt,
             saveDiagnosisSource:
               input.registryFirst ? 'registry' : 'legacy',
           }),
@@ -1570,6 +1619,7 @@ export class CaseGeneratorService {
             failureMessage: lastError.message,
             registryFirst: input.registryFirst,
             plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
+            generationContextBuilt,
             rejectionReason: lastError.message,
             saveDiagnosisSource: input.registryFirst ? 'registry' : 'legacy',
           }),
@@ -1607,6 +1657,36 @@ export class CaseGeneratorService {
     };
   }
 
+  private async buildGenerationContextForSlot(input: {
+    diagnosisRegistryId: string | null;
+    registryFirst: boolean;
+  }): Promise<GenerateCaseInput['generationContext'] | undefined> {
+    if (
+      !input.registryFirst ||
+      !input.diagnosisRegistryId ||
+      !this.generationContextBuilder
+    ) {
+      return undefined;
+    }
+
+    try {
+      return await this.generationContextBuilder.build({
+        diagnosisRegistryId: input.diagnosisRegistryId,
+        purpose: 'case',
+      });
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'case.generate.generation_context_failed',
+          diagnosisRegistryId: input.diagnosisRegistryId,
+          generationContextBuilt: false,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      return undefined;
+    }
+  }
+
   private recordBatchFailure(
     tracker: BatchFailureTracker,
     sample: CaseGenerationFailureSample,
@@ -1635,7 +1715,12 @@ export class CaseGeneratorService {
   private async createPlannerDiagnostics(input: {
     batchId: string;
     options: GenerateBatchOptions;
+    requestedDiagnosisRegistryIds: string[];
   }): Promise<PlannedGenerationSlot[]> {
+    if (input.requestedDiagnosisRegistryIds.length) {
+      return await this.createTargetedPlannerDiagnostics(input);
+    }
+
     try {
       return await this.generationPlannerService.createShadowPlan(input);
     } catch (error) {
@@ -1668,6 +1753,134 @@ export class CaseGeneratorService {
         },
       }));
     }
+  }
+
+  private async createTargetedPlannerDiagnostics(input: {
+    batchId: string;
+    options: GenerateBatchOptions;
+    requestedDiagnosisRegistryIds: string[];
+  }): Promise<PlannedGenerationSlot[]> {
+    const targets = await this.resolveTargetedDiagnoses(
+      input.requestedDiagnosisRegistryIds,
+    );
+    const count = Math.max(0, Math.trunc(input.options.count));
+    const existingCaseCountByDiagnosis = Object.fromEntries(
+      targets.map((target) => [
+        target.diagnosisRegistryId,
+        target.existingCaseCount,
+      ]),
+    );
+
+    return Array.from({ length: count }, (_value, index) => {
+      const diagnosis = targets[index % targets.length] ?? null;
+
+      return {
+        batchId: input.batchId,
+        index,
+        diagnosis,
+        duplicatePrevented: false,
+        selectionStatus: diagnosis ? ('selected' as const) : ('unavailable' as const),
+        repeatReason:
+          index >= targets.length ? 'targeted_diagnoses_reused' : null,
+        existingCaseCount: diagnosis?.existingCaseCount ?? null,
+        recentUsePenaltyApplied: diagnosis?.recentUsePenaltyApplied ?? false,
+        diagnostics: {
+          candidateCount: targets.length,
+          unusedCandidateCount: targets.filter(
+            (target) => target.existingCaseCount === 0,
+          ).length,
+          repeatedCandidateCount: targets.filter(
+            (target) => target.existingCaseCount > 0,
+          ).length,
+          selectedUnusedCount: targets.filter(
+            (target) => target.existingCaseCount === 0,
+          ).length,
+          selectedRepeatCount: targets.filter(
+            (target) => target.existingCaseCount > 0,
+          ).length,
+          repeatReason:
+            count > targets.length ? 'targeted_diagnoses_reused' : null,
+          existingCaseCountByDiagnosis,
+          recentUsePenaltyApplied: targets.some(
+            (target) => target.recentUsePenaltyApplied,
+          ),
+        },
+      };
+    });
+  }
+
+  private async resolveTargetedDiagnoses(
+    diagnosisRegistryIds: string[],
+  ): Promise<NonNullable<PlannedGenerationSlot['diagnosis']>[]> {
+    if (!diagnosisRegistryIds.length) {
+      return [];
+    }
+
+    const rows = await this.prisma.diagnosisRegistry.findMany({
+      where: {
+        id: { in: diagnosisRegistryIds },
+        active: true,
+        status: DiagnosisRegistryStatus.ACTIVE,
+      },
+      select: {
+        id: true,
+        legacyDiagnosisId: true,
+        displayLabel: true,
+        canonicalName: true,
+        specialty: true,
+        category: true,
+        bodySystem: true,
+        difficultyBand: true,
+        _count: {
+          select: {
+            cases: true,
+          },
+        },
+        cases: {
+          orderBy: { date: 'desc' },
+          take: 1,
+          select: { date: true },
+        },
+        aliases: {
+          where: {
+            active: true,
+            acceptedForMatch: true,
+          },
+          select: { term: true },
+          orderBy: [{ rank: 'asc' }, { term: 'asc' }],
+        },
+      },
+    });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const missingIds = diagnosisRegistryIds.filter((id) => !byId.has(id));
+    if (missingIds.length) {
+      throw new BadRequestException(
+        `Diagnosis registry IDs are not active or do not exist: ${missingIds.join(', ')}`,
+      );
+    }
+
+    const now = Date.now();
+    return diagnosisRegistryIds.map((id) => {
+      const row = byId.get(id)!;
+      const lastGeneratedAt = row.cases[0]?.date ?? null;
+
+      return {
+        diagnosisRegistryId: row.id,
+        legacyDiagnosisId: row.legacyDiagnosisId,
+        displayLabel: row.displayLabel,
+        canonicalName: row.canonicalName,
+        acceptedAliases: row.aliases.map((alias) => alias.term),
+        specialty: row.specialty,
+        category: row.category,
+        bodySystem: row.bodySystem,
+        difficultyBand: row.difficultyBand,
+        existingCaseCount: row._count.cases,
+        lastGeneratedAt,
+        recentUsePenaltyApplied: lastGeneratedAt
+          ? now - lastGeneratedAt.getTime() <= 30 * 24 * 60 * 60 * 1000
+          : false,
+      };
+    });
   }
 
   private async requestGeneratedCase(
@@ -1741,6 +1954,7 @@ export class CaseGeneratorService {
       typeof input.sequence === 'number'
         ? `Case ${input.sequence}.`
         : undefined;
+    const teachingSection = this.buildConceptGuidedCaseSection(input);
 
     return [
       sequenceLabel,
@@ -1762,6 +1976,7 @@ export class CaseGeneratorService {
       '3 = narrowing clue',
       '4 = near-diagnostic clue',
       '5 = confirmatory clue',
+      teachingSection,
       '',
       'Return JSON ONLY with this exact shape:',
       '{',
@@ -1845,6 +2060,7 @@ export class CaseGeneratorService {
       target.acceptedAliases.length > 0
         ? target.acceptedAliases.join(', ')
         : 'none';
+    const teachingSection = this.buildConceptGuidedCaseSection(input);
 
     return [
       sequenceLabel,
@@ -1885,6 +2101,7 @@ export class CaseGeneratorService {
       '3 = narrowing clue',
       '4 = near-diagnostic clue',
       '5 = confirmatory clue',
+      teachingSection,
       '',
       'Return JSON ONLY with this exact shape. The answer field may be null for compatibility; if set, it must match the fixed diagnosis or an accepted alias:',
       '{',
@@ -1950,6 +2167,142 @@ export class CaseGeneratorService {
     ]
       .filter((value): value is string => Boolean(value))
       .join('\n');
+  }
+
+  private buildConceptGuidedCaseSection(input: GenerateCaseInput): string | undefined {
+    const context = input.generationContext;
+    if (!context?.requiredTeachingUnits?.length) {
+      return undefined;
+    }
+
+    const difficulty =
+      context.difficultyStrategy?.targetDifficulty ??
+      this.normalizeDifficulty(input.difficulty);
+    const selectedUnits = this.selectCaseTeachingUnits({
+      units: context.requiredTeachingUnits,
+      difficulty,
+      requestedTeachingUnitIds: input.targetedTeachingUnitIds,
+    });
+    const revealCoreUnitByClue =
+      context.difficultyStrategy?.revealCoreUnitByClue ??
+      (difficulty === 'hard' ? 4 : difficulty === 'easy' ? 2 : 3);
+    const unitLines = selectedUnits.map((unit) => {
+      const manifestations = unit.acceptableManifestations.slice(0, 4).join(' | ');
+      return `* ${unit.id}: ${unit.label}. Choose one manifestation, such as: ${manifestations}. Rationale: ${unit.rationale}`;
+    });
+    const avoidTooEarly = context.difficultyStrategy?.avoidTooEarly ?? [];
+    const keepAlive = input.targetedMimics?.length
+      ? input.targetedMimics.map((mimic) => mimic.diagnosis)
+      : context.difficultyGuidance?.keepAliveDifferentials ?? [];
+    const revealStrategy = this.clueRevealStrategyInstruction(
+      input.clueRevealStrategy,
+    );
+
+    return [
+      '',
+      'Concept-guided generation:',
+      '* Use teaching units as concepts, not fixed clue text.',
+      input.targetedTeachingUnitIds?.length
+        ? '* Use the editor-selected teaching units below as required concepts for this case.'
+        : '* Select 2-4 teaching units for this case; do not include every diagnosis-level teaching unit.',
+      '* For each selected unit, use one clinically valid manifestation or an equivalent alternative.',
+      '* Convert teaching units into constraints: required manifestations, discriminators, mimic persistence, investigations, exam findings, or management anchors as clinically appropriate.',
+      `* For ${difficulty} difficulty, avoid giveaway manifestations until clue ${revealCoreUnitByClue} or later.`,
+      '* Keep 1-2 plausible mimics alive until the middle clues when possible.',
+      revealStrategy ? `* Reveal strategy: ${revealStrategy}` : undefined,
+      keepAlive.length
+        ? `* Preferred mimics to keep plausible early: ${keepAlive.slice(0, 4).join(', ')}.`
+        : undefined,
+      avoidTooEarly.length
+        ? `* Avoid too early: ${avoidTooEarly.slice(0, 6).join('; ')}.`
+        : undefined,
+      'Selected teaching units for this case:',
+      ...unitLines,
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join('\n');
+  }
+
+  private selectCaseTeachingUnits(input: {
+    units: NonNullable<GenerateCaseInput['generationContext']>['requiredTeachingUnits'];
+    difficulty: 'easy' | 'medium' | 'hard';
+    requestedTeachingUnitIds?: string[];
+  }) {
+    const targetCount =
+      input.difficulty === 'hard' ? 2 : input.difficulty === 'easy' ? 4 : 3;
+    const caseUnits = input.units.filter((unit) => unit.appliesToCaseGeneration);
+    const requestedIds = new Set(input.requestedTeachingUnitIds ?? []);
+    const requested = caseUnits.filter((unit) => requestedIds.has(unit.id));
+    if (requested.length) {
+      return requested.slice(0, 6);
+    }
+
+    const critical = caseUnits.filter((unit) => unit.importance === 'critical');
+    const remaining = caseUnits.filter((unit) => unit.importance !== 'critical');
+
+    return [...critical, ...remaining].slice(0, targetCount);
+  }
+
+  private clueRevealStrategyInstruction(
+    strategy: GenerateCaseInput['clueRevealStrategy'],
+  ): string | undefined {
+    if (strategy === 'early_anchor') {
+      return 'give a broad syndromic anchor in clues 0-1 while preserving mimics, then separate with later evidence.';
+    }
+    if (strategy === 'late_discriminator') {
+      return 'delay the decisive discriminator until clues 3-4 and keep early clues compatible with selected mimics.';
+    }
+    if (strategy === 'progressive_narrowing') {
+      return 'narrow stepwise from broad syndrome to organ system to discriminator to confirmation.';
+    }
+    if (strategy === 'classic') {
+      return 'use the standard broad, directional, discriminator, narrowing, near-diagnostic, confirmatory ladder.';
+    }
+
+    return undefined;
+  }
+
+  private buildCaseTeachingAlignmentReport(
+    input: GenerateCaseInput,
+    generatedCase: GeneratedCase,
+  ): CaseTeachingAlignmentReport | undefined {
+    const context = input.generationContext;
+    if (!context?.requiredTeachingUnits?.length) {
+      return undefined;
+    }
+
+    const difficulty =
+      context.difficultyStrategy?.targetDifficulty ??
+      this.normalizeDifficulty(input.difficulty);
+    const selectedUnits = this.selectCaseTeachingUnits({
+      units: context.requiredTeachingUnits,
+      difficulty,
+      requestedTeachingUnitIds: input.targetedTeachingUnitIds,
+    });
+    const report = this.caseTeachingAlignmentService.buildReport({
+      caseData: generatedCase,
+      diagnosisRegistryId: context.diagnosis.id,
+      generationContext: context,
+      selectedTeachingUnits: selectedUnits,
+    });
+    const coveredCount = report.selectedUnits.filter((unit) => unit.covered).length;
+
+    this.logger.log(
+      JSON.stringify({
+        event: 'case.generate.teaching_alignment.completed',
+        answer: generatedCase.answer,
+        diagnosisRegistryId: context.diagnosis.id,
+        difficulty,
+        selectedTeachingUnitIds: selectedUnits.map((unit) => unit.id),
+        coveredCount,
+        selectedCount: selectedUnits.length,
+        playabilityScore: report.playability.score,
+        difficultyFit: report.playability.difficultyFit,
+        warnings: report.warnings,
+      }),
+    );
+
+    return report;
   }
 
   private buildSystemPrompt(): string {
@@ -2327,6 +2680,11 @@ export class CaseGeneratorService {
     const hasVitals = generatedCase.clues.some((clue) => clue.type === 'vital');
     const estimatedSolveClue = this.estimateSolveClue(generatedCase);
     const difficultyPreference = this.normalizeDifficulty(input.difficulty);
+    const teachingAlignment = this.buildCaseTeachingAlignmentReport(
+      input,
+      generatedCase,
+    );
+    const selectedUnits = this.selectedTeachingUnitsForMetadata(input);
 
     return {
       estimatedDifficulty: this.estimateDifficulty({
@@ -2345,7 +2703,46 @@ export class CaseGeneratorService {
       hasVitals,
       differentialCount: generatedCase.differentials.length,
       qualityScore: this.computeQualityScore(critique),
+      ...(teachingAlignment ? { teachingAlignment } : {}),
+      ...(input.targetedTeachingUnitIds?.length ||
+      input.targetedMimics?.length ||
+      input.clueRevealStrategy
+        ? {
+            targetedGeneration: {
+              teachingUnitIds: input.targetedTeachingUnitIds ?? [],
+              teachingUnits: selectedUnits.map((unit) => ({
+                id: unit.id,
+                label: unit.label,
+                category: unit.category,
+                importance: unit.importance,
+              })),
+              mimicDiagnosisIds:
+                input.targetedMimics
+                  ?.map((mimic) => mimic.diagnosisRegistryId)
+                  .filter((id): id is string => Boolean(id)) ?? [],
+              mimics:
+                input.targetedMimics?.map((mimic) => mimic.diagnosis) ?? [],
+              clueRevealStrategy: input.clueRevealStrategy ?? null,
+            },
+          }
+        : {}),
     };
+  }
+
+  private selectedTeachingUnitsForMetadata(input: GenerateCaseInput) {
+    const context = input.generationContext;
+    if (!context?.requiredTeachingUnits?.length) {
+      return [];
+    }
+
+    const difficulty =
+      context.difficultyStrategy?.targetDifficulty ??
+      this.normalizeDifficulty(input.difficulty);
+    return this.selectCaseTeachingUnits({
+      units: context.requiredTeachingUnits,
+      difficulty,
+      requestedTeachingUnitIds: input.targetedTeachingUnitIds,
+    });
   }
 
   private estimateSolveClue(generatedCase: GeneratedCase): number {
@@ -2603,6 +3000,7 @@ export class CaseGeneratorService {
     estimatedDifficulty: string | null;
     registryFirst?: boolean;
     plannerDiagnosis?: string | null;
+    generationContextBuilt?: boolean;
   }): void {
     this.logger.warn(
       JSON.stringify({
@@ -2619,6 +3017,7 @@ export class CaseGeneratorService {
         estimatedDifficulty: input.estimatedDifficulty,
         registryFirst: input.registryFirst === true,
         plannerDiagnosis: input.plannerDiagnosis ?? null,
+        generationContextBuilt: input.generationContextBuilt === true,
       }),
     );
   }
@@ -2714,6 +3113,10 @@ export class CaseGeneratorService {
 
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  private uniqueStrings(values: string[]): string[] {
+    return [...new Set(values.filter((value) => typeof value === 'string'))];
   }
 
   private normalizeDifficulty(value?: string): 'easy' | 'medium' | 'hard' {
