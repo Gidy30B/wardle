@@ -119,7 +119,7 @@ const DIAGNOSIS_EDUCATION_DRAFT_SCHEMA = {
     clinicalPattern: {
       type: 'array',
       minItems: 3,
-      maxItems: 5,
+      maxItems: 3,
       items: TYPED_PEARL_DRAFT_SCHEMA,
     },
     keySymptoms: {
@@ -146,7 +146,7 @@ const DIAGNOSIS_EDUCATION_DRAFT_SCHEMA = {
     keySigns: {
       type: 'array',
       minItems: 3,
-      maxItems: 6,
+      maxItems: 4,
       items: {
         type: 'object',
         additionalProperties: false,
@@ -167,11 +167,12 @@ const DIAGNOSIS_EDUCATION_DRAFT_SCHEMA = {
     examPearls: {
       type: 'array',
       minItems: 3,
-      maxItems: 6,
+      maxItems: 4,
       items: TYPED_PEARL_DRAFT_SCHEMA,
     },
     scoringSystems: {
       type: 'array',
+      maxItems: 2,
       items: {
         type: 'object',
         additionalProperties: false,
@@ -188,26 +189,26 @@ const DIAGNOSIS_EDUCATION_DRAFT_SCHEMA = {
     investigations: {
       type: 'array',
       minItems: 3,
-      maxItems: 6,
+      maxItems: 4,
       items: TYPED_PEARL_DRAFT_SCHEMA,
     },
     differentials: {
       type: 'array',
       minItems: 3,
-      maxItems: 6,
+      maxItems: 5,
       items: TYPED_PEARL_DRAFT_SCHEMA,
     },
     management: {
       type: 'array',
       minItems: 3,
-      maxItems: 6,
+      maxItems: 4,
       items: TYPED_PEARL_DRAFT_SCHEMA,
     },
     complications: { type: 'array', items: { type: 'string' } },
     pitfalls: {
       type: 'array',
       minItems: 3,
-      maxItems: 5,
+      maxItems: 3,
       items: TYPED_PEARL_DRAFT_SCHEMA,
     },
     recallPrompts: {
@@ -905,9 +906,11 @@ export class DiagnosisEducationService {
               'Typed pearl content must be 18-45 words and no more than 2 sentences.',
               'Every whyItMatters line must name the probability shift, discriminator, management change, risk, or trap avoided.',
               'Follow schemaContract/editorialPatterns exactly: they use only schema-allowed fields.',
+              'Before returning JSON, mentally assign each teaching concept to exactly one primary section; write a compact clinical handbook page, not a repeated essay.',
+              'Do not repeat concepts; if repeated, add label, mechanism, action, trap, or separator. Avoid synonym duplicates such as RLQ tenderness/right lower quadrant tenderness.',
               'Use compactGenerationContext for expected signs, scores, investigations, mimics, pitfalls, management anchors, and critical teaching units unless clinically irrelevant.',
               'Cover every critical requiredTeachingUnit for education. Explain its rationale, discriminator, and operational implication; do not merely mention the term.',
-              'Differentials must compare explicitly using language such as unlike, rather than, favors, argues against, or distinguishes.',
+              'Differentials must compare explicitly using language such as unlike, rather than, favors, argues against, or distinguishes, with title as diagnosis, content as whyConfused, discriminator as keySeparator, and trapAvoided as classicTrap.',
               'Recall prompts must test reasoning or discrimination, not trivia.',
               'Do not include drug doses, patient-specific advice, or unsupported guideline claims.',
             ].join(' '),
@@ -937,6 +940,10 @@ export class DiagnosisEducationService {
                   'Avoid textbook introductions and generic urgency statements.',
                 ],
               },
+              sectionOwnership:
+                'summary=definition/takeaway only; clinicalPattern=flow; keySigns=named signs; examPearls=mechanism; investigations=interpretation/trap; scoringSystems=scores; management=actions; pitfalls=traps; differentials title=diagnosis content=whyConfused discriminator=keySeparator trapAvoided=classicTrap.',
+              appendicitisAllocationExample:
+                'summary=appendix inflammation/takeaway; clinicalPattern=Periumbilical pain -> RLQ pain -> movement sensitivity -> focal peritonism; keySigns=McBurney/Rovsing/psoas/obturator; examPearls=mechanisms; investigations=WBC/CRP/USS/CT interpretation traps; scoringSystems=Alvarado/MANTRELS; management=action principles; pitfalls=normal early WBC/retrocecal anatomy/perforation reassurance.',
               compactGenerationContext,
               exampleCases: this.toEducationExampleCaseSummaries(
                 this.asArray((registry as Record<string, unknown>).cases),
@@ -963,14 +970,22 @@ export class DiagnosisEducationService {
                 'Do not use differentialDistinguishers; use differentials.',
                 'summary must be an object with definition and highYieldTakeaway.',
                 'clinicalPattern, examPearls, investigations, differentials, management, and pitfalls must use typed pearl objects with id, type, title, content, whyItMatters.',
+                'Length limits: clinicalPattern max 3, keySigns max 4, examPearls max 4, investigations max 4, management max 4, pitfalls max 3, differentials max 5, scoringSystems max 2.',
+                'Do not repeat the same clinical concept across sections; each major concept has one primary section, and any repeat must add label, mechanism, action, trap, or separator.',
+                'Prefer named concepts such as McBurney, Rovsing, and Alvarado/MANTRELS over repeated generic synonyms.',
+                'summary is definition plus one high-yield takeaway only; no exam signs, investigations, management, or full clinical pattern.',
                 'scoringSystems must be objects with id, name, use, components, and caution.',
+                'Keep scoring systems and mnemonics in scoringSystems, not examPearls.',
                 'recallPrompts must be objects with id, type, prompt, answer, sourceSection, and difficulty.',
                 'Recall prompts must include at least one WHY_IT_MATTERS prompt.',
                 'Recall prompts should include at least one DISTINGUISH prompt when meaningful differentials exist.',
-                'Clinical pattern must include illness script, context, tempo, and relevant atypical presentations.',
-                'Exam pearls must prioritize named signs, bedside findings, validated scores, and maneuvers.',
+                'Clinical pattern must include illness script, context, tempo, and relevant atypical presentations without detailed signs, labs, or management.',
+                'Key signs must be named/high-value bedside signs only.',
+                'Exam pearls must prioritize why exam findings matter, not validated scores or repeated signs.',
                 'Exam pearls should be 1-2 dense reasoning sentences, not paragraph prose.',
-                'Differentials must be comparative; pitfalls must be specific traps with consequence or safer heuristic.',
+                'Differentials must include diagnosis, whyConfused, keySeparator, and classicTrap via typed fields.',
+                'Investigations must include interpretation or trap, not generic test usefulness prose.',
+                'Management must state action principles and must not repeat the diagnostic pattern.',
                 'References must include at least two source labels when scoring systems, investigations, or management are populated.',
                 'No drug doses.',
                 'No patient-specific advice.',
@@ -2525,12 +2540,14 @@ export class DiagnosisEducationService {
       keySymptoms: education.keySymptoms,
       keySigns: education.keySigns,
       examPearls: education.examPearls,
+      scoringSystems: education.scoringSystems,
       investigations: education.investigations,
       differentialDistinguishers: education.differentials,
       pitfalls: education.pitfalls,
       managementOverview: education.management,
       complications: education.complications,
       recallPrompts: education.recallPrompts,
+      references: education.references,
       reviewedAt: education.reviewedAt?.toISOString() ?? null,
       version: education.version,
     };
@@ -2562,6 +2579,10 @@ export class DiagnosisEducationService {
       keySymptoms: this.snapshotValue(snapshot.keySymptoms, education.keySymptoms),
       keySigns: this.snapshotValue(snapshot.keySigns, education.keySigns),
       examPearls: this.snapshotValue(snapshot.examPearls, education.examPearls),
+      scoringSystems: this.snapshotValue(
+        snapshot.scoringSystems,
+        education.scoringSystems,
+      ),
       investigations: this.snapshotValue(
         snapshot.investigations,
         education.investigations,
@@ -2583,6 +2604,7 @@ export class DiagnosisEducationService {
         snapshot.recallPrompts,
         education.recallPrompts,
       ),
+      references: this.snapshotValue(snapshot.references, education.references),
       reviewedAt:
         typeof snapshot.reviewedAt === 'string' ? snapshot.reviewedAt : null,
       version: revision.version,

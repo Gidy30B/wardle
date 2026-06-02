@@ -124,6 +124,126 @@ const GENERIC_FILLER_PATTERNS = [
   /\bcan lead to complications\b/i,
 ];
 
+const DUPLICATION_SECTION_KEYS = [
+  'summary',
+  'clinicalPattern',
+  'keySymptoms',
+  'keySigns',
+  'examPearls',
+  'scoringSystems',
+  'investigations',
+  'differentials',
+  'management',
+  'pitfalls',
+] as const;
+
+const DUPLICATE_CONCEPT_PATTERNS: Array<{
+  code: string;
+  pattern: RegExp;
+}> = [
+  {
+    code: 'rlq_tenderness',
+    pattern:
+      /\b(?:(?:focal\s+)?(?:rlq|right lower quadrant|right iliac fossa|rif)\s+(?:point\s+)?tenderness|tenderness\s+(?:at|in|over)?\s*(?:the\s+)?(?:rlq|right lower quadrant|right iliac fossa|rif))\b/i,
+  },
+  {
+    code: 'migration',
+    pattern:
+      /\b(?:migrat\w+|periumbilical.{0,40}(?:rlq|right lower quadrant|right iliac fossa|rif))\b/i,
+  },
+  {
+    code: 'alvarado',
+    pattern: /\b(?:alvarado|mantrels)\b/i,
+  },
+  {
+    code: 'kussmaul',
+    pattern: /\bkussmaul\b/i,
+  },
+  {
+    code: 'ketones',
+    pattern: /\b(?:ketone|ketones|ketonemia|ketonaemia|ketonuria)\b/i,
+  },
+  {
+    code: 'anion_gap',
+    pattern: /\banion gap\b/i,
+  },
+  {
+    code: 'potassium_before_insulin',
+    pattern:
+      /\b(?:(?:potassium|k\+).{0,80}insulin|insulin.{0,80}(?:potassium|k\+))\b/i,
+  },
+  {
+    code: 'fluids_insulin',
+    pattern: /\b(?:fluids?.{0,60}insulin|insulin.{0,60}fluids?)\b/i,
+  },
+];
+
+export function detectEducationConceptDuplication(
+  draft: Partial<Record<string, unknown>>,
+): string[] {
+  const conceptSections = new Map<string, string[]>();
+
+  for (const section of DUPLICATION_SECTION_KEYS) {
+    const text = normalizeEducationConceptText(
+      extractEducationConceptText(draft[section]),
+    );
+    if (!text) {
+      continue;
+    }
+
+    for (const concept of DUPLICATE_CONCEPT_PATTERNS) {
+      if (concept.pattern.test(text)) {
+        const sections = conceptSections.get(concept.code) ?? [];
+        sections.push(section);
+        conceptSections.set(concept.code, sections);
+      }
+    }
+  }
+
+  const warnings = new Set<string>();
+  for (const [concept, sections] of conceptSections) {
+    const uniqueSections = [...new Set(sections)];
+    for (let i = 0; i < uniqueSections.length; i += 1) {
+      for (let j = i + 1; j < uniqueSections.length; j += 1) {
+        warnings.add(
+          `duplicate_concept_${concept}_in_${uniqueSections[i]}_and_${uniqueSections[j]}`,
+        );
+      }
+    }
+  }
+
+  return [...warnings].sort();
+}
+
+function extractEducationConceptText(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => extractEducationConceptText(item)).join(' ');
+  }
+
+  if (!value || typeof value !== 'object') {
+    return '';
+  }
+
+  return Object.values(value)
+    .map((item) => extractEducationConceptText(item))
+    .join(' ');
+}
+
+function normalizeEducationConceptText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\bright lower quadrant\b/g, 'rlq')
+    .replace(/\bright iliac fossa\b/g, 'rif')
+    .replace(/\bfocal rlq tenderness\b/g, 'rlq tenderness')
+    .replace(/[^a-z0-9+\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 @Injectable()
 export class EducationDraftQualityValidator {
   constructor(
@@ -179,6 +299,9 @@ export class EducationDraftQualityValidator {
     const patternComplianceScores =
       this.educationEditorialPatternsService.scoreDraft(draft);
     const genericScore = this.scoreGenericFiller(fullText, warnings);
+    for (const warning of detectEducationConceptDuplication(draft)) {
+      warnings.add(warning);
+    }
     const clinicalSpecificityScore = this.scoreClinicalSpecificity({
       guidance,
       normalizedFullText,

@@ -1355,6 +1355,31 @@ describe('DiagnosisEducationService', () => {
     expect(request.messages[1].content).toContain('Avoid broad syndrome paragraphs');
     expect(request.messages[0].content).toContain('not trivia');
     expect(request.messages[0].content).toContain('Differentials must compare');
+    expect(request.messages[0].content).toContain(
+      'mentally assign each teaching concept to exactly one primary section',
+    );
+    expect(request.messages[0].content).toContain(
+      'Avoid synonym duplicates',
+    );
+    expect(request.messages[1].content).toContain('sectionOwnership');
+    expect(request.messages[1].content).toContain(
+      'clinicalPattern max 3',
+    );
+    expect(request.messages[1].content).toContain(
+      'scoringSystems max 2',
+    );
+    expect(request.messages[1].content).toContain(
+      'Periumbilical pain -> RLQ pain -> movement sensitivity -> focal peritonism',
+    );
+    expect(request.messages[1].content).toContain(
+      'Keep scoring systems and mnemonics in scoringSystems',
+    );
+    expect(request.messages[1].content).toContain(
+      'Investigations must include interpretation or trap',
+    );
+    expect(request.messages[1].content).toContain(
+      'Management must state action principles',
+    );
     expect(request.messages[1].content).toContain('McBurney point tenderness');
     expect(request.messages[1].content).toContain('Rovsing sign');
     expect(request.messages[1].content).toContain('psoas sign');
@@ -1376,7 +1401,7 @@ describe('DiagnosisEducationService', () => {
     );
     expect(request.messages[1].content).not.toContain('badExamples');
     expect(request.messages[1].content).not.toContain('sectionContracts');
-    expect(request.messages[1].content).not.toContain('whyConfused');
+    expect(request.messages[1].content).toContain('whyConfused');
     expect(request.messages[1].content).not.toContain('expectedFinding');
     expect(request.messages[1].content).not.toContain('consequenceIfDelayed');
     expect(create.mock.calls[0][1]).toEqual(
@@ -1613,10 +1638,10 @@ describe('DiagnosisEducationService', () => {
       }),
     );
     expect(Number(promptMetricPayload?.promptCharacterCount)).toBeLessThan(
-      18_000,
+      22_000,
     );
     expect(Number(promptMetricPayload?.approximatePromptTokenCount)).toBeLessThan(
-      4_500,
+      5_500,
     );
   });
 

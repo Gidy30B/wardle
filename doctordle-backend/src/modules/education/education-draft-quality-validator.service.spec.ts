@@ -1,4 +1,7 @@
-import { EducationDraftQualityValidator } from './education-draft-quality-validator.service';
+import {
+  detectEducationConceptDuplication,
+  EducationDraftQualityValidator,
+} from './education-draft-quality-validator.service';
 import { EducationEditorialPatternsService } from './education-editorial-patterns.service';
 import { EducationKnowledgeRulesService } from './education-knowledge-rules.service';
 import { EducationTeachingRulesService } from './education-teaching-rules.service';
@@ -7,6 +10,192 @@ describe('EducationDraftQualityValidator', () => {
   const rules = new EducationKnowledgeRulesService();
   const teachingRules = new EducationTeachingRulesService();
   const validator = new EducationDraftQualityValidator();
+
+  it('does not warn when appendicitis RLQ tenderness is owned by key signs only', () => {
+    const warnings = detectEducationConceptDuplication(
+      buildQualityDraft({
+        summary: {
+          definition: 'Appendiceal inflammation.',
+          highYieldTakeaway:
+            'The key is an evolving surgical abdomen rather than a static diffuse illness.',
+        },
+        clinicalPattern: [
+          {
+            id: 'migration-flow',
+            type: 'PATTERN_RECOGNITION',
+            title: 'Migration flow',
+            content:
+              'Pain often begins near the umbilicus, then localizes as parietal peritoneal irritation develops and movement becomes uncomfortable.',
+            whyItMatters:
+              'The tempo separates evolving appendiceal inflammation from a static diffuse mimic.',
+          },
+        ],
+        keySigns: [
+          {
+            finding: 'Focal right lower quadrant tenderness',
+            whyItMatters:
+              'Localization supports organ-specific irritation rather than diffuse illness.',
+            diagnosticImpact: 'Raises suspicion for appendicitis.',
+            discriminator: 'Diffuse tenderness is less specific.',
+          },
+        ],
+        examPearls: [
+          {
+            id: 'rovsing-mechanism',
+            type: 'EXAM',
+            title: 'Rovsing sign',
+            content:
+              'Left-sided palpation produces contralateral pain because inflamed peritoneum is mechanically irritated across the abdomen.',
+            whyItMatters:
+              'Contralateral provocation adds a mechanism layer beyond simply naming the bedside sign.',
+            discriminator:
+              'Diffuse gastroenteritis should not produce focal contralateral peritoneal pain.',
+          },
+        ],
+      }),
+    );
+
+    expect(warnings).not.toContain(
+      'duplicate_concept_rlq_tenderness_in_summary_and_keySigns',
+    );
+    expect(warnings).not.toContain(
+      'duplicate_concept_rlq_tenderness_in_clinicalPattern_and_keySigns',
+    );
+    expect(warnings).not.toContain(
+      'duplicate_concept_rlq_tenderness_in_keySigns_and_examPearls',
+    );
+  });
+
+  it('warns on duplicated clinical concepts without adding blockers', () => {
+    const result = validator.validate({
+      draft: buildQualityDraft({
+        summary: {
+          definition: 'Appendiceal inflammation.',
+          highYieldTakeaway:
+            'Focal RLQ tenderness is the key clue in this condition.',
+        },
+        keySigns: [
+          {
+            finding: 'Focal right lower quadrant tenderness',
+            whyItMatters:
+              'Localization supports organ-specific irritation rather than diffuse illness.',
+            diagnosticImpact: 'Raises suspicion for appendicitis.',
+            discriminator: 'Diffuse tenderness is less specific.',
+          },
+        ],
+      }),
+    });
+
+    expect(result.warnings).toContain(
+      'duplicate_concept_rlq_tenderness_in_summary_and_keySigns',
+    );
+    expect(result.blockers).not.toContain(
+      'duplicate_concept_rlq_tenderness_in_summary_and_keySigns',
+    );
+  });
+
+  it('warns when scoring systems are repeated in exam pearls', () => {
+    const result = validator.validate({
+      draft: buildQualityDraft({
+        examPearls: [
+          {
+            id: 'alvarado-exam-pearl',
+            type: 'EXAM',
+            title: 'Alvarado score',
+            content:
+              'Alvarado score groups bedside and laboratory features into an appendicitis risk estimate.',
+            whyItMatters:
+              'The score should guide probability rather than replace clinical judgment.',
+            discriminator:
+              'Low scores need reassessment when the story continues to evolve.',
+          },
+        ],
+        scoringSystems: [
+          {
+            id: 'alvarado-score',
+            name: 'Alvarado score',
+            use: 'Risk stratifies suspected appendicitis using MANTRELS.',
+            components: ['Migration', 'Anorexia', 'Nausea or vomiting'],
+            caution:
+              'Use alongside clinical judgment rather than as a standalone rule.',
+          },
+        ],
+      }),
+    });
+
+    expect(result.warnings).toContain(
+      'duplicate_concept_alvarado_in_examPearls_and_scoringSystems',
+    );
+  });
+
+  it('warns when management repeats the diagnostic pattern', () => {
+    const result = validator.validate({
+      draft: buildQualityDraft({
+        clinicalPattern: [
+          {
+            id: 'migratory-pattern',
+            type: 'PATTERN_RECOGNITION',
+            title: 'Migratory pain',
+            content:
+              'Periumbilical pain migrating toward the RLQ reflects evolving peritoneal localization.',
+            whyItMatters:
+              'Migration separates appendicitis from a static diffuse mimic.',
+          },
+        ],
+        management: [
+          {
+            id: 'pattern-based-consult',
+            type: 'MANAGEMENT',
+            title: 'Surgical consultation',
+            content:
+              'Request surgical consultation when periumbilical pain migrates toward the RLQ and clinical suspicion remains high.',
+            whyItMatters:
+              'Early source-control planning reduces delay when appendicitis remains likely.',
+            managementImplication:
+              'Coordinate reassessment, analgesia, and operative readiness.',
+            escalationImplication:
+              'Delayed consultation can increase perforation risk.',
+          },
+        ],
+      }),
+    });
+
+    expect(result.warnings).toContain(
+      'duplicate_concept_migration_in_clinicalPattern_and_management',
+    );
+  });
+
+  it('keeps legacy education shapes accepted by the validator', () => {
+    const result = validator.validate({
+      draft: {
+        summary: 'Inflammation of the appendix.',
+        clinicalPattern: [
+          'Periumbilical pain can migrate to the right lower quadrant.',
+        ],
+        keySigns: ['McBurney point tenderness', 'Rovsing sign'],
+        examPearls: [
+          'Rovsing sign adds evidence of peritoneal irritation.',
+        ],
+        investigations: [
+          'CBC can show leukocytosis but normal early WBC does not exclude disease.',
+        ],
+        differentials: [
+          'Gastroenteritis has more diffuse cramping and diarrhea.',
+        ],
+        management: ['Surgical review when suspicion remains high.'],
+        pitfalls: ['Normal early labs can falsely reassure.'],
+        recallPrompts: [
+          {
+            prompt: 'Why does migration matter?',
+            answer: 'It reflects localizing peritoneal irritation.',
+          },
+        ],
+      },
+    });
+
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.scores.graphReadinessScore).toBeGreaterThanOrEqual(0);
+  });
 
   it('warns when appendicitis draft misses expected named signs', () => {
     const result = validator.validate({

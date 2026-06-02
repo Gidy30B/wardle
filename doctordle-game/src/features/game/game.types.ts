@@ -346,6 +346,26 @@ export type DiagnosisEducationManagement = {
   urgency?: string
 }
 
+export type DiagnosisEducationMnemonic = {
+  id?: string
+  name?: string
+  useCase?: string
+  expansion?: Array<{
+    letter?: string
+    meaning?: string
+    note?: string | null
+  }>
+}
+
+export type DiagnosisEducationScoringSystem = {
+  id?: string
+  name?: string
+  use?: string
+  mnemonic?: DiagnosisEducationMnemonic | null
+  components?: string[]
+  caution?: string
+}
+
 export type DiagnosisEducation = {
   diagnosisRegistryId: string
   title: string
@@ -358,12 +378,15 @@ export type DiagnosisEducation = {
   keySymptoms?: Array<string | DiagnosisEducationFinding> | null
   keySigns?: Array<string | DiagnosisEducationFinding> | null
   examPearls?: Array<string | DiagnosisEducationPearl | TypedEducationPearl> | null
+  scoringSystems?: Array<string | DiagnosisEducationScoringSystem> | null
+  mnemonics?: DiagnosisEducationMnemonic[] | null
   investigations?: Array<string | DiagnosisEducationInvestigation | TypedEducationPearl> | null
   differentialDistinguishers?: Array<string | DiagnosisEducationDifferential | TypedEducationPearl> | null
   pitfalls?: Array<string | DiagnosisEducationPitfall | TypedEducationPearl> | null
   managementOverview?: Array<string | DiagnosisEducationManagement | TypedEducationPearl> | null
   complications?: string[] | null
   recallPrompts?: DiagnosisEducationRecallPrompt[] | null
+  references?: string[] | null
   reviewedAt?: string | null
   version: number
 }

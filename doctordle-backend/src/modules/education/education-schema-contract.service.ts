@@ -58,22 +58,23 @@ export class EducationSchemaContractService {
         'trapAvoided',
       ],
       requiredSignals: [
-        'overlap in content',
-        'explicit comparative discriminator',
-        'management implication or trap avoided',
+        'diagnosis in title',
+        'whyConfused overlap in content',
+        'explicit keySeparator in discriminator',
+        'classicTrap in trapAvoided',
       ],
       template:
-        'content names overlap and comparison; discriminator names separator; managementImplication or trapAvoided explains consequence.',
+        'title names diagnosis; content names why it is confused with the target; discriminator names the key separator; trapAvoided names the classic trap; managementImplication explains consequence when useful.',
       goodExample: this.typedPearl({
         id: 'gastroenteritis-mimic',
         type: 'HIGH_YIELD_DISCRIMINATOR',
         title: 'Gastroenteritis mimic',
         content:
-          'Both can cause early abdominal pain, nausea, and vomiting, but progressive RLQ localization with guarding favors appendicitis whereas diffuse cramps with prominent diarrhea favors gastroenteritis.',
+          'Both can cause early abdominal pain, nausea, and vomiting, but gastroenteritis more often has diffuse cramps with prominent diarrhea.',
         whyItMatters:
           'The separator changes urgency because missed appendicitis delays surgical evaluation and increases perforation risk.',
         discriminator:
-          'RLQ peritonism rather than diffuse cramping with prominent diarrhea.',
+          'Localized peritonism rather than diffuse cramping with diarrhea.',
         managementImplication:
           'Escalate toward surgical evaluation when focal peritoneal findings emerge.',
         trapAvoided:
@@ -197,6 +198,8 @@ export class EducationSchemaContractService {
         template: contract.template,
         goodExample: contract.goodExample,
       })),
+      ownershipSummary:
+        'One primary section per concept; repeated mentions must add label, mechanism, action, trap, or separator. Summary defines; clinicalPattern owns flow; keySigns owns bedside signs; examPearls owns mechanisms; investigations owns interpretation; scoringSystems owns scores; management owns actions; pitfalls owns traps; differentials owns separators.',
       recallPromptShape: {
         keys: [
           'id',

@@ -47,13 +47,20 @@ const SECTION_TYPE: Record<EducationRegenerableSection, string> = {
 
 const SECTION_INSTRUCTION: Record<EducationRegenerableSection, string> = {
   differentials:
-    'For each mimic, use content for overlap/comparison, discriminator for the separator, and managementImplication or trapAvoided for the consequence.',
+    'For each mimic, use title for diagnosis, content for whyConfused overlap/comparison, discriminator for keySeparator, and trapAvoided for classicTrap.',
   investigations:
-    'For each test, use content for test plus expected finding, whyItMatters for interpretation, and managementImplication for how to use or limit the result.',
+    'For each test, use content for test plus expected finding, whyItMatters for interpretation or trap, and managementImplication only for direct use or limit of the result.',
   examPearls:
-    'For each exam pearl, use content for named bedside finding plus mechanism, whyItMatters for diagnostic impact, and discriminator for the mimic separator.',
+    'For each exam pearl, use content for named bedside finding plus mechanism, whyItMatters for diagnostic impact, and discriminator for the mimic separator; do not place scoring systems here.',
   management:
-    'For each management anchor, use content for action and indication, whyItMatters for rationale, managementImplication for next step, and escalationImplication for consequence.',
+    'For each management anchor, use content for action and indication, whyItMatters for rationale, managementImplication for next step, and escalationImplication for consequence; do not repeat diagnostic pattern prose.',
+};
+
+const SECTION_MAX_ITEMS: Record<EducationRegenerableSection, number> = {
+  differentials: 5,
+  investigations: 4,
+  examPearls: 4,
+  management: 4,
 };
 
 type SectionRegenerationResult = DiagnosisEducation & {
@@ -252,6 +259,8 @@ export class EducationSectionRegenerationService {
             'Return JSON only with the requested section key.',
             'Use only schema-allowed typed pearl keys.',
             'Do not rewrite preserved sections.',
+            'Avoid repeating concepts already owned by preserved sections unless you add a new mechanism, action, trap, or separator layer.',
+            'Avoid synonym duplicates such as RLQ tenderness, focal RLQ tenderness, and right lower quadrant tenderness across cards.',
             'Do not include drug doses or patient-specific advice.',
           ].join(' '),
         },
@@ -272,11 +281,15 @@ export class EducationSectionRegenerationService {
             currentSection: input.currentEducation[input.section],
             constraints: [
               'Return an object with exactly the requested section key.',
-              'Use 3-6 typed pearl objects.',
+              `Use 3-${SECTION_MAX_ITEMS[input.section]} typed pearl objects.`,
               'Each item must include id, type, title, content, whyItMatters, discriminator, managementImplication, escalationImplication, trapAvoided.',
               'Use null for unused optional canonical fields.',
               'Content must be 18-45 words and no more than 2 sentences.',
               'Prefer specific named signs, tests, mimics, mechanisms, and management anchors from compactGenerationContext.',
+              'Keep scoring systems and clinically established mnemonics in scoringSystems, not examPearls.',
+              'Differentials must include diagnosis/title, whyConfused/content, keySeparator/discriminator, and classicTrap/trapAvoided.',
+              'Investigations must include interpretation or trap, not generic test usefulness prose.',
+              'Management must state action principles without repeating diagnostic pattern, exam signs, or investigation interpretation.',
             ],
           }),
         },
@@ -320,7 +333,7 @@ export class EducationSectionRegenerationService {
         [section]: {
           type: 'array',
           minItems: 3,
-          maxItems: 6,
+          maxItems: SECTION_MAX_ITEMS[section],
           items: typedPearlSchema,
         },
       },
@@ -344,7 +357,11 @@ export class EducationSectionRegenerationService {
 
     const record = this.asObject(parsed);
     const items = record ? record[section] : null;
-    if (!Array.isArray(items) || items.length < 3 || items.length > 6) {
+    if (
+      !Array.isArray(items) ||
+      items.length < 3 ||
+      items.length > SECTION_MAX_ITEMS[section]
+    ) {
       throw new BadRequestException(
         `AI returned invalid ${section} section shape`,
       );
