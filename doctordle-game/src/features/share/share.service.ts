@@ -37,6 +37,7 @@ export function buildShareText(data: {
     attemptsUsed: data.attempts,
     cluesUsed: data.attempts,
     totalClues: Math.max(6, data.attemptLabels.length),
+    timeUsedText: null,
     score: data.score,
     streak: getVisibleStreak(data.streak),
     xpTotal: null,

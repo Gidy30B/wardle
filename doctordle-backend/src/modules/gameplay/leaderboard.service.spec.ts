@@ -2,7 +2,9 @@ import { LeaderboardService } from './leaderboard.service';
 
 const user = {
   username: null,
+  settings: null,
   stats: null,
+  primaryOrganization: null,
   organizations: [],
 };
 
@@ -123,6 +125,73 @@ describe('LeaderboardService timing tie-breakers', () => {
       'unknown',
     ]);
     expect(result[0].timeToComplete).toBe(102);
+  });
+
+  it('masks leaderboard identity when profile is private without changing score or rank', async () => {
+    const fixture = createLeaderboardServiceFixture();
+    fixture.prisma.leaderboardEntry.findMany.mockResolvedValue([
+      {
+        userId: 'private-user',
+        score: 240,
+        attemptsCount: 1,
+        timeToComplete: 42,
+        completedAt: new Date('2026-04-22T09:05:00.000Z'),
+        user: {
+          username: 'Visible Name',
+          settings: { leaderboardProfilePublic: false },
+          stats: { currentStreak: 7 },
+          primaryOrganization: { name: 'Private School' },
+          organizations: [],
+        },
+      },
+    ]);
+
+    const result = await fixture.service.getToday(10);
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        rank: 1,
+        userId: 'private-user',
+        username: 'Anonymous player',
+        displayName: 'Anonymous player',
+        avatarUrl: null,
+        isAnonymous: true,
+        score: 240,
+        attemptsCount: 1,
+        timeToComplete: 42,
+      }),
+    ]);
+    expect(result[0]).not.toHaveProperty('organizationName');
+  });
+
+  it('defaults missing leaderboard privacy settings to public', async () => {
+    const fixture = createLeaderboardServiceFixture();
+    fixture.prisma.leaderboardEntry.findMany.mockResolvedValue([
+      {
+        userId: 'public-user',
+        score: 200,
+        attemptsCount: 2,
+        timeToComplete: 60,
+        completedAt: new Date('2026-04-22T09:05:00.000Z'),
+        user: {
+          username: 'Public Name',
+          settings: null,
+          stats: null,
+          primaryOrganization: null,
+          organizations: [],
+        },
+      },
+    ]);
+
+    const result = await fixture.service.getToday(10);
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        username: 'Public Name',
+        displayName: 'Public Name',
+        isAnonymous: false,
+      }),
+    );
   });
 
   it('/leaderboard/today returns an empty response without creating a DailyCase when missing', async () => {

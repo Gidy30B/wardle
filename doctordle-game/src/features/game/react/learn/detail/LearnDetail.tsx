@@ -10,7 +10,6 @@ import type {
 } from "../../../game.types";
 import { useDiagnosisEducation } from "../../../useDiagnosisEducation";
 import type { DetailTab } from "../learn.types";
-import { CLUE_TYPE_COPY } from "../learn.constants";
 import {
   buildAttemptPips,
   formatArchiveCaseLabel,
@@ -612,14 +611,6 @@ export function BreakdownTab({
         <KeyEvidence explanation={explanation} />
       </ResponsiveSection>
 
-      <details className="group rounded-[15px] border border-white/[0.06] bg-white/[0.025] px-4 py-3">
-        <summary className="cursor-pointer list-none font-brand-mono text-[10px] font-black uppercase tracking-[0.16em] text-white/38 transition group-open:text-white/58">
-          Evidence Trail
-        </summary>
-        <div className="mt-3">
-          <EvidenceTrail clues={clues} />
-        </div>
-      </details>
     </div>
   );
 }
@@ -699,58 +690,6 @@ function ReasoningFlowCard({
         </details>
       ) : null}
     </article>
-  );
-}
-
-function EvidenceTrail({ clues }: { clues: ClinicalClue[] }) {
-  const sorted = [...clues].sort((a, b) => a.order - b.order);
-
-  if (!sorted.length) {
-    return <InlineNotice tone="muted" copy="No clue trail was stored." />;
-  }
-
-  return (
-    <div className="space-y-2">
-      {sorted.map((clue, index) => {
-        const typeCopy = CLUE_TYPE_COPY[clue.type];
-        const isFinal = index === sorted.length - 1;
-        const strength = index / Math.max(sorted.length - 1, 1);
-        const bg =
-          strength > 0.65
-            ? "bg-amber-400/[0.055] border-amber-400/[0.16]"
-            : strength > 0.35
-              ? "bg-white/[0.035] border-white/[0.07]"
-              : "bg-white/[0.022] border-white/[0.05]";
-
-        return (
-          <div
-            key={clue.id}
-            className={`flex min-w-0 gap-3 rounded-[13px] border px-4 py-3 ${bg}`}
-          >
-            <div
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border text-[10px] font-black ${typeCopy.tone}`}
-            >
-              {typeCopy.abbr}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <p className="font-brand-mono text-[10px] font-bold uppercase tracking-[0.14em] text-white/32">
-                  Clue {index + 1} · {typeCopy.label}
-                </p>
-                {isFinal ? (
-                  <span className="rounded-full border border-amber-300/[0.2] bg-amber-400/[0.09] px-2 py-0.5 font-brand-mono text-[9px] font-bold uppercase tracking-[0.12em] text-amber-200/80">
-                    Sealed it
-                  </span>
-                ) : null}
-              </div>
-              <p className="mt-1 break-words text-sm leading-6 text-white/64">
-                {clue.value}
-              </p>
-            </div>
-          </div>
-        );
-      })}
-    </div>
   );
 }
 

@@ -1,4 +1,8 @@
 import { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useApi } from '../../../../../lib/api'
+import { updateUserSettingsApi } from '../../../../profile/profile.api'
+import { useUserSettings } from '../../../../profile/useUserSettings'
 import { DEFAULT_MOCK_PRIVACY_SETTINGS } from '../settings.constants'
 import { SettingsActionRow, SettingsChevronValue } from '../components/SettingsActionRow'
 import { SettingsBackHeader } from '../components/SettingsBackHeader'
@@ -21,7 +25,20 @@ export function AccountSettingsScreen({
   onSignOut: () => void
   organizationName: string | null
 }) {
-  const [privacy, setPrivacy] = useState(DEFAULT_MOCK_PRIVACY_SETTINGS)
+  const [anonData, setAnonData] = useState(DEFAULT_MOCK_PRIVACY_SETTINGS.anonData)
+  const { request } = useApi()
+  const queryClient = useQueryClient()
+  const settingsQuery = useUserSettings()
+  const leaderboardProfilePublic =
+    settingsQuery.data?.leaderboardProfilePublic ?? true
+  const settingsMutation = useMutation({
+    mutationFn: async (leaderboardProfilePublic: boolean) =>
+      updateUserSettingsApi(request, { leaderboardProfilePublic }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['settings'] })
+      void queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
+    },
+  })
 
   return (
     <SettingsShell>
@@ -63,14 +80,12 @@ export function AccountSettingsScreen({
         <SettingsToggleRow
           icon="👁"
           iconBg="rgba(0,180,166,0.15)"
-          label="Public leaderboard profile"
-          sublabel="Others can see your rank & streak"
-          on={privacy.publicProfile}
+          label="Show me on public leaderboards"
+          sublabel="When off, your score still counts, but your name appears as Anonymous player."
+          on={leaderboardProfilePublic}
+          disabled={settingsQuery.isLoading || settingsMutation.isPending}
           onToggle={() =>
-            setPrivacy((current) => ({
-              ...current,
-              publicProfile: !current.publicProfile,
-            }))
+            settingsMutation.mutate(!leaderboardProfilePublic)
           }
         />
         <SettingsToggleRow
@@ -78,9 +93,9 @@ export function AccountSettingsScreen({
           iconBg="rgba(26,60,94,0.55)"
           label="Share anonymised data"
           sublabel="Help improve case difficulty"
-          on={privacy.anonData}
+          on={anonData}
           onToggle={() =>
-            setPrivacy((current) => ({ ...current, anonData: !current.anonData }))
+            setAnonData((current) => !current)
           }
         />
         <SettingsActionRow
@@ -116,4 +131,3 @@ export function AccountSettingsScreen({
     </SettingsShell>
   )
 }
-

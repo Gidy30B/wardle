@@ -18,6 +18,7 @@ type RankTabPageProps = {
   currentStreak: number | null
   xpTotal: number | null
   organizationName: string | null
+  accuracy: number | null
   onPlay: () => void
 }
 
@@ -33,13 +34,11 @@ export default function RankTabPage({
   currentStreak,
   xpTotal,
   organizationName,
+  accuracy,
   onPlay,
 }: RankTabPageProps) {
-  // TODO(data-gap): accuracy is hidden because current progress/leaderboard models do not expose it yet.
-  const accuracy = null
-
   return (
-    <main className="flex h-full min-h-0 w-full flex-1 flex-col overflow-y-auto px-1 pb-6 pt-1 sm:px-2">
+    <main className="flex h-full min-h-0 w-full flex-1 flex-col overflow-y-auto bg-[var(--wardle-color-charcoal)] pb-6">
       <LeaderboardSection
         iconSet={iconSet}
         mode={mode}

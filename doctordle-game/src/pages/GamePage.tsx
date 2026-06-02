@@ -211,6 +211,7 @@ export default function GamePage() {
           currentStreak={currentStreak}
           xpTotal={shellXpTotal}
           organizationName={organizationName}
+          accuracy={userStats.report?.totals.accuracyPct ?? null}
           onPlay={() => setActiveTab('play')}
         />
       ) : null}

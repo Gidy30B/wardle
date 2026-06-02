@@ -395,6 +395,9 @@ export type LeaderboardEntry = {
   rank: number
   userId: string
   username?: string
+  displayName?: string
+  avatarUrl?: string | null
+  isAnonymous?: boolean
   organizationName?: string
   streak?: number
   score: number

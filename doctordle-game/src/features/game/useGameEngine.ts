@@ -1,5 +1,5 @@
 import { useAuth } from '@clerk/clerk-react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildRoundViewModel } from './buildRoundViewModel'
 import {
@@ -37,6 +37,16 @@ import { useUserSettings } from '../profile/useUserSettings'
 
 const SUBMIT_ACK_DELAY_MS = 180
 const FINAL_TRANSITION_DELAY_MS = 250
+
+function invalidateCompletedGameQueries(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: ['game', 'learn'] })
+  void queryClient.invalidateQueries({ queryKey: ['user-stats'] })
+  void queryClient.invalidateQueries({ queryKey: ['progress'] })
+  void queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
+  void queryClient.refetchQueries({ queryKey: ['leaderboard'], type: 'active' })
+  void queryClient.invalidateQueries({ queryKey: ['game', 'today'] })
+  void queryClient.invalidateQueries({ queryKey: ['game', 'start'] })
+}
 
 export type GameAttempt = {
   guess: string
@@ -334,6 +344,7 @@ export function useGameEngine() {
             source: 'hydrated_completed',
             nextCaseAt: new Date(session.nextCaseAt),
           })
+          invalidateCompletedGameQueries(queryClient)
           return
         }
 
@@ -381,7 +392,7 @@ export function useGameEngine() {
 
     sessionRequestRef.current = task
     return task
-  }, [clearGameplayState, ensureDiagnosisRegistryLoaded, request])
+  }, [clearGameplayState, ensureDiagnosisRegistryLoaded, queryClient, request])
 
   useEffect(() => {
     isMountedRef.current = true
@@ -418,8 +429,7 @@ export function useGameEngine() {
         receivedAt: Date.now(),
       })
 
-      void queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
-      void queryClient.invalidateQueries({ queryKey: ['progress'] })
+      invalidateCompletedGameQueries(queryClient)
     })
   }, [queryClient])
 
@@ -620,8 +630,7 @@ export function useGameEngine() {
         if (hasDisplayableExplanation(response.explanation)) {
           setLatestPlayedLearningResult(response)
         }
-        void queryClient.invalidateQueries({ queryKey: ['game', 'learn'] })
-        void queryClient.invalidateQueries({ queryKey: ['progress'] })
+        invalidateCompletedGameQueries(queryClient)
 
         await delay(FINAL_TRANSITION_DELAY_MS)
 
@@ -653,7 +662,9 @@ export function useGameEngine() {
   }, [
     diagnosisSubmitMode,
     guess,
+    clueIndex,
     mode.type,
+    queryClient,
     request,
     selectedDiagnosis,
     sessionId,

@@ -534,19 +534,26 @@ export function RecallQuestionContent({
           />
         ))}
         {sortedClues.slice(visibleClueCount).map((clue, lockedIndex) => {
-          const typeCopy = CLUE_TYPE_COPY[clue.type];
+          const clueNumber = visibleClueCount + lockedIndex + 1;
           return (
-            <div
+            <article
               key={clue.id}
-              className="flex min-w-0 items-center gap-3 rounded-[13px] border border-white/[0.05] bg-white/[0.01] px-3 py-2.5 opacity-30"
+              className="rounded-[18px] border border-dashed border-white/10 bg-white/[0.025] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]"
             >
-              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] border border-white/[0.1] bg-transparent font-brand-mono text-[9px] font-black text-white/20">
-                {typeCopy.abbr}
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.06] bg-white/[0.035] text-xs font-bold text-white/24">
+                  {clueNumber}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="h-2.5 w-24 rounded-full bg-white/[0.055]" />
+                  <div className="mt-3 h-2.5 w-full rounded-full bg-white/[0.045]" />
+                  <div className="mt-2 h-2.5 w-3/4 rounded-full bg-white/[0.04]" />
+                </div>
+                <span className="shrink-0 text-xs text-white/[0.15]" aria-hidden="true">
+                  🔒
+                </span>
               </div>
-              <p className="min-w-0 text-[12px] italic text-white/30">
-                Clue {visibleClueCount + lockedIndex + 1} — locked
-              </p>
-            </div>
+            </article>
           );
         })}
       </div>

@@ -29,6 +29,7 @@ export default function ShareScoreCard({
           attemptsUsed: attempts.length,
           cluesUsed: attempts.length,
           totalClues: Math.max(6, attempts.length),
+          timeUsedText: null,
           score,
           streak: visibleStreak,
           xpTotal: null,

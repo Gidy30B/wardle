@@ -42,6 +42,10 @@ function formatScore(score: number) {
 }
 
 function getUsername(entry: LeaderboardEntry) {
+  if (entry.displayName?.trim()) {
+    return entry.displayName.trim()
+  }
+
   if (entry.username?.trim()) {
     return entry.username.trim()
   }
@@ -107,12 +111,15 @@ function LeaderboardSection({
   return (
     <section className="w-full">
       <div className="bg-[var(--wardle-color-charcoal)] transition-opacity duration-200">
-      <div className="sticky top-0 z-20 -mx-1 border-b border-white/[0.05] bg-[var(--wardle-color-navy)] px-4 pb-4 pt-3 sm:-mx-2 sm:px-5 lg:mx-0">
-        <div className="mb-4 flex items-center justify-between gap-4">
+      <div className="sticky top-0 z-20 border-b border-white/[0.05] bg-[var(--wardle-color-navy)]">
+        <div className="flex items-center justify-between gap-4 px-5 py-3.5">
           <WardleLogo size="sm" />
-          <div className="text-sm font-semibold text-white/55">{iconSet.rank} Leaderboard</div>
+          <div className="text-xs font-bold uppercase tracking-[0.1em] text-[var(--wardle-color-gray)]">
+            {iconSet.rank} Leaderboard
+          </div>
         </div>
 
+        <div className="px-5 pb-4">
         <div className="wardle-nav-pill mb-3">
           {(['global', 'school', 'friends'] as const).map((scope) => {
             const isGlobal = scope === 'global'
@@ -150,6 +157,7 @@ function LeaderboardSection({
           >
             All-time
           </button>
+        </div>
         </div>
       </div>
 

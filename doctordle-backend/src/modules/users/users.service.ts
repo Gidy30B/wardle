@@ -261,6 +261,10 @@ export class UsersService {
       data.spacedRepetitionEnabled = payload.spacedRepetitionEnabled;
     }
 
+    if (typeof payload.leaderboardProfilePublic === 'boolean') {
+      data.leaderboardProfilePublic = payload.leaderboardProfilePublic;
+    }
+
     const settings = await this.prisma.userSettings.upsert({
       where: { userId },
       update: data,
@@ -271,8 +275,14 @@ export class UsersService {
         autocompleteEnabled: payload.autocompleteEnabled,
         difficultyPreference: payload.difficultyPreference,
         spacedRepetitionEnabled: payload.spacedRepetitionEnabled,
+        leaderboardProfilePublic: payload.leaderboardProfilePublic,
       },
     });
+
+    if (typeof payload.leaderboardProfilePublic === 'boolean') {
+      await this.cache.deleteByPrefix('leaderboard:daily:');
+      await this.cache.deleteByPrefix('leaderboard:weekly:');
+    }
 
     return toUserSettingsDto(settings);
   }
@@ -386,6 +396,7 @@ function toUserSettingsDto(settings: {
   autocompleteEnabled: boolean;
   difficultyPreference: string;
   spacedRepetitionEnabled: boolean;
+  leaderboardProfilePublic: boolean;
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -395,6 +406,7 @@ function toUserSettingsDto(settings: {
     autocompleteEnabled: settings.autocompleteEnabled,
     difficultyPreference: settings.difficultyPreference,
     spacedRepetitionEnabled: settings.spacedRepetitionEnabled,
+    leaderboardProfilePublic: settings.leaderboardProfilePublic,
     createdAt: settings.createdAt,
     updatedAt: settings.updatedAt,
   };

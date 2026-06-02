@@ -81,13 +81,7 @@ export function SettingsHomeScreen({
   const visibleStreak = getVisibleStreak(currentStreak)
 
   return (
-    <SettingsShell
-      contentStyle={{
-        paddingLeft: 'var(--px-1)',
-        paddingRight: 'var(--px-1)',
-        paddingTop: 'var(--pt-1)',
-      }}
-    >
+    <SettingsShell>
       <div
         style={{
           display: 'flex',

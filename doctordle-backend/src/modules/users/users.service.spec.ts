@@ -10,6 +10,7 @@ describe('UsersService settings', () => {
     autocompleteEnabled: true,
     difficultyPreference: 'STANDARD',
     spacedRepetitionEnabled: false,
+    leaderboardProfilePublic: true,
     createdAt: new Date('2026-04-29T10:00:00.000Z'),
     updatedAt: new Date('2026-04-29T10:00:00.000Z'),
   };
@@ -67,8 +68,35 @@ describe('UsersService settings', () => {
         autocompleteEnabled: undefined,
         difficultyPreference: 'HARD',
         spacedRepetitionEnabled: undefined,
+        leaderboardProfilePublic: undefined,
       },
     });
+  });
+
+  it('persists leaderboard privacy and clears leaderboard caches', async () => {
+    const { service, prisma, cache } = createService();
+
+    await service.updateMySettings(user.id, {
+      leaderboardProfilePublic: false,
+    });
+
+    expect(prisma.userSettings.upsert).toHaveBeenCalledWith({
+      where: { userId: user.id },
+      update: {
+        leaderboardProfilePublic: false,
+      },
+      create: {
+        userId: user.id,
+        showTimer: undefined,
+        hintsEnabled: undefined,
+        autocompleteEnabled: undefined,
+        difficultyPreference: undefined,
+        spacedRepetitionEnabled: undefined,
+        leaderboardProfilePublic: false,
+      },
+    });
+    expect(cache.deleteByPrefix).toHaveBeenCalledWith('leaderboard:daily:');
+    expect(cache.deleteByPrefix).toHaveBeenCalledWith('leaderboard:weekly:');
   });
 
   it('fails when the authenticated user no longer exists', async () => {

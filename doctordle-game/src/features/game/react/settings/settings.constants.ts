@@ -13,6 +13,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   autocompleteEnabled: true,
   difficultyPreference: 'STANDARD',
   spacedRepetitionEnabled: false,
+  leaderboardProfilePublic: true,
 }
 
 export const DIFFICULTY_OPTIONS = [
@@ -61,7 +62,6 @@ export const DEFAULT_MOCK_APPEARANCE_SETTINGS: MockAppearanceSettings = {
 }
 
 export const DEFAULT_MOCK_PRIVACY_SETTINGS: MockPrivacySettings = {
-  publicProfile: true,
   anonData: true,
 }
 

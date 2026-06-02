@@ -93,6 +93,39 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
+function formatPublicCaseLabel(publicNumber: number | null | undefined) {
+  if (typeof publicNumber !== 'number' || !Number.isFinite(publicNumber) || publicNumber <= 0) {
+    return null
+  }
+
+  return `Case ${String(Math.floor(publicNumber)).padStart(3, '0')}`
+}
+
+function formatCaseDisplayLabel({
+  publicNumber,
+  fallbackLabel,
+}: {
+  publicNumber?: number | null
+  fallbackLabel?: string | null
+}) {
+  const publicLabel = formatPublicCaseLabel(publicNumber)
+  if (publicLabel) {
+    return publicLabel
+  }
+
+  const trimmed = fallbackLabel?.trim()
+  const sequenceMatch = trimmed?.match(/^Daily Case\s+\d{4}-\d{2}-\d{2}\s+#(\d+)$/i)
+  if (sequenceMatch?.[1]) {
+    return `Daily Case #${sequenceMatch[1]}`
+  }
+
+  if (trimmed && !/\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    return trimmed
+  }
+
+  return 'Daily Case'
+}
+
 function getActiveViabilityRemaining(totalClues: number, clueIndex: number) {
   if (totalClues <= 0) {
     return 0
@@ -258,6 +291,20 @@ export function buildRoundViewModel({
   const gameplayClues = caseData?.clues ?? latestResult?.case?.clues ?? []
   const gameplayVisibleClues = gameplayClues.filter((clue) => clue.order <= clueIndex)
   const totalClues = latestResult?.case?.clues.length ?? caseData?.clues.length ?? 0
+  const casePublicNumber =
+    caseData?.casePublicNumber ?? latestResult?.case?.casePublicNumber ?? null
+  const caseDisplayLabel = formatCaseDisplayLabel({
+    publicNumber: casePublicNumber,
+    fallbackLabel: caseData?.displayLabel ?? latestResult?.case?.displayLabel,
+  })
+  const caseTrackDisplayLabel = formatCaseDisplayLabel({
+    publicNumber: casePublicNumber,
+    fallbackLabel:
+      caseData?.trackDisplayLabel ??
+      latestResult?.case?.trackDisplayLabel ??
+      caseData?.displayLabel ??
+      latestResult?.case?.displayLabel,
+  })
   const attemptsCount = latestResult?.attemptsCount ?? attempts.length
   const isTerminal = mode.type === 'FINAL_FEEDBACK' || latestResult?.gameOver === true
   const allClues = latestResult?.case?.clues ?? gameplayClues
@@ -327,16 +374,9 @@ export function buildRoundViewModel({
     loopState: getLoopState(mode),
     sessionId,
     caseId: caseData?.id ?? latestResult?.case?.id ?? null,
-    casePublicNumber:
-      caseData?.casePublicNumber ?? latestResult?.case?.casePublicNumber ?? null,
-    caseDisplayLabel:
-      caseData?.displayLabel ?? latestResult?.case?.displayLabel ?? 'Daily Case',
-    caseTrackDisplayLabel:
-      caseData?.trackDisplayLabel ??
-      latestResult?.case?.trackDisplayLabel ??
-      caseData?.displayLabel ??
-      latestResult?.case?.displayLabel ??
-      'Daily Case',
+    casePublicNumber,
+    caseDisplayLabel,
+    caseTrackDisplayLabel,
     isLoading: isLoadingCase,
     totalClues,
     revealedClueCount,

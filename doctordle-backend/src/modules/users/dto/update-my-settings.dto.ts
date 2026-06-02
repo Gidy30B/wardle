@@ -31,4 +31,8 @@ export class UpdateMySettingsDto {
   @IsOptional()
   @IsBoolean()
   spacedRepetitionEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  leaderboardProfilePublic?: boolean;
 }

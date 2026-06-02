@@ -111,8 +111,8 @@ forwardedRef,
 
           <div className="mt-6 grid grid-cols-3 gap-3">
             <ShareStat
-              label="Clues Used"
-              value={`${data.cluesUsed}/${data.totalClues}`}
+              label="Time Used"
+              value={data.timeUsedText ?? '\u2014'}
               tone="teal"
             />
             <ShareStat label="Score" value={String(data.score)} tone="mint" />

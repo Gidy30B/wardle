@@ -37,11 +37,15 @@ export function buildShareCardDataFromRound(
 
   return {
     caseId: roundViewModel.caseId,
-    caseLabel: roundViewModel.caseDisplayLabel,
+    caseLabel: buildShareCaseLabel({
+      publicNumber: roundViewModel.casePublicNumber ?? result?.case?.casePublicNumber ?? null,
+      fallbackLabel: roundViewModel.caseDisplayLabel,
+    }),
     result: isCorrect ? 'correct' : 'failed',
     attemptsUsed,
     cluesUsed,
     totalClues,
+    timeUsedText: buildTimeUsedText(result, roundViewModel),
     score: result?.score ?? 0,
     streak,
     xpTotal:
@@ -65,11 +69,15 @@ export function buildShareCardDataFromResult(
 
   return {
     caseId: result.case?.id ?? fallback.caseId,
-    caseLabel: result.case?.displayLabel ?? fallback.caseDisplayLabel,
+    caseLabel: buildShareCaseLabel({
+      publicNumber: result.case?.casePublicNumber ?? fallback.casePublicNumber,
+      fallbackLabel: result.case?.displayLabel ?? fallback.caseDisplayLabel,
+    }),
     result: isCorrect ? 'correct' : 'failed',
     attemptsUsed,
     cluesUsed: Math.min(attemptsUsed, totalClues),
     totalClues,
+    timeUsedText: buildTimeUsedText(result, fallback),
     score: result.score,
     streak: getVisibleStreak(
       typeof fallback.reward?.streak === 'number'
@@ -85,6 +93,64 @@ export function buildShareCardDataFromResult(
         ? fallback.attemptHistory.map((attempt) => attempt.label)
         : fallbackLabels,
   }
+}
+
+function buildShareCaseLabel({
+  publicNumber,
+  fallbackLabel,
+}: {
+  publicNumber?: number | null
+  fallbackLabel?: string | null
+}) {
+  if (typeof publicNumber === 'number' && Number.isFinite(publicNumber) && publicNumber > 0) {
+    return `Case ${String(Math.floor(publicNumber)).padStart(3, '0')}`
+  }
+
+  const trimmed = fallbackLabel?.trim()
+  const sequenceMatch = trimmed?.match(/^Daily Case\s+\d{4}-\d{2}-\d{2}\s+#(\d+)$/i)
+  if (sequenceMatch?.[1]) {
+    return `Daily Case #${sequenceMatch[1]}`
+  }
+
+  if (trimmed && !/\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    return trimmed
+  }
+
+  return 'Daily Case'
+}
+
+function buildTimeUsedText(result: GameResult | null | undefined, fallback: RoundViewModel) {
+  return formatTimeUsed(
+    getElapsedSecondsFromResult(result) ??
+      fallback.elapsedSeconds ??
+      null,
+  )
+}
+
+function getElapsedSecondsFromResult(result: GameResult | null | undefined) {
+  if (!result?.startedAt || !result.completedAt) {
+    return null
+  }
+
+  const startedAtMs = Date.parse(result.startedAt)
+  const completedAtMs = Date.parse(result.completedAt)
+  if (!Number.isFinite(startedAtMs) || !Number.isFinite(completedAtMs)) {
+    return null
+  }
+
+  return Math.max(0, Math.floor((completedAtMs - startedAtMs) / 1000))
+}
+
+function formatTimeUsed(seconds: number | null) {
+  if (seconds === null || !Number.isFinite(seconds)) {
+    return null
+  }
+
+  const safeSeconds = Math.max(0, Math.floor(seconds))
+  const minutes = Math.floor(safeSeconds / 60)
+  const remainingSeconds = safeSeconds % 60
+
+  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`
 }
 
 function getFallbackAttemptLabels({

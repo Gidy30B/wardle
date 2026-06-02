@@ -68,7 +68,6 @@ export type MockAppearanceSettings = {
 }
 
 export type MockPrivacySettings = {
-  publicProfile: boolean
   anonData: boolean
 }
 

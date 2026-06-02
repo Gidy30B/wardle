@@ -9,6 +9,7 @@ export type ShareCardData = {
   attemptsUsed: number
   cluesUsed: number
   totalClues: number
+  timeUsedText: string | null
   score: number
   streak: number | null
   xpTotal: number | null

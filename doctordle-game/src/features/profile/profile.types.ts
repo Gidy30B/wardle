@@ -56,6 +56,7 @@ export type UserSettings = {
   autocompleteEnabled: boolean
   difficultyPreference: DifficultyPreference
   spacedRepetitionEnabled: boolean
+  leaderboardProfilePublic: boolean
   createdAt?: string
   updatedAt?: string
 }
@@ -68,6 +69,7 @@ export type UserSettingsUpdate = Partial<
     | 'autocompleteEnabled'
     | 'difficultyPreference'
     | 'spacedRepetitionEnabled'
+    | 'leaderboardProfilePublic'
   >
 >
 

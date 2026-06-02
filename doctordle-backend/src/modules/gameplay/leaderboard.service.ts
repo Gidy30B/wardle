@@ -19,6 +19,9 @@ type LeaderboardRow = {
   completedAt: Date;
   user: {
     username: string | null;
+    settings: {
+      leaderboardProfilePublic: boolean;
+    } | null;
     stats: {
       currentStreak: number;
     } | null;
@@ -42,6 +45,9 @@ type LeaderboardEntryDto = {
   rank: number;
   userId: string;
   username?: string;
+  displayName?: string;
+  avatarUrl?: string | null;
+  isAnonymous?: boolean;
   organizationName?: string;
   streak?: number;
   score: number;
@@ -382,6 +388,11 @@ export class LeaderboardService {
     return {
       select: {
         username: true,
+        settings: {
+          select: {
+            leaderboardProfilePublic: true,
+          },
+        },
         stats: {
           select: {
             currentStreak: true,
@@ -491,18 +502,25 @@ export class LeaderboardService {
     row: LeaderboardRow,
     rank: number,
   ): LeaderboardEntryDto {
-    const username = row.user.username?.trim() || undefined;
-    const organizationName =
-      row.user.primaryOrganization?.name.trim() ||
-      row.user.organizations[0]?.organization.name.trim() ||
-      undefined;
+    const publicProfile = row.user.settings?.leaderboardProfilePublic ?? true;
+    const username = publicProfile
+      ? row.user.username?.trim() || 'Wardle player'
+      : 'Anonymous player';
+    const organizationName = publicProfile
+      ? row.user.primaryOrganization?.name.trim() ||
+        row.user.organizations[0]?.organization.name.trim() ||
+        undefined
+      : undefined;
     const streak = row.user.stats?.currentStreak;
     const aggregate = row as Partial<LeaderboardAggregate>;
 
     return {
       rank,
       userId: row.userId,
-      ...(username ? { username } : {}),
+      username,
+      displayName: username,
+      avatarUrl: null,
+      isAnonymous: !publicProfile,
       ...(organizationName ? { organizationName } : {}),
       ...(typeof streak === 'number' ? { streak } : {}),
       score: row.score,

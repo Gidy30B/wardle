@@ -251,6 +251,7 @@ function getShareImageCacheKey(data: ShareCardData) {
     attemptsUsed: data.attemptsUsed,
     cluesUsed: data.cluesUsed,
     totalClues: data.totalClues,
+    timeUsedText: data.timeUsedText,
     score: data.score,
     streak: data.streak,
     xpTotal: data.xpTotal,
