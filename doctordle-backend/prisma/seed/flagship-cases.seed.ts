@@ -171,6 +171,7 @@ const explanation = {
   generationQuality: {
     contentTier: 'FLAGSHIP',
     humanReviewed: true,
+    seedVersion,
   },
 };
 
@@ -501,17 +502,6 @@ async function main() {
   const history = clues.find((clue) => clue.type === 'history')?.value ?? displayLabel;
   const symptoms = clues.filter((clue) => clue.type === 'symptom').map((clue) => clue.value);
 
-  const existingCase = await prisma.case.findFirst({
-    where: {
-      diagnosisRegistryId: registry.id,
-      explanation: {
-        path: ['generationQuality', 'seedVersion'],
-        equals: seedVersion,
-      },
-    },
-    select: { id: true },
-  });
-
   const caseData = {
     title: displayLabel,
     date: caseDate,
@@ -533,9 +523,12 @@ async function main() {
       'Seeded frontend-aligned flagship diabetic ketoacidosis case. Scheduler should publish/schedule naturally.',
   };
 
-  const seededCase = existingCase
-    ? await prisma.case.update({ where: { id: existingCase.id }, data: caseData, select: { id: true } })
-    : await prisma.case.create({ data: caseData, select: { id: true } });
+  const seededCase = await prisma.case.upsert({
+    where: { date: caseDate },
+    update: caseData,
+    create: caseData,
+    select: { id: true },
+  });
 
   const latestRevision = await prisma.caseRevision.findFirst({
     where: { caseId: seededCase.id },
