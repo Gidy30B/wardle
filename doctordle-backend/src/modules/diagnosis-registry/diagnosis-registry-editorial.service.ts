@@ -30,6 +30,7 @@ import {
   getDiagnosisTermNormalizedCandidates,
   normalizeDiagnosisTerm,
 } from './diagnosis-term-normalizer.js';
+import { assertAliasValidWithClient } from './alias-validation.service.js';
 
 type DiagnosisRegistryEditorialClient =
   | PrismaService
@@ -440,27 +441,11 @@ export class DiagnosisRegistryEditorialService {
         : (input.acceptedForMatch ?? true);
     const prisma = client as PrismaService;
 
-    if (acceptedForMatch) {
-      const conflictingAlias = await prisma.diagnosisAlias.findFirst({
-        where: {
-          diagnosisRegistryId: {
-            not: diagnosisRegistryId,
-          },
-          normalizedTerm: normalizedAlias,
-          active: true,
-          acceptedForMatch: true,
-        },
-        select: {
-          id: true,
-        },
-      });
-
-      if (conflictingAlias) {
-        throw new BadRequestException(
-          `Accepted alias collision for "${alias}"`,
-        );
-      }
-    }
+    await assertAliasValidWithClient(prisma, {
+      aliasText: alias,
+      targetDiagnosisRegistryId: diagnosisRegistryId,
+      acceptedForMatch,
+    });
 
     await prisma.diagnosisAlias.upsert({
       where: {

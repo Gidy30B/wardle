@@ -14,6 +14,7 @@ import { PrismaService } from '../../core/db/prisma.service.js';
 import { CaseValidationOrchestrator } from '../case-validation/case-validation.orchestrator.js';
 import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
 import { buildMatchedDiagnosisMappingFields } from '../diagnosis-registry/diagnosis-mapping-fields.js';
+import { DifferentialMappingService } from '../diagnosis-graph/differential-mapping.service.js';
 import { GenerationContextBuilder } from '../editorial/generation-context-builder.service.js';
 import type {
   CaseGenerationCritique,
@@ -319,6 +320,7 @@ export class CaseGeneratorService {
     private readonly generationPlannerService: GenerationPlannerService,
     private readonly generationContextBuilder?: GenerationContextBuilder,
     private readonly caseTeachingAlignmentService: CaseTeachingAlignmentService = new CaseTeachingAlignmentService(),
+    private readonly differentialMappingService?: DifferentialMappingService,
   ) {
     if (this.env.OPENAI_API_KEY) {
       this.openaiClient = new OpenAI({
@@ -1217,6 +1219,17 @@ export class CaseGeneratorService {
           saveDiagnosisSource: 'registry',
         }),
       );
+
+      await this.differentialMappingService?.mapCase(createdCase.id).catch((error) => {
+        this.logger.error(
+          JSON.stringify({
+            event: 'differential_mapping.case_generation.failed',
+            caseId: createdCase.id,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+          error instanceof Error ? error.stack : undefined,
+        );
+      });
 
       return createdCase;
     } catch (error) {

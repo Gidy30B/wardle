@@ -106,6 +106,38 @@ export default function CaseClinicalSection({
             </div>
           </div>
 
+          <div className="rounded-lg bg-white px-3 py-3">
+            <p className="text-sm font-semibold text-slate-900">
+              Linked differentials
+            </p>
+            {detail.linkedDifferentials?.length ? (
+              <div className="mt-2 space-y-2">
+                {detail.linkedDifferentials.map((link) => (
+                  <div
+                    key={`${link.diagnosisRegistryId}-${link.sourceText}`}
+                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-slate-900">
+                        {link.displayLabel}
+                      </span>
+                      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        {formatLabel(link.role)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Source: {link.sourceText}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-slate-500">
+                No resolved differential links yet.
+              </p>
+            )}
+          </div>
+
           <CaseDetailSection
             title="Explanation and supporting data"
             description="Expanded only when reviewers need the deeper rationale or extra legacy context."

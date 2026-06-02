@@ -225,6 +225,101 @@ export type DiagnosisGraphCandidateStatus =
 
 export type DiagnosisGraphFactStatus = 'ACTIVE' | 'ARCHIVED';
 
+export type DifferentialResolutionStatus =
+  | 'RESOLVED'
+  | 'AMBIGUOUS'
+  | 'UNRESOLVED'
+  | 'REJECTED';
+
+export type DifferentialLinkRole =
+  | 'PRIMARY_MIMIC'
+  | 'DIFFERENTIAL'
+  | 'IMPORTANT_EXCLUSION'
+  | 'TEACHING_DIFFERENTIAL';
+
+export type StructuredDifferentialLink = {
+  id?: string;
+  diagnosisRegistryId: string;
+  displayLabel: string;
+  canonicalName?: string;
+  role: DifferentialLinkRole | string;
+  confidence: number | null;
+  sourceText: string;
+};
+
+export type DifferentialCoverageSummary = {
+  totalDifferentials: number;
+  resolvedLinks: number;
+  unresolvedMappings: number;
+};
+
+export type DifferentialMappingSourceType =
+  | 'case'
+  | 'case_revision'
+  | 'education'
+  | 'education_revision';
+
+export type DifferentialMappingSuggestion = {
+  diagnosisRegistryId: string;
+  displayLabel: string;
+  canonicalName: string;
+  matchType: string;
+  confidence: number;
+};
+
+export type DifferentialMappingReviewItem = {
+  id: string;
+  sourceType: DifferentialMappingSourceType;
+  sourceId: string;
+  sourceTitle: string;
+  sourcePath: string | null;
+  revisionNumber: number | null;
+  rawText: string;
+  normalizedText: string;
+  status: DifferentialResolutionStatus;
+  matchType: string | null;
+  confidence: number | null;
+  suggestions: DifferentialMappingSuggestion[] | JsonValue | null;
+  resolvedDiagnosisRegistryId: string | null;
+  resolvedDiagnosisRegistry: {
+    id: string;
+    displayLabel: string;
+    canonicalName: string;
+  } | null;
+  contextDiagnosis: {
+    id: string;
+    displayLabel: string;
+  } | null;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DifferentialMappingFilters = {
+  sourceType?: 'case' | 'education';
+  diagnosisRegistryId?: string;
+  status?: DifferentialResolutionStatus;
+};
+
+export type ResolveDifferentialMappingPayload =
+  | {
+      action: 'link_existing';
+      targetDiagnosisRegistryId: string;
+      reason?: string;
+    }
+  | {
+      action: 'add_alias_to_existing';
+      targetDiagnosisRegistryId: string;
+      aliasText: string;
+      reason?: string;
+    }
+  | {
+      action: 'reject';
+      reason?: string;
+    };
+
 export type DiagnosisGraphCandidate = {
   id: string;
   diagnosisRegistryId: string;
@@ -477,6 +572,7 @@ export type DiagnosisEducationRecord = {
   createdAt: string;
   updatedAt: string;
   revisions?: DiagnosisEducationRevision[];
+  linkedDifferentials?: StructuredDifferentialLink[];
 };
 
 export type DiagnosisEducationRevision = {
@@ -827,6 +923,14 @@ export type DiagnosisEditorialWorkspace = {
     blockers: string[];
     warnings: string[];
     recommendedActions: string[];
+    unresolvedDifferentialCount?: number;
+    differentialResolutionSummary?: {
+      resolved: number;
+      ambiguous: number;
+      unresolved: number;
+      rejected: number;
+    };
+    differentialCoverage?: DifferentialCoverageSummary;
   };
   readinessBreakdown: WorkspaceReadinessItem[];
   coverageMatrix: WorkspaceCoverageMatrixRow[];
@@ -899,6 +1003,7 @@ export type DiagnosisEditorialWorkspace = {
       }>;
     };
   };
+  linkedDifferentials?: StructuredDifferentialLink[];
   editorialLearning: {
     available: boolean;
     candidateCounts: {
@@ -1249,6 +1354,7 @@ export type EditorialCaseDetail = {
   clues: CluesBlob | null;
   explanation: ExplanationBlob | null;
   differentials: string[];
+  linkedDifferentials?: StructuredDifferentialLink[];
   diagnosisId: string;
   diagnosisRegistryId: string | null;
   proposedDiagnosisText: string;

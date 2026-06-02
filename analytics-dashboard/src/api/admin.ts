@@ -25,6 +25,8 @@ import type {
   DiagnosisEducationRevisionAnalysis,
   DiagnosisEducationRevisionCompareResult,
   DiagnosisEducationRevisionListResponse,
+  DifferentialMappingFilters,
+  DifferentialMappingReviewItem,
   DiagnosisRegistrySearchItem,
   EditorialCaseDetail,
   EditorialCaseRevision,
@@ -50,6 +52,7 @@ import type {
   RejectDiagnosisGraphCandidatePayload,
   MergeDiagnosisGraphCandidatePayload,
   ResolveMimicCandidatePayload,
+  ResolveDifferentialMappingPayload,
   UnresolvedMimicCandidate,
   UpdateCaseDiagnosisPayload,
   UpsertDiagnosisEducationPayload,
@@ -94,6 +97,27 @@ export function getUnresolvedMimicCandidates(client: ApiClient) {
   return client.get<UnresolvedMimicCandidate[]>(
     '/admin/diagnosis-graph/candidates/unresolved-mimics',
   );
+}
+
+export function getUnresolvedDifferentialMappings(
+  client: ApiClient,
+  filters: DifferentialMappingFilters = {},
+) {
+  return client.get<DifferentialMappingReviewItem[]>(
+    withQuery('/admin/differential-mappings/unresolved', {
+      sourceType: filters.sourceType,
+      diagnosisRegistryId: filters.diagnosisRegistryId,
+      status: filters.status,
+    }),
+  );
+}
+
+export function resolveDifferentialMapping(
+  client: ApiClient,
+  id: string,
+  payload: ResolveDifferentialMappingPayload,
+) {
+  return client.post(`/admin/differential-mappings/${id}/resolve`, payload);
 }
 
 export function approveDiagnosisGraphCandidate(client: ApiClient, id: string) {

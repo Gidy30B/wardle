@@ -21,6 +21,7 @@ import {
   getDiagnosisTermNormalizedCandidates,
   normalizeDiagnosisTerm,
 } from './diagnosis-term-normalizer';
+import { assertAliasValidWithClient } from './alias-validation.service';
 
 type RegistryInventoryClient =
   | PrismaService
@@ -620,21 +621,19 @@ async function importInventoryAliases(
           },
           select: ALIAS_SELECT,
         })) as ExistingAliasRow | null);
-    const conflictingAcceptedAlias = (await prisma.diagnosisAlias.findFirst({
-      where: {
-        diagnosisRegistryId: {
-          not: diagnosisRegistryId,
-        },
-        normalizedTerm,
-        active: true,
-        acceptedForMatch: true,
-      },
-      select: { id: true },
-    })) as { id: string } | null;
 
-    if (conflictingAcceptedAlias) {
-      summary.duplicateAliases += 1;
-      continue;
+    if (!diagnosisRegistryId.startsWith('dry-run:')) {
+      try {
+        await assertAliasValidWithClient(prisma, {
+          aliasText: alias,
+          targetDiagnosisRegistryId: diagnosisRegistryId,
+          acceptedForMatch: true,
+          ignoreAliasId: existingForRegistry?.id,
+        });
+      } catch {
+        summary.duplicateAliases += 1;
+        continue;
+      }
     }
 
     const mutation = {

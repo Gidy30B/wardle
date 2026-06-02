@@ -19,6 +19,7 @@ import {
   getDiagnosisTermNormalizedCandidates,
   normalizeDiagnosisTerm,
 } from './diagnosis-term-normalizer.js';
+import { assertAliasValidWithClient } from './alias-validation.service.js';
 
 type DiagnosisRegistryImportClient =
   | PrismaService
@@ -594,6 +595,22 @@ async function ensureCanonicalAlias(
   canonicalName: string,
   canonicalNormalized: string,
 ): Promise<void> {
+  const existingAlias = (await prisma.diagnosisAlias.findUnique({
+    where: {
+      diagnosisRegistryId_normalizedTerm: {
+        diagnosisRegistryId,
+        normalizedTerm: canonicalNormalized,
+      },
+    },
+    select: { id: true },
+  })) as { id: string } | null;
+  await assertAliasValidWithClient(prisma, {
+    aliasText: canonicalName,
+    targetDiagnosisRegistryId: diagnosisRegistryId,
+    acceptedForMatch: true,
+    ignoreAliasId: existingAlias?.id,
+    allowTargetCanonicalAlias: true,
+  });
   await prisma.diagnosisAlias.upsert({
     where: {
       diagnosisRegistryId_normalizedTerm: {
@@ -676,26 +693,21 @@ async function importAliasesForRegistry(
       select: ALIAS_SELECT,
     })) as ExistingAliasRecord | null;
 
-    if (mutation.acceptedForMatch) {
-      const conflictingAlias = (await prisma.diagnosisAlias.findFirst({
-        where: {
-          diagnosisRegistryId: {
-            not: diagnosisRegistryId,
-          },
-          normalizedTerm,
-          active: true,
-          acceptedForMatch: true,
-        },
-        select: ALIAS_SELECT,
-      })) as ExistingAliasRecord | null;
-
-      if (conflictingAlias) {
-        summary.collisions += 1;
-        summary.errors.push(
-          `Accepted alias collision for "${aliasTerm}" (${normalizedTerm})`,
-        );
-        continue;
-      }
+    try {
+      await assertAliasValidWithClient(prisma, {
+        aliasText: aliasTerm,
+        targetDiagnosisRegistryId: diagnosisRegistryId,
+        acceptedForMatch: mutation.acceptedForMatch,
+        ignoreAliasId: existingAlias?.id,
+      });
+    } catch (error) {
+      summary.collisions += 1;
+      summary.errors.push(
+        error instanceof Error
+          ? error.message
+          : `Alias validation failed for "${aliasTerm}" (${normalizedTerm})`,
+      );
+      continue;
     }
 
     if (!existingAlias) {

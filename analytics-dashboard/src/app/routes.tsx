@@ -6,6 +6,7 @@ import DashboardPage from '../features/dashboard/DashboardPage';
 import DiagnosisGraphCandidatesPage from '../features/diagnosis-graph/DiagnosisGraphCandidatesPage';
 import EditorialDiagnosisWorkspacePage from '../features/editorial/EditorialDiagnosisWorkspacePage';
 import EditorialHomePage from '../features/editorial/EditorialHomePage';
+import UnresolvedDifferentialsPage from '../features/editorial/UnresolvedDifferentialsPage';
 import GeneratePage from '../features/generation/GeneratePage';
 import PublishPage from '../features/publish/PublishPage';
 import { useConsoleAccess } from '../hooks/useConsoleAccess';
@@ -43,6 +44,10 @@ const routeContext: Record<string, { title: string; subtitle: string }> = {
   '/editorial': {
     title: 'Editorial',
     subtitle: 'Diagnosis-centered editorial workspace foundation',
+  },
+  '/editorial/differentials': {
+    title: 'Differentials',
+    subtitle: 'Resolve differential text into registry-linked diagnoses',
   },
 };
 
@@ -182,6 +187,10 @@ export default function AppRoutes() {
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/publish" element={<PublishPage />} />
         <Route path="/editorial" element={<EditorialHomePage />} />
+        <Route
+          path="/editorial/differentials"
+          element={<UnresolvedDifferentialsPage />}
+        />
         <Route
           path="/editorial/diagnoses/:diagnosisRegistryId"
           element={<EditorialDiagnosisWorkspacePage />}

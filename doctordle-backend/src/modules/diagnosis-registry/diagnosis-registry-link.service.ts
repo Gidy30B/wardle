@@ -12,6 +12,7 @@ import {
 import { PrismaService } from '../../core/db/prisma.service.js';
 import { buildDiagnosisRegistryStatusPatch } from './diagnosis-registry-status.js';
 import { normalizeDiagnosisTerm } from './diagnosis-term-normalizer.js';
+import { assertAliasValidWithClient } from './alias-validation.service.js';
 import { mapLegacySystemToRegistryTaxonomy } from './taxonomy/legacy-system-mapper.js';
 import { buildNullOnlyTaxonomyPatch } from './taxonomy/registry-taxonomy-backfill.js';
 
@@ -370,6 +371,23 @@ async function upsertRegistryForDiagnosis(
       })) as DiagnosisRegistryRecord;
     }
   }
+
+  const existingAlias = (await prisma.diagnosisAlias.findUnique({
+    where: {
+      diagnosisRegistryId_normalizedTerm: {
+        diagnosisRegistryId: registry.id,
+        normalizedTerm: canonicalNormalized,
+      },
+    },
+    select: { id: true },
+  })) as { id: string } | null;
+  await assertAliasValidWithClient(prisma, {
+    aliasText: diagnosis.name,
+    targetDiagnosisRegistryId: registry.id,
+    acceptedForMatch: true,
+    ignoreAliasId: existingAlias?.id,
+    allowTargetCanonicalAlias: true,
+  });
 
   await prisma.diagnosisAlias.upsert({
     where: {

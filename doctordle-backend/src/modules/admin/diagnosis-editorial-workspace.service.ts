@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   CaseEditorialStatus,
+  DifferentialResolutionStatus,
   DiagnosisGraphCandidateStatus,
   DiagnosisGraphCandidateType,
   DiagnosisGraphFactStatus,
@@ -9,6 +10,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { DiagnosisGraphCandidatesService } from '../diagnosis-graph/diagnosis-graph-candidates.service';
+import { DifferentialLinkService } from '../diagnosis-graph/differential-link.service';
 import {
   EducationRevisionQualityAnalyzer,
   type EducationRevisionAnalysis,
@@ -112,6 +114,7 @@ export class DiagnosisEditorialWorkspaceService {
     private readonly educationRevisionQualityAnalyzer: EducationRevisionQualityAnalyzer,
     private readonly caseQualityProjectionService: CaseQualityProjectionService,
     private readonly diagnosisGraphCandidatesService: DiagnosisGraphCandidatesService,
+    private readonly differentialLinkService?: DifferentialLinkService,
   ) {}
 
   async getFullWorkspace(diagnosisRegistryId: string) {
@@ -127,6 +130,9 @@ export class DiagnosisEditorialWorkspaceService {
       briefResult,
       revisionsResult,
       graphCandidatesResult,
+      differentialSummaryResult,
+      differentialCoverageResult,
+      linkedDifferentialsResult,
     ] = await Promise.allSettled([
       this.diagnosisWorkspaceQualityService.getSummary(diagnosisRegistryId),
       this.teachingUnitCoverageService.getCoverage(diagnosisRegistryId),
@@ -136,6 +142,11 @@ export class DiagnosisEditorialWorkspaceService {
       this.diagnosisGraphCandidatesService.listCandidates({
         diagnosisRegistryId,
       }),
+      this.getDifferentialResolutionSummary(diagnosisRegistryId),
+      this.differentialLinkService?.getCoverageForDiagnosis(diagnosisRegistryId),
+      this.differentialLinkService?.getLinkedDifferentialsForDiagnosis(
+        diagnosisRegistryId,
+      ),
     ]);
 
     const compositionWarnings = this.compositionWarnings({
@@ -156,6 +167,14 @@ export class DiagnosisEditorialWorkspaceService {
     const briefResponse = this.valueOrNull(briefResult);
     const revisions = this.valueOrNull(revisionsResult)?.revisions ?? [];
     const graphCandidates = this.valueOrNull(graphCandidatesResult) ?? [];
+    const differentialResolutionSummary =
+      this.valueOrNull(differentialSummaryResult) ??
+      this.emptyDifferentialResolutionSummary();
+    const differentialCoverage =
+      this.valueOrNull(differentialCoverageResult) ??
+      this.emptyDifferentialCoverage();
+    const linkedDifferentials =
+      this.valueOrNull(linkedDifferentialsResult) ?? [];
     const cases = this.buildCases(registry.cases);
     const coverageMatrix = this.buildCoverageMatrix({
       coverage,
@@ -207,6 +226,11 @@ export class DiagnosisEditorialWorkspaceService {
         blockers: summary?.blockers ?? [],
         warnings: this.unique([...(summary?.warnings ?? []), ...compositionWarnings]),
         recommendedActions: summary?.recommendedNextActions ?? [],
+        unresolvedDifferentialCount:
+          differentialResolutionSummary.unresolved +
+          differentialResolutionSummary.ambiguous,
+        differentialResolutionSummary,
+        differentialCoverage,
       },
       readinessBreakdown,
       coverageMatrix,
@@ -238,6 +262,7 @@ export class DiagnosisEditorialWorkspaceService {
         candidates: graphCandidates,
         factsSummary: this.graphFactsSummary(registry.graphFacts),
       },
+      linkedDifferentials,
       editorialLearning: {
         available: revisions.length >= 2,
         candidateCounts: {
@@ -324,6 +349,56 @@ export class DiagnosisEditorialWorkspaceService {
         },
       },
     });
+  }
+
+  private async getDifferentialResolutionSummary(diagnosisRegistryId: string) {
+    const [caseRows, educationRows] = await Promise.all([
+      this.prisma.caseDifferentialMapping.groupBy({
+        by: ['status'],
+        where: {
+          case: { diagnosisRegistryId },
+        },
+        _count: { _all: true },
+      }),
+      this.prisma.educationDifferentialMapping.groupBy({
+        by: ['status'],
+        where: { diagnosisRegistryId },
+        _count: { _all: true },
+      }),
+    ]);
+    const summary = this.emptyDifferentialResolutionSummary();
+
+    for (const row of [...caseRows, ...educationRows]) {
+      const count = row._count._all;
+      if (row.status === DifferentialResolutionStatus.RESOLVED) {
+        summary.resolved += count;
+      } else if (row.status === DifferentialResolutionStatus.AMBIGUOUS) {
+        summary.ambiguous += count;
+      } else if (row.status === DifferentialResolutionStatus.UNRESOLVED) {
+        summary.unresolved += count;
+      } else if (row.status === DifferentialResolutionStatus.REJECTED) {
+        summary.rejected += count;
+      }
+    }
+
+    return summary;
+  }
+
+  private emptyDifferentialResolutionSummary() {
+    return {
+      resolved: 0,
+      ambiguous: 0,
+      unresolved: 0,
+      rejected: 0,
+    };
+  }
+
+  private emptyDifferentialCoverage() {
+    return {
+      totalDifferentials: 0,
+      resolvedLinks: 0,
+      unresolvedMappings: 0,
+    };
   }
 
   private buildCases(cases: CaseRow[]) {

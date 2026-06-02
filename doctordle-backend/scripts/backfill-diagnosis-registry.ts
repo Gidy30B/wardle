@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { inferLegacyAliasDecision } from '../src/modules/diagnosis-registry/diagnosis-registry-backfill.js';
 import { collectDiagnosisRegistryIntegrityReport } from '../src/modules/diagnosis-registry/diagnosis-registry-link.service.js';
 import { normalizeDiagnosisTerm } from '../src/modules/diagnosis-registry/diagnosis-term-normalizer.js';
+import { assertAliasValidWithClient } from '../src/modules/diagnosis-registry/alias-validation.service.js';
 
 const prisma = new PrismaClient();
 
@@ -96,6 +97,22 @@ async function main() {
     });
     registryCount += 1;
 
+    const existingCanonicalAlias = await prismaAny.diagnosisAlias.findUnique({
+      where: {
+        diagnosisRegistryId_normalizedTerm: {
+          diagnosisRegistryId: registry.id,
+          normalizedTerm: canonicalNormalized,
+        },
+      },
+      select: { id: true },
+    });
+    await assertAliasValidWithClient(prismaAny, {
+      aliasText: diagnosis.name,
+      targetDiagnosisRegistryId: registry.id,
+      acceptedForMatch: true,
+      ignoreAliasId: existingCanonicalAlias?.id,
+      allowTargetCanonicalAlias: true,
+    });
     await prismaAny.diagnosisAlias.upsert({
       where: {
         diagnosisRegistryId_normalizedTerm: {
@@ -144,6 +161,25 @@ async function main() {
       }
 
       const aliasDecision = inferLegacyAliasDecision(synonym.term, ambiguous);
+      const existingSynonymAlias = await prismaAny.diagnosisAlias.findUnique({
+        where: {
+          diagnosisRegistryId_normalizedTerm: {
+            diagnosisRegistryId: registry.id,
+            normalizedTerm,
+          },
+        },
+        select: { id: true },
+      });
+      try {
+        await assertAliasValidWithClient(prismaAny, {
+          aliasText: synonym.term,
+          targetDiagnosisRegistryId: registry.id,
+          acceptedForMatch: aliasDecision.acceptedForMatch,
+          ignoreAliasId: existingSynonymAlias?.id,
+        });
+      } catch {
+        continue;
+      }
 
       await prismaAny.diagnosisAlias.upsert({
         where: {

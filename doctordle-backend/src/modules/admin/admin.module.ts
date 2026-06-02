@@ -26,6 +26,7 @@ import { EducationEditorialPatternsService } from '../education/education-editor
 import { EducationSchemaContractService } from '../education/education-schema-contract.service';
 import { DiagnosisTeachingRuleSeedService } from '../education/diagnosis-teaching-rule-seed.service';
 import { DiagnosisEditorialBriefService } from '../education/diagnosis-editorial-brief.service';
+import { AliasValidationService } from '../diagnosis-registry/alias-validation.service';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { DiagnosisEditorialBriefService } from '../education/diagnosis-editorial
     EducationSchemaContractService,
     DiagnosisRegistryLinkService,
     DiagnosisRegistryEditorialService,
+    AliasValidationService,
   ],
 })
 export class AdminModule {}

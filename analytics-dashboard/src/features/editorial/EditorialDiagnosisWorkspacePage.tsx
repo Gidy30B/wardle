@@ -29,6 +29,7 @@ import {
   type EducationRegenerableSection,
   type GenerateTargetedCasePayload,
   type GenerateTargetedCaseResult,
+  type StructuredDifferentialLink,
   type TeachingUnitCoverageMap,
   type WorkspaceAvailableAction,
   type WorkspaceCoverageGap,
@@ -892,6 +893,12 @@ function WorkspaceSummaryCard({
           { label: 'Overall score', value: formatScore(summary.overallScore) },
           { label: 'Education score', value: formatScore(summary.educationScore) },
           { label: 'Graph readiness', value: formatSummaryValue(summary.graphReadiness) },
+          {
+            label: 'Differential links',
+            value: summary.differentialCoverage
+              ? `${summary.differentialCoverage.resolvedLinks}/${summary.differentialCoverage.totalDifferentials}`
+              : '0/0',
+          },
         ]}
       />
       {summary.blockers.length || summary.warnings.length ? (
@@ -1561,8 +1568,48 @@ function GraphTab({
         selectedRow={selectedRow}
         onRowSelect={onRowSelect}
       />
+      <LinkedDifferentialsList links={workspace.linkedDifferentials ?? []} />
       <GraphCandidateList candidates={workspace.graph.candidates} />
     </div>
+  );
+}
+
+function LinkedDifferentialsList({
+  links,
+}: {
+  links: StructuredDifferentialLink[];
+}) {
+  if (!links.length) {
+    return (
+      <CompactPanel title="Linked differentials">
+        <p className="text-sm text-slate-500">
+          No resolved differential links are attached to this diagnosis yet.
+        </p>
+      </CompactPanel>
+    );
+  }
+
+  return (
+    <CompactPanel title="Linked differentials">
+      <div className="grid gap-2 sm:grid-cols-2">
+        {links.map((link) => (
+          <div
+            key={`${link.diagnosisRegistryId}-${link.sourceText}`}
+            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-slate-900">
+                {link.displayLabel}
+              </p>
+              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                {formatLabel(link.role)}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-slate-600">Source: {link.sourceText}</p>
+          </div>
+        ))}
+      </div>
+    </CompactPanel>
   );
 }
 

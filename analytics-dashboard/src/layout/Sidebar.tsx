@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 
 const editorialNavigationItems = [
   { to: '/editorial', label: 'Editorial', icon: 'E' },
+  { to: '/editorial/differentials', label: 'Differentials', icon: 'D' },
 ];
 
 const administrationNavigationItems = [

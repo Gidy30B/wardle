@@ -20,6 +20,11 @@ const quickLinks = [
     description: 'Review individual generated cases and diagnosis links.',
   },
   {
+    to: '/editorial/differentials',
+    label: 'Unresolved differentials',
+    description: 'Resolve case and education differential text into registry links.',
+  },
+  {
     to: '/diagnosis-graph/candidates',
     label: 'Graph candidates',
     description: 'Promote or reject extracted diagnosis graph candidates.',

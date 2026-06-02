@@ -30,14 +30,26 @@ function csvRow(values: string[]) {
 function createCsvImporterFixture() {
   const prisma = {
     diagnosisRegistry: {
-      findUnique: jest.fn(),
+      findUnique: jest.fn((input?: { where?: { id?: string } }) =>
+        Promise.resolve(
+          input?.where?.id
+            ? {
+                id: input.where.id,
+                displayLabel: 'Imported diagnosis',
+                canonicalNormalized: 'imported diagnosis',
+              }
+            : null,
+        ),
+      ),
       findFirst: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn(),
       update: jest.fn(),
     },
     diagnosisAlias: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn(),
       update: jest.fn(),
     },
@@ -100,7 +112,13 @@ describe('importDiagnosisRegistryCsv', () => {
 
   it('applies new registry rows with actual schema metadata', async () => {
     const fixture = createCsvImporterFixture();
-    fixture.prisma.diagnosisRegistry.findUnique.mockResolvedValue(null);
+    fixture.prisma.diagnosisRegistry.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({
+        id: 'registry-1',
+        displayLabel: 'Myocardial Infarction',
+        canonicalNormalized: 'myocardial infarction',
+      });
     fixture.prisma.diagnosisRegistry.create.mockResolvedValue({
       id: 'registry-1',
     });
@@ -168,7 +186,13 @@ describe('importDiagnosisRegistryCsv', () => {
 
   it('creates accepted gameplay aliases from semicolon-separated aliases', async () => {
     const fixture = createCsvImporterFixture();
-    fixture.prisma.diagnosisRegistry.findUnique.mockResolvedValue(null);
+    fixture.prisma.diagnosisRegistry.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({
+        id: 'registry-1',
+        displayLabel: 'Ischemic Stroke',
+        canonicalNormalized: 'ischemic stroke',
+      });
     fixture.prisma.diagnosisRegistry.create.mockResolvedValue({
       id: 'registry-1',
     });

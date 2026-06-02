@@ -20,6 +20,7 @@ describe('DiagnosisRegistryEditorialService', () => {
         findFirst: jest.fn(),
       },
       diagnosisAlias: {
+        findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn(),
         upsert: jest.fn(),
       },
@@ -248,6 +249,7 @@ describe('DiagnosisRegistryEditorialService', () => {
       id: 'registry-1',
       canonicalName: 'Asthma',
       canonicalNormalized: 'asthma',
+      displayLabel: 'Asthma',
       status: DiagnosisRegistryStatus.ACTIVE,
       category: null,
       specialty: null,
@@ -258,16 +260,24 @@ describe('DiagnosisRegistryEditorialService', () => {
       legacyDiagnosisId: 'diagnosis-1',
       aliases: [],
     });
-    fixture.prisma.diagnosisAlias.findFirst.mockResolvedValue({
-      id: 'alias-conflict',
-    });
+    fixture.prisma.diagnosisAlias.findMany.mockResolvedValue([
+      {
+        id: 'alias-conflict',
+        diagnosisRegistryId: 'registry-2',
+        term: 'Reactive airway disease',
+        normalizedTerm: 'reactive airway disease',
+        kind: DiagnosisAliasKind.ACCEPTED,
+        acceptedForMatch: true,
+        diagnosis: { id: 'registry-2', displayLabel: 'Reactive Airways' },
+      },
+    ]);
 
     await expect(
       fixture.service.addAlias('registry-1', {
         alias: 'Reactive airway disease',
         kind: DiagnosisAliasKind.ACCEPTED,
       }),
-    ).rejects.toThrow('Accepted alias collision');
+    ).rejects.toThrow('Alias validation failed');
 
     expect(fixture.prisma.diagnosisAlias.upsert).not.toHaveBeenCalled();
   });

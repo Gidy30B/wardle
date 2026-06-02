@@ -134,6 +134,23 @@ const EDITORIAL_CASE_DETAIL_SELECT: Prisma.CaseSelect = {
   clues: true,
   explanation: true,
   differentials: true,
+  differentialLinks: {
+    orderBy: [{ role: 'asc' }, { sourceText: 'asc' }],
+    select: {
+      id: true,
+      role: true,
+      confidence: true,
+      sourceText: true,
+      diagnosisRegistryId: true,
+      diagnosisRegistry: {
+        select: {
+          id: true,
+          displayLabel: true,
+          canonicalName: true,
+        },
+      },
+    },
+  },
   diagnosisId: true,
   diagnosisRegistryId: true,
   proposedDiagnosisText: true,
@@ -1539,9 +1556,37 @@ export class CaseReviewService {
 
     return {
       ...this.attachDiagnosisEditorialSummary(caseRecord),
+      linkedDifferentials: this.toStructuredDifferentialLinks(
+        caseRecord.differentialLinks,
+      ),
       qualityProjection:
         this.caseQualityProjectionService.buildProjection(caseRecord),
     };
+  }
+
+  private toStructuredDifferentialLinks(
+    links: Array<{
+      id: string;
+      role: unknown;
+      confidence: number | null;
+      sourceText: string;
+      diagnosisRegistryId: string;
+      diagnosisRegistry?: {
+        id: string;
+        displayLabel: string;
+        canonicalName: string;
+      } | null;
+    }> = [],
+  ) {
+    return links.map((link) => ({
+      id: link.id,
+      diagnosisRegistryId: link.diagnosisRegistryId,
+      displayLabel: link.diagnosisRegistry?.displayLabel ?? link.sourceText,
+      canonicalName: link.diagnosisRegistry?.canonicalName ?? link.sourceText,
+      role: link.role,
+      confidence: link.confidence,
+      sourceText: link.sourceText,
+    }));
   }
 
   private attachDiagnosisEditorialSummary<

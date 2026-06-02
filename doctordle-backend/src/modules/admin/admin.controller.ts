@@ -12,6 +12,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { DifferentialResolutionStatus } from '@prisma/client';
 import type { AuthenticatedRequest } from '../../auth/authenticated-request.interface';
 import {
   EditorialAccess,
@@ -30,6 +31,10 @@ import {
 } from './targeted-case-generation.service';
 import { TeachingRulesAdminService } from './teaching-rules-admin.service';
 import { DiagnosisEditorialBriefService } from '../education/diagnosis-editorial-brief.service';
+import {
+  DifferentialMappingService,
+  type ResolveDifferentialMappingAction,
+} from '../diagnosis-graph/differential-mapping.service';
 import { CreateAndLinkDiagnosisDto } from './dto/create-and-link-diagnosis.dto';
 import { CreateDiagnosisAliasDto } from './dto/create-diagnosis-alias.dto';
 import { CreateDiagnosisRegistryDto } from './dto/create-diagnosis-registry.dto';
@@ -60,6 +65,7 @@ export class AdminController {
     private readonly targetedCaseGenerationService: TargetedCaseGenerationService,
     private readonly teachingRulesAdminService: TeachingRulesAdminService,
     private readonly diagnosisEditorialBriefService: DiagnosisEditorialBriefService,
+    private readonly differentialMappingService: DifferentialMappingService,
   ) {}
 
   @Get('cases')
@@ -84,6 +90,34 @@ export class AdminController {
   @EditorialAccess()
   async getPublishAssignmentSummary() {
     return this.caseReviewService.getPublishAssignmentSummary();
+  }
+
+  @Get('differential-mappings/unresolved')
+  @EditorialAccess()
+  async listUnresolvedDifferentialMappings(
+    @Query('sourceType') sourceType?: string,
+    @Query('diagnosisRegistryId') diagnosisRegistryId?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.differentialMappingService.listUnresolved({
+      sourceType: this.parseDifferentialSourceType(sourceType),
+      diagnosisRegistryId: diagnosisRegistryId || undefined,
+      status: this.parseDifferentialStatus(status),
+    });
+  }
+
+  @Post('differential-mappings/:mappingId/resolve')
+  @SeniorEditorialAccess()
+  async resolveDifferentialMapping(
+    @Param('mappingId', new ParseUUIDPipe()) mappingId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: ResolveDifferentialMappingAction,
+  ) {
+    return this.differentialMappingService.resolveMapping(
+      mappingId,
+      request.user.id,
+      body,
+    );
   }
 
   @Get('cases/:caseId')
@@ -466,6 +500,30 @@ export class AdminController {
     ) {
       throw new BadRequestException('Invalid clueRevealStrategy');
     }
+  }
+
+  private parseDifferentialSourceType(value: string | undefined) {
+    if (!value) {
+      return undefined;
+    }
+    if (value === 'case' || value === 'education') {
+      return value;
+    }
+    throw new BadRequestException('sourceType must be case or education');
+  }
+
+  private parseDifferentialStatus(value: string | undefined) {
+    if (!value) {
+      return undefined;
+    }
+    if (
+      Object.values(DifferentialResolutionStatus).includes(
+        value as DifferentialResolutionStatus,
+      )
+    ) {
+      return value as DifferentialResolutionStatus;
+    }
+    throw new BadRequestException('Invalid differential mapping status');
   }
 
   private assertDraftLevelStatus(

@@ -9,6 +9,7 @@ function createImportFixture() {
     diagnosisRegistry: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn(),
       update: jest.fn(),
     },
@@ -16,6 +17,7 @@ function createImportFixture() {
       upsert: jest.fn(),
       findUnique: jest.fn(),
       findFirst: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn(),
       update: jest.fn(),
     },
@@ -27,7 +29,13 @@ function createImportFixture() {
 describe('importDiagnosisRegistryRecords', () => {
   it('creates a new diagnosis and imports gameplay-safe aliases deterministically', async () => {
     const fixture = createImportFixture();
-    fixture.prisma.diagnosisRegistry.findUnique.mockResolvedValue(null);
+    fixture.prisma.diagnosisRegistry.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({
+        id: 'registry-1',
+        displayLabel: 'Myocardial Infarction',
+        canonicalNormalized: 'myocardial infarction',
+      });
     fixture.prisma.diagnosisRegistry.create.mockResolvedValue({
       id: 'registry-1',
       canonicalName: 'Myocardial Infarction',
@@ -119,6 +127,54 @@ describe('importDiagnosisRegistryRecords', () => {
     );
   });
 
+  it('uses alias validation and records import collisions', async () => {
+    const fixture = createImportFixture();
+    fixture.prisma.diagnosisRegistry.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({
+        id: 'registry-1',
+        displayLabel: 'Asthma',
+        canonicalNormalized: 'asthma',
+      });
+    fixture.prisma.diagnosisRegistry.create.mockResolvedValue({
+      id: 'registry-1',
+      canonicalName: 'Asthma',
+      canonicalNormalized: 'asthma',
+      displayLabel: 'Asthma',
+      status: DiagnosisRegistryStatus.ACTIVE,
+      active: true,
+      isDescriptive: false,
+      isCompositional: false,
+      searchPriority: 0,
+      icd10Code: null,
+      icd11Code: null,
+      category: null,
+      specialty: null,
+      notes: null,
+    });
+    fixture.prisma.diagnosisAlias.findUnique.mockResolvedValue(null);
+    fixture.prisma.diagnosisRegistry.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'registry-2',
+          canonicalName: 'Reactive Airway Disease',
+          canonicalNormalized: 'reactive airway disease',
+          displayLabel: 'Reactive Airway Disease',
+        },
+      ]);
+
+    const summary = await importDiagnosisRegistryRecords(fixture.prisma as never, [
+      {
+        canonicalName: 'Asthma',
+        aliases: [{ alias: 'Reactive Airway Disease' }],
+      },
+    ]);
+
+    expect(summary.collisions).toBe(1);
+    expect(fixture.prisma.diagnosisAlias.create).not.toHaveBeenCalled();
+  });
+
   it('rejects parenthetical duplicate imports when the core term already exists', async () => {
     const fixture = createImportFixture();
     fixture.prisma.diagnosisRegistry.findUnique.mockResolvedValue(null);
@@ -180,6 +236,17 @@ describe('importDiagnosisRegistryRecords', () => {
     });
     fixture.prisma.diagnosisAlias.findUnique
       .mockResolvedValueOnce({
+        id: 'alias-canonical',
+        diagnosisRegistryId: 'registry-1',
+        term: 'Myocardial Infarction',
+        normalizedTerm: 'myocardial infarction',
+        kind: DiagnosisAliasKind.CANONICAL,
+        acceptedForMatch: true,
+        rank: 0,
+        source: 'seed_import',
+        active: true,
+      })
+      .mockResolvedValueOnce({
         id: 'alias-1',
         diagnosisRegistryId: 'registry-1',
         term: 'MI',
@@ -187,6 +254,17 @@ describe('importDiagnosisRegistryRecords', () => {
         kind: DiagnosisAliasKind.ABBREVIATION,
         acceptedForMatch: true,
         rank: 5,
+        source: 'seed_import',
+        active: true,
+      })
+      .mockResolvedValueOnce({
+        id: 'alias-canonical',
+        diagnosisRegistryId: 'registry-1',
+        term: 'Myocardial Infarction',
+        normalizedTerm: 'myocardial infarction',
+        kind: DiagnosisAliasKind.CANONICAL,
+        acceptedForMatch: true,
+        rank: 0,
         source: 'seed_import',
         active: true,
       })
@@ -349,17 +427,17 @@ describe('importDiagnosisRegistryRecords', () => {
       notes: null,
     });
     fixture.prisma.diagnosisAlias.findUnique.mockResolvedValue(null);
-    fixture.prisma.diagnosisAlias.findFirst.mockResolvedValue({
-      id: 'alias-conflict',
-      diagnosisRegistryId: 'registry-1',
-      term: 'Heart attack',
-      normalizedTerm: 'heart attack',
-      kind: DiagnosisAliasKind.ACCEPTED,
-      acceptedForMatch: true,
-      rank: 10,
-      source: 'seed_import',
-      active: true,
-    });
+    fixture.prisma.diagnosisAlias.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        id: 'alias-conflict',
+        diagnosisRegistryId: 'registry-1',
+        term: 'Heart attack',
+        normalizedTerm: 'heart attack',
+        kind: DiagnosisAliasKind.ACCEPTED,
+        acceptedForMatch: true,
+        diagnosis: { id: 'registry-1', displayLabel: 'Heart Attack' },
+      },
+    ]);
 
     const summary = await importDiagnosisRegistryRecords(fixture.prisma as never, [
       {
@@ -372,7 +450,7 @@ describe('importDiagnosisRegistryRecords', () => {
     expect(summary.errors).toEqual([
       {
         canonicalName: 'Myocardial Infarction',
-        reason: 'Accepted alias collision for "Heart attack" (heart attack)',
+        reason: expect.stringContaining('Alias validation failed'),
       },
     ]);
     expect(fixture.prisma.diagnosisAlias.create).not.toHaveBeenCalled();

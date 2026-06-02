@@ -48,9 +48,11 @@ describe('DiagnosisGraphCandidatesService', () => {
           displayLabel: 'COPD',
           active: true,
         }),
+        findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
       },
       diagnosisAlias: {
+        findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
         upsert: jest.fn().mockResolvedValue({ id: 'alias-1' }),
       },
@@ -280,5 +282,32 @@ describe('DiagnosisGraphCandidatesService', () => {
         }),
       }),
     );
+  });
+
+  it('blocks mimic alias creation when the alias collides with another canonical', async () => {
+    const { tx, service } = buildService();
+    tx.diagnosisGraphCandidate.findUnique.mockResolvedValue({
+      ...candidate,
+      type: DiagnosisGraphCandidateType.MIMIC,
+      unresolvedTargetText: 'Acute Coronary Syndrome',
+    });
+    tx.diagnosisRegistry.findMany.mockResolvedValue([
+      {
+        id: 'registry-2',
+        canonicalName: 'Acute Coronary Syndrome',
+        canonicalNormalized: 'acute coronary syndrome',
+        displayLabel: 'ACS',
+      },
+    ]);
+
+    await expect(
+      service.resolveMimicCandidate('candidate-1', 'user-1', {
+        action: 'add_alias_to_existing',
+        targetDiagnosisRegistryId: 'target-1',
+        aliasText: 'Acute Coronary Syndrome',
+      }),
+    ).rejects.toThrow('Alias validation failed');
+
+    expect(tx.diagnosisAlias.upsert).not.toHaveBeenCalled();
   });
 });

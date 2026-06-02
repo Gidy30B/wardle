@@ -137,6 +137,20 @@ enum DiagnosisMappingMethod {
   NONE
 }
 
+enum DifferentialResolutionStatus {
+  RESOLVED
+  AMBIGUOUS
+  UNRESOLVED
+  REJECTED
+}
+
+enum DifferentialLinkRole {
+  PRIMARY_MIMIC
+  DIFFERENTIAL
+  IMPORTANT_EXCLUSION
+  TEACHING_DIFFERENTIAL
+}
+
 enum DiagnosisEducationStatus {
   DRAFT
   GENERATED
@@ -282,6 +296,11 @@ model DiagnosisRegistry {
   targetedGraphCandidates DiagnosisGraphCandidate[] @relation("DiagnosisGraphCandidateTargetDiagnosis")
   graphFacts            DiagnosisGraphFact[]      @relation("DiagnosisGraphFactDiagnosis")
   targetedGraphFacts    DiagnosisGraphFact[]      @relation("DiagnosisGraphFactTargetDiagnosis")
+  resolvedCaseDifferentialMappings CaseDifferentialMapping[] @relation("CaseDifferentialMappingResolvedDiagnosis")
+  educationDifferentialMappings EducationDifferentialMapping[] @relation("EducationDifferentialMappingDiagnosis")
+  resolvedEducationDifferentialMappings EducationDifferentialMapping[] @relation("EducationDifferentialMappingResolvedDiagnosis")
+  caseDifferentialLinks CaseDifferentialLink[]
+  educationDifferentialLinks EducationDifferentialLink[]
   teachingRules         DiagnosisTeachingRule[]
   editorialBrief        DiagnosisEditorialBrief?
   selectedAttempts      Attempt[]                 @relation("AttemptSelectedDiagnosisRegistry")
@@ -381,6 +400,8 @@ model DiagnosisEducation {
   diagnosisRegistry   DiagnosisRegistry        @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
   reviewedBy          User?                    @relation("DiagnosisEducationReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
   revisions           DiagnosisEducationRevision[]
+  differentialMappings EducationDifferentialMapping[]
+  differentialLinks   EducationDifferentialLink[]
 
   @@index([editorialStatus])
   @@index([source])
@@ -399,6 +420,8 @@ model DiagnosisEducationRevision {
   createdAt        DateTime                 @default(now())
   education        DiagnosisEducation       @relation(fields: [educationId], references: [id], onDelete: Cascade)
   createdBy        User?                    @relation("DiagnosisEducationRevisionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  differentialMappings EducationDifferentialMapping[]
+  differentialLinks   EducationDifferentialLink[]
 
   @@unique([educationId, version])
   @@index([educationId])
@@ -533,6 +556,8 @@ model Case {
   validationRuns             CaseValidationRun[]
   reviews                    CaseReview[]
   revisions                  CaseRevision[]         @relation("CaseRevisions")
+  differentialMappings       CaseDifferentialMapping[]
+  differentialLinks          CaseDifferentialLink[]
 
   @@index([diagnosisId])
   @@index([diagnosisRegistryId])
@@ -570,6 +595,8 @@ model CaseRevision {
   currentForCase             Case?                  @relation("CaseCurrentRevision")
   validationRuns             CaseValidationRun[]
   reviews                    CaseReview[]
+  differentialMappings       CaseDifferentialMapping[]
+  differentialLinks          CaseDifferentialLink[]
 
   @@unique([caseId, revisionNumber])
   @@index([caseId])
@@ -578,6 +605,123 @@ model CaseRevision {
   @@index([diagnosisMappingStatus])
   @@index([createdByUserId])
   @@index([createdAt])
+}
+
+model CaseDifferentialMapping {
+  id                          String                       @id @default(uuid())
+  caseId                      String
+  revisionId                  String?
+  rawText                     String
+  normalizedText              String
+  resolvedDiagnosisRegistryId String?
+  status                      DifferentialResolutionStatus
+  matchType                   String?
+  confidence                  Float?
+  suggestions                 Json?
+  sourcePath                  String?
+  dedupeKey                   String                       @unique
+  reviewedByUserId            String?
+  reviewedAt                  DateTime?
+  reviewNote                  String?
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+  case                        Case                         @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  revision                    CaseRevision?                @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  resolvedDiagnosisRegistry   DiagnosisRegistry?           @relation("CaseDifferentialMappingResolvedDiagnosis", fields: [resolvedDiagnosisRegistryId], references: [id], onDelete: SetNull)
+  reviewedBy                  User?                        @relation("CaseDifferentialMappingReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  differentialLinks           CaseDifferentialLink[]
+
+  @@unique([caseId, revisionId, sourcePath, normalizedText])
+  @@index([caseId])
+  @@index([revisionId])
+  @@index([normalizedText])
+  @@index([resolvedDiagnosisRegistryId])
+  @@index([status])
+}
+
+model EducationDifferentialMapping {
+  id                          String                       @id @default(uuid())
+  educationId                 String
+  revisionId                  String?
+  diagnosisRegistryId         String
+  rawText                     String
+  normalizedText              String
+  resolvedDiagnosisRegistryId String?
+  status                      DifferentialResolutionStatus
+  matchType                   String?
+  confidence                  Float?
+  suggestions                 Json?
+  sourcePath                  String?
+  dedupeKey                   String                       @unique
+  reviewedByUserId            String?
+  reviewedAt                  DateTime?
+  reviewNote                  String?
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+  education                   DiagnosisEducation           @relation(fields: [educationId], references: [id], onDelete: Cascade)
+  revision                    DiagnosisEducationRevision?   @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  diagnosisRegistry           DiagnosisRegistry            @relation("EducationDifferentialMappingDiagnosis", fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  resolvedDiagnosisRegistry   DiagnosisRegistry?           @relation("EducationDifferentialMappingResolvedDiagnosis", fields: [resolvedDiagnosisRegistryId], references: [id], onDelete: SetNull)
+  reviewedBy                  User?                        @relation("EducationDifferentialMappingReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  differentialLinks           EducationDifferentialLink[]
+
+  @@unique([educationId, revisionId, sourcePath, normalizedText])
+  @@index([educationId])
+  @@index([revisionId])
+  @@index([diagnosisRegistryId])
+  @@index([normalizedText])
+  @@index([resolvedDiagnosisRegistryId])
+  @@index([status])
+}
+
+model CaseDifferentialLink {
+  id                    String                  @id @default(uuid())
+  caseId                String
+  caseRevisionId        String?
+  sourceMappingId       String?
+  diagnosisRegistryId   String
+  role                  DifferentialLinkRole
+  confidence            Float?
+  sourceText            String
+  dedupeKey             String                  @unique
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  case                  Case                    @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseRevision          CaseRevision?           @relation(fields: [caseRevisionId], references: [id], onDelete: Cascade)
+  sourceMapping         CaseDifferentialMapping? @relation(fields: [sourceMappingId], references: [id], onDelete: SetNull)
+  diagnosisRegistry     DiagnosisRegistry       @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+
+  @@unique([caseId, caseRevisionId, diagnosisRegistryId])
+  @@index([caseId])
+  @@index([caseRevisionId])
+  @@index([sourceMappingId])
+  @@index([diagnosisRegistryId])
+  @@index([role])
+}
+
+model EducationDifferentialLink {
+  id                    String                       @id @default(uuid())
+  educationId           String
+  educationRevisionId   String?
+  sourceMappingId       String?
+  diagnosisRegistryId   String
+  role                  DifferentialLinkRole
+  confidence            Float?
+  sourceText            String
+  dedupeKey             String                       @unique
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+  education             DiagnosisEducation           @relation(fields: [educationId], references: [id], onDelete: Cascade)
+  educationRevision     DiagnosisEducationRevision?   @relation(fields: [educationRevisionId], references: [id], onDelete: Cascade)
+  sourceMapping         EducationDifferentialMapping? @relation(fields: [sourceMappingId], references: [id], onDelete: SetNull)
+  diagnosisRegistry     DiagnosisRegistry            @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+
+  @@unique([educationId, educationRevisionId, diagnosisRegistryId])
+  @@index([educationId])
+  @@index([educationRevisionId])
+  @@index([sourceMappingId])
+  @@index([diagnosisRegistryId])
+  @@index([role])
 }
 
 model CaseValidationRun {
@@ -748,6 +892,8 @@ model User {
   reviewedDiagnosisEducation DiagnosisEducation[]    @relation("DiagnosisEducationReviewedByUser")
   createdDiagnosisEducationRevisions DiagnosisEducationRevision[] @relation("DiagnosisEducationRevisionCreatedByUser")
   reviewedDiagnosisGraphCandidates DiagnosisGraphCandidate[] @relation("DiagnosisGraphCandidateReviewedByUser")
+  reviewedCaseDifferentialMappings CaseDifferentialMapping[] @relation("CaseDifferentialMappingReviewedByUser")
+  reviewedEducationDifferentialMappings EducationDifferentialMapping[] @relation("EducationDifferentialMappingReviewedByUser")
   primaryOrganization      Organization?            @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
   organizations            UserOrganization[]
 

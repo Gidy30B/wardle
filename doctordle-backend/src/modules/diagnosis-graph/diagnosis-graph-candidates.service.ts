@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { normalizeDiagnosisTerm } from '../diagnosis-registry/diagnosis-term-normalizer';
+import { assertAliasValidWithClient } from '../diagnosis-registry/alias-validation.service';
 import type { ListGraphCandidatesDto } from './dto/list-graph-candidates.dto';
 import type {
   MergeGraphCandidateDto,
@@ -466,33 +467,11 @@ export class DiagnosisGraphCandidatesService {
       return;
     }
 
-    const canonicalConflict = await tx.diagnosisRegistry.findFirst({
-      where: {
-        id: { not: input.diagnosisRegistryId },
-        canonicalNormalized: normalizedAlias,
-      },
-      select: { id: true, displayLabel: true },
+    await assertAliasValidWithClient(tx, {
+      aliasText: alias,
+      targetDiagnosisRegistryId: input.diagnosisRegistryId,
+      acceptedForMatch: true,
     });
-
-    if (canonicalConflict) {
-      throw new BadRequestException(
-        `Alias "${alias}" conflicts with existing diagnosis "${canonicalConflict.displayLabel}"`,
-      );
-    }
-
-    const aliasConflict = await tx.diagnosisAlias.findFirst({
-      where: {
-        diagnosisRegistryId: { not: input.diagnosisRegistryId },
-        normalizedTerm: normalizedAlias,
-        active: true,
-        acceptedForMatch: true,
-      },
-      select: { id: true },
-    });
-
-    if (aliasConflict) {
-      throw new BadRequestException(`Accepted alias collision for "${alias}"`);
-    }
 
     await tx.diagnosisAlias.upsert({
       where: {

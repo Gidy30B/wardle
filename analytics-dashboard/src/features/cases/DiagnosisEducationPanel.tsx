@@ -38,6 +38,7 @@ import {
   type DiagnosisEducationRecord,
   type DiagnosisEducationStatus,
   type DiagnosisGraphCandidate,
+  type StructuredDifferentialLink,
   type DiagnosisWorkspaceProjection,
   type DiagnosisWorkspaceQualitySummary,
   type GenerateTargetedCaseResult,
@@ -1087,6 +1088,10 @@ export default function DiagnosisEducationPanel({
               error={workspaceSummaryError}
             />
 
+            <ResolvedDifferentialLinksCard
+              links={education?.linkedDifferentials ?? []}
+            />
+
             <EditorialBriefCard
               briefResponse={editorialBrief}
               teachingRules={teachingRules}
@@ -1242,6 +1247,71 @@ export default function DiagnosisEducationPanel({
   );
 }
 
+function ResolvedDifferentialLinksCard({
+  links,
+}: {
+  links: StructuredDifferentialLink[];
+}) {
+  const grouped = links.reduce<Record<string, StructuredDifferentialLink[]>>(
+    (acc, link) => {
+      const key = formatDifferentialRole(link.role);
+      acc[key] = [...(acc[key] ?? []), link];
+      return acc;
+    },
+    {},
+  );
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">
+            Resolved differential links
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Registry-linked identities used by editorial tools and graph coverage.
+          </p>
+        </div>
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
+          {links.length} linked
+        </span>
+      </div>
+
+      {links.length ? (
+        <div className="mt-3 space-y-3">
+          {Object.entries(grouped).map(([role, roleLinks]) => (
+            <div key={role}>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {role}
+              </p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {roleLinks.map((link) => (
+                  <div
+                    key={`${link.diagnosisRegistryId}-${link.sourceText}`}
+                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                  >
+                    <p className="text-sm font-semibold text-slate-900">
+                      {link.displayLabel}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Source: {link.sourceText}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-slate-500">
+          No resolved differential links yet. Resolve mappings from the
+          differential review queue to populate this section.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function HeaderState({
   education,
   diagnosisLabel,
@@ -1354,6 +1424,14 @@ function formatSectionActionLabel(section: EducationRegenerableSection) {
   };
 
   return labels[section];
+}
+
+function formatDifferentialRole(role: string) {
+  return role
+    .toLowerCase()
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 function MetaTile({ label, value }: { label: string; value: string }) {

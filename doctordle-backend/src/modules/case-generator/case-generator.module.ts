@@ -8,6 +8,7 @@ import { EducationKnowledgeRulesService } from '../education/education-knowledge
 import { DiagnosisCurriculumProviderService } from '../education/diagnosis-curriculum-provider.service.js';
 import { DiagnosisEditorialBriefService } from '../education/diagnosis-editorial-brief.service.js';
 import { EducationTeachingRulesService } from '../education/education-teaching-rules.service.js';
+import { DiagnosisGraphModule } from '../diagnosis-graph/diagnosis-graph.module.js';
 import { CaseGeneratorService } from './case-generator.service.js';
 import { CaseTeachingAlignmentService } from './case-teaching-alignment.service.js';
 import { DiagnosisSelectionService } from './diagnosis-selection.service.js';
@@ -15,7 +16,7 @@ import { GenerationDeduplicationService } from './generation-deduplication.servi
 import { GenerationPlannerService } from './generation-planner.service.js';
 
 @Module({
-  imports: [DatabaseModule, CaseValidationModule],
+  imports: [DatabaseModule, CaseValidationModule, DiagnosisGraphModule],
   providers: [
     CaseGeneratorService,
     CaseTeachingAlignmentService,

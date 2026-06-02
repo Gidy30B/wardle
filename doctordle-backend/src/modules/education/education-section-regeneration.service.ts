@@ -14,6 +14,7 @@ import OpenAI from 'openai';
 import type { ChatCompletionCreateParamsNonStreaming } from 'openai/resources/chat/completions';
 import { getEnv } from '../../core/config/env.validation';
 import { PrismaService } from '../../core/db/prisma.service';
+import { DifferentialMappingService } from '../diagnosis-graph/differential-mapping.service';
 import { GenerationContextBuilder } from '../editorial/generation-context-builder.service';
 import {
   EducationDraftQualityValidator,
@@ -80,6 +81,7 @@ export class EducationSectionRegenerationService {
     private readonly diagnosisCurriculumProviderService: DiagnosisCurriculumProviderService = new DiagnosisCurriculumProviderService(),
     private readonly educationEditorialPatternsService: EducationEditorialPatternsService = new EducationEditorialPatternsService(),
     private readonly educationSchemaContractService: EducationSchemaContractService = new EducationSchemaContractService(),
+    private readonly differentialMappingService?: DifferentialMappingService,
   ) {
     const env = getEnv();
     if (env.OPENAI_API_KEY) {
@@ -216,6 +218,7 @@ export class EducationSectionRegenerationService {
       return saved;
     });
 
+    await this.refreshDifferentialMappings(education.id);
     return { ...education, qualityReport };
   }
 
@@ -477,6 +480,19 @@ export class EducationSectionRegenerationService {
         createdByUserId: userId,
         snapshot: this.toRevisionSnapshot(education),
       },
+    });
+  }
+
+  private async refreshDifferentialMappings(educationId: string) {
+    await this.differentialMappingService?.mapEducation(educationId).catch((error) => {
+      this.logger.error(
+        JSON.stringify({
+          event: 'differential_mapping.education_section_refresh.failed',
+          educationId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        error instanceof Error ? error.stack : undefined,
+      );
     });
   }
 

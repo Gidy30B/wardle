@@ -23,6 +23,7 @@ import { PrismaService } from '../../core/db/prisma.service';
 import { GenerationContextBuilder } from '../editorial/generation-context-builder.service';
 import { EditorialIntentProjectionService } from '../editorial/editorial-intent-projection.service';
 import { DiagnosisGraphExtractionService } from '../diagnosis-graph/diagnosis-graph-extraction.service';
+import { DifferentialMappingService } from '../diagnosis-graph/differential-mapping.service';
 import type { ReviewDiagnosisEducationDto } from './dto/review-diagnosis-education.dto';
 import type { UpsertDiagnosisEducationDto } from './dto/upsert-diagnosis-education.dto';
 import {
@@ -432,6 +433,7 @@ export class DiagnosisEducationService {
     ),
     private readonly educationEditorialPatternsService: EducationEditorialPatternsService = new EducationEditorialPatternsService(),
     private readonly educationSchemaContractService: EducationSchemaContractService = new EducationSchemaContractService(),
+    private readonly differentialMappingService?: DifferentialMappingService,
   ) {
     const env = getEnv();
     if (env.OPENAI_API_KEY) {
@@ -542,17 +544,68 @@ export class DiagnosisEducationService {
 
     const education = await this.prisma.diagnosisEducation.findUnique({
       where: { diagnosisRegistryId },
-      include: { revisions: { orderBy: { createdAt: 'desc' }, take: 10 } },
+      include: {
+        revisions: { orderBy: { createdAt: 'desc' }, take: 10 },
+        differentialLinks: {
+          orderBy: [{ role: 'asc' }, { sourceText: 'asc' }],
+          select: {
+            id: true,
+            role: true,
+            confidence: true,
+            sourceText: true,
+            diagnosisRegistryId: true,
+            diagnosisRegistry: {
+              select: {
+                id: true,
+                displayLabel: true,
+                canonicalName: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     return {
       diagnosisRegistry: registry,
-      education,
+      education: education
+        ? {
+            ...education,
+            linkedDifferentials: this.toStructuredDifferentialLinks(
+              education.differentialLinks,
+            ),
+          }
+        : null,
       qualityWarnings: education
         ? this.collectEducationQualityWarnings(education)
         : [],
       publishBlockers: education ? this.getPublishBlockers(education) : [],
     };
+  }
+
+  private toStructuredDifferentialLinks(
+    links: Array<{
+      id: string;
+      role: unknown;
+      confidence: number | null;
+      sourceText: string;
+      diagnosisRegistryId: string;
+      diagnosisRegistry: {
+        id: string;
+        displayLabel: string;
+        canonicalName: string;
+      };
+    }>,
+  ) {
+    return links.map((link) => ({
+      id: link.id,
+      diagnosisRegistryId: link.diagnosisRegistryId,
+      displayLabel: link.diagnosisRegistry.displayLabel,
+      canonicalName: link.diagnosisRegistry.canonicalName,
+      role: link.role,
+      confidence: link.confidence,
+      sourceText: link.sourceText,
+    }));
   }
 
   async upsertForDiagnosisRegistry(
@@ -601,6 +654,7 @@ export class DiagnosisEducationService {
       return saved;
     });
 
+    await this.refreshDifferentialMappings(education.id);
     return education;
   }
 
@@ -643,6 +697,7 @@ export class DiagnosisEducationService {
       return saved;
     });
 
+    await this.refreshDifferentialMappings(education.id);
     return education;
   }
 
@@ -701,6 +756,8 @@ export class DiagnosisEducationService {
       await this.createRevision(tx, saved, userId);
       return saved;
     });
+
+    await this.refreshDifferentialMappings(education.id);
 
     if (input.status === DiagnosisEducationStatus.PUBLISHED) {
       await this.diagnosisGraphExtractionService
@@ -1095,6 +1152,7 @@ export class DiagnosisEducationService {
         return saved;
       });
 
+      await this.refreshDifferentialMappings(education.id);
       return education;
     } finally {
       this.educationGenerationLocks.delete(diagnosisRegistryId);
@@ -2414,6 +2472,19 @@ export class DiagnosisEducationService {
         createdByUserId: userId,
         snapshot: this.toRevisionSnapshot(education),
       },
+    });
+  }
+
+  private async refreshDifferentialMappings(educationId: string) {
+    await this.differentialMappingService?.mapEducation(educationId).catch((error) => {
+      this.logger.error(
+        JSON.stringify({
+          event: 'differential_mapping.education_refresh.failed',
+          educationId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        error instanceof Error ? error.stack : undefined,
+      );
     });
   }
 

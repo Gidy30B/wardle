@@ -19,7 +19,13 @@ describe('DiagnosisRegistryLinkService helpers', () => {
         findUnique: jest
           .fn()
           .mockResolvedValueOnce(null)
-          .mockResolvedValueOnce(null),
+          .mockResolvedValueOnce(null)
+          .mockResolvedValue({
+            id: 'registry-1',
+            displayLabel: 'Myocardial Infarction',
+            canonicalNormalized: 'myocardial infarction',
+          }),
+        findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockResolvedValue({
           id: 'registry-1',
           legacyDiagnosisId: 'diagnosis-1',
@@ -28,6 +34,8 @@ describe('DiagnosisRegistryLinkService helpers', () => {
         update: jest.fn(),
       },
       diagnosisAlias: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
         upsert: jest.fn().mockResolvedValue(undefined),
       },
     };
@@ -100,7 +108,13 @@ describe('DiagnosisRegistryLinkService helpers', () => {
             subspecialty: null,
             bodySystem: null,
             category: null,
+          })
+          .mockResolvedValue({
+            id: 'registry-1',
+            displayLabel: 'Myocardial Infarction',
+            canonicalNormalized: 'myocardial infarction',
           }),
+        findMany: jest.fn().mockResolvedValue([]),
         update: jest.fn().mockResolvedValue({
           id: 'registry-1',
           legacyDiagnosisId: 'diagnosis-1',
@@ -108,6 +122,8 @@ describe('DiagnosisRegistryLinkService helpers', () => {
         }),
       },
       diagnosisAlias: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
         upsert: jest.fn().mockResolvedValue(undefined),
       },
     };

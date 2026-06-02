@@ -14,6 +14,7 @@ import {
 } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import { assertAliasValidWithClient } from '../../src/modules/diagnosis-registry/alias-validation.service';
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -42,336 +43,312 @@ const clues = [
     order: 0,
     type: 'history',
     value:
-      '23-year-old man presents with worsening abdominal pain that began yesterday evening and has caused him to stop eating.',
+      '21-year-old woman presents with worsening fatigue, nausea, and repeated vomiting that began yesterday evening.',
   },
   {
     order: 1,
     type: 'symptom',
     value:
-      'The pain is now more noticeable on the right side of the abdomen and is worse when walking or riding over bumps.',
+      'She reports diffuse abdominal pain and has been unable to tolerate oral intake throughout the day.',
   },
   {
     order: 2,
     type: 'exam',
     value:
-      'Examination demonstrates localized tenderness in the right lower quadrant without generalized peritonism.',
+      'Examination reveals dry mucous membranes and marked dehydration without focal abdominal tenderness.',
   },
   {
     order: 3,
     type: 'vital',
     value:
-      'Temperature is 38.1°C, heart rate is 102/min, blood pressure is 118/72 mmHg, and respiratory rate is 18/min.',
+      'Heart rate is 124/min, blood pressure is 94/58 mmHg, respiratory rate is 30/min, and temperature is 37.4°C.',
   },
   {
     order: 4,
     type: 'lab',
     value:
-      'WBC is 15.6 ×10^9/L with neutrophil predominance of 84%.',
+      'Capillary blood glucose is 29 mmol/L and serum ketones are markedly elevated.',
   },
   {
     order: 5,
-    type: 'imaging',
+    type: 'lab',
     value:
-      'CT abdomen demonstrates an 11 mm dilated appendix with periappendiceal fat stranding.',
+      'Venous blood gas demonstrates pH 7.12, bicarbonate 8 mmol/L, and a raised anion gap metabolic acidosis.',
   },
 ] as const;
 
 const differentials = [
-  'Gastroenteritis',
-  'Mesenteric adenitis',
-  'Renal colic',
-  'Ectopic pregnancy',
+  'Hyperosmolar Hyperglycaemic State',
+  'Acute Gastroenteritis',
+  'Acute Pancreatitis',
+  'Sepsis',
 ];
 
 const explanation = {
-  diagnosis: 'Appendicitis',
+  diagnosis: 'Diabetic Ketoacidosis',
   summary:
-    'Progressive right lower quadrant pain worsened by movement, fever, neutrophilic leukocytosis, and CT evidence of appendiceal inflammation support appendicitis.',
+    'Progressive polyuria, polydipsia, dehydration, Kussmaul respirations, marked hyperglycaemia, ketonaemia, and high-anion-gap metabolic acidosis support diabetic ketoacidosis.',
   reasoning: [
-    'The illness begins as poorly localized abdominal pain before localizing as inflammation progresses.',
-    'Pain aggravated by movement suggests irritation of the parietal peritoneum.',
-    'Localized right lower quadrant tenderness narrows the differential toward appendiceal pathology.',
-    'Neutrophilic leukocytosis supports acute intra-abdominal inflammation.',
-    'CT confirms appendiceal enlargement and surrounding inflammatory change.',
+    'The combination of excessive thirst and frequent urination suggests severe hyperglycaemia causing osmotic diuresis.',
+    'Vomiting and abdominal pain are common manifestations of ketosis and metabolic acidosis.',
+    'Deep laboured respirations represent respiratory compensation for metabolic acidosis.',
+    'Hypotension and tachycardia indicate substantial intravascular volume depletion.',
+    'Marked hyperglycaemia together with elevated ketones establishes uncontrolled insulin deficiency.',
+    'Low pH and low bicarbonate confirm high-anion-gap metabolic acidosis consistent with diabetic ketoacidosis.',
   ],
   keyFindings: [
-    'Progressive abdominal pain',
-    'Movement-related pain',
-    'Localized right lower quadrant tenderness',
-    'Low-grade fever',
-    'Neutrophilic leukocytosis',
-    'Inflamed appendix on CT',
+    'Polyuria',
+    'Polydipsia',
+    'Vomiting',
+    'Abdominal pain',
+    'Kussmaul respirations',
+    'Severe dehydration',
+    'Hyperglycaemia',
+    'Ketonaemia',
+    'High-anion-gap metabolic acidosis',
   ],
   differentials,
   differentialAnalysis: [
     {
-      diagnosis: 'Gastroenteritis',
+      diagnosis: 'Hyperosmolar Hyperglycaemic State',
       whyPlausibleEarly:
-        'Early abdominal pain and anorexia may resemble viral gastroenteritis.',
+        'Profound dehydration and hyperglycaemia may initially resemble HHS.',
+      ruledOutByClues: [
+        {
+          clueOrder: 4,
+          evidence: 'markedly elevated serum ketones',
+          reason: 'Significant ketone production favors DKA over HHS.',
+        },
+      ],
+      finalReasonLessLikely:
+        'HHS typically has minimal ketosis and less severe metabolic acidosis.',
+    },
+    {
+      diagnosis: 'Acute Gastroenteritis',
+      whyPlausibleEarly:
+        'Vomiting and abdominal pain are common presentations of gastroenteritis.',
       ruledOutByClues: [
         {
           clueOrder: 2,
-          evidence: 'localized tenderness in the right lower quadrant',
+          evidence: 'deep laboured breathing',
           reason:
-            'Focal tenderness is unusual in uncomplicated gastroenteritis.',
+            'Compensatory respiratory effort suggests metabolic acidosis rather than isolated gastrointestinal disease.',
         },
       ],
       finalReasonLessLikely:
-        'The progression toward focal right lower quadrant inflammation is inconsistent with typical gastroenteritis.',
+        'Gastroenteritis does not explain severe hyperglycaemia, ketosis, and high-anion-gap acidosis.',
     },
     {
-      diagnosis: 'Mesenteric adenitis',
+      diagnosis: 'Acute Pancreatitis',
       whyPlausibleEarly:
-        'Mesenteric adenitis commonly mimics appendicitis in young adults.',
+        'Abdominal pain, vomiting, and systemic illness may resemble pancreatitis.',
+      ruledOutByClues: [
+        {
+          clueOrder: 4,
+          evidence: 'severe hyperglycaemia with ketonaemia',
+          reason:
+            'The metabolic pattern is more characteristic of insulin deficiency than pancreatic inflammation.',
+        },
+      ],
+      finalReasonLessLikely:
+        'The dominant pathology is ketoacidosis rather than pancreatic injury.',
+    },
+    {
+      diagnosis: 'Sepsis',
+      whyPlausibleEarly:
+        'Tachycardia, hypotension, and metabolic derangement can occur in severe infection.',
       ruledOutByClues: [
         {
           clueOrder: 5,
-          evidence: '11 mm dilated appendix with periappendiceal fat stranding',
-          reason: 'Imaging directly demonstrates appendiceal inflammation.',
-        },
-      ],
-      finalReasonLessLikely:
-        'The CT findings identify appendicitis rather than isolated mesenteric lymphadenopathy.',
-    },
-    {
-      diagnosis: 'Renal colic',
-      whyPlausibleEarly:
-        'Right-sided abdominal pain may be mistaken for ureteric stone disease.',
-      ruledOutByClues: [
-        {
-          clueOrder: 1,
-          evidence: 'worse when walking or riding over bumps',
+          evidence: 'high-anion-gap ketoacidosis',
           reason:
-            'Movement-related peritoneal irritation is more typical of appendicitis.',
+            'The acid-base disturbance is specifically explained by ketone accumulation.',
         },
       ],
       finalReasonLessLikely:
-        'There is no flank-to-groin radiation or urinary symptom complex.',
-    },
-    {
-      diagnosis: 'Ectopic pregnancy',
-      whyPlausibleEarly:
-        'Lower abdominal pain can represent ectopic pregnancy in reproductive-age patients.',
-      ruledOutByClues: [
-        {
-          clueOrder: 0,
-          evidence: '23-year-old man',
-          reason: 'Patient demographics exclude ectopic pregnancy.',
-        },
-      ],
-      finalReasonLessLikely:
-        'The diagnosis is biologically incompatible with this patient.',
+        'Sepsis may precipitate DKA but does not independently explain the full metabolic profile.',
     },
   ],
   generationQuality: {
     contentTier: 'FLAGSHIP',
-    seedVersion,
     humanReviewed: true,
   },
 };
 
 const educationForFrontend = {
-  title: "Appendicitis",
+  title: 'Diabetic Ketoacidosis',
 
   summary: {
     definition:
-      "Acute inflammation of the appendix, usually caused by luminal obstruction leading to bacterial overgrowth and progressive inflammation.",
+      'Diabetic ketoacidosis is an acute metabolic emergency caused by absolute or severe relative insulin deficiency, leading to hyperglycaemia, ketone production, and high-anion-gap metabolic acidosis.',
 
     highYieldTakeaway:
-      "Migratory abdominal pain that localizes to the right lower quadrant and becomes movement-sensitive should strongly raise suspicion for appendicitis.",
+      'Think DKA whenever polyuria, polydipsia, dehydration, and unexplained deep breathing occur together with hyperglycaemia.',
   },
 
   recognitionPattern: [
     {
-      pattern: "Migratory abdominal pain",
+      pattern: 'Polyuria and polydipsia',
       whyItMatters:
-        "Pain classically begins periumbilically before localizing to the right lower quadrant as inflammation reaches the parietal peritoneum.",
+        'Osmotic diuresis from severe hyperglycaemia causes large fluid losses and intense thirst.',
     },
     {
-      pattern: "Movement-sensitive pain",
+      pattern: 'Vomiting with abdominal pain',
       whyItMatters:
-        "Pain worsened by walking, coughing, or bumps suggests peritoneal irritation.",
+        'Ketosis and acidosis frequently cause abdominal symptoms that may mimic a surgical abdomen.',
     },
     {
-      pattern: "Anorexia before vomiting",
+      pattern: 'Deep laboured breathing',
       whyItMatters:
-        "Loss of appetite commonly precedes nausea or vomiting in appendicitis.",
+        'Kussmaul respirations are a compensatory response to metabolic acidosis.',
+    },
+    {
+      pattern: 'Progressive dehydration',
+      whyItMatters:
+        'Volume depletion drives shock, acute kidney injury, and electrolyte abnormalities.',
     },
   ],
 
   keySigns: [
     {
-      finding: "McBurney point tenderness",
+      finding: 'Kussmaul respirations',
       significance:
-        "Localized tenderness near McBurney point is the classic bedside sign of appendicitis.",
+        'Deep, rapid breathing is a classic sign of severe metabolic acidosis.',
     },
     {
-      finding: "Rovsing sign",
+      finding: 'Signs of dehydration',
       significance:
-        "Palpation of the left lower quadrant causing right lower quadrant pain suggests peritoneal irritation.",
+        'Dry mucous membranes, poor skin turgor, and tachycardia reflect major fluid losses.',
     },
     {
-      finding: "Psoas sign",
+      finding: 'Altered mental status',
       significance:
-        "Pain on hip extension may indicate a retrocecal appendix.",
-    },
-    {
-      finding: "Obturator sign",
-      significance:
-        "Pain on internal rotation of the flexed hip may indicate a pelvic appendix.",
+        'May indicate severe acidosis, cerebral dysfunction, or profound dehydration.',
     },
   ],
 
   examPearls: [
     {
-      type: "exam",
-      title: "Guarding or rebound",
+      type: 'exam',
+      title: 'Abdominal pain is a trap',
       content:
-        "Peritoneal signs increase concern for advanced inflammation or perforation.",
+        'DKA frequently causes significant abdominal pain that may mimic appendicitis or peritonitis. Reassess after metabolic correction before pursuing surgery.',
     },
     {
-      type: "exam",
-      title: "Negative positional signs",
+      type: 'exam',
+      title: 'Look at the breathing pattern',
       content:
-        "Absence of psoas or obturator signs does not exclude appendicitis.",
+        'Recognizing Kussmaul respirations at the bedside can identify severe acidosis before laboratory results return.',
     },
   ],
 
-  scoringSystems: [
-    {
-      id: "appendicitis-alvarado-score",
-      name: "Alvarado Score",
-      use:
-        "Clinical score used to estimate probability of acute appendicitis.",
-      mnemonic: {
-        id: "appendicitis-mantrels",
-        name: "MANTRELS",
-        useCase: "Mnemonic for the Alvarado Score components.",
-        expansion: [
-          { letter: "M", meaning: "Migration of pain" },
-          { letter: "A", meaning: "Anorexia" },
-          { letter: "N", meaning: "Nausea or vomiting" },
-          { letter: "T", meaning: "Tenderness in RLQ" },
-          { letter: "R", meaning: "Rebound pain" },
-          { letter: "E", meaning: "Elevated temperature" },
-          { letter: "L", meaning: "Leukocytosis" },
-          { letter: "S", meaning: "Shift to the left" },
-        ],
-      },
-      components: [
-        "Migration of pain",
-        "Anorexia",
-        "Nausea or vomiting",
-        "Tenderness in RLQ",
-        "Rebound pain",
-        "Elevated temperature",
-        "Leukocytosis",
-        "Shift to the left",
-      ],
-      caution:
-        "Use as a decision aid, not a replacement for clinical judgment.",
-    },
-  ],
+  scoringSystems: [],
 
   investigations: [
     {
-      test: "CBC",
+      test: 'Capillary glucose',
       interpretation:
-        "Neutrophilic leukocytosis supports acute inflammation.",
+        'Usually elevated, often above 14 mmol/L.',
       commonTrap:
-        "Normal early WBC does not exclude appendicitis.",
+        'Euglycaemic DKA can occur, particularly with SGLT2 inhibitor use.',
     },
     {
-      test: "CRP",
+      test: 'Serum ketones',
       interpretation:
-        "Supports inflammatory burden and symptom duration.",
+        'Elevated ketones confirm active ketogenesis.',
     },
     {
-      test: "Ultrasound",
+      test: 'Venous blood gas',
       interpretation:
-        "Useful first-line imaging in children and pregnancy.",
+        'Demonstrates metabolic acidosis with low pH and bicarbonate.',
     },
     {
-      test: "CT abdomen",
+      test: 'Electrolytes',
       interpretation:
-        "Most accurate imaging modality in adults.",
+        'Assess potassium, sodium, renal function, and anion gap.',
     },
   ],
 
   pitfalls: [
     {
-      pitfall: "Normal early inflammatory markers",
+      pitfall: 'Normal potassium level',
       consequence:
-        "Early appendicitis may have normal laboratory results.",
+        'Total body potassium is depleted even when serum potassium appears normal.',
     },
     {
-      pitfall: "Retrocecal appendix",
+      pitfall: 'Insulin before potassium review',
       consequence:
-        "May present with flank or back pain rather than classic RLQ pain.",
+        'Insulin can precipitate dangerous hypokalaemia.',
     },
     {
-      pitfall: "Transient improvement after perforation",
+      pitfall: 'Assuming abdominal pain means surgery',
       consequence:
-        "Pain may briefly improve before generalized peritonitis develops.",
+        'Unnecessary surgical investigations may occur if DKA is missed.',
+    },
+    {
+      pitfall: 'Stopping insulin too early',
+      consequence:
+        'Ketoacidosis may recur despite improving glucose levels.',
     },
   ],
 
   managementOverview: [
     {
-      step: "NPO",
+      step: 'Aggressive IV fluids',
       rationale:
-        "Keep nil by mouth while diagnosis and operative planning proceed.",
+        'Volume resuscitation reverses shock and improves perfusion.',
     },
     {
-      step: "IV fluids",
+      step: 'Potassium assessment',
       rationale:
-        "Correct dehydration and support circulation.",
+        'Potassium abnormalities determine safe insulin initiation.',
     },
     {
-      step: "Analgesia",
+      step: 'Fixed-rate insulin infusion',
       rationale:
-        "Adequate pain control should not be withheld.",
+        'Suppresses ketogenesis and corrects metabolic derangement.',
     },
     {
-      step: "Surgical review",
+      step: 'Treat precipitating cause',
       rationale:
-        "Urgent assessment is required when appendicitis is suspected.",
+        'Infection, missed insulin, myocardial infarction, and other triggers must be identified.',
     },
   ],
 
   differentialDistinguishers: [
     {
-      diagnosis: "Gastroenteritis",
+      diagnosis: 'Hyperosmolar Hyperglycaemic State',
       keySeparator:
-        "Diffuse diarrheal illness rather than progressive focal RLQ pain.",
+        'Marked hyperglycaemia with minimal ketosis and less severe acidosis.',
     },
     {
-      diagnosis: "Mesenteric adenitis",
+      diagnosis: 'Acute Gastroenteritis',
       keySeparator:
-        "Often follows viral illness and lacks progressive focal peritonism.",
+        'Vomiting occurs but significant hyperglycaemia and ketonaemia are absent.',
     },
     {
-      diagnosis: "Renal colic",
+      diagnosis: 'Acute Pancreatitis',
       keySeparator:
-        "Colicky flank-to-groin pain with urinary features or hematuria.",
+        'Elevated lipase and characteristic epigastric pain predominate.',
     },
     {
-      diagnosis: "Ectopic pregnancy",
+      diagnosis: 'Sepsis',
       keySeparator:
-        "Positive pregnancy test or vaginal bleeding changes management immediately.",
+        'Systemic infection may trigger DKA but does not independently produce marked ketoacidosis.',
     },
   ],
 
   references: [
-    "Oxford Handbook of Clinical Surgery",
-    "WSES Jerusalem Guidelines",
-    "BMJ Best Practice: Acute Appendicitis",
+    'Oxford Handbook of Clinical Medicine',
+    'JBDS Guidelines for Diabetic Ketoacidosis',
+    'ADA Standards of Care',
+    'BMJ Best Practice: Diabetic Ketoacidosis',
   ],
 };
 
 async function main() {
-  const canonicalName = 'appendicitis';
-  const displayLabel = 'Appendicitis';
+  const canonicalName = 'diabetic ketoacidosis';
+  const displayLabel = 'Diabetic Ketoacidosis';
   const canonicalNormalized = normalizeClinicalText(canonicalName);
 
   const registry = await prisma.diagnosisRegistry.upsert({
@@ -409,20 +386,46 @@ async function main() {
     },
   });
 
-  for (const [rank, term] of [displayLabel, canonicalName, 'acute appendicitis'].entries()) {
+  const aliasTerms = [displayLabel, canonicalName, 'dka'];
+  const seenAliasNormalizations = new Set<string>();
+  let aliasRank = 0;
+
+  for (const term of aliasTerms) {
+    const normalizedTerm = normalizeClinicalText(term);
+    if (seenAliasNormalizations.has(normalizedTerm)) {
+      continue;
+    }
+    seenAliasNormalizations.add(normalizedTerm);
+
+    const existingAlias = await prisma.diagnosisAlias.findUnique({
+      where: {
+        diagnosisRegistryId_normalizedTerm: {
+          diagnosisRegistryId: registry.id,
+          normalizedTerm,
+        },
+      },
+      select: { id: true },
+    });
+    await assertAliasValidWithClient(prisma, {
+      aliasText: term,
+      targetDiagnosisRegistryId: registry.id,
+      acceptedForMatch: true,
+      ignoreAliasId: existingAlias?.id,
+      allowTargetCanonicalAlias: normalizedTerm === canonicalNormalized,
+    });
     await prisma.diagnosisAlias.upsert({
       where: {
         diagnosisRegistryId_normalizedTerm: {
           diagnosisRegistryId: registry.id,
-          normalizedTerm: normalizeClinicalText(term),
+          normalizedTerm,
         },
       },
       update: {
         term,
         active: true,
         acceptedForMatch: true,
-        rank,
-        kind: rank === 0 ? DiagnosisAliasKind.CANONICAL : DiagnosisAliasKind.ACCEPTED,
+        rank: aliasRank,
+        kind: aliasRank === 0 ? DiagnosisAliasKind.CANONICAL : DiagnosisAliasKind.ACCEPTED,
       },
       create: {
         diagnosisRegistryId: registry.id,
@@ -430,11 +433,12 @@ async function main() {
         normalizedTerm: normalizeClinicalText(term),
         active: true,
         acceptedForMatch: true,
-        rank,
-        kind: rank === 0 ? DiagnosisAliasKind.CANONICAL : DiagnosisAliasKind.ACCEPTED,
+        rank: aliasRank,
+        kind: aliasRank === 0 ? DiagnosisAliasKind.CANONICAL : DiagnosisAliasKind.ACCEPTED,
         source: seedVersion,
       },
     });
+    aliasRank += 1;
   }
 
   const education = await prisma.diagnosisEducation.upsert({
