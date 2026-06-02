@@ -87,22 +87,21 @@ const differentials = [
 const explanation = {
   diagnosis: 'Diabetic Ketoacidosis',
   summary:
-    'Progressive polyuria, polydipsia, dehydration, Kussmaul respirations, marked hyperglycaemia, ketonaemia, and high-anion-gap metabolic acidosis support diabetic ketoacidosis.',
+    'Recurrent vomiting, abdominal pain, marked dehydration, tachypnoea, hyperglycaemia, ketonaemia, and high-anion-gap metabolic acidosis support diabetic ketoacidosis.',
   reasoning: [
-    'The combination of excessive thirst and frequent urination suggests severe hyperglycaemia causing osmotic diuresis.',
-    'Vomiting and abdominal pain are common manifestations of ketosis and metabolic acidosis.',
-    'Deep laboured respirations represent respiratory compensation for metabolic acidosis.',
-    'Hypotension and tachycardia indicate substantial intravascular volume depletion.',
+    'Vomiting and abdominal pain are common manifestations of ketosis and metabolic acidosis, and can initially mimic gastrointestinal disease.',
+    'Marked dehydration with hypotension and tachycardia indicates substantial intravascular volume depletion.',
+    'Tachypnoea is consistent with respiratory compensation for metabolic acidosis.',
     'Marked hyperglycaemia together with elevated ketones establishes uncontrolled insulin deficiency.',
     'Low pH and low bicarbonate confirm high-anion-gap metabolic acidosis consistent with diabetic ketoacidosis.',
   ],
   keyFindings: [
-    'Polyuria',
-    'Polydipsia',
     'Vomiting',
     'Abdominal pain',
-    'Kussmaul respirations',
     'Severe dehydration',
+    'Tachycardia',
+    'Hypotension',
+    'Tachypnoea',
     'Hyperglycaemia',
     'Ketonaemia',
     'High-anion-gap metabolic acidosis',
@@ -129,10 +128,10 @@ const explanation = {
         'Vomiting and abdominal pain are common presentations of gastroenteritis.',
       ruledOutByClues: [
         {
-          clueOrder: 2,
-          evidence: 'deep laboured breathing',
+          clueOrder: 5,
+          evidence: 'high-anion-gap metabolic acidosis with ketonaemia',
           reason:
-            'Compensatory respiratory effort suggests metabolic acidosis rather than isolated gastrointestinal disease.',
+            'Ketoacidosis explains the vomiting and abdominal pain better than isolated gastrointestinal disease.',
         },
       ],
       finalReasonLessLikely:
@@ -232,7 +231,7 @@ const educationForFrontend = {
       type: 'exam',
       title: 'Abdominal pain is a trap',
       content:
-        'DKA frequently causes significant abdominal pain that may mimic appendicitis or peritonitis. Reassess after metabolic correction before pursuing surgery.',
+        'DKA frequently causes significant abdominal pain that may mimic an acute abdomen or peritonitis. Reassess after metabolic correction before pursuing surgical workup.',
     },
     {
       type: 'exam',
@@ -360,13 +359,13 @@ async function main() {
       active: true,
       isPlayable: true,
       isGeneratable: true,
-      specialty: 'General Surgery',
-      bodySystem: 'Gastrointestinal',
-      category: 'Inflammatory',
+      specialty: 'Endocrinology',
+      bodySystem: 'Endocrine',
+      category: 'Metabolic',
       difficultyBand: DiagnosisDifficultyBand.BASIC,
       clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
       rarityBand: DiagnosisRarityBand.COMMON,
-      urgencyLevel: DiagnosisUrgencyLevel.URGENT,
+      urgencyLevel: DiagnosisUrgencyLevel.EMERGENT,
     },
     create: {
       canonicalName,
@@ -376,13 +375,13 @@ async function main() {
       active: true,
       isPlayable: true,
       isGeneratable: true,
-      specialty: 'General Surgery',
-      bodySystem: 'Gastrointestinal',
-      category: 'Inflammatory',
+      specialty: 'Endocrinology',
+      bodySystem: 'Endocrine',
+      category: 'Metabolic',
       difficultyBand: DiagnosisDifficultyBand.BASIC,
       clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
       rarityBand: DiagnosisRarityBand.COMMON,
-      urgencyLevel: DiagnosisUrgencyLevel.URGENT,
+      urgencyLevel: DiagnosisUrgencyLevel.EMERGENT,
     },
   });
 
@@ -531,7 +530,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Seeded frontend-aligned flagship appendicitis case. Scheduler should publish/schedule naturally.',
+      'Seeded frontend-aligned flagship diabetic ketoacidosis case. Scheduler should publish/schedule naturally.',
   };
 
   const seededCase = existingCase
@@ -563,7 +562,7 @@ async function main() {
       diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
       diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
       diagnosisMappingConfidence: 1,
-      diagnosisEditorialNote: 'Frontend-aligned flagship appendicitis revision.',
+      diagnosisEditorialNote: 'Frontend-aligned flagship diabetic ketoacidosis revision.',
     },
     select: { id: true },
   });
@@ -585,14 +584,14 @@ async function main() {
         contentTier: 'FLAGSHIP',
         seedVersion,
         humanReviewed: true,
-        note: 'Manual frontend-aligned appendicitis case seeded for beta inventory.',
+        note: 'Manual frontend-aligned diabetic ketoacidosis case seeded for beta inventory.',
       },
       findings: [],
       completedAt: now,
     },
   });
 
-  console.log('Seeded frontend-aligned Appendicitis:', {
+  console.log('Seeded frontend-aligned Diabetic Ketoacidosis:', {
     registryId: registry.id,
     caseId: seededCase.id,
     educationId: education.id,
