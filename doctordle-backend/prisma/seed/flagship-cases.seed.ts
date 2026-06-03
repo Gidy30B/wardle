@@ -35,137 +35,140 @@ function normalizeClinicalText(value: string): string {
 }
 
 const now = new Date();
-const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 1, 12, 0, 0));
-const seedVersion = 'flagship-beta-v4';
+const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 4, 12, 0, 0));
+const seedVersion = 'flagship-ruptured-ectopic-pregnancy-v1';
 
 const clues = [
   {
     order: 0,
     type: 'history',
     value:
-      '21-year-old woman presents with worsening fatigue, nausea, and repeated vomiting that began yesterday evening.',
+      'A 28-year-old woman presents with lower abdominal pain radiating to the shoulder. Her last normal menstrual period was 7 weeks ago.',
   },
   {
     order: 1,
     type: 'symptom',
     value:
-      'She reports diffuse abdominal pain and has been unable to tolerate oral intake throughout the day.',
+      'She reports light vaginal spotting for the past two days and occasional dizziness.',
   },
   {
     order: 2,
-    type: 'exam',
-    value:
-      'Examination reveals dry mucous membranes and marked dehydration without focal abdominal tenderness.',
+    type: 'vital',
+    value: 'Pulse rate is 112 beats/min and blood pressure is 92/60 mmHg.',
   },
   {
     order: 3,
-    type: 'vital',
+    type: 'exam',
     value:
-      'Heart rate is 124/min, blood pressure is 94/58 mmHg, respiratory rate is 30/min, and temperature is 37.4°C.',
+      'Pelvic examination demonstrates unilateral adnexal tenderness and cervical motion tenderness.',
   },
   {
     order: 4,
     type: 'lab',
     value:
-      'Capillary blood glucose is 29 mmol/L and serum ketones are markedly elevated.',
+      'A urine pregnancy test is positive. Serum beta-hCG is elevated but lower than expected for the estimated gestational age.',
   },
   {
     order: 5,
-    type: 'lab',
+    type: 'imaging',
     value:
-      'Venous blood gas demonstrates pH 7.12, bicarbonate 8 mmol/L, and a raised anion gap metabolic acidosis.',
+      'Transvaginal ultrasound reveals no intrauterine gestational sac despite a beta-hCG level above the discriminatory zone. A complex adnexal mass is visualized.',
   },
 ] as const;
 
 const differentials = [
-  'Hyperosmolar Hyperglycaemic State',
-  'Acute Gastroenteritis',
-  'Acute Pancreatitis',
-  'Sepsis',
+  'Threatened Miscarriage',
+  'Pelvic Inflammatory Disease',
+  'Ruptured Ovarian Cyst',
+  'Ovarian Torsion',
 ];
 
 const explanation = {
-  diagnosis: 'Diabetic Ketoacidosis',
+  diagnosis: 'Ruptured Ectopic Pregnancy',
   summary:
-    'Recurrent vomiting, abdominal pain, marked dehydration, tachypnoea, hyperglycaemia, ketonaemia, and high-anion-gap metabolic acidosis support diabetic ketoacidosis.',
+    'Amenorrhoea, abdominal pain, shoulder-tip pain, vaginal bleeding, haemodynamic instability, positive pregnancy testing, and absent intrauterine pregnancy on transvaginal ultrasound support ruptured ectopic pregnancy.',
   reasoning: [
-    'Vomiting and abdominal pain are common manifestations of ketosis and metabolic acidosis, and can initially mimic gastrointestinal disease.',
-    'Marked dehydration with hypotension and tachycardia indicates substantial intravascular volume depletion.',
-    'Tachypnoea is consistent with respiratory compensation for metabolic acidosis.',
-    'Marked hyperglycaemia together with elevated ketones establishes uncontrolled insulin deficiency.',
-    'Low pH and low bicarbonate confirm high-anion-gap metabolic acidosis consistent with diabetic ketoacidosis.',
+    'A missed menstrual period with lower abdominal pain suggests an early pregnancy complication until proven otherwise.',
+    'Vaginal spotting forms part of the classic ectopic pregnancy triad.',
+    'Tachycardia and hypotension suggest haemodynamic compromise from intra-abdominal haemorrhage.',
+    'Shoulder-tip pain indicates diaphragmatic irritation from haemoperitoneum.',
+    'Positive pregnancy testing confirms pregnancy and narrows the diagnostic field.',
+    'No intrauterine gestational sac above the discriminatory beta-hCG zone with a complex adnexal mass strongly supports ectopic implantation.',
   ],
   keyFindings: [
-    'Vomiting',
-    'Abdominal pain',
-    'Severe dehydration',
-    'Tachycardia',
+    'Amenorrhoea',
+    'Lower abdominal pain',
+    'Shoulder-tip pain',
+    'Vaginal spotting',
+    'Dizziness',
     'Hypotension',
-    'Tachypnoea',
-    'Hyperglycaemia',
-    'Ketonaemia',
-    'High-anion-gap metabolic acidosis',
+    'Tachycardia',
+    'Positive pregnancy test',
+    'Absent intrauterine gestation',
+    'Complex adnexal mass',
   ],
   differentials,
   differentialAnalysis: [
     {
-      diagnosis: 'Hyperosmolar Hyperglycaemic State',
+      diagnosis: 'Threatened Miscarriage',
       whyPlausibleEarly:
-        'Profound dehydration and hyperglycaemia may initially resemble HHS.',
-      ruledOutByClues: [
-        {
-          clueOrder: 4,
-          evidence: 'markedly elevated serum ketones',
-          reason: 'Significant ketone production favors DKA over HHS.',
-        },
-      ],
-      finalReasonLessLikely:
-        'HHS typically has minimal ketosis and less severe metabolic acidosis.',
-    },
-    {
-      diagnosis: 'Acute Gastroenteritis',
-      whyPlausibleEarly:
-        'Vomiting and abdominal pain are common presentations of gastroenteritis.',
+        'Amenorrhoea and vaginal bleeding are common presentations of early pregnancy loss.',
       ruledOutByClues: [
         {
           clueOrder: 5,
-          evidence: 'high-anion-gap metabolic acidosis with ketonaemia',
+          evidence:
+            'no intrauterine gestational sac with a complex adnexal mass',
           reason:
-            'Ketoacidosis explains the vomiting and abdominal pain better than isolated gastrointestinal disease.',
+            'The ultrasound localizes concern outside the uterine cavity rather than showing an intrauterine pregnancy at risk of miscarriage.',
         },
       ],
       finalReasonLessLikely:
-        'Gastroenteritis does not explain severe hyperglycaemia, ketosis, and high-anion-gap acidosis.',
+        'Threatened miscarriage does not explain absent intrauterine pregnancy above the discriminatory zone with an adnexal mass.',
     },
     {
-      diagnosis: 'Acute Pancreatitis',
+      diagnosis: 'Pelvic Inflammatory Disease',
       whyPlausibleEarly:
-        'Abdominal pain, vomiting, and systemic illness may resemble pancreatitis.',
+        'Pelvic pain and cervical motion tenderness may occur in PID.',
       ruledOutByClues: [
         {
           clueOrder: 4,
-          evidence: 'severe hyperglycaemia with ketonaemia',
+          evidence: 'positive pregnancy test with abnormal beta-hCG pattern',
           reason:
-            'The metabolic pattern is more characteristic of insulin deficiency than pancreatic inflammation.',
+            'Pregnancy-related findings make ectopic pregnancy the priority diagnosis.',
         },
       ],
       finalReasonLessLikely:
-        'The dominant pathology is ketoacidosis rather than pancreatic injury.',
+        'PID does not explain amenorrhoea, positive pregnancy testing, or the absent intrauterine gestation with adnexal mass.',
     },
     {
-      diagnosis: 'Sepsis',
+      diagnosis: 'Ruptured Ovarian Cyst',
       whyPlausibleEarly:
-        'Tachycardia, hypotension, and metabolic derangement can occur in severe infection.',
+        'A ruptured cyst can cause acute pelvic pain and haemoperitoneum.',
+      ruledOutByClues: [
+        {
+          clueOrder: 4,
+          evidence: 'positive pregnancy test',
+          reason:
+            'Pregnancy shifts the dangerous diagnosis toward ectopic pregnancy.',
+        },
+      ],
+      finalReasonLessLikely:
+        'A ruptured ovarian cyst does not explain amenorrhoea, abnormal beta-hCG, or absent intrauterine pregnancy.',
+    },
+    {
+      diagnosis: 'Ovarian Torsion',
+      whyPlausibleEarly:
+        'Ovarian torsion may present with sudden unilateral pelvic pain.',
       ruledOutByClues: [
         {
           clueOrder: 5,
-          evidence: 'high-anion-gap ketoacidosis',
+          evidence: 'absent intrauterine gestation with complex adnexal mass',
           reason:
-            'The acid-base disturbance is specifically explained by ketone accumulation.',
+            'The pregnancy localization problem is more consistent with ectopic pregnancy.',
         },
       ],
       finalReasonLessLikely:
-        'Sepsis may precipitate DKA but does not independently explain the full metabolic profile.',
+        'Torsion does not explain the missed period, positive pregnancy test, or beta-hCG and ultrasound pattern.',
     },
   ],
   generationQuality: {
@@ -176,69 +179,64 @@ const explanation = {
 };
 
 const educationForFrontend = {
-  title: 'Diabetic Ketoacidosis',
+  title: 'Ruptured Ectopic Pregnancy',
 
   summary: {
     definition:
-      'Diabetic ketoacidosis is an acute metabolic emergency caused by absolute or severe relative insulin deficiency, leading to hyperglycaemia, ketone production, and high-anion-gap metabolic acidosis.',
-
+      'A ruptured ectopic pregnancy occurs when an extrauterine gestation, most commonly within the fallopian tube, ruptures and causes intra-abdominal haemorrhage.',
     highYieldTakeaway:
-      'Think DKA whenever polyuria, polydipsia, dehydration, and unexplained deep breathing occur together with hyperglycaemia.',
+      'Any woman of reproductive age with abdominal pain, vaginal bleeding, and a recent missed period should be assumed to have ectopic pregnancy until proven otherwise.',
   },
 
   recognitionPattern: [
     {
-      pattern: 'Polyuria and polydipsia',
+      pattern: 'Classic triad',
       whyItMatters:
-        'Osmotic diuresis from severe hyperglycaemia causes large fluid losses and intense thirst.',
+        'Amenorrhoea, abdominal pain, and vaginal bleeding are hallmark features of ectopic pregnancy.',
     },
     {
-      pattern: 'Vomiting with abdominal pain',
+      pattern: 'Features of rupture',
       whyItMatters:
-        'Ketosis and acidosis frequently cause abdominal symptoms that may mimic a surgical abdomen.',
-    },
-    {
-      pattern: 'Deep laboured breathing',
-      whyItMatters:
-        'Kussmaul respirations are a compensatory response to metabolic acidosis.',
-    },
-    {
-      pattern: 'Progressive dehydration',
-      whyItMatters:
-        'Volume depletion drives shock, acute kidney injury, and electrolyte abnormalities.',
+        'Shoulder-tip pain, dizziness, syncope, tachycardia, hypotension, and sudden worsening pain suggest tubal rupture with haemoperitoneum.',
     },
   ],
 
   keySigns: [
     {
-      finding: 'Kussmaul respirations',
+      finding: 'Shoulder-tip pain',
       significance:
-        'Deep, rapid breathing is a classic sign of severe metabolic acidosis.',
+        'Blood in the peritoneal cavity can irritate the diaphragm and produce referred pain.',
     },
     {
-      finding: 'Signs of dehydration',
+      finding: 'Adnexal tenderness',
       significance:
-        'Dry mucous membranes, poor skin turgor, and tachycardia reflect major fluid losses.',
+        'Localized tenderness adjacent to the uterus supports a tubal source of symptoms.',
     },
     {
-      finding: 'Altered mental status',
+      finding: 'Shock',
       significance:
-        'May indicate severe acidosis, cerebral dysfunction, or profound dehydration.',
+        'Hypotension and tachycardia may appear before definitive imaging confirms the diagnosis.',
     },
   ],
 
   examPearls: [
     {
       type: 'exam',
-      title: 'Abdominal pain is a trap',
+      title: 'Shoulder-tip pain',
       content:
-        'DKA frequently causes significant abdominal pain that may mimic an acute abdomen or peritonitis. Reassess after metabolic correction before pursuing surgical workup.',
+        'Blood within the peritoneal cavity irritates the diaphragm, producing referred pain via the phrenic nerve.',
     },
     {
       type: 'exam',
-      title: 'Look at the breathing pattern',
+      title: 'Adnexal tenderness',
       content:
-        'Recognizing Kussmaul respirations at the bedside can identify severe acidosis before laboratory results return.',
+        'Unilateral adnexal tenderness supports a tubal rather than intrauterine source of symptoms.',
+    },
+    {
+      type: 'exam',
+      title: 'Treat instability first',
+      content:
+        'Haemodynamic instability should prompt immediate resuscitation and gynaecology involvement rather than waiting passively for imaging.',
     },
   ],
 
@@ -246,109 +244,99 @@ const educationForFrontend = {
 
   investigations: [
     {
-      test: 'Capillary glucose',
+      test: 'Urine pregnancy test',
       interpretation:
-        'Usually elevated, often above 14 mmol/L.',
-      commonTrap:
-        'Euglycaemic DKA can occur, particularly with SGLT2 inhibitor use.',
+        'Positive testing confirms pregnancy and triggers localization of the gestation.',
     },
     {
-      test: 'Serum ketones',
+      test: 'Serum beta-hCG',
       interpretation:
-        'Elevated ketones confirm active ketogenesis.',
+        'An abnormal rise or lower-than-expected level suggests an abnormal pregnancy.',
     },
     {
-      test: 'Venous blood gas',
+      test: 'Transvaginal ultrasound',
       interpretation:
-        'Demonstrates metabolic acidosis with low pH and bicarbonate.',
+        'No intrauterine gestation with an adnexal mass is the key imaging pattern supporting ectopic pregnancy.',
     },
     {
-      test: 'Electrolytes',
+      test: 'Full blood count and cross-match',
       interpretation:
-        'Assess potassium, sodium, renal function, and anion gap.',
+        'Assesses haemorrhage severity and prepares for urgent transfusion if needed.',
     },
   ],
 
   pitfalls: [
     {
-      pitfall: 'Normal potassium level',
+      pitfall: 'Assuming miscarriage',
       consequence:
-        'Total body potassium is depleted even when serum potassium appears normal.',
+        'Vaginal bleeding in early pregnancy should not be attributed to miscarriage until ectopic pregnancy is excluded.',
     },
     {
-      pitfall: 'Insulin before potassium review',
+      pitfall: 'Waiting for ultrasound in an unstable patient',
       consequence:
-        'Insulin can precipitate dangerous hypokalaemia.',
+        'Delaying resuscitation and specialist involvement can be fatal in haemorrhagic shock.',
     },
     {
-      pitfall: 'Assuming abdominal pain means surgery',
+      pitfall: 'Ignoring shoulder-tip pain',
       consequence:
-        'Unnecessary surgical investigations may occur if DKA is missed.',
-    },
-    {
-      pitfall: 'Stopping insulin too early',
-      consequence:
-        'Ketoacidosis may recur despite improving glucose levels.',
+        'This symptom may be an early clue to significant haemoperitoneum.',
     },
   ],
 
   managementOverview: [
     {
-      step: 'Aggressive IV fluids',
+      step: 'Immediate ABC assessment and resuscitation',
       rationale:
-        'Volume resuscitation reverses shock and improves perfusion.',
+        'Haemorrhagic shock is the immediate life-threatening complication.',
     },
     {
-      step: 'Potassium assessment',
-      rationale:
-        'Potassium abnormalities determine safe insulin initiation.',
+      step: 'Large-bore IV access and blood cross-match',
+      rationale: 'Allows rapid fluid and blood product administration.',
     },
     {
-      step: 'Fixed-rate insulin infusion',
+      step: 'Urgent gynaecology consultation',
       rationale:
-        'Suppresses ketogenesis and corrects metabolic derangement.',
+        'Definitive treatment is usually surgical when rupture is suspected.',
     },
     {
-      step: 'Treat precipitating cause',
-      rationale:
-        'Infection, missed insulin, myocardial infarction, and other triggers must be identified.',
+      step: 'Emergency laparoscopy or laparotomy',
+      rationale: 'Controls bleeding and removes the ectopic pregnancy.',
     },
   ],
 
   differentialDistinguishers: [
     {
-      diagnosis: 'Hyperosmolar Hyperglycaemic State',
+      diagnosis: 'Threatened Miscarriage',
       keySeparator:
-        'Marked hyperglycaemia with minimal ketosis and less severe acidosis.',
+        'Absence of an intrauterine pregnancy and presence of an adnexal mass favour ectopic pregnancy.',
     },
     {
-      diagnosis: 'Acute Gastroenteritis',
+      diagnosis: 'Pelvic Inflammatory Disease',
       keySeparator:
-        'Vomiting occurs but significant hyperglycaemia and ketonaemia are absent.',
+        'Pregnancy-related findings and abnormal ultrasound findings favour ectopic pregnancy.',
     },
     {
-      diagnosis: 'Acute Pancreatitis',
+      diagnosis: 'Ruptured Ovarian Cyst',
       keySeparator:
-        'Elevated lipase and characteristic epigastric pain predominate.',
+        'Does not explain amenorrhoea, positive pregnancy testing, or abnormal beta-hCG levels.',
     },
     {
-      diagnosis: 'Sepsis',
+      diagnosis: 'Ovarian Torsion',
       keySeparator:
-        'Systemic infection may trigger DKA but does not independently produce marked ketoacidosis.',
+        'Ultrasound findings and pregnancy-related features support ectopic pregnancy.',
     },
   ],
 
   references: [
     'Oxford Handbook of Clinical Medicine',
-    'JBDS Guidelines for Diabetic Ketoacidosis',
-    'ADA Standards of Care',
-    'BMJ Best Practice: Diabetic Ketoacidosis',
+    'NICE guideline: Ectopic pregnancy and miscarriage',
+    'BMJ Best Practice: Ectopic pregnancy',
   ],
 };
 
 async function main() {
-  const canonicalName = 'diabetic ketoacidosis';
-  const displayLabel = 'Diabetic Ketoacidosis';
+  const canonicalName = 'ectopic pregnancy';
+  const displayLabel = 'Ruptured Ectopic Pregnancy';
   const canonicalNormalized = normalizeClinicalText(canonicalName);
 
   const registry = await prisma.diagnosisRegistry.upsert({
@@ -360,9 +348,9 @@ async function main() {
       active: true,
       isPlayable: true,
       isGeneratable: true,
-      specialty: 'Endocrinology',
-      bodySystem: 'Endocrine',
-      category: 'Metabolic',
+      specialty: 'Obstetrics and Gynaecology',
+      bodySystem: 'Reproductive',
+      category: 'Pregnancy emergency',
       difficultyBand: DiagnosisDifficultyBand.BASIC,
       clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
       rarityBand: DiagnosisRarityBand.COMMON,
@@ -376,9 +364,9 @@ async function main() {
       active: true,
       isPlayable: true,
       isGeneratable: true,
-      specialty: 'Endocrinology',
-      bodySystem: 'Endocrine',
-      category: 'Metabolic',
+      specialty: 'Obstetrics and Gynaecology',
+      bodySystem: 'Reproductive',
+      category: 'Pregnancy emergency',
       difficultyBand: DiagnosisDifficultyBand.BASIC,
       clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
       rarityBand: DiagnosisRarityBand.COMMON,
@@ -386,7 +374,12 @@ async function main() {
     },
   });
 
-  const aliasTerms = [displayLabel, canonicalName, 'dka'];
+  const aliasTerms = [
+    canonicalName,
+    displayLabel,
+    'ruptured ectopic pregnancy',
+    'tubal ectopic pregnancy',
+  ];
   const seenAliasNormalizations = new Set<string>();
   let aliasRank = 0;
 
@@ -425,16 +418,22 @@ async function main() {
         active: true,
         acceptedForMatch: true,
         rank: aliasRank,
-        kind: aliasRank === 0 ? DiagnosisAliasKind.CANONICAL : DiagnosisAliasKind.ACCEPTED,
+        kind:
+          aliasRank === 0
+            ? DiagnosisAliasKind.CANONICAL
+            : DiagnosisAliasKind.ACCEPTED,
       },
       create: {
         diagnosisRegistryId: registry.id,
         term,
-        normalizedTerm: normalizeClinicalText(term),
+        normalizedTerm,
         active: true,
         acceptedForMatch: true,
         rank: aliasRank,
-        kind: aliasRank === 0 ? DiagnosisAliasKind.CANONICAL : DiagnosisAliasKind.ACCEPTED,
+        kind:
+          aliasRank === 0
+            ? DiagnosisAliasKind.CANONICAL
+            : DiagnosisAliasKind.ACCEPTED,
         source: seedVersion,
       },
     });
@@ -499,8 +498,11 @@ async function main() {
     },
   });
 
-  const history = clues.find((clue) => clue.type === 'history')?.value ?? displayLabel;
-  const symptoms = clues.filter((clue) => clue.type === 'symptom').map((clue) => clue.value);
+  const history =
+    clues.find((clue) => clue.type === 'history')?.value ?? displayLabel;
+  const symptoms = clues
+    .filter((clue) => clue.type === 'symptom')
+    .map((clue) => clue.value);
 
   const caseData = {
     title: displayLabel,
@@ -520,7 +522,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Seeded frontend-aligned flagship diabetic ketoacidosis inventory case. DailyCase scheduler should assign the actual daily slot.',
+      'Seeded frontend-aligned flagship ruptured ectopic pregnancy inventory case. DailyCase scheduler should assign the actual daily slot.',
   };
 
   const existingSeedCase = await prisma.case.findFirst({
@@ -589,7 +591,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Frontend-aligned flagship diabetic ketoacidosis inventory revision for DailyCase scheduler assignment.',
+      'Frontend-aligned flagship ruptured ectopic pregnancy inventory revision for DailyCase scheduler assignment.',
   };
 
   const revision = reusableCase?.currentRevisionId
@@ -627,19 +629,19 @@ async function main() {
       source: 'MANUAL',
       publishTrack: 'DAILY',
       outcome: 'PASSED',
-      validatorVersion: 'flagship-human-review:v4',
+      validatorVersion: 'flagship-human-review:ruptured-ectopic-pregnancy-v1',
       summary: {
         contentTier: 'FLAGSHIP',
         seedVersion,
         humanReviewed: true,
-        note: 'Manual frontend-aligned diabetic ketoacidosis inventory case seeded for DailyCase scheduler assignment.',
+        note: 'Manual frontend-aligned ruptured ectopic pregnancy inventory case seeded for DailyCase scheduler assignment.',
       },
       findings: [],
       completedAt: now,
     },
   });
 
-  console.log('Seeded frontend-aligned Diabetic Ketoacidosis:', {
+  console.log('Seeded frontend-aligned Ruptured Ectopic Pregnancy:', {
     registryId: registry.id,
     caseId: seededCase.id,
     educationId: education.id,
