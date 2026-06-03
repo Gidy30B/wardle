@@ -8,7 +8,6 @@ import { PrismaService } from '../../core/db/prisma.service';
 import { RedisCacheService } from '../../core/cache/redis-cache.service';
 import { AppLoggerService } from '../../core/logger/app-logger.service';
 import { MetricsService } from '../../core/logger/metrics.service';
-import { DailyCasesService } from './daily-cases.service';
 
 type LeaderboardMode = 'daily' | 'weekly';
 type LeaderboardRow = {
@@ -64,6 +63,11 @@ export type LeaderboardCacheDiagnostic = {
   hit: boolean;
 };
 
+type ActiveDailyLeaderboardCase = {
+  id: string;
+  sequenceIndex: number;
+};
+
 @Injectable()
 export class LeaderboardService {
   private readonly leaderboardTtlSeconds = 300;
@@ -73,7 +77,6 @@ export class LeaderboardService {
     private readonly cache: RedisCacheService,
     private readonly logger: AppLoggerService,
     private readonly metrics: MetricsService,
-    private readonly dailyCasesService: DailyCasesService,
   ) {}
 
   async getCacheDiagnostic(input: {
@@ -82,7 +85,7 @@ export class LeaderboardService {
   }): Promise<LeaderboardCacheDiagnostic> {
     const key =
       input.mode === 'daily'
-        ? this.getDailyCacheKey(input.limit)
+        ? await this.getDailyCacheKey(input.limit)
         : this.getWeeklyCacheKey(input.limit);
     const cached = await this.cache.get(key);
 
@@ -93,8 +96,8 @@ export class LeaderboardService {
   }
 
   async getToday(limit = 50) {
-    const { date } = this.getUtcDayRange();
-    const key = `leaderboard:daily:v4:${date}:${limit}`;
+    const dailyCase = await this.getActiveDailyLeaderboardCase();
+    const key = this.getDailyCacheKeyForCase(dailyCase, limit);
 
     const cached = await this.cache.get(key);
     if (cached) {
@@ -104,13 +107,14 @@ export class LeaderboardService {
     }
 
     this.metrics.increment('leaderboard.cache.miss');
-    this.logger.info({ key }, 'leaderboard.cache_miss');
-
-    const dailyCase = await this.dailyCasesService.findDailyCaseForDate({
-      date: new Date(),
-      track: PublishTrack.DAILY,
-      sequenceIndex: 1,
-    });
+    this.logger.info(
+      {
+        key,
+        dailyCaseId: dailyCase?.id ?? null,
+        sequenceIndex: dailyCase?.sequenceIndex ?? null,
+      },
+      'leaderboard.cache_miss',
+    );
 
     if (!dailyCase) {
       return [];
@@ -182,11 +186,7 @@ export class LeaderboardService {
 
   async getUserPosition(input: { userId: string; mode: LeaderboardMode }) {
     if (input.mode === 'daily') {
-      const dailyCase = await this.dailyCasesService.findDailyCaseForDate({
-        date: new Date(),
-        track: PublishTrack.DAILY,
-        sequenceIndex: 1,
-      });
+      const dailyCase = await this.getActiveDailyLeaderboardCase();
 
       if (!dailyCase) {
         return null;
@@ -375,9 +375,21 @@ export class LeaderboardService {
     }
   }
 
-  private getDailyCacheKey(limit: number) {
+  private async getDailyCacheKey(limit: number) {
+    return this.getDailyCacheKeyForCase(
+      await this.getActiveDailyLeaderboardCase(),
+      limit,
+    );
+  }
+
+  private getDailyCacheKeyForCase(
+    dailyCase: ActiveDailyLeaderboardCase | null,
+    limit: number,
+  ) {
     const { date } = this.getUtcDayRange();
-    return `leaderboard:daily:v4:${date}:${limit}`;
+    return dailyCase
+      ? `leaderboard:daily:v5:${dailyCase.id}:${limit}`
+      : `leaderboard:daily:v5:missing:${date}:${limit}`;
   }
 
   private getWeeklyCacheKey(limit: number, keyDate?: string) {
@@ -441,6 +453,22 @@ export class LeaderboardService {
         timeToComplete: true,
         completedAt: true,
         user: this.getPublicUserSelect(),
+      },
+    });
+  }
+
+  private async getActiveDailyLeaderboardCase(): Promise<ActiveDailyLeaderboardCase | null> {
+    const { start } = this.getUtcDayRange();
+
+    return this.prisma.dailyCase.findFirst({
+      where: {
+        date: start,
+        track: PublishTrack.DAILY,
+      },
+      orderBy: [{ sequenceIndex: 'desc' }],
+      select: {
+        id: true,
+        sequenceIndex: true,
       },
     });
   }

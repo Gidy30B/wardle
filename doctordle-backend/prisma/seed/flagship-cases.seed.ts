@@ -35,7 +35,7 @@ function normalizeClinicalText(value: string): string {
 }
 
 const now = new Date();
-const caseDate = new Date(Date.UTC(2026, 5, 1, 12, 0, 0));
+const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 1, 12, 0, 0));
 const seedVersion = 'flagship-beta-v4';
 
 const clues = [
@@ -504,7 +504,7 @@ async function main() {
 
   const caseData = {
     title: displayLabel,
-    date: caseDate,
+    date: inventoryPlaceholderDate,
     difficulty: 'easy',
     history,
     symptoms,
@@ -520,45 +520,100 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Seeded frontend-aligned flagship diabetic ketoacidosis case. Scheduler should publish/schedule naturally.',
+      'Seeded frontend-aligned flagship diabetic ketoacidosis inventory case. DailyCase scheduler should assign the actual daily slot.',
   };
 
-  const seededCase = await prisma.case.upsert({
-    where: { date: caseDate },
-    update: caseData,
-    create: caseData,
-    select: { id: true },
-  });
-
-  const latestRevision = await prisma.caseRevision.findFirst({
-    where: { caseId: seededCase.id },
-    orderBy: { revisionNumber: 'desc' },
-    select: { revisionNumber: true },
-  });
-
-  const revision = await prisma.caseRevision.create({
-    data: {
-      caseId: seededCase.id,
-      revisionNumber: (latestRevision?.revisionNumber ?? 0) + 1,
-      source: 'MANUAL',
-      publishTrack: 'DAILY',
-      title: displayLabel,
-      date: caseDate,
-      difficulty: 'easy',
-      history,
-      symptoms,
-      clues: clues as unknown as object,
-      explanation: explanation as object,
-      differentials,
+  const existingSeedCase = await prisma.case.findFirst({
+    where: {
       diagnosisRegistryId: registry.id,
       proposedDiagnosisText: displayLabel,
-      diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
-      diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
-      diagnosisMappingConfidence: 1,
-      diagnosisEditorialNote: 'Frontend-aligned flagship diabetic ketoacidosis revision.',
     },
-    select: { id: true },
+    orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      currentRevisionId: true,
+      dailyCases: { select: { id: true }, take: 1 },
+    },
   });
+
+  const placeholderDateOwner = await prisma.case.findUnique({
+    where: { date: inventoryPlaceholderDate },
+    select: {
+      id: true,
+      title: true,
+      diagnosisRegistryId: true,
+      currentRevisionId: true,
+      dailyCases: { select: { id: true }, take: 1 },
+    },
+  });
+
+  if (
+    placeholderDateOwner &&
+    placeholderDateOwner.diagnosisRegistryId !== registry.id
+  ) {
+    throw new Error(
+      `Cannot seed ${displayLabel}: inventory placeholder date ${inventoryPlaceholderDate.toISOString()} is already used by "${placeholderDateOwner.title}" (${placeholderDateOwner.id}).`,
+    );
+  }
+
+  const reusableCase = placeholderDateOwner ?? existingSeedCase;
+
+  if (reusableCase?.dailyCases.length) {
+    throw new Error(
+      `Cannot seed ${displayLabel}: existing case ${reusableCase.id} is already assigned to a DailyCase. Restore or manage it through the scheduler instead.`,
+    );
+  }
+
+  const seededCase = reusableCase
+    ? await prisma.case.update({
+        where: { id: reusableCase.id },
+        data: caseData,
+        select: { id: true },
+      })
+    : await prisma.case.create({ data: caseData, select: { id: true } });
+
+  const revisionData = {
+    source: 'MANUAL' as const,
+    publishTrack: 'DAILY' as const,
+    title: displayLabel,
+    date: inventoryPlaceholderDate,
+    difficulty: 'easy',
+    history,
+    symptoms,
+    clues: clues as unknown as object,
+    explanation: explanation as object,
+    differentials,
+    diagnosisRegistryId: registry.id,
+    proposedDiagnosisText: displayLabel,
+    diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
+    diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
+    diagnosisMappingConfidence: 1,
+    diagnosisEditorialNote:
+      'Frontend-aligned flagship diabetic ketoacidosis inventory revision for DailyCase scheduler assignment.',
+  };
+
+  const revision = reusableCase?.currentRevisionId
+    ? await prisma.caseRevision.update({
+        where: { id: reusableCase.currentRevisionId },
+        data: revisionData,
+        select: { id: true },
+      })
+    : await (async () => {
+        const latestRevision = await prisma.caseRevision.findFirst({
+          where: { caseId: seededCase.id },
+          orderBy: { revisionNumber: 'desc' },
+          select: { revisionNumber: true },
+        });
+
+        return prisma.caseRevision.create({
+          data: {
+            caseId: seededCase.id,
+            revisionNumber: (latestRevision?.revisionNumber ?? 0) + 1,
+            ...revisionData,
+          },
+          select: { id: true },
+        });
+      })();
 
   await prisma.case.update({
     where: { id: seededCase.id },
@@ -577,7 +632,7 @@ async function main() {
         contentTier: 'FLAGSHIP',
         seedVersion,
         humanReviewed: true,
-        note: 'Manual frontend-aligned diabetic ketoacidosis case seeded for beta inventory.',
+        note: 'Manual frontend-aligned diabetic ketoacidosis inventory case seeded for DailyCase scheduler assignment.',
       },
       findings: [],
       completedAt: now,

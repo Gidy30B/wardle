@@ -14,6 +14,10 @@ function createLeaderboardServiceFixture() {
       create: jest.fn(),
       createMany: jest.fn(),
       upsert: jest.fn(),
+      findFirst: jest.fn().mockResolvedValue({
+        id: 'daily-1',
+        sequenceIndex: 1,
+      }),
     },
     leaderboardEntry: {
       findMany: jest.fn(),
@@ -61,7 +65,6 @@ function createLeaderboardServiceFixture() {
       cache as never,
       logger as never,
       metrics as never,
-      dailyCasesService as never,
     ),
   };
 }
@@ -102,10 +105,12 @@ describe('LeaderboardService timing tie-breakers', () => {
 
     const result = await fixture.service.getToday(10);
 
-    expect(fixture.dailyCasesService.findDailyCaseForDate).toHaveBeenCalledWith(
+    expect(fixture.prisma.dailyCase.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        track: 'DAILY',
-        sequenceIndex: 1,
+        where: expect.objectContaining({
+          track: 'DAILY',
+        }),
+        orderBy: [{ sequenceIndex: 'desc' }],
       }),
     );
     expect(fixture.prisma.leaderboardEntry.findMany).toHaveBeenCalledWith(
@@ -125,6 +130,62 @@ describe('LeaderboardService timing tie-breakers', () => {
       'unknown',
     ]);
     expect(result[0].timeToComplete).toBe(102);
+  });
+
+  it('uses the highest DAILY sequenceIndex for today when building the daily leaderboard', async () => {
+    const fixture = createLeaderboardServiceFixture();
+    fixture.prisma.dailyCase.findFirst.mockResolvedValue({
+      id: 'daily-2',
+      sequenceIndex: 2,
+    });
+    fixture.prisma.leaderboardEntry.findMany.mockResolvedValue([
+      {
+        userId: 'slot-two-user',
+        score: 240,
+        attemptsCount: 1,
+        timeToComplete: 42,
+        completedAt: new Date('2026-04-22T09:05:00.000Z'),
+        user,
+      },
+    ]);
+
+    const result = await fixture.service.getToday(10);
+
+    expect(fixture.prisma.dailyCase.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          track: 'DAILY',
+        }),
+        orderBy: [{ sequenceIndex: 'desc' }],
+      }),
+    );
+    expect(fixture.prisma.leaderboardEntry.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { dailyCaseId: 'daily-2' },
+      }),
+    );
+    expect(fixture.cache.get).toHaveBeenCalledWith(
+      'leaderboard:daily:v5:daily-2:10',
+    );
+    expect(result.map((entry) => entry.userId)).toEqual(['slot-two-user']);
+  });
+
+  it('uses the active dailyCaseId in the daily cache diagnostic key', async () => {
+    const fixture = createLeaderboardServiceFixture();
+    fixture.prisma.dailyCase.findFirst.mockResolvedValue({
+      id: 'daily-2',
+      sequenceIndex: 2,
+    });
+
+    const result = await fixture.service.getCacheDiagnostic({
+      mode: 'daily',
+      limit: 25,
+    });
+
+    expect(result.key).toBe('leaderboard:daily:v5:daily-2:25');
+    expect(fixture.cache.get).toHaveBeenCalledWith(
+      'leaderboard:daily:v5:daily-2:25',
+    );
   });
 
   it('masks leaderboard identity when profile is private without changing score or rank', async () => {
@@ -196,7 +257,7 @@ describe('LeaderboardService timing tie-breakers', () => {
 
   it('/leaderboard/today returns an empty response without creating a DailyCase when missing', async () => {
     const fixture = createLeaderboardServiceFixture();
-    fixture.dailyCasesService.findDailyCaseForDate.mockResolvedValue(null);
+    fixture.prisma.dailyCase.findFirst.mockResolvedValue(null);
 
     const result = await fixture.service.getToday(10);
 
@@ -224,10 +285,12 @@ describe('LeaderboardService timing tie-breakers', () => {
       mode: 'daily',
     });
 
-    expect(fixture.dailyCasesService.findDailyCaseForDate).toHaveBeenCalledWith(
+    expect(fixture.prisma.dailyCase.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        track: 'DAILY',
-        sequenceIndex: 1,
+        where: expect.objectContaining({
+          track: 'DAILY',
+        }),
+        orderBy: [{ sequenceIndex: 'desc' }],
       }),
     );
     expect(fixture.prisma.leaderboardEntry.count).toHaveBeenCalledWith(
@@ -247,7 +310,7 @@ describe('LeaderboardService timing tie-breakers', () => {
 
   it('/leaderboard/me?mode=daily returns null without creating a DailyCase when missing', async () => {
     const fixture = createLeaderboardServiceFixture();
-    fixture.dailyCasesService.findDailyCaseForDate.mockResolvedValue(null);
+    fixture.prisma.dailyCase.findFirst.mockResolvedValue(null);
 
     const result = await fixture.service.getUserPosition({
       userId: 'unknown',
@@ -260,6 +323,45 @@ describe('LeaderboardService timing tie-breakers', () => {
     expect(fixture.prisma.dailyCase.create).not.toHaveBeenCalled();
     expect(fixture.prisma.dailyCase.createMany).not.toHaveBeenCalled();
     expect(fixture.prisma.dailyCase.upsert).not.toHaveBeenCalled();
+  });
+
+  it('/leaderboard/me?mode=daily ranks the user on the active sequenceIndex 2 case', async () => {
+    const fixture = createLeaderboardServiceFixture();
+    fixture.prisma.dailyCase.findFirst.mockResolvedValue({
+      id: 'daily-2',
+      sequenceIndex: 2,
+    });
+    fixture.prisma.leaderboardEntry.findUnique.mockResolvedValue({
+      userId: 'slot-two-user',
+      score: 220,
+      attemptsCount: 2,
+      timeToComplete: 90,
+      completedAt: new Date('2026-04-22T08:00:00.000Z'),
+      user,
+    });
+    fixture.prisma.leaderboardEntry.count.mockResolvedValue(3);
+
+    const result = await fixture.service.getUserPosition({
+      userId: 'slot-two-user',
+      mode: 'daily',
+    });
+
+    expect(fixture.prisma.leaderboardEntry.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          dailyCaseId_userId: {
+            dailyCaseId: 'daily-2',
+            userId: 'slot-two-user',
+          },
+        },
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        rank: 4,
+        userId: 'slot-two-user',
+      }),
+    );
   });
 
   it('creates leaderboard completions only when the session matches the assigned DailyCase', async () => {
@@ -378,5 +480,6 @@ describe('LeaderboardService timing tie-breakers', () => {
     ]);
     expect(result[0].casesCompleted).toBe(2);
     expect(result[0].totalTimeToComplete).toBe(110);
+    expect(fixture.prisma.dailyCase.findFirst).not.toHaveBeenCalled();
   });
 });
