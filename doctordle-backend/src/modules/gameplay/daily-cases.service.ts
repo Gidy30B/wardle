@@ -15,7 +15,7 @@ import {
   type User,
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
-import { ASSIGNABLE_EDITORIAL_STATUSES } from '../editorial/policies/publish-policy.js';
+import { CaseEligibilityPolicyService } from '../cases/case-eligibility-policy.service';
 import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service.js';
 import {
   AssignmentBlockedReason,
@@ -121,6 +121,8 @@ type DailyCaseScheduleExcludedReason =
   | AssignmentBlockedReason
   | 'already_scheduled'
   | 'invalid_clues'
+  | 'no_playable_clues'
+  | 'invalid_clue_type'
   | 'missing_diagnosis'
   | 'missing_explanation'
   | 'invalid_status';
@@ -236,6 +238,7 @@ export class DailyCasesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly dailyLimitService: DailyLimitService,
+    private readonly caseEligibilityPolicy: CaseEligibilityPolicyService,
     @Optional()
     private caseAssignmentService?: CaseAssignmentService,
     @Optional()
@@ -658,33 +661,22 @@ export class DailyCasesService {
     return trimmed.length > 0 ? trimmed : null;
   }
 
-  private hasPlayableClueArray(value: unknown): boolean {
-    const parsed =
-      typeof value === 'string'
-        ? (() => {
-            try {
-              return JSON.parse(value);
-            } catch {
-              return null;
-            }
-          })()
-        : value;
-
-    return Array.isArray(parsed) && parsed.length > 0;
-  }
-
   private assertDailyCasePlayableForStart(dailyCase: DailyCaseWithCase): void {
-    const isAssignable = ASSIGNABLE_EDITORIAL_STATUSES.some(
-      (status) => status === dailyCase.case.editorialStatus,
-    ) || dailyCase.case.editorialStatus === CaseEditorialStatus.PUBLISHED;
-
-    if (!isAssignable) {
+    if (
+      !this.caseEligibilityPolicy.isGameplayEditorialStatus(
+        dailyCase.case.editorialStatus,
+      )
+    ) {
       throw new BadRequestException(
         'Daily case is no longer eligible for gameplay',
       );
     }
 
-    if (!this.hasPlayableClueArray(dailyCase.case.clues)) {
+    const clueValidation = this.caseEligibilityPolicy.validatePlayableClues(
+      dailyCase.case.clues,
+      { caseId: dailyCase.case.id },
+    );
+    if (!clueValidation.valid) {
       throw new BadRequestException('Daily case has no playable clues');
     }
   }
@@ -692,6 +684,7 @@ export class DailyCasesService {
   private getAssignmentService(): CaseAssignmentService {
     this.caseAssignmentService ??= new CaseAssignmentService(
       this.prisma,
+      this.caseEligibilityPolicy,
       this.lifecyclePolicy,
     );
     return this.caseAssignmentService;
@@ -745,16 +738,19 @@ export class DailyCasesService {
       return 'already_scheduled';
     }
 
-    const isAssignable = ASSIGNABLE_EDITORIAL_STATUSES.some(
-      (status) => status === caseRecord.editorialStatus,
-    );
-
-    if (!isAssignable) {
+    if (
+      !this.caseEligibilityPolicy.isAssignableEditorialStatus(
+        caseRecord.editorialStatus,
+      )
+    ) {
       return 'invalid_status';
     }
 
-    if (!this.hasPlayableClueArray(caseRecord.clues)) {
-      return 'invalid_clues';
+    const clueReason = this.caseEligibilityPolicy.getSchedulerClueExclusionReason(
+      caseRecord.clues,
+    );
+    if (clueReason) {
+      return clueReason;
     }
 
     if (

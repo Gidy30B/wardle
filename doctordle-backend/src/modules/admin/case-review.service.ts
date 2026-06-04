@@ -22,6 +22,7 @@ import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-re
 import { normalizeDiagnosisTerm } from '../diagnosis-registry/diagnosis-term-normalizer.js';
 import { EditorialMetricsService } from '../editorial/editorial-metrics.service.js';
 import { DiagnosisGraphExtractionService } from '../diagnosis-graph/diagnosis-graph-extraction.service.js';
+import { CaseEligibilityPolicyService } from '../cases/case-eligibility-policy.service.js';
 import { getApprovalResetFields } from '../editorial/policies/approval-policy.js';
 import { getCaseDiagnosisPublishReadiness } from '../editorial/policies/diagnosis-publish-readiness.policy.js';
 import {
@@ -250,6 +251,7 @@ export class CaseReviewService {
     private readonly editorialMetrics: EditorialMetricsService,
     private readonly diagnosisRegistryLinkService: DiagnosisRegistryLinkService,
     private readonly diagnosisRegistryEditorialService: DiagnosisRegistryEditorialService,
+    private readonly caseEligibilityPolicy: CaseEligibilityPolicyService,
     private readonly diagnosisGraphExtractionService?: DiagnosisGraphExtractionService,
     private readonly caseQualityProjectionService: CaseQualityProjectionService = new CaseQualityProjectionService(),
   ) {}
@@ -1218,6 +1220,7 @@ export class CaseReviewService {
               approvedByUserId: true,
               diagnosisRegistryId: true,
               diagnosisMappingStatus: true,
+              clues: true,
               diagnosisRegistry: {
                 select: {
                   status: true,
@@ -1246,6 +1249,16 @@ export class CaseReviewService {
           if (!diagnosisPublishReadiness.ready) {
             throw new BadRequestException(
               `Case diagnosis is not ready for publish: ${diagnosisPublishReadiness.reason}`,
+            );
+          }
+
+          const clueValidation =
+            this.caseEligibilityPolicy.validatePlayableClues(caseRecord.clues, {
+              caseId: caseRecord.id,
+            });
+          if (!clueValidation.valid) {
+            throw new BadRequestException(
+              `Case clues are not ready for publish: ${clueValidation.reasons.join(', ')}`,
             );
           }
 

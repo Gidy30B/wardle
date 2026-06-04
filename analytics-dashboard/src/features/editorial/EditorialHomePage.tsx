@@ -2,11 +2,11 @@ import { useAuth } from '@clerk/clerk-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  getDiagnosisRegistryCandidateSummary,
   getDiagnosisRegistryOnboardingSummary,
+  getEditorialInbox,
   searchDiagnosisRegistry,
   type DiagnosisEditorialOnboardingSummary,
-  type DiagnosisRegistryCandidateQueueSummary,
+  type EditorialInboxSummary,
   type DiagnosisRegistrySearchItem,
 } from '../../api/admin';
 import { createApiClient } from '../../api/client';
@@ -18,6 +18,11 @@ import {
 } from '../../hooks/useConsoleAccess';
 
 const quickLinks = [
+  {
+    to: '/editorial/inbox',
+    label: 'Review Inbox',
+    description: 'See the unified read-first queue across editorial work.',
+  },
   {
     to: '/cases',
     label: 'Browse cases',
@@ -66,8 +71,8 @@ export default function EditorialHomePage() {
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [queueSummary, setQueueSummary] =
-    useState<DiagnosisRegistryCandidateQueueSummary | null>(null);
+  const [inboxSummary, setInboxSummary] =
+    useState<EditorialInboxSummary | null>(null);
   const [queueSummaryError, setQueueSummaryError] = useState<string | null>(
     null,
   );
@@ -141,19 +146,19 @@ export default function EditorialHomePage() {
     async function loadQueueSummary() {
       try {
         setQueueSummaryError(null);
-        const [summary, onboarding] = await Promise.all([
-          getDiagnosisRegistryCandidateSummary(client),
+        const [inbox, onboarding] = await Promise.all([
+          getEditorialInbox(client, { limit: 1 }),
           getDiagnosisRegistryOnboardingSummary(client),
         ]);
         if (active) {
-          setQueueSummary(summary);
+          setInboxSummary(inbox.summary);
           setOnboardingSummary(onboarding);
         }
       } catch (summaryError) {
         if (!active) {
           return;
         }
-        setQueueSummary(null);
+        setInboxSummary(null);
         setOnboardingSummary(null);
         setQueueSummaryError(
           summaryError instanceof Error
@@ -245,8 +250,8 @@ export default function EditorialHomePage() {
               Review queues
             </p>
             <p className="mt-1 text-sm text-slate-500">
-              Candidate-first registry review and unresolved differential
-              attention.
+              Unified counts across cases, education, graph, registry, and
+              differential review surfaces.
             </p>
             {queueSummaryError ? (
               <div className="mt-4">
@@ -258,20 +263,28 @@ export default function EditorialHomePage() {
             ) : null}
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <QueueMetric
-                label="Registry candidates"
-                value={queueSummary?.registryCandidateCount}
-                helper="Total proposed registry entries"
+                label="Total inbox"
+                value={inboxSummary?.total}
+                helper="Current reviewable items"
               />
               <QueueMetric
-                label="Unresolved differentials"
-                value={queueSummary?.unresolvedDifferentialCount}
-                helper="Unresolved or ambiguous mappings"
+                label="Blockers"
+                value={inboxSummary?.blockers}
+                helper="Identity or merge risks"
               />
               <QueueMetric
-                label="Pending candidates"
-                value={queueSummary?.pendingRegistryCandidateCount}
-                helper="Candidate queue needing review"
+                label="Urgent"
+                value={inboxSummary?.urgent}
+                helper="Ready for review action"
               />
+            </div>
+            <div className="mt-4">
+              <Link
+                to="/editorial/inbox"
+                className="text-sm font-semibold text-slate-700 hover:text-slate-950"
+              >
+                Open Review Inbox
+              </Link>
             </div>
           </section>
 

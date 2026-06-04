@@ -7,6 +7,9 @@ describe('AdminController generateCases', () => {
       generateBatch: jest.fn().mockResolvedValue({ batchId: 'batch-1' }),
     };
     const caseReviewService = {};
+    const caseInventoryHealthService = {
+      getInventoryHealth: jest.fn().mockResolvedValue({ totalCases: 0 }),
+    };
     const diagnosisEditorialWorkspaceService = {
       getFullWorkspace: jest
         .fn()
@@ -14,6 +17,9 @@ describe('AdminController generateCases', () => {
     };
     const diagnosisWorkspaceQualityService = {};
     const teachingUnitCoverageService = {};
+    const editorialReviewInboxService = {
+      getInbox: jest.fn().mockResolvedValue({ summary: { total: 0 }, items: [] }),
+    };
     const targetedCaseGenerationService = {
       generate: jest.fn().mockResolvedValue({ generatedCase: null }),
     };
@@ -49,15 +55,20 @@ describe('AdminController generateCases', () => {
       analyzeMerge: jest.fn().mockResolvedValue({ allowed: true }),
       getMergeRelated: jest.fn().mockResolvedValue({ diagnosisRegistryId: 'registry-1' }),
     };
+    const diagnosisRegistryMergeExecutionService = {
+      executeMerge: jest.fn().mockResolvedValue({ mergeLogId: 'merge-log-1' }),
+    };
 
     return {
       caseGenerator,
       controller: new AdminController(
         caseGenerator as never,
         caseReviewService as never,
+        caseInventoryHealthService as never,
         diagnosisEditorialWorkspaceService as never,
         diagnosisWorkspaceQualityService as never,
         teachingUnitCoverageService as never,
+        editorialReviewInboxService as never,
         targetedCaseGenerationService as never,
         teachingRulesAdminService as never,
         diagnosisEditorialBriefService as never,
@@ -66,14 +77,18 @@ describe('AdminController generateCases', () => {
         diagnosisEditorialOnboardingService as never,
         diagnosisRegistryLifecyclePolicyService as never,
         diagnosisRegistryMergeAnalysisService as never,
+        diagnosisRegistryMergeExecutionService as never,
       ),
       targetedCaseGenerationService,
+      caseInventoryHealthService,
+      editorialReviewInboxService,
       teachingRulesAdminService,
       diagnosisEditorialBriefService,
       diagnosisEditorialWorkspaceService,
       diagnosisEditorialOnboardingService,
       diagnosisRegistryLifecyclePolicyService,
       diagnosisRegistryMergeAnalysisService,
+      diagnosisRegistryMergeExecutionService,
     };
   }
 
@@ -92,6 +107,36 @@ describe('AdminController generateCases', () => {
         diagnosisRegistryIds: ['11111111-1111-4111-8111-111111111111'],
       }),
     );
+  });
+
+  it('gets editorial review inbox with filters', async () => {
+    const { controller, editorialReviewInboxService } = buildController();
+
+    await controller.getEditorialReviewInbox(
+      'cases',
+      'urgent',
+      'REVIEW',
+      'Cardiology',
+      '25',
+      '2',
+    );
+
+    expect(editorialReviewInboxService.getInbox).toHaveBeenCalledWith({
+      type: 'cases',
+      severity: 'urgent',
+      status: 'REVIEW',
+      specialty: 'Cardiology',
+      limit: 25,
+      page: 2,
+    });
+  });
+
+  it('gets case inventory health', async () => {
+    const { controller, caseInventoryHealthService } = buildController();
+
+    await controller.getCaseInventoryHealth();
+
+    expect(caseInventoryHealthService.getInventoryHealth).toHaveBeenCalled();
   });
 
   it('generates a targeted case from diagnosis workspace payload', async () => {
@@ -301,6 +346,31 @@ describe('AdminController generateCases', () => {
     expect(
       diagnosisRegistryMergeAnalysisService.getMergeRelated,
     ).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
+  });
+
+  it('executes registry merge through merge execution service', async () => {
+    const { controller, diagnosisRegistryMergeExecutionService } =
+      buildController();
+
+    await controller.executeDiagnosisRegistryMerge(
+      { user: { id: 'senior-1' } } as never,
+      {
+        sourceDiagnosisRegistryId: '11111111-1111-4111-8111-111111111111',
+        targetDiagnosisRegistryId: '22222222-2222-4222-8222-222222222222',
+        reason: 'Duplicate diagnosis',
+        expectedAnalysisHash: 'hash-1',
+      },
+    );
+
+    expect(
+      diagnosisRegistryMergeExecutionService.executeMerge,
+    ).toHaveBeenCalledWith({
+      sourceDiagnosisRegistryId: '11111111-1111-4111-8111-111111111111',
+      targetDiagnosisRegistryId: '22222222-2222-4222-8222-222222222222',
+      performedByUserId: 'senior-1',
+      reason: 'Duplicate diagnosis',
+      expectedAnalysisHash: 'hash-1',
+    });
   });
 
   it('allows editors to create draft-level teaching rules', async () => {

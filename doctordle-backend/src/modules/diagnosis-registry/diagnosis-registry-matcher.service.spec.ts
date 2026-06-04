@@ -6,6 +6,9 @@ function createMatcherFixture() {
     diagnosisRegistry: {
       findUnique: jest.fn(),
     },
+    diagnosisRegistryMergeLog: {
+      findFirst: jest.fn(),
+    },
   };
 
   return {
@@ -101,6 +104,7 @@ describe('DiagnosisRegistryMatcherService', () => {
 
   it('does not resolve a selected diagnosis in an unusable status', async () => {
     const fixture = createMatcherFixture();
+    fixture.prisma.diagnosisRegistryMergeLog.findFirst.mockResolvedValue(null);
     fixture.prisma.diagnosisRegistry.findUnique
       .mockResolvedValueOnce({
         id: 'registry-1',
@@ -119,6 +123,51 @@ describe('DiagnosisRegistryMatcherService', () => {
 
     expect(result.isCorrect).toBe(false);
     expect(result.resolution.resolutionReason).toBe('UNUSABLE_SELECTED_ID');
+  });
+
+  it('resolves a deprecated selected diagnosis through its latest merge target', async () => {
+    const fixture = createMatcherFixture();
+    fixture.prisma.diagnosisRegistry.findUnique
+      .mockResolvedValueOnce({
+        id: 'registry-target',
+        status: DiagnosisRegistryStatus.ACTIVE,
+      })
+      .mockResolvedValueOnce({
+        id: 'registry-source',
+        status: DiagnosisRegistryStatus.DEPRECATED,
+        displayLabel: 'Old Asthma',
+      })
+      .mockResolvedValueOnce({
+        id: 'registry-target',
+        status: DiagnosisRegistryStatus.ACTIVE,
+        displayLabel: 'Asthma',
+      });
+    fixture.prisma.diagnosisRegistryMergeLog.findFirst.mockResolvedValue({
+      targetDiagnosisRegistryId: 'registry-target',
+    });
+
+    const result = await fixture.service.evaluateGameplayGuess({
+      expectedDiagnosisRegistryId: 'registry-target',
+      submittedDiagnosisRegistryId: 'registry-source',
+      submittedGuessText: 'Old asthma label',
+    });
+
+    expect(result.isCorrect).toBe(true);
+    expect(result.resolution).toEqual(
+      expect.objectContaining({
+        submittedDiagnosisRegistryId: 'registry-target',
+        resolvedDiagnosisRegistryId: 'registry-target',
+        resolutionMethod: 'MERGED_SELECTED_ID',
+        isResolvable: true,
+      }),
+    );
+    expect(fixture.prisma.diagnosisRegistryMergeLog.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          sourceDiagnosisRegistryId: 'registry-source',
+        },
+      }),
+    );
   });
 
   it('returns unresolved when no selected diagnosis id is provided', async () => {

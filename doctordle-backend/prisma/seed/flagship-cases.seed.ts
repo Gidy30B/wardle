@@ -36,139 +36,138 @@ function normalizeClinicalText(value: string): string {
 
 const now = new Date();
 const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 4, 12, 0, 0));
-const seedVersion = 'flagship-ruptured-ectopic-pregnancy-v1';
+const seedVersion = 'flagship-peptic-ulcer-disease-v1';
 
 const clues = [
   {
     order: 0,
     type: 'history',
     value:
-      'A 28-year-old woman presents with lower abdominal pain radiating to the shoulder. Her last normal menstrual period was 7 weeks ago.',
+      'A 38-year-old man presents with recurrent upper abdominal discomfort that has been worsening over several months.',
   },
   {
     order: 1,
     type: 'symptom',
     value:
-      'She reports light vaginal spotting for the past two days and occasional dizziness.',
+      'The pain is localized to the epigastrium and is described as a burning sensation.',
   },
   {
     order: 2,
-    type: 'vital',
-    value: 'Pulse rate is 112 beats/min and blood pressure is 92/60 mmHg.',
+    type: 'history',
+    value:
+      'He notices that the pain often improves temporarily after eating but returns a few hours later, frequently waking him at night.',
   },
   {
     order: 3,
-    type: 'exam',
+    type: 'history',
     value:
-      'Pelvic examination demonstrates unilateral adnexal tenderness and cervical motion tenderness.',
+      'He has been taking over-the-counter pain medications regularly for chronic knee pain.',
   },
   {
     order: 4,
-    type: 'lab',
+    type: 'exam',
     value:
-      'A urine pregnancy test is positive. Serum beta-hCG is elevated but lower than expected for the estimated gestational age.',
+      'Physical examination reveals mild epigastric tenderness without guarding, rebound tenderness, or abdominal distension.',
   },
   {
     order: 5,
     type: 'imaging',
     value:
-      'Transvaginal ultrasound reveals no intrauterine gestational sac despite a beta-hCG level above the discriminatory zone. A complex adnexal mass is visualized.',
+      'Upper gastrointestinal endoscopy demonstrates a well-defined ulcer in the first part of the duodenum. Testing is positive for Helicobacter pylori.',
   },
 ] as const;
 
 const differentials = [
-  'Threatened Miscarriage',
-  'Pelvic Inflammatory Disease',
-  'Ruptured Ovarian Cyst',
-  'Ovarian Torsion',
+  'Gastroesophageal Reflux Disease',
+  'Gastritis',
+  'Chronic Pancreatitis',
+  'Functional Dyspepsia',
 ];
 
 const explanation = {
-  diagnosis: 'Ruptured Ectopic Pregnancy',
+  diagnosis: 'Peptic Ulcer Disease',
   summary:
-    'Amenorrhoea, abdominal pain, shoulder-tip pain, vaginal bleeding, haemodynamic instability, positive pregnancy testing, and absent intrauterine pregnancy on transvaginal ultrasound support ruptured ectopic pregnancy.',
+    'Chronic burning epigastric pain, nocturnal recurrence, temporary relief with food, regular NSAID exposure, mild epigastric tenderness, endoscopic duodenal ulceration, and positive Helicobacter pylori testing support peptic ulcer disease.',
   reasoning: [
-    'A missed menstrual period with lower abdominal pain suggests an early pregnancy complication until proven otherwise.',
-    'Vaginal spotting forms part of the classic ectopic pregnancy triad.',
-    'Tachycardia and hypotension suggest haemodynamic compromise from intra-abdominal haemorrhage.',
-    'Shoulder-tip pain indicates diaphragmatic irritation from haemoperitoneum.',
-    'Positive pregnancy testing confirms pregnancy and narrows the diagnostic field.',
-    'No intrauterine gestational sac above the discriminatory beta-hCG zone with a complex adnexal mass strongly supports ectopic implantation.',
+    'Recurrent upper abdominal discomfort over months suggests a chronic dyspeptic or ulcer-related process.',
+    'Burning epigastric pain is a classic symptom pattern for acid-mediated ulcer disease.',
+    'Temporary relief after meals with recurrence several hours later and nocturnal awakening is characteristic of duodenal ulcer pain.',
+    'Regular over-the-counter pain medication use raises concern for NSAID-associated mucosal injury.',
+    'Mild epigastric tenderness without peritonism supports uncomplicated disease rather than perforation or acute surgical abdomen.',
+    'Endoscopic visualization of a duodenal ulcer with positive Helicobacter pylori testing confirms the diagnosis.',
   ],
   keyFindings: [
-    'Amenorrhoea',
-    'Lower abdominal pain',
-    'Shoulder-tip pain',
-    'Vaginal spotting',
-    'Dizziness',
-    'Hypotension',
-    'Tachycardia',
-    'Positive pregnancy test',
-    'Absent intrauterine gestation',
-    'Complex adnexal mass',
+    'Recurrent upper abdominal discomfort',
+    'Burning epigastric pain',
+    'Pain improves after eating',
+    'Pain returns several hours after meals',
+    'Nocturnal pain',
+    'Regular NSAID use',
+    'Mild epigastric tenderness',
+    'Duodenal ulcer on endoscopy',
+    'Positive Helicobacter pylori testing',
   ],
   differentials,
   differentialAnalysis: [
     {
-      diagnosis: 'Threatened Miscarriage',
+      diagnosis: 'Gastroesophageal Reflux Disease',
       whyPlausibleEarly:
-        'Amenorrhoea and vaginal bleeding are common presentations of early pregnancy loss.',
+        'GERD can cause upper abdominal or retrosternal burning discomfort.',
+      ruledOutByClues: [
+        {
+          clueOrder: 2,
+          evidence: 'pain improves after eating and returns hours later',
+          reason:
+            'This timing is more typical of duodenal ulcer disease than reflux, which often worsens when lying down or after trigger meals.',
+        },
+      ],
+      finalReasonLessLikely:
+        'GERD does not explain a discrete duodenal ulcer on endoscopy with positive Helicobacter pylori testing.',
+    },
+    {
+      diagnosis: 'Gastritis',
+      whyPlausibleEarly:
+        'Gastritis can produce epigastric burning, dyspepsia, and NSAID-associated symptoms.',
       ruledOutByClues: [
         {
           clueOrder: 5,
-          evidence:
-            'no intrauterine gestational sac with a complex adnexal mass',
+          evidence: 'well-defined ulcer in the first part of the duodenum',
           reason:
-            'The ultrasound localizes concern outside the uterine cavity rather than showing an intrauterine pregnancy at risk of miscarriage.',
+            'A discrete ulcer crater establishes peptic ulcer disease rather than diffuse mucosal inflammation alone.',
         },
       ],
       finalReasonLessLikely:
-        'Threatened miscarriage does not explain absent intrauterine pregnancy above the discriminatory zone with an adnexal mass.',
+        'Gastritis does not account for the confirmed duodenal ulcer seen on endoscopy.',
     },
     {
-      diagnosis: 'Pelvic Inflammatory Disease',
+      diagnosis: 'Chronic Pancreatitis',
       whyPlausibleEarly:
-        'Pelvic pain and cervical motion tenderness may occur in PID.',
-      ruledOutByClues: [
-        {
-          clueOrder: 4,
-          evidence: 'positive pregnancy test with abnormal beta-hCG pattern',
-          reason:
-            'Pregnancy-related findings make ectopic pregnancy the priority diagnosis.',
-        },
-      ],
-      finalReasonLessLikely:
-        'PID does not explain amenorrhoea, positive pregnancy testing, or the absent intrauterine gestation with adnexal mass.',
-    },
-    {
-      diagnosis: 'Ruptured Ovarian Cyst',
-      whyPlausibleEarly:
-        'A ruptured cyst can cause acute pelvic pain and haemoperitoneum.',
-      ruledOutByClues: [
-        {
-          clueOrder: 4,
-          evidence: 'positive pregnancy test',
-          reason:
-            'Pregnancy shifts the dangerous diagnosis toward ectopic pregnancy.',
-        },
-      ],
-      finalReasonLessLikely:
-        'A ruptured ovarian cyst does not explain amenorrhoea, abnormal beta-hCG, or absent intrauterine pregnancy.',
-    },
-    {
-      diagnosis: 'Ovarian Torsion',
-      whyPlausibleEarly:
-        'Ovarian torsion may present with sudden unilateral pelvic pain.',
+        'Chronic pancreatitis can cause chronic epigastric pain and dyspeptic symptoms.',
       ruledOutByClues: [
         {
           clueOrder: 5,
-          evidence: 'absent intrauterine gestation with complex adnexal mass',
+          evidence: 'duodenal ulcer and positive Helicobacter pylori testing',
           reason:
-            'The pregnancy localization problem is more consistent with ectopic pregnancy.',
+            'Endoscopic ulceration and H. pylori positivity directly identify ulcer disease rather than pancreatic pathology.',
         },
       ],
       finalReasonLessLikely:
-        'Torsion does not explain the missed period, positive pregnancy test, or beta-hCG and ultrasound pattern.',
+        'Chronic pancreatitis more often radiates to the back and may include malabsorption or pancreatic insufficiency.',
+    },
+    {
+      diagnosis: 'Functional Dyspepsia',
+      whyPlausibleEarly:
+        'Functional dyspepsia can mimic uncomplicated ulcer disease with chronic epigastric discomfort.',
+      ruledOutByClues: [
+        {
+          clueOrder: 5,
+          evidence: 'well-defined duodenal ulcer on endoscopy',
+          reason:
+            'Functional dyspepsia is diagnosed when no structural lesion explains the symptoms.',
+        },
+      ],
+      finalReasonLessLikely:
+        'A structural ulcer lesion excludes functional dyspepsia as the primary diagnosis.',
     },
   ],
   generationQuality: {
@@ -179,64 +178,69 @@ const explanation = {
 };
 
 const educationForFrontend = {
-  title: 'Ruptured Ectopic Pregnancy',
+  title: 'Peptic Ulcer Disease',
 
   summary: {
     definition:
-      'A ruptured ectopic pregnancy occurs when an extrauterine gestation, most commonly within the fallopian tube, ruptures and causes intra-abdominal haemorrhage.',
+      'Peptic ulcer disease is a mucosal defect extending through the muscularis mucosa of the stomach or proximal duodenum, most commonly caused by Helicobacter pylori infection or nonsteroidal anti-inflammatory drug use.',
     highYieldTakeaway:
-      'Any woman of reproductive age with abdominal pain, vaginal bleeding, and a recent missed period should be assumed to have ectopic pregnancy until proven otherwise.',
+      'Think peptic ulcer disease when burning epigastric pain follows a meal-related pattern, especially with H. pylori risk or NSAID exposure.',
   },
 
   recognitionPattern: [
     {
-      pattern: 'Classic triad',
+      pattern: 'Meal-related burning epigastric pain',
       whyItMatters:
-        'Amenorrhoea, abdominal pain, and vaginal bleeding are hallmark features of ectopic pregnancy.',
+        'Duodenal ulcer pain often improves with eating and returns several hours later, whereas gastric ulcer pain may worsen after meals.',
     },
     {
-      pattern: 'Features of rupture',
+      pattern: 'Associated dyspeptic symptoms',
       whyItMatters:
-        'Shoulder-tip pain, dizziness, syncope, tachycardia, hypotension, and sudden worsening pain suggest tubal rupture with haemoperitoneum.',
+        'Bloating, early satiety, nausea, dyspepsia, nocturnal pain, and occasional vomiting can accompany ulcer disease.',
+    },
+    {
+      pattern: 'Complicated disease',
+      whyItMatters:
+        'Upper gastrointestinal bleeding, perforation, gastric outlet obstruction, or iron deficiency anemia may be the presenting clue.',
     },
   ],
 
   keySigns: [
     {
-      finding: 'Shoulder-tip pain',
+      finding: 'Mild epigastric tenderness',
       significance:
-        'Blood in the peritoneal cavity can irritate the diaphragm and produce referred pain.',
+        'Many uncomplicated ulcers have only subtle localized tenderness or a normal examination.',
     },
     {
-      finding: 'Adnexal tenderness',
+      finding: 'Peritonism',
       significance:
-        'Localized tenderness adjacent to the uterus supports a tubal source of symptoms.',
+        'Guarding, rebound tenderness, or rigid abdomen suggests perforation and requires urgent assessment.',
     },
     {
-      finding: 'Shock',
+      finding: 'Melena or hematemesis',
       significance:
-        'Hypotension and tachycardia may appear before definitive imaging confirms the diagnosis.',
+        'Gastrointestinal bleeding is the most common serious complication of peptic ulcer disease.',
     },
   ],
 
   examPearls: [
     {
       type: 'exam',
-      title: 'Shoulder-tip pain',
+      title: 'Pain timing matters',
       content:
-        'Blood within the peritoneal cavity irritates the diaphragm, producing referred pain via the phrenic nerve.',
+        'Relief of epigastric pain after meals followed by recurrence several hours later strongly suggests a duodenal ulcer.',
     },
     {
       type: 'exam',
-      title: 'Adnexal tenderness',
+      title: 'Normal examination does not exclude disease',
       content:
-        'Unilateral adnexal tenderness supports a tubal rather than intrauterine source of symptoms.',
+        'Many patients have only mild epigastric tenderness or an entirely normal abdominal examination.',
     },
     {
       type: 'exam',
-      title: 'Treat instability first',
+      title: 'Look for alarm features',
       content:
-        'Haemodynamic instability should prompt immediate resuscitation and gynaecology involvement rather than waiting passively for imaging.',
+        'Weight loss, anemia, persistent vomiting, dysphagia, or gastrointestinal bleeding require prompt investigation.',
     },
   ],
 
@@ -244,99 +248,101 @@ const educationForFrontend = {
 
   investigations: [
     {
-      test: 'Urine pregnancy test',
+      test: 'Upper gastrointestinal endoscopy',
       interpretation:
-        'Positive testing confirms pregnancy and triggers localization of the gestation.',
+        'Confirms the presence, location, and complications of an ulcer, and allows biopsy when indicated.',
     },
     {
-      test: 'Serum beta-hCG',
+      test: 'Helicobacter pylori testing',
       interpretation:
-        'An abnormal rise or lower-than-expected level suggests an abnormal pregnancy.',
+        'Urea breath test, stool antigen testing, rapid urease testing, or biopsy-based methods identify treatable infection.',
     },
     {
-      test: 'Transvaginal ultrasound',
+      test: 'Complete blood count',
       interpretation:
-        'No intrauterine gestation with an adnexal mass is the key imaging pattern supporting ectopic pregnancy.',
+        'May show iron deficiency anemia or acute blood loss in bleeding ulcers.',
     },
     {
-      test: 'Full blood count and cross-match',
+      test: 'Medication review',
       interpretation:
-        'Assesses haemorrhage severity and prepares for urgent transfusion if needed.',
+        'NSAID, aspirin, anticoagulant, and steroid exposure can increase ulcer risk or complication risk.',
     },
   ],
 
   pitfalls: [
     {
-      pitfall: 'Assuming miscarriage',
+      pitfall: 'Assuming dyspepsia is benign',
       consequence:
-        'Vaginal bleeding in early pregnancy should not be attributed to miscarriage until ectopic pregnancy is excluded.',
+        'Alarm symptoms such as weight loss, anemia, persistent vomiting, dysphagia, or gastrointestinal bleeding require prompt investigation.',
     },
     {
-      pitfall: 'Waiting for ultrasound in an unstable patient',
+      pitfall: 'Treating without H. pylori testing',
       consequence:
-        'Delaying resuscitation and specialist involvement can be fatal in haemorrhagic shock.',
+        'Failure to identify and eradicate H. pylori increases recurrence risk.',
     },
     {
-      pitfall: 'Ignoring shoulder-tip pain',
+      pitfall: 'Missing perforation',
       consequence:
-        'This symptom may be an early clue to significant haemoperitoneum.',
+        'Sudden severe abdominal pain with peritonism should trigger urgent surgical evaluation.',
     },
   ],
 
   managementOverview: [
     {
-      step: 'Immediate ABC assessment and resuscitation',
+      step: 'Proton pump inhibitor therapy',
       rationale:
-        'Haemorrhagic shock is the immediate life-threatening complication.',
+        'Acid suppression promotes ulcer healing and symptom control.',
     },
     {
-      step: 'Large-bore IV access and blood cross-match',
-      rationale: 'Allows rapid fluid and blood product administration.',
-    },
-    {
-      step: 'Urgent gynaecology consultation',
+      step: 'Eradicate H. pylori',
       rationale:
-        'Definitive treatment is usually surgical when rupture is suspected.',
+        'Guideline-recommended eradication regimens reduce recurrence when infection is confirmed.',
     },
     {
-      step: 'Emergency laparoscopy or laparotomy',
-      rationale: 'Controls bleeding and removes the ectopic pregnancy.',
+      step: 'Stop NSAIDs',
+      rationale:
+        'Removing the mucosal injury driver reduces ongoing ulcer risk whenever possible.',
+    },
+    {
+      step: 'Manage complications',
+      rationale:
+        'Bleeding, perforation, or obstruction may require urgent endoscopic, radiologic, or surgical intervention.',
     },
   ],
 
   differentialDistinguishers: [
     {
-      diagnosis: 'Threatened Miscarriage',
+      diagnosis: 'Gastroesophageal Reflux Disease',
       keySeparator:
-        'Absence of an intrauterine pregnancy and presence of an adnexal mass favour ectopic pregnancy.',
+        'Heartburn and acid regurgitation predominate, often worsening when lying down.',
     },
     {
-      diagnosis: 'Pelvic Inflammatory Disease',
+      diagnosis: 'Gastritis',
       keySeparator:
-        'Pregnancy-related findings and abnormal ultrasound findings favour ectopic pregnancy.',
+        'Diffuse mucosal inflammation occurs without a discrete ulcer crater.',
     },
     {
-      diagnosis: 'Ruptured Ovarian Cyst',
+      diagnosis: 'Chronic Pancreatitis',
       keySeparator:
-        'Does not explain amenorrhoea, positive pregnancy testing, or abnormal beta-hCG levels.',
+        'Pain often radiates to the back and may be associated with pancreatic insufficiency.',
     },
     {
-      diagnosis: 'Ovarian Torsion',
+      diagnosis: 'Functional Dyspepsia',
       keySeparator:
-        'Ultrasound findings and pregnancy-related features support ectopic pregnancy.',
+        'No structural lesion is identified on endoscopy.',
     },
   ],
 
   references: [
     'Oxford Handbook of Clinical Medicine',
-    'NICE guideline: Ectopic pregnancy and miscarriage',
-    'BMJ Best Practice: Ectopic pregnancy',
+    'BMJ Best Practice: Peptic ulcer disease',
+    'NICE Clinical Knowledge Summary: Dyspepsia',
   ],
 };
 
 async function main() {
-  const canonicalName = 'ectopic pregnancy';
-  const displayLabel = 'Ruptured Ectopic Pregnancy';
+  const canonicalName = 'peptic ulcer disease';
+  const displayLabel = 'Peptic Ulcer Disease';
   const canonicalNormalized = normalizeClinicalText(canonicalName);
 
   const registry = await prisma.diagnosisRegistry.upsert({
@@ -348,13 +354,13 @@ async function main() {
       active: true,
       isPlayable: true,
       isGeneratable: true,
-      specialty: 'Obstetrics and Gynaecology',
-      bodySystem: 'Reproductive',
-      category: 'Pregnancy emergency',
+      specialty: 'Gastroenterology',
+      bodySystem: 'Gastrointestinal',
+      category: 'Upper GI Disorders',
       difficultyBand: DiagnosisDifficultyBand.BASIC,
-      clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
+      clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
       rarityBand: DiagnosisRarityBand.COMMON,
-      urgencyLevel: DiagnosisUrgencyLevel.EMERGENT,
+      urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
     },
     create: {
       canonicalName,
@@ -364,21 +370,22 @@ async function main() {
       active: true,
       isPlayable: true,
       isGeneratable: true,
-      specialty: 'Obstetrics and Gynaecology',
-      bodySystem: 'Reproductive',
-      category: 'Pregnancy emergency',
+      specialty: 'Gastroenterology',
+      bodySystem: 'Gastrointestinal',
+      category: 'Upper GI Disorders',
       difficultyBand: DiagnosisDifficultyBand.BASIC,
-      clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
+      clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
       rarityBand: DiagnosisRarityBand.COMMON,
-      urgencyLevel: DiagnosisUrgencyLevel.EMERGENT,
+      urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
     },
   });
 
   const aliasTerms = [
     canonicalName,
     displayLabel,
-    'ruptured ectopic pregnancy',
-    'tubal ectopic pregnancy',
+    'PUD',
+    'gastric ulcer',
+    'duodenal ulcer',
   ];
   const seenAliasNormalizations = new Set<string>();
   let aliasRank = 0;
@@ -522,7 +529,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Seeded frontend-aligned flagship ruptured ectopic pregnancy inventory case. DailyCase scheduler should assign the actual daily slot.',
+      'Seeded frontend-aligned flagship peptic ulcer disease inventory case. DailyCase scheduler should assign the actual daily slot.',
   };
 
   const existingSeedCase = await prisma.case.findFirst({
@@ -591,7 +598,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Frontend-aligned flagship ruptured ectopic pregnancy inventory revision for DailyCase scheduler assignment.',
+      'Frontend-aligned flagship peptic ulcer disease inventory revision for DailyCase scheduler assignment.',
   };
 
   const revision = reusableCase?.currentRevisionId
@@ -629,19 +636,19 @@ async function main() {
       source: 'MANUAL',
       publishTrack: 'DAILY',
       outcome: 'PASSED',
-      validatorVersion: 'flagship-human-review:ruptured-ectopic-pregnancy-v1',
+      validatorVersion: 'flagship-human-review:peptic-ulcer-disease-v1',
       summary: {
         contentTier: 'FLAGSHIP',
         seedVersion,
         humanReviewed: true,
-        note: 'Manual frontend-aligned ruptured ectopic pregnancy inventory case seeded for DailyCase scheduler assignment.',
+        note: 'Manual frontend-aligned peptic ulcer disease inventory case seeded for DailyCase scheduler assignment.',
       },
       findings: [],
       completedAt: now,
     },
   });
 
-  console.log('Seeded frontend-aligned Ruptured Ectopic Pregnancy:', {
+  console.log('Seeded frontend-aligned Peptic Ulcer Disease:', {
     registryId: registry.id,
     caseId: seededCase.id,
     educationId: education.id,

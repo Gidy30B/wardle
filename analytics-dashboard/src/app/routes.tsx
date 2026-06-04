@@ -6,6 +6,7 @@ import DashboardPage from '../features/dashboard/DashboardPage';
 import DiagnosisGraphCandidatesPage from '../features/diagnosis-graph/DiagnosisGraphCandidatesPage';
 import EditorialDiagnosisWorkspacePage from '../features/editorial/EditorialDiagnosisWorkspacePage';
 import EditorialHomePage from '../features/editorial/EditorialHomePage';
+import EditorialReviewInboxPage from '../features/editorial/EditorialReviewInboxPage';
 import RegistryCandidatesPage from '../features/editorial/RegistryCandidatesPage';
 import RegistryMergeAnalysisPage from '../features/editorial/RegistryMergeAnalysisPage';
 import UnresolvedDifferentialsPage from '../features/editorial/UnresolvedDifferentialsPage';
@@ -46,6 +47,10 @@ const routeContext: Record<string, { title: string; subtitle: string }> = {
   '/editorial': {
     title: 'Editorial',
     subtitle: 'Diagnosis-centered editorial workspace foundation',
+  },
+  '/editorial/inbox': {
+    title: 'Review Inbox',
+    subtitle: 'Unified editorial review queues',
   },
   '/editorial/differentials': {
     title: 'Differentials',
@@ -196,6 +201,7 @@ export default function AppRoutes() {
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/publish" element={<PublishPage />} />
         <Route path="/editorial" element={<EditorialHomePage />} />
+        <Route path="/editorial/inbox" element={<EditorialReviewInboxPage />} />
         <Route
           path="/editorial/differentials"
           element={<UnresolvedDifferentialsPage />}

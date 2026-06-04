@@ -9,6 +9,7 @@ import {
   getTrackPriority,
   normalizeDailyDate,
 } from './daily-cases.service';
+import { CaseEligibilityPolicyService } from '../cases/case-eligibility-policy.service';
 
 type StoreCase = {
   id: string;
@@ -466,7 +467,11 @@ function createDailyCasesFixture(options?: { forceCreateRace?: boolean }) {
     prisma,
     store,
     dailyLimitService,
-    service: new DailyCasesService(prisma as never, dailyLimitService as never),
+    service: new DailyCasesService(
+      prisma as never,
+      dailyLimitService as never,
+      new CaseEligibilityPolicyService(),
+    ),
   };
 }
 
@@ -499,7 +504,9 @@ function addScheduleCase(
             isPlayable: true,
           }
         : overrides.diagnosisRegistry,
-    clues: overrides.clues ?? [{ value: `clue ${overrides.id}` }],
+    clues: overrides.clues ?? [
+      { type: 'history', value: `clue ${overrides.id}`, order: 0 },
+    ],
     explanation: hasOverride('explanation')
       ? (overrides.explanation ?? null)
       : { summary: `summary ${overrides.id}` },
@@ -555,7 +562,7 @@ describe('DailyCasesService', () => {
     ).toBeInstanceOf(Date);
   });
 
-  it('excludes APPROVED inventory until it is ready to publish', async () => {
+  it('schedules APPROVED inventory as assignable', async () => {
     const { service, store } = createDailyCasesFixture();
     const scheduleDate = normalizeDailyDate('2099-02-02');
     addScheduleCase(store, {
@@ -565,19 +572,39 @@ describe('DailyCasesService', () => {
 
     const result = await service.ensureScheduleWindow(scheduleDate, 1);
 
-    expect(result.createdSlots).toEqual([]);
-    expect(result.blockedCases).toContainEqual({
-      caseId: 'case-approved',
-      diagnosis: 'case-approved',
-      editorialStatus: CaseEditorialStatus.APPROVED,
-      reason: 'invalid_status',
-    });
+    expect(result.createdSlots).toMatchObject([
+      {
+        caseId: 'case-approved',
+        track: PublishTrack.DAILY,
+        sequenceIndex: 1,
+      },
+    ]);
     expect(store.cases.find((item) => item.id === 'case-approved')).toMatchObject(
       {
         editorialStatus: CaseEditorialStatus.APPROVED,
         publishedAt: null,
       },
     );
+  });
+
+  it('does not reuse PUBLISHED inventory', async () => {
+    const { service, store } = createDailyCasesFixture();
+    const scheduleDate = normalizeDailyDate('2099-02-02');
+    addScheduleCase(store, {
+      id: 'case-published',
+      editorialStatus: CaseEditorialStatus.PUBLISHED,
+      publishedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    const result = await service.ensureScheduleWindow(scheduleDate, 1);
+
+    expect(result.createdSlots).toEqual([]);
+    expect(result.blockedCases).toContainEqual({
+      caseId: 'case-published',
+      diagnosis: 'case-published',
+      editorialStatus: CaseEditorialStatus.PUBLISHED,
+      reason: 'invalid_status',
+    });
   });
 
   it('excludes invalid inventory with scheduling diagnostics', async () => {
@@ -605,7 +632,7 @@ describe('DailyCasesService', () => {
     expect(result.createdCount).toBe(1);
     expect(result.excludedCases).toEqual(
       expect.arrayContaining([
-        { caseId: 'case-invalid-clues', reason: 'invalid_clues' },
+        { caseId: 'case-invalid-clues', reason: 'no_playable_clues' },
         { caseId: 'case-missing-diagnosis', reason: 'missing_diagnosis' },
         { caseId: 'case-missing-explanation', reason: 'missing_explanation' },
         { caseId: 'case-draft', reason: 'invalid_status' },
@@ -817,7 +844,7 @@ describe('DailyCasesService', () => {
       date,
       difficulty: 'easy',
       diagnosisId: 'd1',
-      clues: [{ value: 'clue' }],
+      clues: [{ type: 'history', value: 'clue', order: 0 }],
       explanation: null,
       editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
       approvedAt: new Date('2026-04-17T00:00:00.000Z'),
@@ -890,7 +917,7 @@ describe('DailyCasesService', () => {
         date,
         difficulty: 'easy',
         diagnosisId: 'd1',
-        clues: [{ value: 'clue' }],
+        clues: [{ type: 'history', value: 'clue', order: 0 }],
         explanation: null,
         editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
         approvedAt: new Date('2026-04-17T00:00:00.000Z'),
@@ -902,7 +929,7 @@ describe('DailyCasesService', () => {
         date,
         difficulty: 'hard',
         diagnosisId: 'd2',
-        clues: [{ value: 'premium clue' }],
+        clues: [{ type: 'history', value: 'premium clue', order: 0 }],
         explanation: null,
         editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
         approvedAt: new Date('2026-04-17T00:00:01.000Z'),
@@ -936,7 +963,7 @@ describe('DailyCasesService', () => {
       date,
       difficulty: 'easy',
       diagnosisId: 'd1',
-      clues: [{ value: 'clue' }],
+      clues: [{ type: 'history', value: 'clue', order: 0 }],
       explanation: null,
       editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
       approvedAt: new Date('2026-04-17T00:00:00.000Z'),
@@ -977,7 +1004,7 @@ describe('DailyCasesService', () => {
         date,
         difficulty: 'easy',
         diagnosisId: 'd1',
-        clues: [{ value: 'clue' }],
+        clues: [{ type: 'history', value: 'clue', order: 0 }],
         explanation: null,
         editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
         approvedAt: new Date('2026-04-17T00:00:00.000Z'),
@@ -989,7 +1016,7 @@ describe('DailyCasesService', () => {
         date,
         difficulty: 'medium',
         diagnosisId: 'd2',
-        clues: [{ value: 'premium clue 2' }],
+        clues: [{ type: 'history', value: 'premium clue 2', order: 0 }],
         explanation: null,
         editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
         approvedAt: new Date('2026-04-17T00:00:03.000Z'),
@@ -1001,7 +1028,7 @@ describe('DailyCasesService', () => {
         date,
         difficulty: 'medium',
         diagnosisId: 'd3',
-        clues: [{ value: 'premium clue 1' }],
+        clues: [{ type: 'history', value: 'premium clue 1', order: 0 }],
         explanation: null,
         editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
         approvedAt: new Date('2026-04-17T00:00:02.000Z'),
@@ -1046,7 +1073,7 @@ describe('DailyCasesService', () => {
       date,
       difficulty: 'hard',
       diagnosisId: 'd1',
-      clues: [{ value: 'premium clue' }],
+      clues: [{ type: 'history', value: 'premium clue', order: 0 }],
       explanation: null,
       editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
       approvedAt: new Date(),
@@ -1076,7 +1103,7 @@ describe('DailyCasesService', () => {
       date,
       difficulty: 'hard',
       diagnosisId: 'd1',
-      clues: [{ value: 'premium clue' }],
+      clues: [{ type: 'history', value: 'premium clue', order: 0 }],
       explanation: null,
       editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
       approvedAt: new Date(),
@@ -1111,7 +1138,7 @@ describe('DailyCasesService', () => {
       date,
       difficulty: 'hard',
       diagnosisId: 'd1',
-      clues: [{ value: 'premium clue' }],
+      clues: [{ type: 'history', value: 'premium clue', order: 0 }],
       explanation: null,
       editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
       approvedAt: new Date(),
@@ -1145,7 +1172,7 @@ describe('DailyCasesService', () => {
       date,
       difficulty: 'easy',
       diagnosisId: 'd1',
-      clues: [{ value: 'clue' }],
+      clues: [{ type: 'history', value: 'clue', order: 0 }],
       explanation: null,
       editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
       approvedAt: new Date(),
@@ -1206,7 +1233,7 @@ describe('DailyCasesService', () => {
       date,
       difficulty: 'easy',
       diagnosisId: 'd1',
-      clues: [{ value: 'clue' }],
+      clues: [{ type: 'history', value: 'clue', order: 0 }],
       explanation: null,
       editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
       approvedAt: new Date(),
@@ -1257,7 +1284,7 @@ describe('DailyCasesService', () => {
         date,
         difficulty: 'easy',
         diagnosisId: 'd1',
-        clues: [{ value: 'clue' }],
+        clues: [{ type: 'history', value: 'clue', order: 0 }],
         explanation: null,
         editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
         approvedAt: new Date('2026-04-17T00:00:00.000Z'),
@@ -1269,7 +1296,7 @@ describe('DailyCasesService', () => {
         date,
         difficulty: 'medium',
         diagnosisId: 'd2',
-        clues: [{ value: 'premium clue A' }],
+        clues: [{ type: 'history', value: 'premium clue A', order: 0 }],
         explanation: null,
         editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
         approvedAt: new Date('2026-04-17T00:00:02.000Z'),
@@ -1281,7 +1308,7 @@ describe('DailyCasesService', () => {
         date,
         difficulty: 'medium',
         diagnosisId: 'd3',
-        clues: [{ value: 'premium clue B' }],
+        clues: [{ type: 'history', value: 'premium clue B', order: 0 }],
         explanation: null,
         editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
         approvedAt: new Date('2026-04-17T00:00:03.000Z'),
@@ -1328,7 +1355,7 @@ describe('DailyCasesService', () => {
         date,
         difficulty: 'easy',
         diagnosisId: 'd0',
-        clues: [{ value: 'legacy clue' }],
+        clues: [{ type: 'history', value: 'legacy clue', order: 0 }],
         explanation: null,
         editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
         approvedAt: new Date('2026-04-16T00:00:00.000Z'),
@@ -1340,7 +1367,7 @@ describe('DailyCasesService', () => {
         date,
         difficulty: 'medium',
         diagnosisId: 'd1',
-        clues: [{ value: 'premium clue A' }],
+        clues: [{ type: 'history', value: 'premium clue A', order: 0 }],
         explanation: null,
         editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
         approvedAt: new Date('2026-04-17T00:00:02.000Z'),
@@ -1352,7 +1379,7 @@ describe('DailyCasesService', () => {
         date,
         difficulty: 'medium',
         diagnosisId: 'd2',
-        clues: [{ value: 'premium clue B' }],
+        clues: [{ type: 'history', value: 'premium clue B', order: 0 }],
         explanation: null,
         editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
         approvedAt: new Date('2026-04-17T00:00:03.000Z'),
@@ -1408,7 +1435,7 @@ describe('DailyCasesService', () => {
         date,
         difficulty: 'hard',
         diagnosisId: 'd0',
-        clues: [{ value: 'curated clue' }],
+        clues: [{ type: 'history', value: 'curated clue', order: 0 }],
         explanation: null,
         editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
         approvedAt: new Date('2026-04-16T00:00:00.000Z'),
@@ -1420,7 +1447,7 @@ describe('DailyCasesService', () => {
         date,
         difficulty: 'medium',
         diagnosisId: 'd1',
-        clues: [{ value: 'premium clue B' }],
+        clues: [{ type: 'history', value: 'premium clue B', order: 0 }],
         explanation: null,
         editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
         approvedAt: new Date('2026-04-17T00:00:03.000Z'),
@@ -1462,7 +1489,7 @@ describe('DailyCasesService', () => {
         date,
         difficulty: 'medium',
         diagnosisId: 'd1',
-        clues: [{ value: 'premium clue A' }],
+        clues: [{ type: 'history', value: 'premium clue A', order: 0 }],
         explanation: null,
         editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
         approvedAt: new Date('2026-04-17T00:00:02.000Z'),
@@ -1474,7 +1501,7 @@ describe('DailyCasesService', () => {
         date,
         difficulty: 'medium',
         diagnosisId: 'd2',
-        clues: [{ value: 'premium clue B' }],
+        clues: [{ type: 'history', value: 'premium clue B', order: 0 }],
         explanation: null,
         editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
         approvedAt: new Date('2026-04-17T00:00:03.000Z'),
@@ -1514,7 +1541,7 @@ describe('DailyCasesService', () => {
       date,
       difficulty: 'medium',
       diagnosisId: 'd1',
-      clues: [{ value: 'premium clue A' }],
+      clues: [{ type: 'history', value: 'premium clue A', order: 0 }],
       explanation: null,
       editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
       approvedAt: new Date('2026-04-17T00:00:02.000Z'),

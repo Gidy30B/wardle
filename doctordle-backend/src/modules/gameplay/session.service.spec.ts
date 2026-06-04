@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { DiagnosisRegistryStatus } from '@prisma/client';
+import { CaseEligibilityPolicyService } from '../cases/case-eligibility-policy.service';
 import { SessionService } from './session.service';
 
 function createSessionServiceFixture() {
@@ -102,6 +103,7 @@ function createSessionServiceFixture() {
       dailyCasesService as never,
       logger as never,
       metrics as never,
+      new CaseEligibilityPolicyService(),
     ),
   };
 }
@@ -494,6 +496,73 @@ describe('SessionService gameplay registry correctness', () => {
     ).not.toHaveBeenCalled();
   });
 
+  it('loads normalized legacy investigation clues for gameplay', async () => {
+    const fixture = createSessionServiceFixture();
+    fixture.prisma.$queryRawUnsafe.mockResolvedValue([
+      {
+        clues: [
+          {
+            type: 'investigation',
+            value:
+              'Upper gastrointestinal endoscopy demonstrates a duodenal ulcer.',
+            order: 0,
+          },
+        ],
+      },
+    ]);
+    fixture.dailyCasesService.getTodayCasesForUser.mockResolvedValue({
+      date: '2026-04-22',
+      cases: [
+        {
+          dailyCaseId: 'daily-1',
+          track: 'DAILY',
+          sequenceIndex: 1,
+        },
+      ],
+    });
+    fixture.dailyCasesService.getOrCreateGameSessionForDailyCase.mockResolvedValue(
+      {
+        user: {
+          id: 'user-1',
+          subscriptionTier: 'free',
+        },
+        session: {
+          id: 'session-1',
+          caseId: 'case-1',
+          dailyCaseId: 'daily-1',
+          status: 'active',
+          startedAt: new Date('2026-04-22T08:00:00.000Z'),
+          completedAt: null,
+          attempts: [],
+        },
+        dailyCase: {
+          id: 'daily-1',
+          caseId: 'case-1',
+          date: new Date('2026-04-22T00:00:00.000Z'),
+          track: 'DAILY',
+          sequenceIndex: 1,
+          case: {
+            id: 'case-1',
+            date: new Date('2026-04-22T00:00:00.000Z'),
+            difficulty: 'medium',
+          },
+        },
+      },
+    );
+
+    const result = await fixture.service.startDailyGame({ userId: 'user-1' });
+
+    expect(result.state).toBe('ready');
+    expect(result.case?.clues).toEqual([
+      {
+        id: 'case-1-0',
+        type: 'imaging',
+        value: 'Upper gastrointestinal endoscopy demonstrates a duodenal ulcer.',
+        order: 0,
+      },
+    ]);
+  });
+
   it('uses registry evaluation to persist a correct selected diagnosis submission', async () => {
     const fixture = createSessionServiceFixture();
     fixture.prisma.gameSession.findUnique
@@ -584,6 +653,127 @@ describe('SessionService gameplay registry correctness', () => {
     expect(result.feedback?.signals?.diagnosisResolutionMethod).toBe(
       'SELECTED_ID',
     );
+  });
+
+  it('persists the active target id for a merged registry selection', async () => {
+    const fixture = createSessionServiceFixture();
+    fixture.prisma.gameSession.findUnique
+      .mockImplementationOnce(async () => buildActiveSession('registry-target'))
+      .mockImplementationOnce(async () =>
+        buildFreshSession(fixture.getClaimAt()),
+      );
+    fixture.diagnosisRegistryMatcherService.evaluateGameplayGuess.mockResolvedValue(
+      {
+        expectedDiagnosisRegistryId: 'registry-target',
+        expectedDiagnosisStatus: DiagnosisRegistryStatus.ACTIVE,
+        expectedDiagnosisUsable: true,
+        isCorrect: true,
+        resolution: {
+          submittedDiagnosisRegistryId: 'registry-target',
+          submittedGuessText: 'Old asthma label',
+          normalizedGuess: 'old asthma label',
+          resolvedDiagnosisRegistryId: 'registry-target',
+          resolutionMethod: 'MERGED_SELECTED_ID',
+          isResolvable: true,
+        },
+        evaluation: {
+          score: 1,
+          label: 'correct',
+          evaluatorVersion: 'registry:v2',
+          retrievalMode: 'selected-id-only',
+          normalizedGuess: 'old asthma label',
+          signals: {
+            registryCorrectnessAuthority: true,
+            diagnosisResolutionMethod: 'MERGED_SELECTED_ID',
+          },
+        },
+      },
+    );
+    fixture.evaluationService.computeGuessOutcome.mockReturnValue({
+      clueIndex: 0,
+      attemptsCount: 1,
+      computedScore: 100,
+      nextClueIndex: 1,
+      gameOver: true,
+      gameOverReason: 'correct',
+      shouldRequestReward: true,
+      isTerminalCorrect: true,
+    });
+
+    await fixture.service.submitGuess({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      diagnosisRegistryId: 'registry-source',
+      guess: 'Old asthma label',
+    });
+
+    expect(
+      fixture.attemptService.recordAttemptInTransaction,
+    ).toHaveBeenCalledWith(
+      fixture.prisma,
+      expect.objectContaining({
+        selectedDiagnosisId: 'registry-target',
+        strictMatchedDiagnosisId: 'registry-target',
+        strictMatchOutcome: 'MERGED_SELECTED_ID',
+      }),
+    );
+  });
+
+  it('rejects invalid selected diagnosis ids before attempt persistence', async () => {
+    const fixture = createSessionServiceFixture();
+    fixture.prisma.gameSession.findUnique.mockImplementationOnce(async () =>
+      buildActiveSession('registry-1'),
+    );
+    fixture.diagnosisRegistryMatcherService.evaluateGameplayGuess.mockResolvedValue(
+      {
+        expectedDiagnosisRegistryId: 'registry-1',
+        expectedDiagnosisStatus: DiagnosisRegistryStatus.ACTIVE,
+        expectedDiagnosisUsable: true,
+        isCorrect: false,
+        resolution: {
+          submittedDiagnosisRegistryId: 'missing-registry',
+          submittedGuessText: 'Asthma',
+          normalizedGuess: 'asthma',
+          resolvedDiagnosisRegistryId: null,
+          resolutionMethod: 'UNRESOLVED',
+          resolutionReason: 'INVALID_SELECTED_ID',
+          isResolvable: false,
+        },
+        evaluation: {
+          score: 0,
+          label: 'wrong',
+          evaluatorVersion: 'registry:v2',
+          retrievalMode: 'selected-id-only',
+          normalizedGuess: 'asthma',
+          signals: {
+            registryCorrectnessAuthority: true,
+            diagnosisResolutionReason: 'INVALID_SELECTED_ID',
+          },
+        },
+      },
+    );
+
+    await expect(
+      fixture.service.submitGuess({
+        sessionId: 'session-1',
+        userId: 'user-1',
+        diagnosisRegistryId: 'missing-registry',
+        guess: 'Asthma',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(
+      fixture.rewardOrchestrator.emitAttemptEvaluated,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        submittedDiagnosisRegistryId: 'missing-registry',
+        resolutionReason: 'INVALID_SELECTED_ID',
+      }),
+    );
+    expect(fixture.prisma.$transaction).not.toHaveBeenCalled();
+    expect(
+      fixture.attemptService.recordAttemptInTransaction,
+    ).not.toHaveBeenCalled();
   });
 
   it('rejects gameplay submissions without a diagnosisRegistryId', async () => {

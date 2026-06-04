@@ -1,6 +1,7 @@
 import { GoneException } from '@nestjs/common';
 import { PublishTrack } from '@prisma/client';
 import { resetEnvCacheForTests } from '../../core/config/env.validation';
+import { CaseEligibilityPolicyService } from './case-eligibility-policy.service';
 import { CasesService } from './cases.service';
 
 describe('CasesService', () => {
@@ -26,7 +27,7 @@ describe('CasesService', () => {
         findUnique: jest.fn().mockResolvedValue({
           id: 'case-1',
           editorialStatus: 'READY_TO_PUBLISH',
-          clues: [{ value: 'clue' }],
+          clues: [{ type: 'history', value: 'clue', order: 0 }],
           diagnosis: { name: 'Asthma' },
           publicNumber: 238,
         }),
@@ -78,6 +79,7 @@ describe('CasesService', () => {
         prisma as never,
         aiContentService as never,
         editorialMetrics as never,
+        new CaseEligibilityPolicyService(),
       ),
     };
   }
@@ -182,6 +184,7 @@ describe('CasesService', () => {
         id: true,
         legacyDiagnosisId: true,
         displayLabel: true,
+        status: true,
         active: true,
         isPlayable: true,
       },
@@ -284,7 +287,7 @@ describe('CasesService', () => {
           case: {
             id: 'case-1',
             publicNumber: 238,
-            clues: [{ value: 'clue' }],
+            clues: [{ type: 'history', value: 'clue', order: 0 }],
           },
         }),
       },
@@ -315,7 +318,7 @@ describe('CasesService', () => {
           case: {
             id: 'case-1',
             publicNumber: 238,
-            clues: [{ value: 'clue' }],
+            clues: [{ type: 'history', value: 'clue', order: 0 }],
           },
         }),
       },

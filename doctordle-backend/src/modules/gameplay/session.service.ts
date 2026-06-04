@@ -11,7 +11,9 @@ import { getEnv } from '../../core/config/env.validation';
 import { PrismaService } from '../../core/db/prisma.service';
 import { AppLoggerService } from '../../core/logger/app-logger.service';
 import { MetricsService } from '../../core/logger/metrics.service';
+import { CaseEligibilityPolicyService } from '../cases/case-eligibility-policy.service';
 import { DiagnosisRegistryMatcherService } from '../diagnosis-registry/diagnosis-registry-matcher.service';
+import type { ResolvedGameplayDiagnosisGuess } from '../diagnosis-registry/diagnosis-registry-matcher.service';
 import { AttemptService } from './attempt.service';
 import {
   DailyCasesService,
@@ -179,6 +181,7 @@ export class SessionService {
     private readonly dailyCasesService: DailyCasesService,
     private readonly logger: AppLoggerService,
     private readonly metrics: MetricsService,
+    private readonly caseEligibilityPolicy: CaseEligibilityPolicyService,
   ) {}
 
   async startGame(input: {
@@ -740,6 +743,12 @@ export class SessionService {
           resolution.resolvedDiagnosisRegistryId ?? null,
         resolutionMethod: resolution.resolutionMethod,
         resolutionReason: resolution.resolutionReason ?? null,
+      });
+
+      this.assertResolvableDiagnosisSelection({
+        sessionId: session.id,
+        userId: input.userId,
+        resolution,
       });
 
       const persisted = await this.withSerializableRetry(() =>
@@ -1529,6 +1538,27 @@ export class SessionService {
     );
   }
 
+  private assertResolvableDiagnosisSelection(input: {
+    sessionId: string;
+    userId: string;
+    resolution: ResolvedGameplayDiagnosisGuess;
+  }): void {
+    if (input.resolution.isResolvable) {
+      return;
+    }
+
+    this.logWarnEvent('daily.guess.invalid_selected_diagnosis', {
+      sessionId: input.sessionId,
+      userId: input.userId,
+      submittedDiagnosisRegistryId:
+        input.resolution.submittedDiagnosisRegistryId,
+      resolutionMethod: input.resolution.resolutionMethod,
+      resolutionReason: input.resolution.resolutionReason ?? null,
+    });
+
+    throw new BadRequestException('Selected diagnosis is no longer available');
+  }
+
   private async hydrateGameplayCase(selectedCase: {
     id: string;
     publicNumber?: number | null;
@@ -1586,81 +1616,15 @@ export class SessionService {
     >('SELECT "clues" FROM "Case" WHERE "id" = $1', caseId);
 
     const rawClues = rows[0]?.clues;
-    const parsedClues = this.parseCaseClues(caseId, rawClues);
+    const parsedClues = this.caseEligibilityPolicy.validatePlayableClues(
+      rawClues,
+      { caseId },
+    ).clues;
     if (!parsedClues.length) {
       throw new BadRequestException(`Case ${caseId} has no playable clues`);
     }
 
     return parsedClues;
-  }
-
-  private parseCaseClues(
-    caseId: string,
-    value: unknown,
-  ): GameplayClinicalClue[] {
-    const parsed = this.parseUnknownJson(value);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    const normalized: GameplayClinicalClue[] = [];
-
-    for (const entry of parsed) {
-      if (typeof entry !== 'object' || entry === null) {
-        return [];
-      }
-
-      const candidate = entry as {
-        id?: unknown;
-        type?: unknown;
-        value?: unknown;
-        order?: unknown;
-      };
-
-      if (
-        candidate.type !== 'history' &&
-        candidate.type !== 'symptom' &&
-        candidate.type !== 'vital' &&
-        candidate.type !== 'lab' &&
-        candidate.type !== 'exam' &&
-        candidate.type !== 'imaging'
-      ) {
-        return [];
-      }
-
-      if (
-        typeof candidate.order !== 'number' ||
-        !Number.isInteger(candidate.order)
-      ) {
-        return [];
-      }
-
-      const normalizedValue = this.normalizeClueValue(candidate.value);
-      if (!normalizedValue) {
-        return [];
-      }
-
-      normalized.push({
-        id:
-          typeof candidate.id === 'string' && candidate.id.trim().length > 0
-            ? candidate.id
-            : '',
-        type: candidate.type,
-        value: normalizedValue,
-        order: candidate.order,
-      });
-    }
-
-    if (normalized.length === 0) {
-      return [];
-    }
-
-    return normalized
-      .sort((left, right) => left.order - right.order)
-      .map((clue) => ({
-        ...clue,
-        id: clue.id || `${caseId}-${clue.order}`,
-      }));
   }
 
   private parseUnknownJson(value: unknown): unknown {
@@ -1836,15 +1800,6 @@ export class SessionService {
 
   private getTotalClues(selectedCase: GameplayCaseView): number {
     return selectedCase.clues.length;
-  }
-
-  private normalizeClueValue(value: unknown): string | null {
-    if (typeof value !== 'string') {
-      return null;
-    }
-
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
   }
 
   private normalizeOptionalText(value: unknown): string | null {

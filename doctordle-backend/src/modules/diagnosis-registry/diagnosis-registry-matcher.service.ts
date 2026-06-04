@@ -4,7 +4,10 @@ import { PrismaService } from '../../core/db/prisma.service.js';
 import type { EvaluationResult } from '../diagnostics/services/types.js';
 import { normalizeDiagnosisTerm } from './diagnosis-term-normalizer.js';
 
-export type GameplayDiagnosisResolutionMethod = 'SELECTED_ID' | 'UNRESOLVED';
+export type GameplayDiagnosisResolutionMethod =
+  | 'SELECTED_ID'
+  | 'MERGED_SELECTED_ID'
+  | 'UNRESOLVED';
 
 export type GameplayDiagnosisResolutionReason =
   | 'NO_SELECTED_ID'
@@ -42,6 +45,10 @@ type DiagnosisRegistryLookupRow = {
   id: string;
   status: DiagnosisRegistryStatus;
   displayLabel?: string | null;
+};
+
+type DiagnosisRegistryMergeLogLookupRow = {
+  targetDiagnosisRegistryId: string;
 };
 
 @Injectable()
@@ -177,6 +184,26 @@ export class DiagnosisRegistryMatcherService {
     }
 
     if (selectedDiagnosis.status !== DiagnosisRegistryStatus.ACTIVE) {
+      const mergedTarget = await this.lookupMergedTargetDiagnosis(
+        input.submittedDiagnosisRegistryId,
+      );
+
+      if (mergedTarget?.status === DiagnosisRegistryStatus.ACTIVE) {
+        const resolvedGuessText =
+          input.submittedGuessText ??
+          mergedTarget.displayLabel?.trim() ??
+          input.submittedDiagnosisRegistryId;
+
+        return {
+          submittedDiagnosisRegistryId: mergedTarget.id,
+          submittedGuessText: resolvedGuessText,
+          normalizedGuess: normalizeDiagnosisTerm(resolvedGuessText),
+          resolvedDiagnosisRegistryId: mergedTarget.id,
+          resolutionMethod: 'MERGED_SELECTED_ID',
+          isResolvable: true,
+        };
+      }
+
       return {
         submittedDiagnosisRegistryId: input.submittedDiagnosisRegistryId,
         submittedGuessText: input.submittedGuessText,
@@ -227,6 +254,44 @@ export class DiagnosisRegistryMatcherService {
     })) as DiagnosisRegistryLookupRow | null);
   }
 
+  private async lookupMergedTargetDiagnosis(
+    sourceDiagnosisRegistryId: string,
+  ): Promise<DiagnosisRegistryLookupRow | null> {
+    const mergeLogModel = this.getDiagnosisRegistryMergeLogModel();
+    const diagnosisRegistryModel = this.getDiagnosisRegistryModel();
+
+    if (!mergeLogModel || !diagnosisRegistryModel) {
+      return null;
+    }
+
+    const mergeLog = (await mergeLogModel.findFirst({
+      where: {
+        sourceDiagnosisRegistryId,
+      },
+      orderBy: {
+        performedAt: 'desc',
+      },
+      select: {
+        targetDiagnosisRegistryId: true,
+      },
+    })) as DiagnosisRegistryMergeLogLookupRow | null;
+
+    if (!mergeLog?.targetDiagnosisRegistryId) {
+      return null;
+    }
+
+    return ((await diagnosisRegistryModel.findUnique({
+      where: {
+        id: mergeLog.targetDiagnosisRegistryId,
+      },
+      select: {
+        id: true,
+        status: true,
+        displayLabel: true,
+      },
+    })) as DiagnosisRegistryLookupRow | null);
+  }
+
   private getDiagnosisRegistryModel():
     | {
         findUnique: (args: unknown) => Promise<DiagnosisRegistryLookupRow | null>;
@@ -242,6 +307,22 @@ export class DiagnosisRegistryMatcherService {
     }
 
     return diagnosisRegistryModel;
+  }
+
+  private getDiagnosisRegistryMergeLogModel():
+    | {
+        findFirst: (
+          args: unknown,
+        ) => Promise<DiagnosisRegistryMergeLogLookupRow | null>;
+      }
+    | null {
+    const mergeLogModel = (this.prisma as any)?.diagnosisRegistryMergeLog;
+
+    if (!mergeLogModel || typeof mergeLogModel.findFirst !== 'function') {
+      return null;
+    }
+
+    return mergeLogModel;
   }
 
   private getExpectedDiagnosisFailureReason(

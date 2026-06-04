@@ -40,8 +40,12 @@ import type {
   RegistryCandidateFilters,
   RegistryMergeAnalysis,
   RegistryMergeAnalysisPayload,
+  RegistryMergeExecutePayload,
+  RegistryMergeExecutionResult,
   RegistryMergeRelated,
   DiagnosisRegistrySearchItem,
+  EditorialInboxQuery,
+  EditorialInboxResponse,
   EditorialCaseDetail,
   EditorialCaseRevision,
   EditorialCasesQuery,
@@ -215,6 +219,16 @@ export function analyzeDiagnosisRegistryMerge(
   );
 }
 
+export function executeDiagnosisRegistryMerge(
+  client: ApiClient,
+  payload: RegistryMergeExecutePayload,
+) {
+  return client.post<RegistryMergeExecutionResult>(
+    '/admin/diagnosis-registry/merge/execute',
+    payload,
+  );
+}
+
 export function getDiagnosisRegistryMergeRelated(
   client: ApiClient,
   diagnosisRegistryId: string,
@@ -316,6 +330,22 @@ export function getValidationOutcomeSummary(client: ApiClient) {
 
 export function getPublishResultsSummary(client: ApiClient) {
   return client.get<PublishResultsSummary>('/admin/summary/publish-results');
+}
+
+export function getEditorialInbox(
+  client: ApiClient,
+  query: EditorialInboxQuery = {},
+) {
+  return client.get<EditorialInboxResponse>(
+    withQuery('/admin/editorial/inbox', {
+      type: query.type || undefined,
+      severity: query.severity || undefined,
+      status: query.status || undefined,
+      specialty: query.specialty || undefined,
+      limit: query.limit,
+      page: query.page,
+    }),
+  );
 }
 
 export function getEditorialCases(

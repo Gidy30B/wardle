@@ -6,7 +6,9 @@ import {
   PublishTrack,
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
+import { CaseEligibilityPolicyService } from '../cases/case-eligibility-policy.service';
 import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
+import { ASSIGNABLE_EDITORIAL_STATUSES } from '../editorial/policies/publish-policy.js';
 
 const TRACK_PRIORITY: Record<PublishTrack, number> = {
   [PublishTrack.DAILY]: 1,
@@ -87,6 +89,8 @@ export type AssignmentBlockedReason =
   | 'invalid_status'
   | 'already_scheduled'
   | 'invalid_clues'
+  | 'no_playable_clues'
+  | 'invalid_clue_type'
   | 'missing_diagnosis'
   | 'diagnosis_not_matched'
   | 'registry_not_playable'
@@ -142,6 +146,7 @@ export class CaseAssignmentService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly caseEligibilityPolicy: CaseEligibilityPolicyService,
     @Optional()
     private readonly lifecyclePolicy?: DiagnosisRegistryLifecyclePolicyService,
   ) {}
@@ -199,12 +204,19 @@ export class CaseAssignmentService {
       return 'already_scheduled';
     }
 
-    if (caseRecord.editorialStatus !== CaseEditorialStatus.READY_TO_PUBLISH) {
+    if (
+      !this.caseEligibilityPolicy.isAssignableEditorialStatus(
+        caseRecord.editorialStatus,
+      )
+    ) {
       return 'invalid_status';
     }
 
-    if (!this.hasPlayableClueArray(caseRecord.clues)) {
-      return 'invalid_clues';
+    const clueReason = this.caseEligibilityPolicy.getSchedulerClueExclusionReason(
+      caseRecord.clues,
+    );
+    if (clueReason) {
+      return clueReason;
     }
 
     if (!caseRecord.diagnosisRegistryId?.trim()) {
@@ -459,7 +471,7 @@ export class CaseAssignmentService {
       input.mode === 'editorial_date'
         ? {
             editorialStatus: {
-              in: [CaseEditorialStatus.READY_TO_PUBLISH],
+              in: [...ASSIGNABLE_EDITORIAL_STATUSES],
             },
             currentRevision: {
               is: {
@@ -726,21 +738,6 @@ export class CaseAssignmentService {
       track: dailyCase.track,
       sequenceIndex: dailyCase.sequenceIndex,
     };
-  }
-
-  private hasPlayableClueArray(value: unknown): boolean {
-    const parsed =
-      typeof value === 'string'
-        ? (() => {
-            try {
-              return JSON.parse(value);
-            } catch {
-              return null;
-            }
-          })()
-        : value;
-
-    return Array.isArray(parsed) && parsed.length > 0;
   }
 
   private isRegistryPlayable(

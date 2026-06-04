@@ -5,6 +5,7 @@ import {
   DiagnosisMappingStatus,
   ValidationOutcome,
 } from '@prisma/client';
+import { CaseEligibilityPolicyService } from '../cases/case-eligibility-policy.service';
 import { CaseReviewService } from './case-review.service';
 
 describe('CaseReviewService', () => {
@@ -152,6 +153,7 @@ describe('CaseReviewService', () => {
         editorialMetrics as never,
         diagnosisRegistryLinkService as never,
         diagnosisRegistryEditorialService as never,
+        new CaseEligibilityPolicyService(),
       ),
     };
   }
@@ -646,6 +648,7 @@ describe('CaseReviewService', () => {
       approvedByUserId: 'reviewer-1',
       diagnosisRegistryId: 'registry-1',
       diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
+      clues: [{ type: 'history', value: 'Wheeze', order: 0 }],
       diagnosisRegistry: {
         status: 'ACTIVE',
       },
@@ -680,6 +683,7 @@ describe('CaseReviewService', () => {
       approvedByUserId: 'reviewer-1',
       diagnosisRegistryId: null,
       diagnosisMappingStatus: DiagnosisMappingStatus.UNRESOLVED,
+      clues: [{ type: 'history', value: 'Wheeze', order: 0 }],
       diagnosisRegistry: null,
     });
 

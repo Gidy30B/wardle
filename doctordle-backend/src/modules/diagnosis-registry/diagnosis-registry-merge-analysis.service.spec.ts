@@ -167,7 +167,13 @@ describe('DiagnosisRegistryMergeAnalysisService', () => {
         'Source has unresolved or ambiguous differential mappings',
       ]),
     );
-    expect(result.severity).toBe('HIGH');
+    expect(result.severity).toBe('BLOCKED');
+    expect(result.blockers).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Teaching rule conflict'),
+        expect.stringContaining('Graph fact conflict'),
+      ]),
+    );
   });
 
   it('returns low severity when no conflicts exist', async () => {

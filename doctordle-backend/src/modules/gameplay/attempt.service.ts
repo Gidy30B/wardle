@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { MetricsService } from '../../core/logger/metrics.service';
@@ -24,6 +24,8 @@ type AttemptRecordInput = {
 
 @Injectable()
 export class AttemptService {
+  private readonly logger = new Logger(AttemptService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsService,
@@ -32,7 +34,7 @@ export class AttemptService {
 
   async recordAttempt(data: AttemptRecordInput) {
     const start = performance.now();
-    this.validateAttempt(data);
+    await this.validateAttemptForPersistence(this.prisma, data);
 
     try {
       const attempt = await this.withTimeout(
@@ -76,7 +78,7 @@ export class AttemptService {
     data: AttemptRecordInput,
   ) {
     const start = performance.now();
-    this.validateAttempt(data);
+    await this.validateAttemptForPersistence(tx, data);
 
     try {
       const attempt = await tx.attempt.create({
@@ -116,6 +118,54 @@ export class AttemptService {
     if (!Number.isFinite(data.score)) {
       throw new Error('Invalid evaluation score for attempt persistence');
     }
+  }
+
+  private async validateAttemptForPersistence(
+    client: Pick<PrismaService, 'diagnosisRegistry'> | Prisma.TransactionClient,
+    data: AttemptRecordInput,
+  ): Promise<void> {
+    this.validateAttempt(data);
+
+    const diagnosisIds = Array.from(
+      new Set(
+        [data.selectedDiagnosisId, data.strictMatchedDiagnosisId].filter(
+          (id): id is string => Boolean(id?.trim()),
+        ),
+      ),
+    );
+
+    if (!diagnosisIds.length) {
+      return;
+    }
+
+    const existing = await client.diagnosisRegistry.findMany({
+      where: {
+        id: {
+          in: diagnosisIds,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+    const existingIds = new Set(existing.map((row) => row.id));
+    const missingIds = diagnosisIds.filter((id) => !existingIds.has(id));
+
+    if (!missingIds.length) {
+      return;
+    }
+
+    this.logger.warn({
+      event: 'attempt.persistence.invalid_diagnosis_reference',
+      caseId: data.caseId,
+      sessionId: data.sessionId,
+      userId: data.userId,
+      selectedDiagnosisId: data.selectedDiagnosisId ?? null,
+      strictMatchedDiagnosisId: data.strictMatchedDiagnosisId ?? null,
+      missingDiagnosisRegistryIds: missingIds,
+    });
+
+    throw new BadRequestException('Selected diagnosis is no longer available');
   }
 
   private async withTimeout<T>(

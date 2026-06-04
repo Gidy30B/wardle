@@ -746,6 +746,23 @@ model DiagnosisRegistryCandidate {
   @@index([createdAt])
 }
 
+model DiagnosisRegistryMergeLog {
+  id                        String   @id @default(uuid())
+  sourceDiagnosisRegistryId String
+  targetDiagnosisRegistryId String
+  reason                    String?
+  analysisSnapshot          Json
+  reassignmentSummary       Json
+  performedByUserId         String?
+  performedAt               DateTime @default(now())
+  createdAt                 DateTime @default(now())
+
+  @@index([sourceDiagnosisRegistryId])
+  @@index([targetDiagnosisRegistryId])
+  @@index([performedByUserId])
+  @@index([performedAt])
+}
+
 model CaseDifferentialLink {
   id                  String                   @id @default(uuid())
   caseId              String

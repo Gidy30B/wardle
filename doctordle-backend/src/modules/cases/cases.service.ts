@@ -21,6 +21,7 @@ import { AIContentService } from '../ai/ai-content.service';
 import { buildMatchedDiagnosisMappingFields } from '../diagnosis-registry/diagnosis-mapping-fields.js';
 import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service.js';
 import { CreateCaseDto } from './dto/create-case.dto';
+import { CaseEligibilityPolicyService } from './case-eligibility-policy.service';
 
 export type DiagnosisCatalogItem = {
   id: string;
@@ -78,6 +79,7 @@ export class CasesService {
     private readonly prisma: PrismaService,
     private readonly aiContentService: AIContentService,
     private readonly editorialMetrics: EditorialMetricsService,
+    private readonly caseEligibilityPolicy: CaseEligibilityPolicyService,
     @Optional()
     private readonly lifecyclePolicy?: DiagnosisRegistryLifecyclePolicyService,
   ) {}
@@ -214,7 +216,11 @@ export class CasesService {
       throw new NotFoundException('No daily case has been published for today');
     }
 
-    if (!this.hasPlayableClueArray(existing.case.clues)) {
+    const clueValidation = this.caseEligibilityPolicy.validatePlayableClues(
+      existing.case.clues,
+      { caseId: existing.caseId },
+    );
+    if (!clueValidation.valid) {
       this.logger.warn(
         JSON.stringify({
           event: 'cases.today.invalid_daily_case',
@@ -243,10 +249,6 @@ export class CasesService {
     );
 
     return this.mapTodayCaseContext(existing);
-  }
-
-  private hasPlayableClueArray(value: unknown): boolean {
-    return Array.isArray(value) && value.length > 0;
   }
 
   async resetTodayCase(): Promise<ResetTodayCaseResult> {

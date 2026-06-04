@@ -9,17 +9,19 @@ import { CasesController } from './cases.controller';
 import { DevController } from './dev.controller';
 import { DevOnlyGuard } from './guards/dev-only.guard';
 import { CasesService } from './cases.service.js';
+import { CaseEligibilityPolicyService } from './case-eligibility-policy.service';
 
 @Module({
   imports: [AiModule, DatabaseModule, EditorialObservabilityModule],
   controllers: [CasesController, DevController],
   providers: [
     CasesService,
+    CaseEligibilityPolicyService,
     DiagnosisRegistryLinkService,
     DiagnosisRegistryLifecyclePolicyService,
     InternalApiGuard,
     DevOnlyGuard,
   ],
-  exports: [CasesService],
+  exports: [CasesService, CaseEligibilityPolicyService],
 })
 export class CasesModule {}

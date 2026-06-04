@@ -23,6 +23,7 @@ import { canPublishEditorial } from '../../auth/roles';
 import { CaseGeneratorService } from '../case-generator/case-generator.service';
 import { AdminGuard } from './admin.guard';
 import { CaseReviewService } from './case-review.service';
+import { CaseInventoryHealthService } from './case-inventory-health.service';
 import { DiagnosisEditorialWorkspaceService } from './diagnosis-editorial-workspace.service';
 import {
   DiagnosisEditorialOnboardingService,
@@ -30,6 +31,7 @@ import {
 } from './diagnosis-editorial-onboarding.service';
 import { DiagnosisWorkspaceQualityService } from './diagnosis-workspace-quality.service';
 import { TeachingUnitCoverageService } from './teaching-unit-coverage.service';
+import { EditorialReviewInboxService } from './editorial-review-inbox.service';
 import {
   TargetedCaseGenerationService,
   type TargetedCaseGenerationPayload,
@@ -49,6 +51,7 @@ import {
   type DiagnosisRegistryLifecycleAction,
 } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
 import { DiagnosisRegistryMergeAnalysisService } from '../diagnosis-registry/diagnosis-registry-merge-analysis.service';
+import { DiagnosisRegistryMergeExecutionService } from '../diagnosis-registry/diagnosis-registry-merge-execution.service';
 import { CreateAndLinkDiagnosisDto } from './dto/create-and-link-diagnosis.dto';
 import { CreateDiagnosisAliasDto } from './dto/create-diagnosis-alias.dto';
 import { CreateDiagnosisRegistryDto } from './dto/create-diagnosis-registry.dto';
@@ -73,9 +76,11 @@ export class AdminController {
   constructor(
     private readonly caseGenerator: CaseGeneratorService,
     private readonly caseReviewService: CaseReviewService,
+    private readonly caseInventoryHealthService: CaseInventoryHealthService,
     private readonly diagnosisEditorialWorkspaceService: DiagnosisEditorialWorkspaceService,
     private readonly diagnosisWorkspaceQualityService: DiagnosisWorkspaceQualityService,
     private readonly teachingUnitCoverageService: TeachingUnitCoverageService,
+    private readonly editorialReviewInboxService: EditorialReviewInboxService,
     private readonly targetedCaseGenerationService: TargetedCaseGenerationService,
     private readonly teachingRulesAdminService: TeachingRulesAdminService,
     private readonly diagnosisEditorialBriefService: DiagnosisEditorialBriefService,
@@ -84,6 +89,7 @@ export class AdminController {
     private readonly diagnosisEditorialOnboardingService: DiagnosisEditorialOnboardingService,
     private readonly diagnosisRegistryLifecyclePolicyService: DiagnosisRegistryLifecyclePolicyService,
     private readonly diagnosisRegistryMergeAnalysisService: DiagnosisRegistryMergeAnalysisService,
+    private readonly diagnosisRegistryMergeExecutionService: DiagnosisRegistryMergeExecutionService,
   ) {}
 
   @Get('cases')
@@ -108,6 +114,32 @@ export class AdminController {
   @EditorialAccess()
   async getPublishAssignmentSummary() {
     return this.caseReviewService.getPublishAssignmentSummary();
+  }
+
+  @Get('cases/inventory-health')
+  @EditorialAccess()
+  async getCaseInventoryHealth() {
+    return this.caseInventoryHealthService.getInventoryHealth();
+  }
+
+  @Get('editorial/inbox')
+  @EditorialAccess()
+  async getEditorialReviewInbox(
+    @Query('type') type?: string,
+    @Query('severity') severity?: string,
+    @Query('status') status?: string,
+    @Query('specialty') specialty?: string,
+    @Query('limit') limit?: string,
+    @Query('page') page?: string,
+  ) {
+    return this.editorialReviewInboxService.getInbox({
+      type,
+      severity,
+      status,
+      specialty,
+      limit: limit ? Number(limit) : undefined,
+      page: page ? Number(page) : undefined,
+    });
   }
 
   @Get('differential-mappings/unresolved')
@@ -230,6 +262,33 @@ export class AdminController {
         'targetDiagnosisRegistryId',
       ),
     );
+  }
+
+  @Post('diagnosis-registry/merge/execute')
+  @SeniorEditorialAccess()
+  async executeDiagnosisRegistryMerge(
+    @Req() request: AuthenticatedRequest,
+    @Body()
+    body: {
+      sourceDiagnosisRegistryId?: string;
+      targetDiagnosisRegistryId?: string;
+      reason?: string;
+      expectedAnalysisHash?: string;
+    },
+  ) {
+    return this.diagnosisRegistryMergeExecutionService.executeMerge({
+      sourceDiagnosisRegistryId: this.requireUuidLike(
+        body.sourceDiagnosisRegistryId,
+        'sourceDiagnosisRegistryId',
+      ),
+      targetDiagnosisRegistryId: this.requireUuidLike(
+        body.targetDiagnosisRegistryId,
+        'targetDiagnosisRegistryId',
+      ),
+      performedByUserId: request.user.id,
+      reason: body.reason,
+      expectedAnalysisHash: body.expectedAnalysisHash,
+    });
   }
 
   @Get('diagnosis-registry/:diagnosisRegistryId/merge-related')

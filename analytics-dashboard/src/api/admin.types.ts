@@ -1318,6 +1318,11 @@ export type RegistryMergeAnalysisPayload = {
   targetDiagnosisRegistryId: string;
 };
 
+export type RegistryMergeExecutePayload = RegistryMergeAnalysisPayload & {
+  reason?: string;
+  expectedAnalysisHash?: string;
+};
+
 export type RegistryMergeRegistrySummary = {
   id: string;
   canonicalName: string;
@@ -1338,6 +1343,7 @@ export type RegistryMergeRegistrySummary = {
 };
 
 export type RegistryMergeAnalysis = {
+  analysisHash: string;
   allowed: boolean;
   severity: RegistryMergeSeverity;
   blockers: string[];
@@ -1368,6 +1374,79 @@ export type RegistryMergeAnalysis = {
   };
   source: RegistryMergeRegistrySummary;
   target: RegistryMergeRegistrySummary;
+};
+
+export type RegistryMergeExecutionResult = {
+  mergeLogId: string;
+  analysisHash: string;
+  sourceDiagnosisRegistryId: string;
+  targetDiagnosisRegistryId: string;
+  sourceStatus: string;
+  reassignmentSummary: {
+    aliasesMoved: number;
+    aliasesSkipped: Array<{
+      aliasId?: string;
+      term: string;
+      reason: string;
+    }>;
+    aliasesCreated: number;
+    referencesReassigned: Record<string, number>;
+    referencesSkipped: Record<string, number>;
+  };
+};
+
+export type EditorialInboxItemType =
+  | 'teachingRules'
+  | 'briefs'
+  | 'education'
+  | 'cases'
+  | 'graphCandidates'
+  | 'differentials'
+  | 'registryCandidates'
+  | 'onboarding'
+  | 'mergeRisks';
+
+export type EditorialInboxSeverity = 'blocker' | 'urgent' | 'normal' | 'low';
+
+export type EditorialInboxQuery = {
+  type?: EditorialInboxItemType | '';
+  severity?: EditorialInboxSeverity | '';
+  status?: string;
+  specialty?: string;
+  limit?: number;
+  page?: number;
+};
+
+export type EditorialInboxItem = {
+  id: string;
+  type: EditorialInboxItemType;
+  title: string;
+  subtitle: string;
+  status: string;
+  severity: EditorialInboxSeverity;
+  diagnosisRegistryId: string | null;
+  diagnosisLabel: string | null;
+  specialty: string | null;
+  sourceId: string;
+  sourcePath: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  targetUrl: string;
+  recommendedAction: string;
+  blockerReason?: string;
+};
+
+export type EditorialInboxSummary = {
+  total: number;
+  urgent: number;
+  needsReview: number;
+  blockers: number;
+  byType: Record<EditorialInboxItemType, number>;
+};
+
+export type EditorialInboxResponse = {
+  summary: EditorialInboxSummary;
+  items: EditorialInboxItem[];
 };
 
 export type RegistryMergeRelated = {

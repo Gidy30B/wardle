@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import {
   DiagnosisRegistryCandidateStatus,
   DiagnosisRegistryStatus,
@@ -17,6 +18,7 @@ import { DiagnosisRegistryLifecyclePolicyService } from './diagnosis-registry-li
 export type RegistryMergeSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'BLOCKED';
 
 export type RegistryMergeAnalysis = {
+  analysisHash: string;
   allowed: boolean;
   severity: RegistryMergeSeverity;
   blockers: string[];
@@ -187,19 +189,20 @@ export class DiagnosisRegistryMergeAnalysisService {
       warnings,
       severity,
     );
-    const analysis = {
+    const readinessLabel: RegistryMergeAnalysis['readiness']['label'] =
+      blockers.length > 0
+        ? 'blocked'
+        : warnings.length > 0
+          ? 'needs_review'
+          : 'ready';
+    const analysisWithoutHash = {
       allowed: blockers.length === 0,
       severity,
       blockers,
       warnings,
       readiness: {
         score: readinessScore,
-        label:
-          blockers.length > 0
-            ? 'blocked'
-            : warnings.length > 0
-              ? 'needs_review'
-              : 'ready',
+        label: readinessLabel,
       },
       impact,
       conflicts: allConflicts,
@@ -207,6 +210,10 @@ export class DiagnosisRegistryMergeAnalysisService {
       mergePreview: this.buildMergePreview(source, target),
       source,
       target,
+    };
+    const analysis = {
+      analysisHash: this.hashAnalysis(analysisWithoutHash),
+      ...analysisWithoutHash,
     } satisfies RegistryMergeAnalysis;
 
     this.logger.log({
@@ -608,17 +615,28 @@ export class DiagnosisRegistryMergeAnalysisService {
   ) {
     const blockers = [
       ...conflicts.aliases.map((conflict) => `Alias conflict: ${conflict}`),
+      ...conflicts.teachingRules.map(
+        (conflict) => `Teaching rule conflict: ${conflict}`,
+      ),
+      ...conflicts.graph.map((conflict) => `Graph fact conflict: ${conflict}`),
     ];
     const warnings = [
-      ...conflicts.teachingRules.map(
-        (conflict) => `Teaching rule overlap: ${conflict}`,
-      ),
-      ...conflicts.graph.map((conflict) => `Graph overlap: ${conflict}`),
       ...conflicts.lifecycle.map((conflict) => `Lifecycle: ${conflict}`),
       ...conflicts.duplicateCases.map(
         (conflict) => `Duplicate case title: ${conflict}`,
       ),
     ];
+
+    if (impact.education > 1) {
+      blockers.push(
+        'DiagnosisEducation conflict: both source and target have education',
+      );
+    }
+    if (impact.editorialBriefs > 1) {
+      blockers.push(
+        'DiagnosisEditorialBrief conflict: both source and target have editorial briefs',
+      );
+    }
 
     if (impact.cases > 10 || impact.caseRevisions > 20) {
       warnings.push('Large case/revision impact requires senior review');
@@ -685,7 +703,7 @@ export class DiagnosisRegistryMergeAnalysisService {
       recommendations.push('Resolve unresolved differential mappings first');
     }
     if (!recommendations.length) {
-      recommendations.push('Dry-run only: execution remains deferred to 13E-C');
+      recommendations.push('Review impact summary before merge execution');
     }
     return this.unique(recommendations);
   }
@@ -715,4 +733,23 @@ export class DiagnosisRegistryMergeAnalysisService {
   private unique(values: string[]): string[] {
     return Array.from(new Set(values.filter((value) => value.trim())));
   }
+
+  private hashAnalysis(analysis: Omit<RegistryMergeAnalysis, 'analysisHash'>) {
+    return createHash('sha256')
+      .update(stableStringify(analysis))
+      .digest('hex');
+  }
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
