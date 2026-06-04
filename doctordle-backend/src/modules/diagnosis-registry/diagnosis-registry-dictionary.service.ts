@@ -69,6 +69,7 @@ export class DiagnosisRegistryDictionaryService {
             },
             diagnosis: {
               status: DiagnosisRegistryStatus.ACTIVE,
+              active: true,
             },
           },
         }),
@@ -89,6 +90,7 @@ export class DiagnosisRegistryDictionaryService {
             },
             diagnosis: {
               status: DiagnosisRegistryStatus.ACTIVE,
+              active: true,
             },
           },
           orderBy: {

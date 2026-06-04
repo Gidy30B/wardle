@@ -14,6 +14,7 @@ import { MetricsService } from '../../core/logger/metrics.service';
 import { CaseEligibilityPolicyService } from '../cases/case-eligibility-policy.service';
 import { DiagnosisRegistryMatcherService } from '../diagnosis-registry/diagnosis-registry-matcher.service';
 import type { ResolvedGameplayDiagnosisGuess } from '../diagnosis-registry/diagnosis-registry-matcher.service';
+import { DiagnosisRegistrySnapshotService } from '../diagnosis-registry/diagnosis-registry-snapshot.service';
 import { AttemptService } from './attempt.service';
 import {
   DailyCasesService,
@@ -182,6 +183,7 @@ export class SessionService {
     private readonly logger: AppLoggerService,
     private readonly metrics: MetricsService,
     private readonly caseEligibilityPolicy: CaseEligibilityPolicyService,
+    private readonly diagnosisRegistrySnapshotService: DiagnosisRegistrySnapshotService,
   ) {}
 
   async startGame(input: {
@@ -745,7 +747,7 @@ export class SessionService {
         resolutionReason: resolution.resolutionReason ?? null,
       });
 
-      this.assertResolvableDiagnosisSelection({
+      await this.assertResolvableDiagnosisSelection({
         sessionId: session.id,
         userId: input.userId,
         resolution,
@@ -1538,12 +1540,15 @@ export class SessionService {
     );
   }
 
-  private assertResolvableDiagnosisSelection(input: {
+  private async assertResolvableDiagnosisSelection(input: {
     sessionId: string;
     userId: string;
     resolution: ResolvedGameplayDiagnosisGuess;
-  }): void {
-    if (input.resolution.isResolvable) {
+  }): Promise<void> {
+    if (
+      input.resolution.isResolvable &&
+      input.resolution.resolutionMethod === 'SELECTED_ID'
+    ) {
       return;
     }
 
@@ -1556,7 +1561,27 @@ export class SessionService {
       resolutionReason: input.resolution.resolutionReason ?? null,
     });
 
-    throw new BadRequestException('Selected diagnosis is no longer available');
+    const dictionaryVersion =
+      await this.diagnosisRegistrySnapshotService.getVersion();
+    const staleSelection =
+      input.resolution.resolutionReason === 'MERGED_SELECTED_ID' ||
+      input.resolution.resolutionReason === 'UNUSABLE_SELECTED_ID';
+
+    throw new BadRequestException({
+      code: staleSelection
+        ? 'DICTIONARY_STALE'
+        : 'INVALID_DIAGNOSIS_SELECTION',
+      message: staleSelection
+        ? 'Diagnosis dictionary changed. Please reselect your diagnosis.'
+        : 'Selected diagnosis is no longer available. Please reselect your diagnosis.',
+      currentDictionaryVersion: dictionaryVersion.version,
+      resolutionMethod: input.resolution.resolutionMethod,
+      resolutionReason: input.resolution.resolutionReason ?? null,
+      submittedDiagnosisRegistryId:
+        input.resolution.submittedDiagnosisRegistryId,
+      resolvedDiagnosisRegistryId:
+        input.resolution.resolvedDiagnosisRegistryId,
+    });
   }
 
   private async hydrateGameplayCase(selectedCase: {

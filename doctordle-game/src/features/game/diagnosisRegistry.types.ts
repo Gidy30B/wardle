@@ -18,6 +18,15 @@ export type DiagnosisDictionary = {
   items: DiagnosisDictionaryItem[]
 }
 
+export type DiagnosisRegistryVersion = {
+  version: string
+  generatedAt: string
+  diagnosisCount: number
+  aliasCount: number
+  selectionRequired: boolean
+  autocompleteEnabled: boolean
+}
+
 export type DiagnosisDictionaryIndex = {
   version: string
   generatedAt: string

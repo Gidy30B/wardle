@@ -12,6 +12,7 @@ export type GameplayDiagnosisResolutionMethod =
 export type GameplayDiagnosisResolutionReason =
   | 'NO_SELECTED_ID'
   | 'INVALID_SELECTED_ID'
+  | 'MERGED_SELECTED_ID'
   | 'UNUSABLE_SELECTED_ID'
   | 'EXPECTED_DIAGNOSIS_MISSING'
   | 'EXPECTED_DIAGNOSIS_UNUSABLE';
@@ -195,11 +196,12 @@ export class DiagnosisRegistryMatcherService {
           input.submittedDiagnosisRegistryId;
 
         return {
-          submittedDiagnosisRegistryId: mergedTarget.id,
+          submittedDiagnosisRegistryId: input.submittedDiagnosisRegistryId,
           submittedGuessText: resolvedGuessText,
           normalizedGuess: normalizeDiagnosisTerm(resolvedGuessText),
           resolvedDiagnosisRegistryId: mergedTarget.id,
           resolutionMethod: 'MERGED_SELECTED_ID',
+          resolutionReason: 'MERGED_SELECTED_ID',
           isResolvable: true,
         };
       }

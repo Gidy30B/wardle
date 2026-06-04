@@ -101,6 +101,7 @@ export class DiagnosisRegistrySnapshotService {
         this.prisma.diagnosisAlias.count({
           where: {
             active: true,
+            diagnosis: getDictionaryVisibleDiagnosisRegistryWhere(),
           },
         }),
         this.prisma.diagnosisRegistry.findFirst({
@@ -115,6 +116,7 @@ export class DiagnosisRegistrySnapshotService {
         this.prisma.diagnosisAlias.findFirst({
           where: {
             active: true,
+            diagnosis: getDictionaryVisibleDiagnosisRegistryWhere(),
           },
           orderBy: {
             updatedAt: 'desc',

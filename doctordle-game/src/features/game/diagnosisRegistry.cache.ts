@@ -1,5 +1,5 @@
 import type { RequestJson } from '../../lib/api'
-import { getDiagnosisDictionaryApi } from './game.api'
+import { getDiagnosisDictionaryApi, getDiagnosisRegistryVersionApi } from './game.api'
 import { buildDiagnosisRegistrySearchIndex } from './diagnosisRegistry.search'
 import type {
   DiagnosisDictionary,
@@ -27,6 +27,7 @@ let cachedDictionary: DiagnosisDictionary | null = null
 let cachedIndex: DiagnosisDictionaryIndex | null = null
 let cachedAtMs: number | null = null
 let refreshRequest: Promise<DiagnosisDictionaryIndex> | null = null
+let versionCheckRequest: Promise<string> | null = null
 let refreshAttemptedThisSession = false
 
 export function getCachedDiagnosisDictionarySnapshot(): DiagnosisDictionaryCacheSnapshot | null {
@@ -94,6 +95,33 @@ export async function refreshDiagnosisDictionaryIndex(
   } finally {
     refreshRequest = null
   }
+}
+
+export async function ensureCurrentDiagnosisDictionaryIndex(
+  request: RequestJson,
+): Promise<DiagnosisDictionaryIndex> {
+  const cachedSnapshot = getCachedDiagnosisDictionarySnapshot()
+
+  if (cachedSnapshot) {
+    const currentVersion = await getCurrentDiagnosisDictionaryVersion(request)
+
+    if (cachedSnapshot.dictionary.version === currentVersion) {
+      return cachedSnapshot.index
+    }
+
+    clearDiagnosisDictionaryCache()
+  }
+
+  return refreshDiagnosisDictionaryIndex(request)
+}
+
+export function clearDiagnosisDictionaryCache(): void {
+  cachedDictionary = null
+  cachedIndex = null
+  cachedAtMs = null
+  refreshRequest = null
+  refreshAttemptedThisSession = false
+  removeDiagnosisDictionaryStorageValue()
 }
 
 export function readPersistedDiagnosisDictionaryCache(): PersistedDiagnosisDictionaryCache | null {
@@ -180,6 +208,34 @@ function writeDiagnosisDictionaryStorageValue(value: string): void {
     window.localStorage.setItem(DIAGNOSIS_DICTIONARY_STORAGE_KEY, value)
   } catch {
     // Ignore storage failures and keep the in-memory cache alive.
+  }
+}
+
+function removeDiagnosisDictionaryStorageValue(): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.localStorage.removeItem(DIAGNOSIS_DICTIONARY_STORAGE_KEY)
+  } catch {
+    // Ignore storage failures and keep runtime state consistent.
+  }
+}
+
+async function getCurrentDiagnosisDictionaryVersion(
+  request: RequestJson,
+): Promise<string> {
+  if (!versionCheckRequest) {
+    versionCheckRequest = getDiagnosisRegistryVersionApi(request).then(
+      (payload) => payload.version,
+    )
+  }
+
+  try {
+    return await versionCheckRequest
+  } finally {
+    versionCheckRequest = null
   }
 }
 

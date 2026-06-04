@@ -1,5 +1,5 @@
 import type { RequestJson } from '../../lib/api'
-import type { DiagnosisDictionary } from './diagnosisRegistry.types'
+import type { DiagnosisDictionary, DiagnosisRegistryVersion } from './diagnosisRegistry.types'
 import type {
   ClinicalClue,
   GameCase,
@@ -68,6 +68,12 @@ export async function getDiagnosisDictionaryApi(
   request: RequestJson,
 ): Promise<DiagnosisDictionary> {
   return request<DiagnosisDictionary>('/diagnosis-registry/dictionary')
+}
+
+export async function getDiagnosisRegistryVersionApi(
+  request: RequestJson,
+): Promise<DiagnosisRegistryVersion> {
+  return request<DiagnosisRegistryVersion>('/diagnosis-registry/version')
 }
 
 export async function startGameApi(request: RequestJson): Promise<StartGameResponse> {

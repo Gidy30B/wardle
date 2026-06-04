@@ -80,6 +80,17 @@ function createSessionServiceFixture() {
     increment: jest.fn(),
   };
 
+  const diagnosisRegistrySnapshotService = {
+    getVersion: jest.fn().mockResolvedValue({
+      version: 'dictionary-v2',
+      generatedAt: '2026-04-22T08:00:00.000Z',
+      diagnosisCount: 1,
+      aliasCount: 0,
+      selectionRequired: true,
+      autocompleteEnabled: true,
+    }),
+  };
+
   return {
     prisma,
     cacheService,
@@ -91,6 +102,7 @@ function createSessionServiceFixture() {
     dailyCasesService,
     logger,
     metrics,
+    diagnosisRegistrySnapshotService,
     getClaimAt: () => claimAt,
     service: new SessionService(
       prisma as never,
@@ -104,6 +116,7 @@ function createSessionServiceFixture() {
       logger as never,
       metrics as never,
       new CaseEligibilityPolicyService(),
+      diagnosisRegistrySnapshotService as never,
     ),
   };
 }
@@ -655,7 +668,7 @@ describe('SessionService gameplay registry correctness', () => {
     );
   });
 
-  it('persists the active target id for a merged registry selection', async () => {
+  it('rejects merged selected diagnosis ids before attempt persistence', async () => {
     const fixture = createSessionServiceFixture();
     fixture.prisma.gameSession.findUnique
       .mockImplementationOnce(async () => buildActiveSession('registry-target'))
@@ -669,11 +682,12 @@ describe('SessionService gameplay registry correctness', () => {
         expectedDiagnosisUsable: true,
         isCorrect: true,
         resolution: {
-          submittedDiagnosisRegistryId: 'registry-target',
+          submittedDiagnosisRegistryId: 'registry-source',
           submittedGuessText: 'Old asthma label',
           normalizedGuess: 'old asthma label',
           resolvedDiagnosisRegistryId: 'registry-target',
           resolutionMethod: 'MERGED_SELECTED_ID',
+          resolutionReason: 'MERGED_SELECTED_ID',
           isResolvable: true,
         },
         evaluation: {
@@ -700,23 +714,24 @@ describe('SessionService gameplay registry correctness', () => {
       isTerminalCorrect: true,
     });
 
-    await fixture.service.submitGuess({
-      sessionId: 'session-1',
-      userId: 'user-1',
-      diagnosisRegistryId: 'registry-source',
-      guess: 'Old asthma label',
+    await expect(
+      fixture.service.submitGuess({
+        sessionId: 'session-1',
+        userId: 'user-1',
+        diagnosisRegistryId: 'registry-source',
+        guess: 'Old asthma label',
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'DICTIONARY_STALE',
+        currentDictionaryVersion: 'dictionary-v2',
+        resolutionReason: 'MERGED_SELECTED_ID',
+      }),
     });
 
     expect(
       fixture.attemptService.recordAttemptInTransaction,
-    ).toHaveBeenCalledWith(
-      fixture.prisma,
-      expect.objectContaining({
-        selectedDiagnosisId: 'registry-target',
-        strictMatchedDiagnosisId: 'registry-target',
-        strictMatchOutcome: 'MERGED_SELECTED_ID',
-      }),
-    );
+    ).not.toHaveBeenCalled();
   });
 
   it('rejects invalid selected diagnosis ids before attempt persistence', async () => {
@@ -760,7 +775,13 @@ describe('SessionService gameplay registry correctness', () => {
         diagnosisRegistryId: 'missing-registry',
         guess: 'Asthma',
       }),
-    ).rejects.toThrow(BadRequestException);
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'INVALID_DIAGNOSIS_SELECTION',
+        currentDictionaryVersion: 'dictionary-v2',
+        resolutionReason: 'INVALID_SELECTED_ID',
+      }),
+    });
 
     expect(
       fixture.rewardOrchestrator.emitAttemptEvaluated,

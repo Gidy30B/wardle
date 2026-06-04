@@ -187,4 +187,15 @@ export function isDiagnosisSelectionCurrent(
   return normalizeDiagnosisSearchText(selectionLabel) === normalizeDiagnosisSearchText(typedText)
 }
 
+export function hasDiagnosisRegistryEntry(
+  index: DiagnosisDictionaryIndex | null,
+  diagnosisRegistryId: string | null | undefined,
+): boolean {
+  if (!index || !diagnosisRegistryId) {
+    return false
+  }
+
+  return index.entries.some((entry) => entry.id === diagnosisRegistryId)
+}
+
 export type { DiagnosisSuggestionMatchKind }

@@ -68,6 +68,15 @@ describe('DiagnosisRegistrySnapshotService', () => {
         },
       }),
     );
+    expect(fixture.prisma.diagnosisAlias.count).toHaveBeenCalledWith({
+      where: {
+        active: true,
+        diagnosis: {
+          status: 'ACTIVE',
+          active: true,
+        },
+      },
+    });
   });
 
   it('returns active diagnoses and alias metadata for the local snapshot', async () => {

@@ -155,9 +155,10 @@ describe('DiagnosisRegistryMatcherService', () => {
     expect(result.isCorrect).toBe(true);
     expect(result.resolution).toEqual(
       expect.objectContaining({
-        submittedDiagnosisRegistryId: 'registry-target',
+        submittedDiagnosisRegistryId: 'registry-source',
         resolvedDiagnosisRegistryId: 'registry-target',
         resolutionMethod: 'MERGED_SELECTED_ID',
+        resolutionReason: 'MERGED_SELECTED_ID',
         isResolvable: true,
       }),
     );

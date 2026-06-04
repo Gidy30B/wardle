@@ -9,6 +9,7 @@ export type GuessPayload = {
 export type DiagnosisSelection = {
   diagnosisRegistryId: string
   displayLabel: string
+  dictionaryVersion?: string
 }
 
 export type DiagnosisSuggestion = DiagnosisSelection & {

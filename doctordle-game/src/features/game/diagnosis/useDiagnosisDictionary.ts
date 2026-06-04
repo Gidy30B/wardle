@@ -3,6 +3,7 @@ import { useApi } from '../../../lib/api'
 import type { DiagnosisDictionaryAvailability } from '../diagnosisInput.state'
 import {
   getCachedDiagnosisDictionarySnapshot,
+  ensureCurrentDiagnosisDictionaryIndex,
   refreshDiagnosisDictionaryIndex,
   shouldRefreshDiagnosisDictionary,
 } from '../diagnosisRegistry.cache'
@@ -53,7 +54,9 @@ export function useDiagnosisDictionaryIndex() {
       }
 
       try {
-        const nextIndex = await refreshDiagnosisDictionaryIndex(request)
+        const nextIndex = cachedSnapshot
+          ? await ensureCurrentDiagnosisDictionaryIndex(request)
+          : await refreshDiagnosisDictionaryIndex(request)
 
         if (!isMountedRef.current) {
           return nextIndex

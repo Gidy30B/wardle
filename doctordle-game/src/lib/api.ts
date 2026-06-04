@@ -15,6 +15,7 @@ export class ApiRequestError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly payload?: unknown,
   ) {
     super(message)
     this.name = 'ApiRequestError'
@@ -56,6 +57,7 @@ export function useApi() {
         throw new ApiRequestError(
           payload || `Request failed: ${response.status}`,
           response.status,
+          payload,
         )
       }
 
@@ -67,6 +69,7 @@ export function useApi() {
       throw new ApiRequestError(
         message || `Request failed: ${response.status}`,
         response.status,
+        payload,
       )
     }
 

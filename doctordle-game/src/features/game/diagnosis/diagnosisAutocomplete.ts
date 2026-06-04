@@ -29,6 +29,7 @@ export function toDiagnosisSelection(
   return {
     diagnosisRegistryId: suggestion.diagnosisRegistryId,
     displayLabel: suggestion.displayLabel,
+    dictionaryVersion: undefined,
   }
 }
 
@@ -56,6 +57,7 @@ export function findExactDiagnosisSelection(
     ? {
         diagnosisRegistryId: match.id,
         displayLabel: match.label,
+        dictionaryVersion: index.version,
       }
     : null
 }

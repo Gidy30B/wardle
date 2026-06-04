@@ -1,6 +1,7 @@
 import { useAuth } from '@clerk/clerk-react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ApiRequestError } from '../../lib/api'
 import { buildRoundViewModel } from './buildRoundViewModel'
 import {
   deriveDiagnosisInputState,
@@ -9,10 +10,13 @@ import {
   type DiagnosisDictionaryAvailability,
 } from './diagnosisInput.state'
 import {
+  clearDiagnosisDictionaryCache,
+  ensureCurrentDiagnosisDictionaryIndex,
   getCachedDiagnosisDictionarySnapshot,
   refreshDiagnosisDictionaryIndex,
   shouldRefreshDiagnosisDictionary,
 } from './diagnosisRegistry.cache'
+import { hasDiagnosisRegistryEntry } from './diagnosisRegistry.search'
 import {
   DEFAULT_DIAGNOSIS_AUTOCOMPLETE_LIMIT,
   findExactDiagnosisSelection,
@@ -90,6 +94,69 @@ function isFinalResult(result: GameResult): boolean {
 
 function isDailyLimitMessage(message: string): boolean {
   return /daily free limit reached/i.test(message)
+}
+
+type DiagnosisSelectionErrorPayload = {
+  code?: string
+  message?: string
+  currentDictionaryVersion?: string
+}
+
+function getApiErrorPayload(error: unknown): DiagnosisSelectionErrorPayload | null {
+  if (!(error instanceof ApiRequestError)) {
+    return null
+  }
+
+  const payload = error.payload
+  if (typeof payload !== 'object' || payload === null) {
+    return null
+  }
+
+  const body = payload as {
+    code?: unknown
+    message?: unknown
+    currentDictionaryVersion?: unknown
+  }
+  const nested =
+    typeof body.message === 'object' && body.message !== null
+      ? (body.message as DiagnosisSelectionErrorPayload)
+      : null
+
+  return {
+    code:
+      typeof body.code === 'string'
+        ? body.code
+        : typeof nested?.code === 'string'
+          ? nested.code
+          : undefined,
+    message:
+      typeof body.message === 'string'
+        ? body.message
+        : typeof nested?.message === 'string'
+          ? nested.message
+          : undefined,
+    currentDictionaryVersion:
+      typeof body.currentDictionaryVersion === 'string'
+        ? body.currentDictionaryVersion
+        : typeof nested?.currentDictionaryVersion === 'string'
+          ? nested.currentDictionaryVersion
+          : undefined,
+  }
+}
+
+function isDiagnosisSelectionApiError(error: unknown): error is ApiRequestError {
+  const payload = getApiErrorPayload(error)
+  return (
+    payload?.code === 'INVALID_DIAGNOSIS_SELECTION' ||
+    payload?.code === 'DICTIONARY_STALE'
+  )
+}
+
+function getDiagnosisSelectionErrorMessage(error: ApiRequestError): string {
+  return (
+    getApiErrorPayload(error)?.message ??
+    'Diagnosis dictionary changed. Please reselect your diagnosis.'
+  )
 }
 
 function formatCountdown(target: Date, nowMs: number): string {
@@ -201,6 +268,14 @@ export function useGameEngine() {
     setAttempts([])
   }, [])
 
+  const clearDiagnosisSelectionState = useCallback(() => {
+    setGuess('')
+    setSelectedDiagnosis(null)
+    setStaleSelection(null)
+    setSuggestions([])
+    setHighlightedSuggestionIndex(0)
+  }, [])
+
   const ensureDiagnosisRegistryLoaded = useCallback(async () => {
     const cachedSnapshot = getCachedDiagnosisDictionarySnapshot()
 
@@ -230,7 +305,10 @@ export function useGameEngine() {
       }
 
       try {
-        const nextRegistryIndex = await refreshDiagnosisDictionaryIndex(request)
+        const previousVersion = cachedSnapshot?.dictionary.version ?? null
+        const nextRegistryIndex = cachedSnapshot
+          ? await ensureCurrentDiagnosisDictionaryIndex(request)
+          : await refreshDiagnosisDictionaryIndex(request)
 
         if (!isMountedRef.current) {
           return nextRegistryIndex
@@ -239,6 +317,11 @@ export function useGameEngine() {
         setRegistryIndex(nextRegistryIndex)
         setDictionaryAvailability('ready')
         setRegistryError(null)
+        if (previousVersion && nextRegistryIndex.version !== previousVersion) {
+          clearDiagnosisSelectionState()
+          void queryClient.invalidateQueries({ queryKey: ['diagnosis-autocomplete'] })
+          void queryClient.invalidateQueries({ queryKey: ['diagnosis-dictionary'] })
+        }
         return nextRegistryIndex
       } catch (exception) {
         const message =
@@ -274,7 +357,7 @@ export function useGameEngine() {
     }
 
     return task
-  }, [request])
+  }, [clearDiagnosisSelectionState, queryClient, request])
 
   const startSession = useCallback(async () => {
     if (sessionRequestRef.current) {
@@ -518,6 +601,24 @@ export function useGameEngine() {
     sessionId,
   ])
 
+  useEffect(() => {
+    if (!selectedDiagnosis || !registryIndex) {
+      return
+    }
+
+    if (
+      selectedDiagnosis.dictionaryVersion === registryIndex.version &&
+      hasDiagnosisRegistryEntry(registryIndex, selectedDiagnosis.diagnosisRegistryId)
+    ) {
+      return
+    }
+
+    setSelectedDiagnosis(null)
+    setStaleSelection(selectedDiagnosis)
+    setSuggestions([])
+    setHighlightedSuggestionIndex(0)
+  }, [registryIndex, selectedDiagnosis])
+
   const isAutocompleteLoading =
     autocompleteEnabled &&
     mode.type === 'PLAYING' &&
@@ -569,6 +670,29 @@ export function useGameEngine() {
     setError(null)
 
     try {
+      const currentRegistryIndex = await ensureCurrentDiagnosisDictionaryIndex(request)
+
+      if (!isMountedRef.current) {
+        return undefined
+      }
+
+      setRegistryIndex(currentRegistryIndex)
+      setDictionaryAvailability('ready')
+      setRegistryError(null)
+
+      if (
+        selectedDiagnosis?.dictionaryVersion !== currentRegistryIndex.version ||
+        !hasDiagnosisRegistryEntry(
+          currentRegistryIndex,
+          selectedDiagnosis.diagnosisRegistryId,
+        )
+      ) {
+        clearDiagnosisSelectionState()
+        setError('Diagnosis dictionary changed. Please reselect your diagnosis.')
+        setMode({ type: 'PLAYING' })
+        return undefined
+      }
+
       const clueIndexAtSubmit = clueIndex
       // The submit response is the source of truth for correctness and finality.
       const response = await submitGuessApi(request, {
@@ -651,6 +775,17 @@ export function useGameEngine() {
       return response
     } catch (exception) {
       if (isMountedRef.current) {
+        if (isDiagnosisSelectionApiError(exception)) {
+          clearDiagnosisDictionaryCache()
+          clearDiagnosisSelectionState()
+          void queryClient.invalidateQueries({ queryKey: ['diagnosis-autocomplete'] })
+          void queryClient.invalidateQueries({ queryKey: ['diagnosis-dictionary'] })
+          void ensureDiagnosisRegistryLoaded().catch(() => undefined)
+          setError(getDiagnosisSelectionErrorMessage(exception))
+          setMode(sessionId ? { type: 'PLAYING' } : { type: 'BLOCKED', reason: null })
+          return undefined
+        }
+
         setError(exception instanceof Error ? exception.message : 'Unknown error')
         setMode(sessionId ? { type: 'PLAYING' } : { type: 'BLOCKED', reason: null })
       }
@@ -668,6 +803,8 @@ export function useGameEngine() {
     request,
     selectedDiagnosis,
     sessionId,
+    clearDiagnosisSelectionState,
+    ensureDiagnosisRegistryLoaded,
   ])
 
   const continueGame = useCallback(() => {
@@ -726,11 +863,14 @@ export function useGameEngine() {
     }
 
     setGuess(suggestion.displayLabel)
-    setSelectedDiagnosis(toDiagnosisSelection(suggestion))
+    setSelectedDiagnosis({
+      ...toDiagnosisSelection(suggestion),
+      dictionaryVersion: registryIndex?.version,
+    })
     setStaleSelection(null)
     setSuggestions([])
     setHighlightedSuggestionIndex(0)
-  }, [mode.type])
+  }, [mode.type, registryIndex?.version])
 
   const clearSelectedSuggestion = useCallback(() => {
     if (mode.type !== 'PLAYING' || !selectedDiagnosis) {
