@@ -38,6 +38,62 @@ const now = new Date();
 const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 4, 12, 0, 0));
 const seedVersion = 'flagship-peptic-ulcer-disease-v1';
 
+function addUtcDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+async function findAvailableInventoryPlaceholderDate(params: {
+  preferredDate: Date;
+  reusableCaseId?: string;
+  displayLabel: string;
+}): Promise<Date> {
+  const maxAttempts = 365;
+
+  for (let offset = 0; offset < maxAttempts; offset += 1) {
+    const candidateDate = addUtcDays(params.preferredDate, offset);
+    const owner = await prisma.case.findUnique({
+      where: { date: candidateDate },
+      select: {
+        id: true,
+        title: true,
+        diagnosisRegistryId: true,
+        currentRevisionId: true,
+        dailyCases: { select: { id: true }, take: 1 },
+      },
+    });
+
+    if (!owner) {
+      if (offset > 0) {
+        console.warn('Preferred inventory placeholder date was occupied; using next free date.', {
+          displayLabel: params.displayLabel,
+          preferredDate: params.preferredDate.toISOString(),
+          assignedDate: candidateDate.toISOString(),
+          offsetDays: offset,
+        });
+      }
+      return candidateDate;
+    }
+
+    if (params.reusableCaseId && owner.id === params.reusableCaseId) {
+      return candidateDate;
+    }
+
+    console.warn('Inventory placeholder date occupied; trying next day.', {
+      displayLabel: params.displayLabel,
+      candidateDate: candidateDate.toISOString(),
+      occupiedByCaseId: owner.id,
+      occupiedByTitle: owner.title,
+      occupiedCaseIsScheduled: owner.dailyCases.length > 0,
+    });
+  }
+
+  throw new Error(
+    `Cannot seed ${params.displayLabel}: no free inventory placeholder date found within ${maxAttempts} days after ${params.preferredDate.toISOString()}.`,
+  );
+}
+
 const clues = [
   {
     order: 0,
@@ -511,9 +567,29 @@ async function main() {
     .filter((clue) => clue.type === 'symptom')
     .map((clue) => clue.value);
 
+  const reusableCase = await prisma.case.findFirst({
+    where: {
+      diagnosisRegistryId: registry.id,
+      proposedDiagnosisText: displayLabel,
+      dailyCases: { none: {} },
+    },
+    orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      currentRevisionId: true,
+    },
+  });
+
+  const assignedInventoryPlaceholderDate =
+    await findAvailableInventoryPlaceholderDate({
+      preferredDate: inventoryPlaceholderDate,
+      reusableCaseId: reusableCase?.id,
+      displayLabel,
+    });
+
   const caseData = {
     title: displayLabel,
-    date: inventoryPlaceholderDate,
+    date: assignedInventoryPlaceholderDate,
     difficulty: 'easy',
     history,
     symptoms,
@@ -532,47 +608,6 @@ async function main() {
       'Seeded frontend-aligned flagship peptic ulcer disease inventory case. DailyCase scheduler should assign the actual daily slot.',
   };
 
-  const existingSeedCase = await prisma.case.findFirst({
-    where: {
-      diagnosisRegistryId: registry.id,
-      proposedDiagnosisText: displayLabel,
-    },
-    orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
-    select: {
-      id: true,
-      currentRevisionId: true,
-      dailyCases: { select: { id: true }, take: 1 },
-    },
-  });
-
-  const placeholderDateOwner = await prisma.case.findUnique({
-    where: { date: inventoryPlaceholderDate },
-    select: {
-      id: true,
-      title: true,
-      diagnosisRegistryId: true,
-      currentRevisionId: true,
-      dailyCases: { select: { id: true }, take: 1 },
-    },
-  });
-
-  if (
-    placeholderDateOwner &&
-    placeholderDateOwner.diagnosisRegistryId !== registry.id
-  ) {
-    throw new Error(
-      `Cannot seed ${displayLabel}: inventory placeholder date ${inventoryPlaceholderDate.toISOString()} is already used by "${placeholderDateOwner.title}" (${placeholderDateOwner.id}).`,
-    );
-  }
-
-  const reusableCase = placeholderDateOwner ?? existingSeedCase;
-
-  if (reusableCase?.dailyCases.length) {
-    throw new Error(
-      `Cannot seed ${displayLabel}: existing case ${reusableCase.id} is already assigned to a DailyCase. Restore or manage it through the scheduler instead.`,
-    );
-  }
-
   const seededCase = reusableCase
     ? await prisma.case.update({
         where: { id: reusableCase.id },
@@ -585,7 +620,7 @@ async function main() {
     source: 'MANUAL' as const,
     publishTrack: 'DAILY' as const,
     title: displayLabel,
-    date: inventoryPlaceholderDate,
+    date: assignedInventoryPlaceholderDate,
     difficulty: 'easy',
     history,
     symptoms,
@@ -652,6 +687,7 @@ async function main() {
     registryId: registry.id,
     caseId: seededCase.id,
     educationId: education.id,
+    inventoryPlaceholderDate: assignedInventoryPlaceholderDate.toISOString(),
   });
 }
 
