@@ -185,7 +185,11 @@ export type PublishTrack = 'DAILY' | 'PREMIUM' | 'PRACTICE';
 
 export type EditorialQueueFilter = 'all' | 'review' | 'publish';
 
-export type DiagnosisRegistryStatus = 'ACTIVE' | 'HIDDEN' | 'DEPRECATED' | 'DRAFT';
+export type DiagnosisRegistryStatus =
+  | 'ACTIVE'
+  | 'HIDDEN'
+  | 'DEPRECATED'
+  | 'DRAFT';
 
 export type DiagnosisDifficultyBand = 'BASIC' | 'INTERMEDIATE' | 'ADVANCED';
 
@@ -320,6 +324,111 @@ export type ResolveDifferentialMappingPayload =
       reason?: string;
     };
 
+export type DiagnosisRegistryCandidateStatus =
+  | 'CANDIDATE'
+  | 'NEEDS_REVIEW'
+  | 'REJECTED'
+  | 'MERGED'
+  | 'APPROVED_PENDING_CREATE'
+  | 'CREATED';
+
+export type DiagnosisRegistryCandidateDuplicateSuggestions = {
+  registryCanonicalMatches?: Array<{
+    id: string;
+    canonicalName: string;
+    displayLabel: string;
+    status: string;
+  }>;
+  registryAliasMatches?: Array<{
+    aliasId: string;
+    aliasTerm: string;
+    aliasKind: string;
+    registry: {
+      id: string;
+      canonicalName: string;
+      displayLabel: string;
+      status: string;
+    };
+  }>;
+  candidateMatches?: Array<{
+    id: string;
+    proposedCanonicalName: string;
+    proposedDisplayLabel: string;
+    status: DiagnosisRegistryCandidateStatus;
+  }>;
+};
+
+export type DiagnosisRegistryCandidate = {
+  id: string;
+  proposedCanonicalName: string;
+  proposedCanonicalNormalized: string;
+  proposedDisplayLabel: string;
+  proposedAliases: string[] | JsonValue | null;
+  sourceType: DifferentialMappingSourceType | string;
+  sourceId: string;
+  sourceMappingId: string | null;
+  sourceRawText: string;
+  contextDiagnosisRegistryId: string | null;
+  contextDiagnosisRegistry: {
+    id: string;
+    displayLabel: string;
+    canonicalName: string;
+  } | null;
+  duplicateSuggestions:
+    | DiagnosisRegistryCandidateDuplicateSuggestions
+    | JsonValue
+    | null;
+  status: DiagnosisRegistryCandidateStatus;
+  reviewerUserId: string | null;
+  reviewerUser: {
+    id: string;
+    email: string | null;
+    username: string | null;
+  } | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  createdRegistryId: string | null;
+  createdRegistry: {
+    id: string;
+    displayLabel: string;
+    canonicalName: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RegistryCandidateFilters = {
+  status?: DiagnosisRegistryCandidateStatus;
+  limit?: number;
+};
+
+export type DiagnosisRegistryCandidateQueueSummary = {
+  registryCandidateCount: number;
+  unresolvedDifferentialCount: number;
+  pendingRegistryCandidateCount: number;
+};
+
+export type CreateRegistryCandidatePayload = {
+  proposedCanonicalName?: string;
+  proposedDisplayLabel?: string;
+  proposedAliases?: string[];
+};
+
+export type ReviewRegistryCandidatePayload =
+  | {
+      action: 'mark_needs_review';
+      note?: string;
+    }
+  | {
+      action: 'reject';
+      note?: string;
+    }
+  | {
+      action: 'merge_duplicate_candidate';
+      duplicateCandidateId: string;
+      note?: string;
+    };
+
 export type DiagnosisGraphCandidate = {
   id: string;
   diagnosisRegistryId: string;
@@ -429,7 +538,10 @@ export type DiagnosisPublishReadinessReason =
 
 export type JsonPrimitive = string | number | boolean | null;
 
-export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+export type JsonValue =
+  | JsonPrimitive
+  | JsonValue[]
+  | { [key: string]: JsonValue };
 
 export type JsonObject = { [key: string]: JsonValue };
 
@@ -919,11 +1031,15 @@ export type DiagnosisEditorialWorkspace = {
     overallScore: number | null;
     graphReadiness: number | string | null;
     educationScore: number | null;
-    caseQualitySummary: DiagnosisWorkspaceQualitySummary['caseQuality'] | WorkspaceCaseSummary;
+    caseQualitySummary:
+      | DiagnosisWorkspaceQualitySummary['caseQuality']
+      | WorkspaceCaseSummary;
     blockers: string[];
     warnings: string[];
     recommendedActions: string[];
     unresolvedDifferentialCount?: number;
+    registryCandidateCount?: number;
+    pendingRegistryCandidateCount?: number;
     differentialResolutionSummary?: {
       resolved: number;
       ambiguous: number;
@@ -955,7 +1071,9 @@ export type DiagnosisEditorialWorkspace = {
   };
   education: {
     id: string | null;
-    status: DiagnosisWorkspaceQualitySummary['educationQuality']['status'] | string;
+    status:
+      | DiagnosisWorkspaceQualitySummary['educationQuality']['status']
+      | string;
     version: number | null;
     qualityScore: number | null;
     sectionHealth: WorkspaceSectionFailureSummary[];
@@ -986,7 +1104,12 @@ export type DiagnosisEditorialWorkspace = {
     }>;
   };
   graph: {
-    readiness: 'none' | 'candidate_only' | 'review_needed' | 'fact_ready' | string;
+    readiness:
+      | 'none'
+      | 'candidate_only'
+      | 'review_needed'
+      | 'fact_ready'
+      | string;
     factCount: number;
     candidateCount: number;
     reviewableCandidateCount: number;

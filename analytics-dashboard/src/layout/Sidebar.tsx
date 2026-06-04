@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 const editorialNavigationItems = [
   { to: '/editorial', label: 'Editorial', icon: 'E' },
   { to: '/editorial/differentials', label: 'Differentials', icon: 'D' },
+  { to: '/editorial/registry-candidates', label: 'Registry Queue', icon: 'R' },
 ];
 
 const administrationNavigationItems = [
@@ -90,7 +91,9 @@ export default function Sidebar({
         collapsed ? 'w-20' : 'w-64'
       }`}
     >
-      <div className={`border-b border-slate-200 ${collapsed ? 'px-3 py-4' : 'px-5 py-4'}`}>
+      <div
+        className={`border-b border-slate-200 ${collapsed ? 'px-3 py-4' : 'px-5 py-4'}`}
+      >
         <div className="flex items-center justify-between gap-2">
           {collapsed ? (
             <h1 className="text-sm font-semibold text-slate-900">DX</h1>
@@ -99,7 +102,9 @@ export default function Sidebar({
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
                 Admin Console
               </p>
-              <h1 className="mt-2 text-lg font-semibold text-slate-900">DxLab Admin</h1>
+              <h1 className="mt-2 text-lg font-semibold text-slate-900">
+                DxLab Admin
+              </h1>
             </div>
           )}
 

@@ -6,6 +6,7 @@ import DashboardPage from '../features/dashboard/DashboardPage';
 import DiagnosisGraphCandidatesPage from '../features/diagnosis-graph/DiagnosisGraphCandidatesPage';
 import EditorialDiagnosisWorkspacePage from '../features/editorial/EditorialDiagnosisWorkspacePage';
 import EditorialHomePage from '../features/editorial/EditorialHomePage';
+import RegistryCandidatesPage from '../features/editorial/RegistryCandidatesPage';
 import UnresolvedDifferentialsPage from '../features/editorial/UnresolvedDifferentialsPage';
 import GeneratePage from '../features/generation/GeneratePage';
 import PublishPage from '../features/publish/PublishPage';
@@ -49,6 +50,10 @@ const routeContext: Record<string, { title: string; subtitle: string }> = {
     title: 'Differentials',
     subtitle: 'Resolve differential text into registry-linked diagnoses',
   },
+  '/editorial/registry-candidates': {
+    title: 'Registry Candidates',
+    subtitle: 'Review proposed diagnosis registry entries before creation',
+  },
 };
 
 function SignInScreen({
@@ -85,22 +90,23 @@ function AdminShell() {
     isCasesPath ||
     location.pathname === '/diagnosis-graph/candidates' ||
     location.pathname === '/publish';
-  const context = isCasesPath
-    ? routeContext['/cases']
-    : isEditorialPath
-      ? routeContext['/editorial']
-    : routeContext[location.pathname] ?? routeContext['/'];
+  const context =
+    routeContext[location.pathname] ??
+    (isCasesPath
+      ? routeContext['/cases']
+      : isEditorialPath
+        ? routeContext['/editorial']
+        : routeContext['/']);
   const signInPath:
     | '/'
     | '/cases'
     | '/generate'
     | '/analytics'
     | '/publish'
-    | '/editorial' =
-    isCasesPath
-      ? '/cases'
-      : isEditorialPath
-        ? '/editorial'
+    | '/editorial' = isCasesPath
+    ? '/cases'
+    : isEditorialPath
+      ? '/editorial'
       : location.pathname === '/generate'
         ? '/generate'
         : location.pathname === '/analytics'
@@ -110,7 +116,9 @@ function AdminShell() {
             : '/';
 
   if (access.status === 'loading') {
-    return <p className="p-6 text-sm text-slate-600">Loading admin console...</p>;
+    return (
+      <p className="p-6 text-sm text-slate-600">Loading admin console...</p>
+    );
   }
 
   if (access.status === 'signed-out') {
@@ -190,6 +198,10 @@ export default function AppRoutes() {
         <Route
           path="/editorial/differentials"
           element={<UnresolvedDifferentialsPage />}
+        />
+        <Route
+          path="/editorial/registry-candidates"
+          element={<RegistryCandidatesPage />}
         />
         <Route
           path="/editorial/diagnoses/:diagnosisRegistryId"

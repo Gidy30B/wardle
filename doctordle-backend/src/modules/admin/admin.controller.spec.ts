@@ -8,7 +8,9 @@ describe('AdminController generateCases', () => {
     };
     const caseReviewService = {};
     const diagnosisEditorialWorkspaceService = {
-      getFullWorkspace: jest.fn().mockResolvedValue({ diagnosis: { id: 'registry-1' } }),
+      getFullWorkspace: jest
+        .fn()
+        .mockResolvedValue({ diagnosis: { id: 'registry-1' } }),
     };
     const diagnosisWorkspaceQualityService = {};
     const teachingUnitCoverageService = {};
@@ -21,7 +23,9 @@ describe('AdminController generateCases', () => {
       updateRule: jest.fn().mockResolvedValue({ id: 'rule-1' }),
       reviewRule: jest.fn().mockResolvedValue({ id: 'rule-1' }),
       generateCandidateRules: jest.fn().mockResolvedValue({ rules: [] }),
-      seedLegacyRulesForDiagnosis: jest.fn().mockResolvedValue({ rulesUpserted: 0 }),
+      seedLegacyRulesForDiagnosis: jest
+        .fn()
+        .mockResolvedValue({ rulesUpserted: 0 }),
     };
     const diagnosisEditorialBriefService = {
       getBrief: jest.fn().mockResolvedValue({ brief: null }),
@@ -30,6 +34,8 @@ describe('AdminController generateCases', () => {
       updateBrief: jest.fn().mockResolvedValue({ id: 'brief-1' }),
       reviewBrief: jest.fn().mockResolvedValue({ id: 'brief-1' }),
     };
+    const differentialMappingService = {};
+    const diagnosisRegistryCandidateService = {};
 
     return {
       caseGenerator,
@@ -42,6 +48,8 @@ describe('AdminController generateCases', () => {
         targetedCaseGenerationService as never,
         teachingRulesAdminService as never,
         diagnosisEditorialBriefService as never,
+        differentialMappingService as never,
+        diagnosisRegistryCandidateService as never,
       ),
       targetedCaseGenerationService,
       teachingRulesAdminService,
@@ -70,12 +78,15 @@ describe('AdminController generateCases', () => {
   it('generates a targeted case from diagnosis workspace payload', async () => {
     const { controller, targetedCaseGenerationService } = buildController();
 
-    await controller.generateTargetedCase('11111111-1111-4111-8111-111111111111', {
-      difficulty: 'MEDIUM',
-      teachingUnitIds: ['migratory_rlq_pain'],
-      mimicDiagnosisIds: ['22222222-2222-4222-8222-222222222222'],
-      clueRevealStrategy: 'progressive_narrowing',
-    });
+    await controller.generateTargetedCase(
+      '11111111-1111-4111-8111-111111111111',
+      {
+        difficulty: 'MEDIUM',
+        teachingUnitIds: ['migratory_rlq_pain'],
+        mimicDiagnosisIds: ['22222222-2222-4222-8222-222222222222'],
+        clueRevealStrategy: 'progressive_narrowing',
+      },
+    );
 
     expect(targetedCaseGenerationService.generate).toHaveBeenCalledWith({
       diagnosisRegistryId: '11111111-1111-4111-8111-111111111111',
@@ -159,15 +170,16 @@ describe('AdminController generateCases', () => {
   });
 
   it('gets the full diagnosis editorial workspace read model', async () => {
-    const { controller, diagnosisEditorialWorkspaceService } = buildController();
+    const { controller, diagnosisEditorialWorkspaceService } =
+      buildController();
 
     await controller.getFullDiagnosisEditorialWorkspace(
       '11111111-1111-4111-8111-111111111111',
     );
 
-    expect(diagnosisEditorialWorkspaceService.getFullWorkspace).toHaveBeenCalledWith(
-      '11111111-1111-4111-8111-111111111111',
-    );
+    expect(
+      diagnosisEditorialWorkspaceService.getFullWorkspace,
+    ).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
   });
 
   it('reviews an editorial brief', async () => {

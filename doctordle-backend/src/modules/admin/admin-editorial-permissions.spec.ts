@@ -11,6 +11,8 @@ function permissionFor(methodName: keyof AdminController) {
 describe('AdminController editorial permissions', () => {
   it.each([
     'getFullDiagnosisEditorialWorkspace',
+    'getDiagnosisRegistryCandidateSummary',
+    'listDiagnosisRegistryCandidates',
     'searchDiagnosisRegistry',
     'generateDiagnosisTeachingRules',
     'generateTargetedCase',
@@ -25,6 +27,8 @@ describe('AdminController editorial permissions', () => {
   it.each([
     'reviewTeachingRule',
     'reviewDiagnosisEditorialBrief',
+    'createRegistryCandidateFromDifferentialMapping',
+    'reviewDiagnosisRegistryCandidate',
     'submitReview',
     'markReadyToPublish',
   ] as Array<keyof AdminController>)(
@@ -38,10 +42,7 @@ describe('AdminController editorial permissions', () => {
     'generateCases',
     'createDiagnosisRegistry',
     'addDiagnosisAlias',
-  ] as Array<keyof AdminController>)(
-    'keeps %s admin-only',
-    (methodName) => {
-      expect(permissionFor(methodName)).toBeUndefined();
-    },
-  );
+  ] as Array<keyof AdminController>)('keeps %s admin-only', (methodName) => {
+    expect(permissionFor(methodName)).toBeUndefined();
+  });
 });

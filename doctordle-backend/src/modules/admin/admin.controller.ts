@@ -13,6 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { DifferentialResolutionStatus } from '@prisma/client';
+import { DiagnosisRegistryCandidateStatus } from '@prisma/client';
 import type { AuthenticatedRequest } from '../../auth/authenticated-request.interface';
 import {
   EditorialAccess,
@@ -35,6 +36,10 @@ import {
   DifferentialMappingService,
   type ResolveDifferentialMappingAction,
 } from '../diagnosis-graph/differential-mapping.service';
+import {
+  DiagnosisRegistryCandidateService,
+  type ReviewRegistryCandidateAction,
+} from '../diagnosis-registry/diagnosis-registry-candidate.service';
 import { CreateAndLinkDiagnosisDto } from './dto/create-and-link-diagnosis.dto';
 import { CreateDiagnosisAliasDto } from './dto/create-diagnosis-alias.dto';
 import { CreateDiagnosisRegistryDto } from './dto/create-diagnosis-registry.dto';
@@ -66,6 +71,7 @@ export class AdminController {
     private readonly teachingRulesAdminService: TeachingRulesAdminService,
     private readonly diagnosisEditorialBriefService: DiagnosisEditorialBriefService,
     private readonly differentialMappingService: DifferentialMappingService,
+    private readonly diagnosisRegistryCandidateService: DiagnosisRegistryCandidateService,
   ) {}
 
   @Get('cases')
@@ -120,6 +126,59 @@ export class AdminController {
     );
   }
 
+  @Post('differential-mappings/:mappingId/create-registry-candidate')
+  @SeniorEditorialAccess()
+  async createRegistryCandidateFromDifferentialMapping(
+    @Param('mappingId', new ParseUUIDPipe()) mappingId: string,
+    @Body()
+    body: {
+      proposedCanonicalName?: string;
+      proposedDisplayLabel?: string;
+      proposedAliases?: string[];
+    } = {},
+  ) {
+    return this.diagnosisRegistryCandidateService.createFromDifferentialMapping(
+      {
+        mappingId,
+        proposedCanonicalName: body.proposedCanonicalName,
+        proposedDisplayLabel: body.proposedDisplayLabel,
+        proposedAliases: body.proposedAliases,
+      },
+    );
+  }
+
+  @Get('diagnosis-registry/candidates')
+  @EditorialAccess()
+  async listDiagnosisRegistryCandidates(
+    @Query('status') status?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.diagnosisRegistryCandidateService.listCandidates({
+      status: this.parseRegistryCandidateStatus(status),
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Get('diagnosis-registry/candidates/summary')
+  @EditorialAccess()
+  async getDiagnosisRegistryCandidateSummary() {
+    return this.diagnosisRegistryCandidateService.getQueueSummary();
+  }
+
+  @Post('diagnosis-registry/candidates/:candidateId/review')
+  @SeniorEditorialAccess()
+  async reviewDiagnosisRegistryCandidate(
+    @Param('candidateId', new ParseUUIDPipe()) candidateId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: ReviewRegistryCandidateAction,
+  ) {
+    return this.diagnosisRegistryCandidateService.reviewCandidate(
+      candidateId,
+      request.user.id,
+      body,
+    );
+  }
+
   @Get('cases/:caseId')
   @EditorialAccess()
   async getEditorialCaseDetail(
@@ -131,7 +190,8 @@ export class AdminController {
   @Get('diagnosis-workspace/:diagnosisRegistryId/full')
   @EditorialAccess()
   async getFullDiagnosisEditorialWorkspace(
-    @Param('diagnosisRegistryId', new ParseUUIDPipe()) diagnosisRegistryId: string,
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
   ) {
     return this.diagnosisEditorialWorkspaceService.getFullWorkspace(
       diagnosisRegistryId,
@@ -141,15 +201,19 @@ export class AdminController {
   @Get('diagnosis-workspace/:diagnosisRegistryId')
   @EditorialAccess()
   async getDiagnosisWorkspaceQualitySummary(
-    @Param('diagnosisRegistryId', new ParseUUIDPipe()) diagnosisRegistryId: string,
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
   ) {
-    return this.diagnosisWorkspaceQualityService.getSummary(diagnosisRegistryId);
+    return this.diagnosisWorkspaceQualityService.getSummary(
+      diagnosisRegistryId,
+    );
   }
 
   @Get('diagnosis-workspace/:diagnosisRegistryId/teaching-units')
   @EditorialAccess()
   async getDiagnosisTeachingUnitCoverage(
-    @Param('diagnosisRegistryId', new ParseUUIDPipe()) diagnosisRegistryId: string,
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
   ) {
     return this.teachingUnitCoverageService.getCoverage(diagnosisRegistryId);
   }
@@ -157,7 +221,8 @@ export class AdminController {
   @Get('diagnosis-workspace/:diagnosisRegistryId/teaching-rules')
   @EditorialAccess()
   async listDiagnosisTeachingRules(
-    @Param('diagnosisRegistryId', new ParseUUIDPipe()) diagnosisRegistryId: string,
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
   ) {
     return this.teachingRulesAdminService.listRules(diagnosisRegistryId);
   }
@@ -165,7 +230,8 @@ export class AdminController {
   @Get('diagnosis-workspace/:diagnosisRegistryId/editorial-brief')
   @EditorialAccess()
   async getDiagnosisEditorialBrief(
-    @Param('diagnosisRegistryId', new ParseUUIDPipe()) diagnosisRegistryId: string,
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
   ) {
     return this.diagnosisEditorialBriefService.getBrief(diagnosisRegistryId);
   }
@@ -173,15 +239,19 @@ export class AdminController {
   @Post('diagnosis-workspace/:diagnosisRegistryId/editorial-brief/generate')
   @EditorialAccess()
   async generateDiagnosisEditorialBrief(
-    @Param('diagnosisRegistryId', new ParseUUIDPipe()) diagnosisRegistryId: string,
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
   ) {
-    return this.diagnosisEditorialBriefService.generateBrief(diagnosisRegistryId);
+    return this.diagnosisEditorialBriefService.generateBrief(
+      diagnosisRegistryId,
+    );
   }
 
   @Post('diagnosis-workspace/:diagnosisRegistryId/editorial-brief')
   @EditorialAccess()
   async createDiagnosisEditorialBrief(
-    @Param('diagnosisRegistryId', new ParseUUIDPipe()) diagnosisRegistryId: string,
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
     @Req() request: AuthenticatedRequest,
     @Body() body: Record<string, unknown>,
   ) {
@@ -199,7 +269,8 @@ export class AdminController {
   @Patch('diagnosis-workspace/:diagnosisRegistryId/editorial-brief')
   @EditorialAccess()
   async updateDiagnosisEditorialBrief(
-    @Param('diagnosisRegistryId', new ParseUUIDPipe()) diagnosisRegistryId: string,
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
     @Req() request: AuthenticatedRequest,
     @Body() body: Record<string, unknown>,
   ) {
@@ -217,7 +288,8 @@ export class AdminController {
   @Post('diagnosis-workspace/:diagnosisRegistryId/editorial-brief/review')
   @SeniorEditorialAccess()
   async reviewDiagnosisEditorialBrief(
-    @Param('diagnosisRegistryId', new ParseUUIDPipe()) diagnosisRegistryId: string,
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
     @Body() body: { action?: unknown },
   ) {
     return this.diagnosisEditorialBriefService.reviewBrief(
@@ -229,7 +301,8 @@ export class AdminController {
   @Post('diagnosis-workspace/:diagnosisRegistryId/teaching-rules')
   @EditorialAccess()
   async createDiagnosisTeachingRule(
-    @Param('diagnosisRegistryId', new ParseUUIDPipe()) diagnosisRegistryId: string,
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
     @Req() request: AuthenticatedRequest,
     @Body() body: Record<string, unknown>,
   ) {
@@ -245,7 +318,8 @@ export class AdminController {
   @Post('diagnosis-workspace/:diagnosisRegistryId/teaching-rules/generate')
   @EditorialAccess()
   async generateDiagnosisTeachingRules(
-    @Param('diagnosisRegistryId', new ParseUUIDPipe()) diagnosisRegistryId: string,
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
   ) {
     return this.teachingRulesAdminService.generateCandidateRules(
       diagnosisRegistryId,
@@ -255,7 +329,8 @@ export class AdminController {
   @Post('diagnosis-workspace/:diagnosisRegistryId/teaching-rules/seed-legacy')
   @EditorialAccess()
   async seedLegacyDiagnosisTeachingRules(
-    @Param('diagnosisRegistryId', new ParseUUIDPipe()) diagnosisRegistryId: string,
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
   ) {
     return this.teachingRulesAdminService.seedLegacyRulesForDiagnosis(
       diagnosisRegistryId,
@@ -290,7 +365,8 @@ export class AdminController {
   @Post('diagnosis-workspace/:diagnosisRegistryId/generate-case')
   @EditorialAccess()
   async generateTargetedCase(
-    @Param('diagnosisRegistryId', new ParseUUIDPipe()) diagnosisRegistryId: string,
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
     @Body() body: TargetedCaseGenerationPayload,
   ) {
     this.validateTargetedCasePayload(body);
@@ -308,15 +384,14 @@ export class AdminController {
   }
 
   @Post('diagnosis-registry')
-  async createDiagnosisRegistry(
-    @Body() body: CreateDiagnosisRegistryDto,
-  ) {
+  async createDiagnosisRegistry(@Body() body: CreateDiagnosisRegistryDto) {
     return this.caseReviewService.createDiagnosisRegistry(body);
   }
 
   @Post('diagnosis-registry/:diagnosisRegistryId/aliases')
   async addDiagnosisAlias(
-    @Param('diagnosisRegistryId', new ParseUUIDPipe()) diagnosisRegistryId: string,
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
     @Body() body: CreateDiagnosisAliasDto,
   ) {
     return this.caseReviewService.addDiagnosisAlias(diagnosisRegistryId, body);
@@ -347,11 +422,7 @@ export class AdminController {
     @Req() request: AuthenticatedRequest,
     @Body() body: SubmitCaseReviewDto,
   ) {
-    return this.caseReviewService.submitReview(
-      caseId,
-      request.user.id,
-      body,
-    );
+    return this.caseReviewService.submitReview(caseId, request.user.id, body);
   }
 
   @Post('cases/:caseId/diagnosis-link')
@@ -398,9 +469,7 @@ export class AdminController {
 
   @Get('cases/:caseId/revisions')
   @EditorialAccess()
-  async listRevisions(
-    @Param('caseId', new ParseUUIDPipe()) caseId: string,
-  ) {
+  async listRevisions(@Param('caseId', new ParseUUIDPipe()) caseId: string) {
     return this.caseReviewService.listRevisions(caseId);
   }
 
@@ -460,7 +529,9 @@ export class AdminController {
     }
 
     if (value.length > 20) {
-      throw new BadRequestException('diagnosisRegistryIds supports at most 20 IDs');
+      throw new BadRequestException(
+        'diagnosisRegistryIds supports at most 20 IDs',
+      );
     }
 
     const uuidPattern =
@@ -526,13 +597,33 @@ export class AdminController {
     throw new BadRequestException('Invalid differential mapping status');
   }
 
+  private parseRegistryCandidateStatus(value: string | undefined) {
+    if (!value) {
+      return undefined;
+    }
+    if (
+      Object.values(DiagnosisRegistryCandidateStatus).includes(
+        value as DiagnosisRegistryCandidateStatus,
+      )
+    ) {
+      return value as DiagnosisRegistryCandidateStatus;
+    }
+    throw new BadRequestException(
+      'Invalid diagnosis registry candidate status',
+    );
+  }
+
   private assertDraftLevelStatus(
     body: Record<string, unknown>,
     role: string | null | undefined,
     seniorOnlyStatuses: string[],
   ) {
     const status = typeof body.status === 'string' ? body.status : null;
-    if (status && seniorOnlyStatuses.includes(status) && !canPublishEditorial(role)) {
+    if (
+      status &&
+      seniorOnlyStatuses.includes(status) &&
+      !canPublishEditorial(role)
+    ) {
       throw new ForbiddenException('Requires senior editor');
     }
   }

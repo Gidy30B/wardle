@@ -1,6 +1,7 @@
 import { useAuth } from '@clerk/clerk-react';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  createRegistryCandidateFromDifferentialMapping,
   getUnresolvedDifferentialMappings,
   resolveDifferentialMapping,
   type DifferentialMappingFilters,
@@ -135,6 +136,25 @@ export default function UnresolvedDifferentialsPage() {
     );
   }
 
+  function createRegistryCandidate(row: DifferentialMappingReviewItem) {
+    const proposedCanonicalName = window.prompt(
+      'Proposed canonical name',
+      row.rawText,
+    );
+    if (proposedCanonicalName === null) return;
+    const proposedDisplayLabel = window.prompt(
+      'Proposed display label',
+      proposedCanonicalName.trim() || row.rawText,
+    );
+    if (proposedDisplayLabel === null) return;
+    void runAction(row, () =>
+      createRegistryCandidateFromDifferentialMapping(client, row.id, {
+        proposedCanonicalName: proposedCanonicalName.trim() || undefined,
+        proposedDisplayLabel: proposedDisplayLabel.trim() || undefined,
+      }),
+    );
+  }
+
   if (access.status === 'loading') {
     return <LoadingState title="Checking editorial access" />;
   }
@@ -172,7 +192,8 @@ export default function UnresolvedDifferentialsPage() {
               onChange={(event) =>
                 setSourceType(
                   event.target.value
-                    ? (event.target.value as DifferentialMappingFilters['sourceType'])
+                    ? (event.target
+                        .value as DifferentialMappingFilters['sourceType'])
                     : undefined,
                 )
               }
@@ -189,7 +210,9 @@ export default function UnresolvedDifferentialsPage() {
             <select
               value={status}
               onChange={(event) =>
-                setStatus(event.target.value as DifferentialResolutionStatus | '')
+                setStatus(
+                  event.target.value as DifferentialResolutionStatus | '',
+                )
               }
               className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-900"
             >
@@ -240,6 +263,7 @@ export default function UnresolvedDifferentialsPage() {
               onLink={() => linkExisting(row)}
               onAlias={() => addAlias(row)}
               onReject={() => reject(row)}
+              onCreateCandidate={() => createRegistryCandidate(row)}
             />
           ))}
         </div>
@@ -259,6 +283,7 @@ function DifferentialMappingCard({
   onLink,
   onAlias,
   onReject,
+  onCreateCandidate,
 }: {
   row: DifferentialMappingReviewItem;
   busy: boolean;
@@ -266,6 +291,7 @@ function DifferentialMappingCard({
   onLink: () => void;
   onAlias: () => void;
   onReject: () => void;
+  onCreateCandidate: () => void;
 }) {
   const suggestions = getSuggestions(row);
 
@@ -274,7 +300,9 @@ function DifferentialMappingCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-semibold text-slate-900">{row.rawText}</h2>
+            <h2 className="text-lg font-semibold text-slate-900">
+              {row.rawText}
+            </h2>
             <StatusBadge status={row.status} />
             <StatusBadge status={formatSource(row.sourceType)} tone="neutral" />
           </div>
@@ -310,11 +338,26 @@ function DifferentialMappingCard({
           >
             Reject
           </button>
+          <button
+            type="button"
+            onClick={onCreateCandidate}
+            disabled={
+              !canResolve ||
+              busy ||
+              !['UNRESOLVED', 'AMBIGUOUS'].includes(row.status)
+            }
+            className="rounded-md border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Create registry candidate
+          </button>
         </div>
       </div>
 
       <dl className="mt-4 grid gap-3 text-sm md:grid-cols-3">
-        <InfoItem label="Context" value={row.contextDiagnosis?.displayLabel ?? 'Unknown'} />
+        <InfoItem
+          label="Context"
+          value={row.contextDiagnosis?.displayLabel ?? 'Unknown'}
+        />
         <InfoItem label="Source" value={row.sourceTitle} />
         <InfoItem
           label="Path"

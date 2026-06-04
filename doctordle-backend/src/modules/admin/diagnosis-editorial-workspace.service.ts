@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   CaseEditorialStatus,
   DifferentialResolutionStatus,
+  DiagnosisRegistryCandidateStatus,
   DiagnosisGraphCandidateStatus,
   DiagnosisGraphCandidateType,
   DiagnosisGraphFactStatus,
@@ -15,16 +16,12 @@ import {
   EducationRevisionQualityAnalyzer,
   type EducationRevisionAnalysis,
 } from '../education/education-revision-quality-analyzer.service';
-import {
-  CaseQualityProjectionService,
-} from './case-quality-projection.service';
+import { CaseQualityProjectionService } from './case-quality-projection.service';
 import {
   DiagnosisWorkspaceQualityService,
   type DiagnosisWorkspaceQualitySummary,
 } from './diagnosis-workspace-quality.service';
-import {
-  TeachingRulesAdminService,
-} from './teaching-rules-admin.service';
+import { TeachingRulesAdminService } from './teaching-rules-admin.service';
 import {
   TeachingUnitCoverageService,
   type TeachingUnitCoverageMap,
@@ -133,6 +130,7 @@ export class DiagnosisEditorialWorkspaceService {
       differentialSummaryResult,
       differentialCoverageResult,
       linkedDifferentialsResult,
+      registryCandidateCountsResult,
     ] = await Promise.allSettled([
       this.diagnosisWorkspaceQualityService.getSummary(diagnosisRegistryId),
       this.teachingUnitCoverageService.getCoverage(diagnosisRegistryId),
@@ -143,10 +141,13 @@ export class DiagnosisEditorialWorkspaceService {
         diagnosisRegistryId,
       }),
       this.getDifferentialResolutionSummary(diagnosisRegistryId),
-      this.differentialLinkService?.getCoverageForDiagnosis(diagnosisRegistryId),
+      this.differentialLinkService?.getCoverageForDiagnosis(
+        diagnosisRegistryId,
+      ),
       this.differentialLinkService?.getLinkedDifferentialsForDiagnosis(
         diagnosisRegistryId,
       ),
+      this.getRegistryCandidateCounts(diagnosisRegistryId),
     ]);
 
     const compositionWarnings = this.compositionWarnings({
@@ -175,6 +176,9 @@ export class DiagnosisEditorialWorkspaceService {
       this.emptyDifferentialCoverage();
     const linkedDifferentials =
       this.valueOrNull(linkedDifferentialsResult) ?? [];
+    const registryCandidateCounts =
+      this.valueOrNull(registryCandidateCountsResult) ??
+      this.emptyRegistryCandidateCounts();
     const cases = this.buildCases(registry.cases);
     const coverageMatrix = this.buildCoverageMatrix({
       coverage,
@@ -224,11 +228,17 @@ export class DiagnosisEditorialWorkspaceService {
         educationScore: summary?.educationQuality.score ?? null,
         caseQualitySummary: summary?.caseQuality ?? cases.summary,
         blockers: summary?.blockers ?? [],
-        warnings: this.unique([...(summary?.warnings ?? []), ...compositionWarnings]),
+        warnings: this.unique([
+          ...(summary?.warnings ?? []),
+          ...compositionWarnings,
+        ]),
         recommendedActions: summary?.recommendedNextActions ?? [],
         unresolvedDifferentialCount:
           differentialResolutionSummary.unresolved +
           differentialResolutionSummary.ambiguous,
+        registryCandidateCount: registryCandidateCounts.registryCandidateCount,
+        pendingRegistryCandidateCount:
+          registryCandidateCounts.pendingRegistryCandidateCount,
         differentialResolutionSummary,
         differentialCoverage,
       },
@@ -250,8 +260,10 @@ export class DiagnosisEditorialWorkspaceService {
       cases,
       graph: {
         readiness:
-          summary?.graphReadiness.status ?? this.graphReadinessFromRegistry(registry),
-        factCount: summary?.graphReadiness.factCount ?? registry.graphFacts.length,
+          summary?.graphReadiness.status ??
+          this.graphReadinessFromRegistry(registry),
+        factCount:
+          summary?.graphReadiness.factCount ?? registry.graphFacts.length,
         candidateCount:
           summary?.graphReadiness.candidateCount ?? graphCandidates.length,
         reviewableCandidateCount:
@@ -384,6 +396,32 @@ export class DiagnosisEditorialWorkspaceService {
     return summary;
   }
 
+  private async getRegistryCandidateCounts(diagnosisRegistryId: string) {
+    const [registryCandidateCount, pendingRegistryCandidateCount] =
+      await Promise.all([
+        this.prisma.diagnosisRegistryCandidate.count({
+          where: { contextDiagnosisRegistryId: diagnosisRegistryId },
+        }),
+        this.prisma.diagnosisRegistryCandidate.count({
+          where: {
+            contextDiagnosisRegistryId: diagnosisRegistryId,
+            status: {
+              in: [
+                DiagnosisRegistryCandidateStatus.CANDIDATE,
+                DiagnosisRegistryCandidateStatus.NEEDS_REVIEW,
+                DiagnosisRegistryCandidateStatus.APPROVED_PENDING_CREATE,
+              ],
+            },
+          },
+        }),
+      ]);
+
+    return {
+      registryCandidateCount,
+      pendingRegistryCandidateCount,
+    };
+  }
+
   private emptyDifferentialResolutionSummary() {
     return {
       resolved: 0,
@@ -401,11 +439,17 @@ export class DiagnosisEditorialWorkspaceService {
     };
   }
 
+  private emptyRegistryCandidateCounts() {
+    return {
+      registryCandidateCount: 0,
+      pendingRegistryCandidateCount: 0,
+    };
+  }
+
   private buildCases(cases: CaseRow[]) {
     const items = cases.map((caseRecord) => {
-      const qualityProjection = this.caseQualityProjectionService.buildProjection(
-        caseRecord,
-      );
+      const qualityProjection =
+        this.caseQualityProjectionService.buildProjection(caseRecord);
       return {
         id: caseRecord.id,
         title: caseRecord.title,
@@ -424,7 +468,9 @@ export class DiagnosisEditorialWorkspaceService {
       summary: {
         total: cases.length,
         usable: usableCases.length,
-        byStatus: this.countBy(cases.map((caseRecord) => caseRecord.editorialStatus)),
+        byStatus: this.countBy(
+          cases.map((caseRecord) => caseRecord.editorialStatus),
+        ),
         warningCount: items.reduce(
           (count, item) => count + item.qualityProjection.warnings.length,
           0,
@@ -470,7 +516,9 @@ export class DiagnosisEditorialWorkspaceService {
         title: rule?.title ?? unit.title,
         category: rule?.category ?? 'legacy_teaching_rule',
         importance: rule?.importance ?? 'supporting',
-        ruleStatus: rule?.status ?? (unit.source === 'legacy_teaching_rules' ? 'LEGACY' : 'UNKNOWN'),
+        ruleStatus:
+          rule?.status ??
+          (unit.source === 'legacy_teaching_rules' ? 'LEGACY' : 'UNKNOWN'),
         educationCoverage: unit.educationCoverage,
         caseCoverage: unit.caseCoverage.status,
         graphCoverage: unit.graphCoverage,
@@ -481,7 +529,9 @@ export class DiagnosisEditorialWorkspaceService {
   }
 
   private buildCoverageGaps(
-    matrix: ReturnType<DiagnosisEditorialWorkspaceService['buildCoverageMatrix']>,
+    matrix: ReturnType<
+      DiagnosisEditorialWorkspaceService['buildCoverageMatrix']
+    >,
   ) {
     return matrix
       .filter(
@@ -496,12 +546,10 @@ export class DiagnosisEditorialWorkspaceService {
         missingEducation: this.isGap(row.educationCoverage),
         missingCases: this.isGap(row.caseCoverage),
         missingGraph: this.isGap(row.graphCoverage),
-        severity: (
-          row.importance === 'critical' &&
-          (this.isGap(row.educationCoverage) || this.isGap(row.caseCoverage))
-            ? 'blocker'
-            : 'warning'
-        ) as ReadinessSeverity,
+        severity: (row.importance === 'critical' &&
+        (this.isGap(row.educationCoverage) || this.isGap(row.caseCoverage))
+          ? 'blocker'
+          : 'warning') as ReadinessSeverity,
         recommendedAction: row.recommendedAction,
         targetTab: this.targetTabForCoverage(row),
       }));
@@ -511,7 +559,9 @@ export class DiagnosisEditorialWorkspaceService {
     rules: Array<{ status: string; importance: string }>;
     summary: DiagnosisWorkspaceQualitySummary | null;
     registry: RegistryRow;
-    coverageGaps: ReturnType<DiagnosisEditorialWorkspaceService['buildCoverageGaps']>;
+    coverageGaps: ReturnType<
+      DiagnosisEditorialWorkspaceService['buildCoverageGaps']
+    >;
   }): Record<string, LifecycleState> {
     const activeRules = input.rules.filter((rule) =>
       ['ACTIVE', 'APPROVED'].includes(rule.status),
@@ -520,11 +570,14 @@ export class DiagnosisEditorialWorkspaceService {
       ['CANDIDATE', 'NEEDS_REVIEW'].includes(rule.status),
     );
     const briefStatus =
-      input.summary?.editorialBrief.status ?? input.registry.editorialBrief?.status ?? null;
+      input.summary?.editorialBrief.status ??
+      input.registry.editorialBrief?.status ??
+      null;
     const educationBlockers =
       input.summary?.educationQuality.blockerCount ??
-      input.summary?.blockers.filter((blocker) => blocker.startsWith('education:'))
-        .length ??
+      input.summary?.blockers.filter((blocker) =>
+        blocker.startsWith('education:'),
+      ).length ??
       0;
     const criticalCoverageBlockers = input.coverageGaps.some(
       (gap) => gap.severity === 'blocker',
@@ -558,7 +611,9 @@ export class DiagnosisEditorialWorkspaceService {
           : 'not_started',
       graph: input.summary
         ? this.lifecycleFromGraphStatus(input.summary.graphReadiness.status)
-        : this.lifecycleFromGraphStatus(this.graphReadinessFromRegistry(input.registry)),
+        : this.lifecycleFromGraphStatus(
+            this.graphReadinessFromRegistry(input.registry),
+          ),
       ready: 'warning',
     };
 
@@ -580,7 +635,9 @@ export class DiagnosisEditorialWorkspaceService {
 
   private buildReadinessBreakdown(input: {
     summary: DiagnosisWorkspaceQualitySummary | null;
-    coverageGaps: ReturnType<DiagnosisEditorialWorkspaceService['buildCoverageGaps']>;
+    coverageGaps: ReturnType<
+      DiagnosisEditorialWorkspaceService['buildCoverageGaps']
+    >;
     compositionWarnings: string[];
   }) {
     return [
@@ -618,7 +675,9 @@ export class DiagnosisEditorialWorkspaceService {
   private buildRecommendedActions(input: {
     registry: RegistryRow;
     summary: DiagnosisWorkspaceQualitySummary | null;
-    coverageGaps: ReturnType<DiagnosisEditorialWorkspaceService['buildCoverageGaps']>;
+    coverageGaps: ReturnType<
+      DiagnosisEditorialWorkspaceService['buildCoverageGaps']
+    >;
     graphCandidateCount: number;
   }): ActionDescriptor[] {
     const endpointBase = `/api/admin/diagnosis-workspace/${input.registry.id}`;
@@ -771,23 +830,30 @@ export class DiagnosisEditorialWorkspaceService {
   ) {
     return {
       id: education?.id ?? null,
-      status: summary?.educationQuality.status ?? education?.editorialStatus ?? 'missing',
+      status:
+        summary?.educationQuality.status ??
+        education?.editorialStatus ??
+        'missing',
       version: summary?.educationQuality.version ?? education?.version ?? null,
       qualityScore: summary?.educationQuality.score ?? null,
-      sectionHealth: summary?.sectionHealth ?? latestRevision?.quality.sectionHealth ?? [],
+      sectionHealth:
+        summary?.sectionHealth ?? latestRevision?.quality.sectionHealth ?? [],
       blockers: latestRevision?.quality.blockers ?? [],
       warnings: latestRevision?.quality.warnings ?? [],
       updatedAt: education ? this.toIso(education.updatedAt) : null,
     };
   }
 
-  private teachingRuleSummary(rules: Array<{ status: string; importance: string }>) {
+  private teachingRuleSummary(
+    rules: Array<{ status: string; importance: string }>,
+  ) {
     return {
       total: rules.length,
       active: rules.filter((rule) => rule.status === 'ACTIVE').length,
       approved: rules.filter((rule) => rule.status === 'APPROVED').length,
       candidates: rules.filter((rule) => rule.status === 'CANDIDATE').length,
-      needsReview: rules.filter((rule) => rule.status === 'NEEDS_REVIEW').length,
+      needsReview: rules.filter((rule) => rule.status === 'NEEDS_REVIEW')
+        .length,
       critical: rules.filter((rule) => rule.importance === 'critical').length,
     };
   }
@@ -806,7 +872,9 @@ export class DiagnosisEditorialWorkspaceService {
     };
   }
 
-  private recentLearningThemes(revisions: EducationRevisionAnalysis[]): string[] {
+  private recentLearningThemes(
+    revisions: EducationRevisionAnalysis[],
+  ): string[] {
     return this.unique(
       revisions
         .slice(0, 3)

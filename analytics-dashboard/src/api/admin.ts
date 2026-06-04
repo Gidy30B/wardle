@@ -8,6 +8,7 @@ import type {
   CreateDiagnosisAndLinkPayload,
   CreateDiagnosisRegistryPayload,
   CreateDiagnosisRegistryResult,
+  CreateRegistryCandidatePayload,
   DashboardPayload,
   DiagnosisEditorialBrief,
   DiagnosisEditorialWorkspace,
@@ -27,6 +28,9 @@ import type {
   DiagnosisEducationRevisionListResponse,
   DifferentialMappingFilters,
   DifferentialMappingReviewItem,
+  DiagnosisRegistryCandidate,
+  DiagnosisRegistryCandidateQueueSummary,
+  RegistryCandidateFilters,
   DiagnosisRegistrySearchItem,
   EditorialCaseDetail,
   EditorialCaseRevision,
@@ -53,6 +57,7 @@ import type {
   MergeDiagnosisGraphCandidatePayload,
   ResolveMimicCandidatePayload,
   ResolveDifferentialMappingPayload,
+  ReviewRegistryCandidatePayload,
   UnresolvedMimicCandidate,
   UpdateCaseDiagnosisPayload,
   UpsertDiagnosisEducationPayload,
@@ -120,6 +125,46 @@ export function resolveDifferentialMapping(
   return client.post(`/admin/differential-mappings/${id}/resolve`, payload);
 }
 
+export function createRegistryCandidateFromDifferentialMapping(
+  client: ApiClient,
+  id: string,
+  payload: CreateRegistryCandidatePayload = {},
+) {
+  return client.post<DiagnosisRegistryCandidate>(
+    `/admin/differential-mappings/${id}/create-registry-candidate`,
+    payload,
+  );
+}
+
+export function getDiagnosisRegistryCandidates(
+  client: ApiClient,
+  filters: RegistryCandidateFilters = {},
+) {
+  return client.get<DiagnosisRegistryCandidate[]>(
+    withQuery('/admin/diagnosis-registry/candidates', {
+      status: filters.status,
+      limit: filters.limit,
+    }),
+  );
+}
+
+export function getDiagnosisRegistryCandidateSummary(client: ApiClient) {
+  return client.get<DiagnosisRegistryCandidateQueueSummary>(
+    '/admin/diagnosis-registry/candidates/summary',
+  );
+}
+
+export function reviewDiagnosisRegistryCandidate(
+  client: ApiClient,
+  id: string,
+  payload: ReviewRegistryCandidatePayload,
+) {
+  return client.post<DiagnosisRegistryCandidate>(
+    `/admin/diagnosis-registry/candidates/${id}/review`,
+    payload,
+  );
+}
+
 export function approveDiagnosisGraphCandidate(client: ApiClient, id: string) {
   return client.post(`/admin/diagnosis-graph/candidates/${id}/approve`);
 }
@@ -163,16 +208,23 @@ export function fetchAttemptsOverTime(client: ApiClient) {
   return client.get<AttemptsOverTimePayload>('/analytics/attempts-over-time');
 }
 
-export function generateCases(client: ApiClient, payload: GenerateCasesPayload) {
+export function generateCases(
+  client: ApiClient,
+  payload: GenerateCasesPayload,
+) {
   return client.post<GenerateCasesResult>('/admin/generate-cases', payload);
 }
 
 export function getEditorialStatusSummary(client: ApiClient) {
-  return client.get<EditorialStatusSummary>('/admin/summary/editorial-statuses');
+  return client.get<EditorialStatusSummary>(
+    '/admin/summary/editorial-statuses',
+  );
 }
 
 export function getValidationOutcomeSummary(client: ApiClient) {
-  return client.get<ValidationOutcomeSummary>('/admin/summary/validation-outcomes');
+  return client.get<ValidationOutcomeSummary>(
+    '/admin/summary/validation-outcomes',
+  );
 }
 
 export function getPublishResultsSummary(client: ApiClient) {
@@ -501,7 +553,9 @@ export function createAndLinkDiagnosis(
 }
 
 export function getEditorialCaseRevisions(client: ApiClient, caseId: string) {
-  return client.get<EditorialCaseRevision[]>(`/admin/cases/${caseId}/revisions`);
+  return client.get<EditorialCaseRevision[]>(
+    `/admin/cases/${caseId}/revisions`,
+  );
 }
 
 export function rerunCaseValidation(client: ApiClient, caseId: string) {
@@ -511,7 +565,9 @@ export function rerunCaseValidation(client: ApiClient, caseId: string) {
 }
 
 export function startCaseReview(client: ApiClient, caseId: string) {
-  return client.post<StartCaseReviewResult>(`/admin/cases/${caseId}/start-review`);
+  return client.post<StartCaseReviewResult>(
+    `/admin/cases/${caseId}/start-review`,
+  );
 }
 
 export function submitCaseReview(

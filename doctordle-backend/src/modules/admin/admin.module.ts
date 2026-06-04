@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
-import { EditorialGuard, SeniorEditorialGuard } from '../../auth/editorial.guard';
+import {
+  EditorialGuard,
+  SeniorEditorialGuard,
+} from '../../auth/editorial.guard';
 import { AdminController } from './admin.controller';
 import { AdminGuard } from './admin.guard';
 import { CaseGeneratorModule } from '../case-generator/case-generator.module';
@@ -27,6 +30,7 @@ import { EducationSchemaContractService } from '../education/education-schema-co
 import { DiagnosisTeachingRuleSeedService } from '../education/diagnosis-teaching-rule-seed.service';
 import { DiagnosisEditorialBriefService } from '../education/diagnosis-editorial-brief.service';
 import { AliasValidationService } from '../diagnosis-registry/alias-validation.service';
+import { DiagnosisRegistryCandidateService } from '../diagnosis-registry/diagnosis-registry-candidate.service';
 
 @Module({
   imports: [
@@ -60,6 +64,7 @@ import { AliasValidationService } from '../diagnosis-registry/alias-validation.s
     EducationSchemaContractService,
     DiagnosisRegistryLinkService,
     DiagnosisRegistryEditorialService,
+    DiagnosisRegistryCandidateService,
     AliasValidationService,
   ],
 })

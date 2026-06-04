@@ -2,7 +2,9 @@ import { useAuth } from '@clerk/clerk-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  getDiagnosisRegistryCandidateSummary,
   searchDiagnosisRegistry,
+  type DiagnosisRegistryCandidateQueueSummary,
   type DiagnosisRegistrySearchItem,
 } from '../../api/admin';
 import { createApiClient } from '../../api/client';
@@ -22,7 +24,13 @@ const quickLinks = [
   {
     to: '/editorial/differentials',
     label: 'Unresolved differentials',
-    description: 'Resolve case and education differential text into registry links.',
+    description:
+      'Resolve case and education differential text into registry links.',
+  },
+  {
+    to: '/editorial/registry-candidates',
+    label: 'Registry candidates',
+    description: 'Review candidate diagnosis registry entries before creation.',
   },
   {
     to: '/diagnosis-graph/candidates',
@@ -51,6 +59,11 @@ export default function EditorialHomePage() {
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [queueSummary, setQueueSummary] =
+    useState<DiagnosisRegistryCandidateQueueSummary | null>(null);
+  const [queueSummaryError, setQueueSummaryError] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     let active = true;
@@ -108,6 +121,40 @@ export default function EditorialHomePage() {
       window.clearTimeout(timeoutId);
     };
   }, [client, query]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!access.canAccessEditorial) {
+      return;
+    }
+
+    async function loadQueueSummary() {
+      try {
+        setQueueSummaryError(null);
+        const summary = await getDiagnosisRegistryCandidateSummary(client);
+        if (active) {
+          setQueueSummary(summary);
+        }
+      } catch (summaryError) {
+        if (!active) {
+          return;
+        }
+        setQueueSummary(null);
+        setQueueSummaryError(
+          summaryError instanceof Error
+            ? summaryError.message
+            : 'Failed to load queue summary.',
+        );
+      }
+    }
+
+    void loadQueueSummary();
+
+    return () => {
+      active = false;
+    };
+  }, [access.canAccessEditorial, client]);
 
   if (!access.canAccessEditorial) {
     return <AccessDenied access={access} />;
@@ -184,17 +231,32 @@ export default function EditorialHomePage() {
               Review queues
             </p>
             <p className="mt-1 text-sm text-slate-500">
-              Queue-level diagnosis coverage metrics will appear here once the
-              editorial home has a dedicated aggregate read model.
+              Candidate-first registry review and unresolved differential
+              attention.
             </p>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <QueuePlaceholder
-                title="Coverage attention"
-                description="Use diagnosis search to inspect blockers and coverage gaps."
+            {queueSummaryError ? (
+              <div className="mt-4">
+                <ErrorState
+                  title="Queue summary failed"
+                  message={queueSummaryError}
+                />
+              </div>
+            ) : null}
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <QueueMetric
+                label="Registry candidates"
+                value={queueSummary?.registryCandidateCount}
+                helper="Total proposed registry entries"
               />
-              <QueuePlaceholder
-                title="Readiness attention"
-                description="Open workspaces to review lifecycle and graph readiness."
+              <QueueMetric
+                label="Unresolved differentials"
+                value={queueSummary?.unresolvedDifferentialCount}
+                helper="Unresolved or ambiguous mappings"
+              />
+              <QueueMetric
+                label="Pending candidates"
+                value={queueSummary?.pendingRegistryCandidateCount}
+                helper="Candidate queue needing review"
               />
             </div>
           </section>
@@ -207,19 +269,19 @@ export default function EditorialHomePage() {
               {quickLinks
                 .filter((link) => !link.adminOnly || access.canAccessAdminOps)
                 .map((link) => (
-                <Link
-                  key={link.to}
-                  to={link.to}
-                  className="block rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 transition hover:bg-white"
-                >
-                  <p className="text-sm font-semibold text-slate-900">
-                    {link.label}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {link.description}
-                  </p>
-                </Link>
-              ))}
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    className="block rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 transition hover:bg-white"
+                  >
+                    <p className="text-sm font-semibold text-slate-900">
+                      {link.label}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {link.description}
+                    </p>
+                  </Link>
+                ))}
             </div>
           </section>
 
@@ -314,7 +376,10 @@ function DiagnosisSearchResults({
             </div>
             <div className="flex flex-wrap gap-2">
               <StatusBadge status={result.status} />
-              <StatusBadge status={formatLabel(result.matchSource)} tone="info" />
+              <StatusBadge
+                status={formatLabel(result.matchSource)}
+                tone="info"
+              />
             </div>
           </div>
 
@@ -357,17 +422,24 @@ function ResultMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function QueuePlaceholder({
-  title,
-  description,
+function QueueMetric({
+  label,
+  value,
+  helper,
 }: {
-  title: string;
-  description: string;
+  label: string;
+  value: number | undefined;
+  helper: string;
 }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
-      <p className="text-sm font-semibold text-slate-900">{title}</p>
-      <p className="mt-1 text-sm text-slate-500">{description}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900">
+        {value ?? '...'}
+      </p>
+      <p className="mt-1 text-sm text-slate-500">{helper}</p>
     </div>
   );
 }
