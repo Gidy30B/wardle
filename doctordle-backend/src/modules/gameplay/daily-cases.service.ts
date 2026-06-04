@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import {
   CaseEditorialStatus,
+  DiagnosisRegistryStatus,
   Prisma,
   PublishTrack,
   type GameSession,
@@ -15,6 +16,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { ASSIGNABLE_EDITORIAL_STATUSES } from '../editorial/policies/publish-policy.js';
+import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service.js';
 import {
   AssignmentBlockedReason,
   AssignmentResult,
@@ -236,6 +238,8 @@ export class DailyCasesService {
     private readonly dailyLimitService: DailyLimitService,
     @Optional()
     private caseAssignmentService?: CaseAssignmentService,
+    @Optional()
+    private readonly lifecyclePolicy?: DiagnosisRegistryLifecyclePolicyService,
   ) {}
 
   async ensureScheduleWindow(
@@ -686,7 +690,10 @@ export class DailyCasesService {
   }
 
   private getAssignmentService(): CaseAssignmentService {
-    this.caseAssignmentService ??= new CaseAssignmentService(this.prisma);
+    this.caseAssignmentService ??= new CaseAssignmentService(
+      this.prisma,
+      this.lifecyclePolicy,
+    );
     return this.caseAssignmentService;
   }
 
@@ -724,6 +731,7 @@ export class DailyCasesService {
       diagnosisMappingStatus: string;
       diagnosisRegistry?: {
         id: string;
+        status: DiagnosisRegistryStatus;
         active: boolean;
         isPlayable: boolean;
       } | null;
@@ -752,8 +760,7 @@ export class DailyCasesService {
     if (
       !caseRecord.diagnosisRegistryId?.trim() ||
       caseRecord.diagnosisMappingStatus !== 'MATCHED' ||
-      caseRecord.diagnosisRegistry?.active !== true ||
-      caseRecord.diagnosisRegistry?.isPlayable !== true
+      !this.isScheduleRegistryPlayable(caseRecord.diagnosisRegistry)
     ) {
       return 'missing_diagnosis';
     }
@@ -778,6 +785,28 @@ export class DailyCasesService {
       track: dailyCase.track,
       sequenceIndex: dailyCase.sequenceIndex,
     };
+  }
+
+  private isScheduleRegistryPlayable(
+    registry:
+      | {
+          status: DiagnosisRegistryStatus;
+          active: boolean;
+          isPlayable: boolean;
+        }
+      | null
+      | undefined,
+  ): boolean {
+    if (!registry) {
+      return false;
+    }
+
+    return (
+      this.lifecyclePolicy?.isPlayable(registry) ??
+      (registry.status === DiagnosisRegistryStatus.ACTIVE &&
+        registry.active &&
+        registry.isPlayable)
+    );
   }
 
   private toDateKey(date: Date): string {

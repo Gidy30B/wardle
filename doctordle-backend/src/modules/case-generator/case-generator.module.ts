@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../core/db/database.module.js';
 import { CaseValidationModule } from '../case-validation/case-validation.module.js';
 import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
+import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service.js';
 import { EditorialIntentProjectionService } from '../editorial/editorial-intent-projection.service.js';
 import { GenerationContextBuilder } from '../editorial/generation-context-builder.service.js';
 import { EducationKnowledgeRulesService } from '../education/education-knowledge-rules.service.js';
@@ -27,6 +28,7 @@ import { GenerationPlannerService } from './generation-planner.service.js';
     DiagnosisEditorialBriefService,
     GenerationContextBuilder,
     DiagnosisRegistryLinkService,
+    DiagnosisRegistryLifecyclePolicyService,
     DiagnosisSelectionService,
     GenerationDeduplicationService,
     GenerationPlannerService,

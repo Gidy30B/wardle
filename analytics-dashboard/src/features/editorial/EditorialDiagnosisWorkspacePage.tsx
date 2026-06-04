@@ -14,12 +14,16 @@ import {
   reviewDiagnosisEditorialBrief,
   reviewDiagnosisTeachingRule,
   seedLegacyDiagnosisTeachingRules,
+  updateDiagnosisRegistryLifecycle,
   updateDiagnosisEditorialBrief,
   updateDiagnosisTeachingRule,
   type DiagnosisEditorialBriefResponse,
   type DiagnosisEditorialBriefReviewAction,
   type DiagnosisEditorialBriefWritePayload,
   type DiagnosisEditorialWorkspace,
+  type DiagnosisRegistryLifecycleAction,
+  type DiagnosisRegistryLifecycleEvaluation,
+  type DiagnosisRegistryLifecycleReport,
   type DiagnosisEducationRevisionAnalysis,
   type DiagnosisEducationRevisionCompareResult,
   type DiagnosisGraphCandidate,
@@ -364,6 +368,19 @@ export default function EditorialDiagnosisWorkspacePage() {
     });
   }
 
+  function handleLifecycleAction(action: DiagnosisRegistryLifecycleAction) {
+    if (!diagnosisRegistryId) {
+      return;
+    }
+    void runWorkspaceAction({
+      id: `lifecycle-${action}`,
+      pending: 'Updating registry lifecycle...',
+      success: 'Registry lifecycle updated.',
+      action: () =>
+        updateDiagnosisRegistryLifecycle(client, diagnosisRegistryId, action),
+    });
+  }
+
   function handleSeedLegacyTeachingRules() {
     if (!diagnosisRegistryId) {
       return;
@@ -574,6 +591,10 @@ export default function EditorialDiagnosisWorkspacePage() {
               onRowSelect={openCoverageRow}
               onGapSelect={openCoverageGap}
               onTabChange={setActiveTab}
+              canRunSeniorActions={canRunSeniorActions}
+              seniorDisabledReason={seniorDisabledReason}
+              pendingAction={pendingAction}
+              onLifecycleAction={handleLifecycleAction}
             />
           ) : null}
           {activeTab === 'teaching-rules' ? (
@@ -810,16 +831,31 @@ function OverviewTab({
   onRowSelect,
   onGapSelect,
   onTabChange,
+  canRunSeniorActions,
+  seniorDisabledReason,
+  pendingAction,
+  onLifecycleAction,
 }: {
   workspace: DiagnosisEditorialWorkspace;
   selectedRow: WorkspaceCoverageMatrixRow | null;
   onRowSelect: (row: WorkspaceCoverageMatrixRow) => void;
   onGapSelect: (gap: WorkspaceCoverageGap) => void;
   onTabChange: (tab: WorkspaceTab) => void;
+  canRunSeniorActions: boolean;
+  seniorDisabledReason: string;
+  pendingAction: string | null;
+  onLifecycleAction: (action: DiagnosisRegistryLifecycleAction) => void;
 }) {
   return (
     <div className="space-y-4">
       <LifecycleBar lifecycle={workspace.lifecycle} />
+      <LifecycleGovernanceCard
+        lifecycle={workspace.lifecycleGovernance}
+        canRunSeniorActions={canRunSeniorActions}
+        seniorDisabledReason={seniorDisabledReason}
+        pendingAction={pendingAction}
+        onAction={onLifecycleAction}
+      />
       <OnboardingCard workspace={workspace} onTabChange={onTabChange} />
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <WorkspaceSummaryCard workspace={workspace} />
@@ -929,6 +965,250 @@ function OnboardingCard({
         </div>
       </div>
     </CompactPanel>
+  );
+}
+
+function LifecycleGovernanceCard({
+  lifecycle,
+  canRunSeniorActions,
+  seniorDisabledReason,
+  pendingAction,
+  onAction,
+}: {
+  lifecycle?: DiagnosisRegistryLifecycleReport | null;
+  canRunSeniorActions: boolean;
+  seniorDisabledReason: string;
+  pendingAction: string | null;
+  onAction: (action: DiagnosisRegistryLifecycleAction) => void;
+}) {
+  if (!lifecycle) {
+    return null;
+  }
+
+  const actionButtons: Array<{
+    action: DiagnosisRegistryLifecycleAction;
+    label: string;
+    enabled: boolean;
+  }> = [
+    {
+      action: lifecycle.lifecycle.active ? 'deactivate' : 'activate',
+      label: lifecycle.lifecycle.active ? 'Deactivate' : 'Activate',
+      enabled:
+        lifecycle.lifecycle.active || lifecycle.readiness.activation.allowed,
+    },
+    {
+      action: lifecycle.lifecycle.isPlayable ? 'unmark_playable' : 'mark_playable',
+      label: lifecycle.lifecycle.isPlayable ? 'Unmark playable' : 'Mark playable',
+      enabled:
+        lifecycle.lifecycle.isPlayable || lifecycle.readiness.playability.allowed,
+    },
+    {
+      action: lifecycle.lifecycle.isGeneratable
+        ? 'unmark_generatable'
+        : 'mark_generatable',
+      label: lifecycle.lifecycle.isGeneratable
+        ? 'Unmark generatable'
+        : 'Mark generatable',
+      enabled:
+        lifecycle.lifecycle.isGeneratable ||
+        lifecycle.readiness.generatability.allowed,
+    },
+  ];
+
+  return (
+    <CompactPanel title="Lifecycle governance">
+      <div className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-4">
+          <LifecycleMetric
+            label="Active"
+            value={lifecycle.lifecycle.active ? 'Yes' : 'No'}
+            tone={lifecycle.lifecycle.active ? 'success' : 'warning'}
+          />
+          <LifecycleMetric
+            label="Playable"
+            value={lifecycle.lifecycle.isPlayable ? 'Yes' : 'No'}
+            tone={lifecycle.lifecycle.isPlayable ? 'success' : 'warning'}
+          />
+          <LifecycleMetric
+            label="Generatable"
+            value={lifecycle.lifecycle.isGeneratable ? 'Yes' : 'No'}
+            tone={lifecycle.lifecycle.isGeneratable ? 'success' : 'warning'}
+          />
+          <LifecycleMetric
+            label="Onboarding"
+            value={formatLabel(lifecycle.lifecycle.onboardingStatus ?? 'NEW')}
+            tone="info"
+          />
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-3">
+          <ReadinessMeter
+            title="Activation readiness"
+            evaluation={lifecycle.readiness.activation}
+          />
+          <ReadinessMeter
+            title="Playability readiness"
+            evaluation={lifecycle.readiness.playability}
+          />
+          <ReadinessMeter
+            title="Generatability readiness"
+            evaluation={lifecycle.readiness.generatability}
+          />
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-2">
+          <LifecycleList
+            title="Blockers"
+            items={lifecycle.blockers}
+            emptyText="No lifecycle blockers."
+            tone="danger"
+          />
+          <LifecycleList
+            title="Warnings"
+            items={lifecycle.warnings}
+            emptyText="No lifecycle warnings."
+            tone="warning"
+          />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <StatusBadge
+            status={`Canonical duplicates: ${lifecycle.duplicateRisk.registryCanonicalMatches}`}
+            tone={lifecycle.duplicateRisk.registryCanonicalMatches ? 'danger' : 'success'}
+          />
+          <StatusBadge
+            status={`Alias duplicates: ${lifecycle.duplicateRisk.registryAliasMatches}`}
+            tone={lifecycle.duplicateRisk.registryAliasMatches ? 'danger' : 'success'}
+          />
+          <StatusBadge
+            status={`Candidate conflicts: ${lifecycle.duplicateRisk.pendingCandidateConflicts}`}
+            tone={lifecycle.duplicateRisk.pendingCandidateConflicts ? 'warning' : 'success'}
+          />
+          {hasDuplicateRisk(lifecycle) ? (
+            <Link
+              to={`/editorial/registry-merge?source=${lifecycle.diagnosisRegistryId}`}
+              className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
+            >
+              Potential duplicate
+            </Link>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {actionButtons.map((button) => {
+            const disabled =
+              pendingAction !== null ||
+              !canRunSeniorActions ||
+              !button.enabled;
+            const title = !canRunSeniorActions
+              ? seniorDisabledReason
+              : !button.enabled
+                ? 'Resolve lifecycle blockers first'
+                : undefined;
+            return (
+              <button
+                key={button.action}
+                type="button"
+                disabled={disabled}
+                title={title}
+                onClick={() => onAction(button.action)}
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {button.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </CompactPanel>
+  );
+}
+
+function LifecycleMetric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: StatusBadgeTone;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+        {label}
+      </p>
+      <div className="mt-2">
+        <StatusBadge status={value} tone={tone} />
+      </div>
+    </div>
+  );
+}
+
+function hasDuplicateRisk(lifecycle: DiagnosisRegistryLifecycleReport) {
+  return (
+    lifecycle.duplicateRisk.registryCanonicalMatches > 0 ||
+    lifecycle.duplicateRisk.registryAliasMatches > 0 ||
+    lifecycle.duplicateRisk.pendingCandidateConflicts > 0
+  );
+}
+
+function ReadinessMeter({
+  title,
+  evaluation,
+}: {
+  title: string;
+  evaluation: DiagnosisRegistryLifecycleEvaluation;
+}) {
+  const tone: StatusBadgeTone = evaluation.allowed ? 'success' : 'warning';
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-slate-800">{title}</p>
+        <StatusBadge
+          status={`${evaluation.readinessScore}%`}
+          tone={tone}
+        />
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+        <div
+          className={[
+            'h-full rounded-full',
+            evaluation.allowed ? 'bg-emerald-600' : 'bg-amber-500',
+          ].join(' ')}
+          style={{ width: `${evaluation.readinessScore}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function LifecycleList({
+  title,
+  items,
+  emptyText,
+  tone,
+}: {
+  title: string;
+  items: string[];
+  emptyText: string;
+  tone: StatusBadgeTone;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+        {title}
+      </p>
+      {items.length ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {items.slice(0, 8).map((item) => (
+            <StatusBadge key={item} status={item} tone={tone} />
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-slate-600">{emptyText}</p>
+      )}
+    </div>
   );
 }
 

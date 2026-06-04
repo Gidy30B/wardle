@@ -1133,6 +1133,7 @@ export type DiagnosisEditorialWorkspace = {
   onboardingProgress?: DiagnosisEditorialOnboarding['progress'] | null;
   onboardingRecommendations?: DiagnosisEditorialOnboarding['recommendedActions'];
   lifecycle: WorkspaceLifecycle;
+  lifecycleGovernance?: DiagnosisRegistryLifecycleReport | null;
   workspaceSummary: {
     status: DiagnosisWorkspaceOverallStatus | 'ready' | 'needs_review' | string;
     overallScore: number | null;
@@ -1246,6 +1247,150 @@ export type DiagnosisEditorialWorkspace = {
   };
   recommendedActions: WorkspaceRecommendedAction[];
   availableActions: WorkspaceAvailableAction[];
+};
+
+export type DiagnosisRegistryLifecycleAction =
+  | 'activate'
+  | 'deactivate'
+  | 'mark_playable'
+  | 'unmark_playable'
+  | 'mark_generatable'
+  | 'unmark_generatable';
+
+export type DiagnosisRegistryLifecycleEvaluation = {
+  allowed: boolean;
+  blockers: string[];
+  warnings: string[];
+  readinessScore: number;
+};
+
+export type DiagnosisRegistryLifecycleReport = {
+  diagnosisRegistryId: string;
+  lifecycle: {
+    status: string;
+    active: boolean;
+    isPlayable: boolean;
+    isGeneratable: boolean;
+    onboardingStatus: DiagnosisEditorialOnboardingStatus | null;
+    activationReviewedByUserId: string | null;
+    activationReviewedAt: string | null;
+  };
+  readiness: {
+    activation: DiagnosisRegistryLifecycleEvaluation;
+    playability: DiagnosisRegistryLifecycleEvaluation;
+    generatability: DiagnosisRegistryLifecycleEvaluation;
+    merge: DiagnosisRegistryLifecycleEvaluation;
+  };
+  blockers: string[];
+  warnings: string[];
+  visibility: {
+    editorialVisible: boolean;
+    dictionaryVisible: boolean;
+    playable: boolean;
+    generatable: boolean;
+    mergeable: boolean;
+  };
+  duplicateRisk: {
+    registryCanonicalMatches: number;
+    registryAliasMatches: number;
+    pendingCandidateConflicts: number;
+  };
+  recommendations: string[];
+};
+
+export type DiagnosisRegistryLifecycleActionResult = {
+  registry: {
+    id: string;
+    status: string;
+    active: boolean;
+    isPlayable: boolean;
+    isGeneratable: boolean;
+    activationReviewedByUserId: string | null;
+    activationReviewedAt: string | null;
+  };
+  lifecycle: DiagnosisRegistryLifecycleReport;
+};
+
+export type RegistryMergeSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'BLOCKED';
+
+export type RegistryMergeAnalysisPayload = {
+  sourceDiagnosisRegistryId: string;
+  targetDiagnosisRegistryId: string;
+};
+
+export type RegistryMergeRegistrySummary = {
+  id: string;
+  canonicalName: string;
+  canonicalNormalized: string;
+  displayLabel: string;
+  status: string;
+  active: boolean;
+  isPlayable: boolean;
+  isGeneratable: boolean;
+  onboardingStatus: string | null;
+  aliases: Array<{
+    id: string;
+    term: string;
+    normalizedTerm: string;
+    active: boolean;
+    acceptedForMatch: boolean;
+  }>;
+};
+
+export type RegistryMergeAnalysis = {
+  allowed: boolean;
+  severity: RegistryMergeSeverity;
+  blockers: string[];
+  warnings: string[];
+  readiness: {
+    score: number;
+    label: 'ready' | 'needs_review' | 'blocked';
+  };
+  impact: Record<string, number>;
+  conflicts: {
+    aliases: string[];
+    teachingRules: string[];
+    graph: string[];
+    lifecycle: string[];
+    duplicateCases: string[];
+  };
+  recommendations: string[];
+  mergePreview: {
+    resultingCanonical: string;
+    resultingAliases: string[];
+    resultingStatus: string;
+    resultingVisibility: {
+      editorialVisible: boolean;
+      dictionaryVisible: boolean;
+      playable: boolean;
+      generatable: boolean;
+    };
+  };
+  source: RegistryMergeRegistrySummary;
+  target: RegistryMergeRegistrySummary;
+};
+
+export type RegistryMergeRelated = {
+  diagnosisRegistryId: string;
+  potentialDuplicateSuggestions: Array<{
+    id: string;
+    canonicalName: string;
+    displayLabel: string;
+    status: string;
+    reason: string;
+  }>;
+  aliasSimilarityMatches: Array<{
+    diagnosisRegistryId: string;
+    displayLabel: string;
+    alias: string;
+    reason: string;
+  }>;
+  candidateConflicts: Array<{
+    id: string;
+    proposedCanonicalName: string;
+    status: DiagnosisRegistryCandidateStatus;
+    sourceRawText: string;
+  }>;
 };
 
 export type TeachingUnitCoverageStatus =

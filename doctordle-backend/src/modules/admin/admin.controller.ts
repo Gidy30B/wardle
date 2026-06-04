@@ -44,6 +44,11 @@ import {
   DiagnosisRegistryCandidateService,
   type ReviewRegistryCandidateAction,
 } from '../diagnosis-registry/diagnosis-registry-candidate.service';
+import {
+  DiagnosisRegistryLifecyclePolicyService,
+  type DiagnosisRegistryLifecycleAction,
+} from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
+import { DiagnosisRegistryMergeAnalysisService } from '../diagnosis-registry/diagnosis-registry-merge-analysis.service';
 import { CreateAndLinkDiagnosisDto } from './dto/create-and-link-diagnosis.dto';
 import { CreateDiagnosisAliasDto } from './dto/create-diagnosis-alias.dto';
 import { CreateDiagnosisRegistryDto } from './dto/create-diagnosis-registry.dto';
@@ -77,6 +82,8 @@ export class AdminController {
     private readonly differentialMappingService: DifferentialMappingService,
     private readonly diagnosisRegistryCandidateService: DiagnosisRegistryCandidateService,
     private readonly diagnosisEditorialOnboardingService: DiagnosisEditorialOnboardingService,
+    private readonly diagnosisRegistryLifecyclePolicyService: DiagnosisRegistryLifecyclePolicyService,
+    private readonly diagnosisRegistryMergeAnalysisService: DiagnosisRegistryMergeAnalysisService,
   ) {}
 
   @Get('cases')
@@ -202,6 +209,64 @@ export class AdminController {
       request.user.id,
       body,
     );
+  }
+
+  @Post('diagnosis-registry/merge/analyze')
+  @SeniorEditorialAccess()
+  async analyzeDiagnosisRegistryMerge(
+    @Body()
+    body: {
+      sourceDiagnosisRegistryId?: string;
+      targetDiagnosisRegistryId?: string;
+    },
+  ) {
+    return this.diagnosisRegistryMergeAnalysisService.analyzeMerge(
+      this.requireUuidLike(
+        body.sourceDiagnosisRegistryId,
+        'sourceDiagnosisRegistryId',
+      ),
+      this.requireUuidLike(
+        body.targetDiagnosisRegistryId,
+        'targetDiagnosisRegistryId',
+      ),
+    );
+  }
+
+  @Get('diagnosis-registry/:diagnosisRegistryId/merge-related')
+  @EditorialAccess()
+  async getDiagnosisRegistryMergeRelated(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+  ) {
+    return this.diagnosisRegistryMergeAnalysisService.getMergeRelated(
+      diagnosisRegistryId,
+    );
+  }
+
+  @Get('diagnosis-registry/:diagnosisRegistryId/lifecycle')
+  @EditorialAccess()
+  async getDiagnosisRegistryLifecycle(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+  ) {
+    return this.diagnosisRegistryLifecyclePolicyService.getLifecycle(
+      diagnosisRegistryId,
+    );
+  }
+
+  @Post('diagnosis-registry/:diagnosisRegistryId/lifecycle/action')
+  @SeniorEditorialAccess()
+  async updateDiagnosisRegistryLifecycle(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: { action?: DiagnosisRegistryLifecycleAction },
+  ) {
+    return this.diagnosisRegistryLifecyclePolicyService.performAction({
+      diagnosisRegistryId,
+      reviewerUserId: request.user.id,
+      action: this.parseLifecycleAction(body.action),
+    });
   }
 
   @Get('diagnosis-registry/onboarding/summary')
@@ -604,6 +669,17 @@ export class AdminController {
     return [...new Set(ids)];
   }
 
+  private requireUuidLike(value: unknown, fieldName: string): string {
+    const uuidPattern =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    if (typeof value !== 'string' || !uuidPattern.test(value)) {
+      throw new BadRequestException(`${fieldName} must be a UUID string`);
+    }
+
+    return value;
+  }
+
   private validateTargetedCasePayload(
     body: TargetedCaseGenerationPayload,
   ): void {
@@ -666,6 +742,25 @@ export class AdminController {
     throw new BadRequestException(
       'Invalid diagnosis registry candidate status',
     );
+  }
+
+  private parseLifecycleAction(
+    value: DiagnosisRegistryLifecycleAction | undefined,
+  ): DiagnosisRegistryLifecycleAction {
+    const allowedActions: DiagnosisRegistryLifecycleAction[] = [
+      'activate',
+      'deactivate',
+      'mark_playable',
+      'unmark_playable',
+      'mark_generatable',
+      'unmark_generatable',
+    ];
+
+    if (value && allowedActions.includes(value)) {
+      return value;
+    }
+
+    throw new BadRequestException('Invalid diagnosis registry lifecycle action');
   }
 
   private assertDraftLevelStatus(

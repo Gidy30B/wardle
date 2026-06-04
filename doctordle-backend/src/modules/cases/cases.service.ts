@@ -4,8 +4,13 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
-import { Case as CaseModel, PublishTrack } from '@prisma/client';
+import {
+  Case as CaseModel,
+  DiagnosisRegistryStatus,
+  PublishTrack,
+} from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { EditorialMetricsService } from '../editorial/editorial-metrics.service.js';
 import {
@@ -14,6 +19,7 @@ import {
 } from '../gameplay/daily-case-labels.js';
 import { AIContentService } from '../ai/ai-content.service';
 import { buildMatchedDiagnosisMappingFields } from '../diagnosis-registry/diagnosis-mapping-fields.js';
+import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service.js';
 import { CreateCaseDto } from './dto/create-case.dto';
 
 export type DiagnosisCatalogItem = {
@@ -72,6 +78,8 @@ export class CasesService {
     private readonly prisma: PrismaService,
     private readonly aiContentService: AIContentService,
     private readonly editorialMetrics: EditorialMetricsService,
+    @Optional()
+    private readonly lifecyclePolicy?: DiagnosisRegistryLifecyclePolicyService,
   ) {}
 
   async createCase(dto: CreateCaseDto): Promise<CreatedCaseRecord> {
@@ -363,6 +371,7 @@ export class CasesService {
         id: true,
         legacyDiagnosisId: true,
         displayLabel: true,
+        status: true,
         active: true,
         isPlayable: true,
       },
@@ -374,7 +383,14 @@ export class CasesService {
       );
     }
 
-    if (!registry.active || !registry.isPlayable) {
+    const isPlayable =
+      this.lifecyclePolicy?.isPlayable(registry) ??
+      ((registry.status === undefined ||
+        registry.status === DiagnosisRegistryStatus.ACTIVE) &&
+        registry.active &&
+        registry.isPlayable);
+
+    if (!isPlayable) {
       throw new BadRequestException(
         'Manual cases require an active playable diagnosis registry entry',
       );

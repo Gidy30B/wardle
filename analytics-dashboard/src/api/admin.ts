@@ -16,6 +16,9 @@ import type {
   DiagnosisEditorialOnboardingAction,
   DiagnosisEditorialOnboardingSummary,
   DiagnosisEditorialWorkspace,
+  DiagnosisRegistryLifecycleAction,
+  DiagnosisRegistryLifecycleActionResult,
+  DiagnosisRegistryLifecycleReport,
   DiagnosisEditorialBriefResponse,
   DiagnosisEditorialBriefReviewAction,
   DiagnosisEditorialBriefWritePayload,
@@ -35,6 +38,9 @@ import type {
   DiagnosisRegistryCandidate,
   DiagnosisRegistryCandidateQueueSummary,
   RegistryCandidateFilters,
+  RegistryMergeAnalysis,
+  RegistryMergeAnalysisPayload,
+  RegistryMergeRelated,
   DiagnosisRegistrySearchItem,
   EditorialCaseDetail,
   EditorialCaseRevision,
@@ -176,6 +182,45 @@ export function getDiagnosisRegistryOnboarding(
 ) {
   return client.get<DiagnosisEditorialOnboarding>(
     `/admin/diagnosis-registry/${diagnosisRegistryId}/onboarding`,
+  );
+}
+
+export function getDiagnosisRegistryLifecycle(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.get<DiagnosisRegistryLifecycleReport>(
+    `/admin/diagnosis-registry/${diagnosisRegistryId}/lifecycle`,
+  );
+}
+
+export function updateDiagnosisRegistryLifecycle(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  action: DiagnosisRegistryLifecycleAction,
+) {
+  return client.post<DiagnosisRegistryLifecycleActionResult>(
+    `/admin/diagnosis-registry/${diagnosisRegistryId}/lifecycle/action`,
+    { action },
+  );
+}
+
+export function analyzeDiagnosisRegistryMerge(
+  client: ApiClient,
+  payload: RegistryMergeAnalysisPayload,
+) {
+  return client.post<RegistryMergeAnalysis>(
+    '/admin/diagnosis-registry/merge/analyze',
+    payload,
+  );
+}
+
+export function getDiagnosisRegistryMergeRelated(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.get<RegistryMergeRelated>(
+    `/admin/diagnosis-registry/${diagnosisRegistryId}/merge-related`,
   );
 }
 

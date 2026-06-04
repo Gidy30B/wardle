@@ -32,6 +32,8 @@ import { DiagnosisTeachingRuleSeedService } from '../education/diagnosis-teachin
 import { DiagnosisEditorialBriefService } from '../education/diagnosis-editorial-brief.service';
 import { AliasValidationService } from '../diagnosis-registry/alias-validation.service';
 import { DiagnosisRegistryCandidateService } from '../diagnosis-registry/diagnosis-registry-candidate.service';
+import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
+import { DiagnosisRegistryMergeAnalysisService } from '../diagnosis-registry/diagnosis-registry-merge-analysis.service';
 
 @Module({
   imports: [
@@ -67,6 +69,8 @@ import { DiagnosisRegistryCandidateService } from '../diagnosis-registry/diagnos
     DiagnosisRegistryLinkService,
     DiagnosisRegistryEditorialService,
     DiagnosisRegistryCandidateService,
+    DiagnosisRegistryLifecyclePolicyService,
+    DiagnosisRegistryMergeAnalysisService,
     AliasValidationService,
   ],
 })

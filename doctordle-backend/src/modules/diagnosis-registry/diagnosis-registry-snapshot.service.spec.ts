@@ -57,12 +57,14 @@ describe('DiagnosisRegistrySnapshotService', () => {
     expect(fixture.prisma.diagnosisRegistry.count).toHaveBeenCalledWith({
       where: {
         status: 'ACTIVE',
+        active: true,
       },
     });
     expect(fixture.prisma.diagnosisRegistry.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           status: 'ACTIVE',
+          active: true,
         },
       }),
     );
@@ -146,6 +148,7 @@ describe('DiagnosisRegistrySnapshotService', () => {
       expect.objectContaining({
         where: {
           status: 'ACTIVE',
+          active: true,
         },
       }),
     );

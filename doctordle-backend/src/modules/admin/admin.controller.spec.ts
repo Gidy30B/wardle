@@ -41,6 +41,14 @@ describe('AdminController generateCases', () => {
       updateStatus: jest.fn().mockResolvedValue({ onboardingStatus: 'COMPLETE' }),
       getSummary: jest.fn().mockResolvedValue({ newlyCreatedDiagnoses: 0 }),
     };
+    const diagnosisRegistryLifecyclePolicyService = {
+      getLifecycle: jest.fn().mockResolvedValue({ diagnosisRegistryId: 'registry-1' }),
+      performAction: jest.fn().mockResolvedValue({ registry: { id: 'registry-1' } }),
+    };
+    const diagnosisRegistryMergeAnalysisService = {
+      analyzeMerge: jest.fn().mockResolvedValue({ allowed: true }),
+      getMergeRelated: jest.fn().mockResolvedValue({ diagnosisRegistryId: 'registry-1' }),
+    };
 
     return {
       caseGenerator,
@@ -56,12 +64,16 @@ describe('AdminController generateCases', () => {
         differentialMappingService as never,
         diagnosisRegistryCandidateService as never,
         diagnosisEditorialOnboardingService as never,
+        diagnosisRegistryLifecyclePolicyService as never,
+        diagnosisRegistryMergeAnalysisService as never,
       ),
       targetedCaseGenerationService,
       teachingRulesAdminService,
       diagnosisEditorialBriefService,
       diagnosisEditorialWorkspaceService,
       diagnosisEditorialOnboardingService,
+      diagnosisRegistryLifecyclePolicyService,
+      diagnosisRegistryMergeAnalysisService,
     };
   }
 
@@ -229,6 +241,66 @@ describe('AdminController generateCases', () => {
       '11111111-1111-4111-8111-111111111111',
       'mark_complete',
     );
+  });
+
+  it('gets registry lifecycle governance state', async () => {
+    const { controller, diagnosisRegistryLifecyclePolicyService } =
+      buildController();
+
+    await controller.getDiagnosisRegistryLifecycle(
+      '11111111-1111-4111-8111-111111111111',
+    );
+
+    expect(
+      diagnosisRegistryLifecyclePolicyService.getLifecycle,
+    ).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
+  });
+
+  it('updates registry lifecycle through policy service', async () => {
+    const { controller, diagnosisRegistryLifecyclePolicyService } =
+      buildController();
+
+    await controller.updateDiagnosisRegistryLifecycle(
+      '11111111-1111-4111-8111-111111111111',
+      { user: { id: 'senior-1' } } as never,
+      { action: 'mark_playable' },
+    );
+
+    expect(
+      diagnosisRegistryLifecyclePolicyService.performAction,
+    ).toHaveBeenCalledWith({
+      diagnosisRegistryId: '11111111-1111-4111-8111-111111111111',
+      reviewerUserId: 'senior-1',
+      action: 'mark_playable',
+    });
+  });
+
+  it('analyzes registry merge dry-run through merge analysis service', async () => {
+    const { controller, diagnosisRegistryMergeAnalysisService } =
+      buildController();
+
+    await controller.analyzeDiagnosisRegistryMerge({
+      sourceDiagnosisRegistryId: '11111111-1111-4111-8111-111111111111',
+      targetDiagnosisRegistryId: '22222222-2222-4222-8222-222222222222',
+    });
+
+    expect(diagnosisRegistryMergeAnalysisService.analyzeMerge).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+    );
+  });
+
+  it('gets registry merge-related suggestions', async () => {
+    const { controller, diagnosisRegistryMergeAnalysisService } =
+      buildController();
+
+    await controller.getDiagnosisRegistryMergeRelated(
+      '11111111-1111-4111-8111-111111111111',
+    );
+
+    expect(
+      diagnosisRegistryMergeAnalysisService.getMergeRelated,
+    ).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
   });
 
   it('allows editors to create draft-level teaching rules', async () => {

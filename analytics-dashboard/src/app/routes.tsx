@@ -7,6 +7,7 @@ import DiagnosisGraphCandidatesPage from '../features/diagnosis-graph/DiagnosisG
 import EditorialDiagnosisWorkspacePage from '../features/editorial/EditorialDiagnosisWorkspacePage';
 import EditorialHomePage from '../features/editorial/EditorialHomePage';
 import RegistryCandidatesPage from '../features/editorial/RegistryCandidatesPage';
+import RegistryMergeAnalysisPage from '../features/editorial/RegistryMergeAnalysisPage';
 import UnresolvedDifferentialsPage from '../features/editorial/UnresolvedDifferentialsPage';
 import GeneratePage from '../features/generation/GeneratePage';
 import PublishPage from '../features/publish/PublishPage';
@@ -202,6 +203,10 @@ export default function AppRoutes() {
         <Route
           path="/editorial/registry-candidates"
           element={<RegistryCandidatesPage />}
+        />
+        <Route
+          path="/editorial/registry-merge"
+          element={<RegistryMergeAnalysisPage />}
         />
         <Route
           path="/editorial/diagnoses/:diagnosisRegistryId"

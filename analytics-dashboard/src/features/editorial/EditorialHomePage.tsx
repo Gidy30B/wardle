@@ -35,6 +35,11 @@ const quickLinks = [
     description: 'Review candidate diagnosis registry entries before creation.',
   },
   {
+    to: '/editorial/registry-merge',
+    label: 'Registry merge analysis',
+    description: 'Dry-run duplicate registry merge impact and conflicts.',
+  },
+  {
     to: '/diagnosis-graph/candidates',
     label: 'Graph candidates',
     description: 'Promote or reject extracted diagnosis graph candidates.',

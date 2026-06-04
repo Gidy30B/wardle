@@ -55,9 +55,11 @@ describe('diagnosis registry status helpers', () => {
   it('returns explicit where clauses for status-driven queries', () => {
     expect(getUsableDiagnosisRegistryWhere()).toEqual({
       status: 'ACTIVE',
+      active: true,
     });
     expect(getDictionaryVisibleDiagnosisRegistryWhere()).toEqual({
       status: 'ACTIVE',
+      active: true,
     });
   });
 });

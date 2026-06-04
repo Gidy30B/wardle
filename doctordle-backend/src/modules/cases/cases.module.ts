@@ -3,6 +3,7 @@ import { DatabaseModule } from '../../core/db/database.module';
 import { InternalApiGuard } from '../../auth/internal-api.guard';
 import { AiModule } from '../ai/ai.module';
 import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
+import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service.js';
 import { EditorialObservabilityModule } from '../editorial/editorial-observability.module.js';
 import { CasesController } from './cases.controller';
 import { DevController } from './dev.controller';
@@ -15,6 +16,7 @@ import { CasesService } from './cases.service.js';
   providers: [
     CasesService,
     DiagnosisRegistryLinkService,
+    DiagnosisRegistryLifecyclePolicyService,
     InternalApiGuard,
     DevOnlyGuard,
   ],

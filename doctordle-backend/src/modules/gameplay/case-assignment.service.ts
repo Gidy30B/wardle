@@ -1,6 +1,12 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { CaseEditorialStatus, Prisma, PublishTrack } from '@prisma/client';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
+import {
+  CaseEditorialStatus,
+  DiagnosisRegistryStatus,
+  Prisma,
+  PublishTrack,
+} from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
+import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
 
 const TRACK_PRIORITY: Record<PublishTrack, number> = {
   [PublishTrack.DAILY]: 1,
@@ -61,6 +67,7 @@ type AssignmentCandidate = {
     id: string;
     displayLabel: string | null;
     canonicalName: string;
+    status?: DiagnosisRegistryStatus;
     active: boolean;
     isPlayable: boolean;
   } | null;
@@ -133,7 +140,11 @@ type AssignmentMode = 'rolling_window' | 'editorial_date';
 export class CaseAssignmentService {
   private readonly logger = new Logger(CaseAssignmentService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    private readonly lifecyclePolicy?: DiagnosisRegistryLifecyclePolicyService,
+  ) {}
 
   async ensureWindow(input: {
     startDate: string | Date;
@@ -205,8 +216,7 @@ export class CaseAssignmentService {
     }
 
     if (
-      caseRecord.diagnosisRegistry?.active !== true ||
-      caseRecord.diagnosisRegistry?.isPlayable !== true
+      !this.isRegistryPlayable(caseRecord.diagnosisRegistry)
     ) {
       return 'registry_not_playable';
     }
@@ -476,6 +486,7 @@ export class CaseAssignmentService {
             id: true,
             displayLabel: true,
             canonicalName: true,
+            status: true,
             active: true,
             isPlayable: true,
           },
@@ -730,6 +741,35 @@ export class CaseAssignmentService {
         : value;
 
     return Array.isArray(parsed) && parsed.length > 0;
+  }
+
+  private isRegistryPlayable(
+    registry:
+      | {
+          status?: DiagnosisRegistryStatus;
+          active: boolean;
+          isPlayable: boolean;
+        }
+      | null,
+  ): boolean {
+    if (!registry) {
+      return false;
+    }
+
+    if (this.lifecyclePolicy && registry.status) {
+      return this.lifecyclePolicy.isPlayable({
+        status: registry.status,
+        active: registry.active,
+        isPlayable: registry.isPlayable,
+      });
+    }
+
+    return (
+      (registry.status === undefined ||
+        registry.status === DiagnosisRegistryStatus.ACTIVE) &&
+      registry.active &&
+      registry.isPlayable
+    );
   }
 
   private getSlotKey(

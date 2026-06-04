@@ -28,6 +28,7 @@ import {
 } from './teaching-unit-coverage.service';
 import { DiagnosisEditorialBriefService } from '../education/diagnosis-editorial-brief.service';
 import { DiagnosisEditorialOnboardingService } from './diagnosis-editorial-onboarding.service';
+import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
 
 type LifecycleState = 'complete' | 'warning' | 'blocked' | 'not_started';
 type ReadinessSeverity = 'info' | 'warning' | 'blocker';
@@ -118,6 +119,8 @@ export class DiagnosisEditorialWorkspaceService {
     private readonly differentialLinkService?: DifferentialLinkService,
     @Optional()
     private readonly diagnosisEditorialOnboardingService?: DiagnosisEditorialOnboardingService,
+    @Optional()
+    private readonly diagnosisRegistryLifecyclePolicyService?: DiagnosisRegistryLifecyclePolicyService,
   ) {}
 
   async getFullWorkspace(diagnosisRegistryId: string) {
@@ -138,6 +141,7 @@ export class DiagnosisEditorialWorkspaceService {
       linkedDifferentialsResult,
       registryCandidateCountsResult,
       onboardingResult,
+      lifecycleGovernanceResult,
     ] = await Promise.allSettled([
       this.diagnosisWorkspaceQualityService.getSummary(diagnosisRegistryId),
       this.teachingUnitCoverageService.getCoverage(diagnosisRegistryId),
@@ -156,6 +160,9 @@ export class DiagnosisEditorialWorkspaceService {
       ),
       this.getRegistryCandidateCounts(diagnosisRegistryId),
       this.diagnosisEditorialOnboardingService?.getOnboarding(
+        diagnosisRegistryId,
+      ),
+      this.diagnosisRegistryLifecyclePolicyService?.getLifecycle(
         diagnosisRegistryId,
       ),
     ]);
@@ -190,6 +197,8 @@ export class DiagnosisEditorialWorkspaceService {
       this.valueOrNull(registryCandidateCountsResult) ??
       this.emptyRegistryCandidateCounts();
     const onboarding = this.valueOrNull(onboardingResult) ?? null;
+    const lifecycleGovernance =
+      this.valueOrNull(lifecycleGovernanceResult) ?? null;
     const cases = this.buildCases(registry.cases);
     const coverageMatrix = this.buildCoverageMatrix({
       coverage,
@@ -241,6 +250,7 @@ export class DiagnosisEditorialWorkspaceService {
       onboardingProgress: onboarding?.progress ?? null,
       onboardingRecommendations: onboarding?.recommendedActions ?? [],
       lifecycle,
+      lifecycleGovernance,
       workspaceSummary: {
         status:
           summary?.overallWorkspaceStatus ??

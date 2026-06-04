@@ -259,6 +259,8 @@ model DiagnosisRegistry {
   onboardingStatus                      DiagnosisEditorialOnboardingStatus?
   onboardingStartedAt                   DateTime?
   onboardingCompletedAt                 DateTime?
+  activationReviewedByUserId            String?
+  activationReviewedAt                  DateTime?
   isDescriptive                         Boolean                        @default(false)
   isCompositional                       Boolean                        @default(false)
   searchPriority                        Int                            @default(0)
@@ -310,6 +312,7 @@ model DiagnosisRegistry {
   createdAt                             DateTime                       @default(now())
   updatedAt                             DateTime                       @updatedAt
   legacyDiagnosis                       Diagnosis?                     @relation("LegacyDiagnosisRegistry", fields: [legacyDiagnosisId], references: [id], onDelete: SetNull)
+  activationReviewedByUser              User?                          @relation("DiagnosisRegistryActivationReviewedByUser", fields: [activationReviewedByUserId], references: [id], onDelete: SetNull)
   aliases                               DiagnosisAlias[]
   cases                                 Case[]                         @relation("CaseDiagnosisRegistry")
   caseRevisions                         CaseRevision[]                 @relation("CaseRevisionDiagnosisRegistry")
@@ -332,6 +335,7 @@ model DiagnosisRegistry {
 
   @@index([status])
   @@index([onboardingStatus])
+  @@index([activationReviewedByUserId])
   @@index([active])
   @@index([displayLabel])
   @@index([searchPriority])
@@ -964,6 +968,7 @@ model User {
   reviewedEducationDifferentialMappings EducationDifferentialMapping[] @relation("EducationDifferentialMappingReviewedByUser")
   reviewedDiagnosisRegistryCandidates   DiagnosisRegistryCandidate[]   @relation("DiagnosisRegistryCandidateReviewer")
   approvedDiagnosisRegistryCandidates   DiagnosisRegistryCandidate[]   @relation("DiagnosisRegistryCandidateApprovedByUser")
+  activationReviewedDiagnoses           DiagnosisRegistry[]            @relation("DiagnosisRegistryActivationReviewedByUser")
   primaryOrganization                   Organization?                  @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
   organizations                         UserOrganization[]
 

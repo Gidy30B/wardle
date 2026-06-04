@@ -89,6 +89,7 @@ describe('DiagnosisRegistryDictionaryService', () => {
       expect.objectContaining({
         where: {
           status: 'ACTIVE',
+          active: true,
         },
         orderBy: [{ searchPriority: 'desc' }, { displayLabel: 'asc' }],
       }),

@@ -44,11 +44,13 @@ export function getDiagnosisRegistryLifecycle(status: DiagnosisRegistryStatus) {
 export function getUsableDiagnosisRegistryWhere() {
   return {
     status: DiagnosisRegistryStatus.ACTIVE,
+    active: true,
   } as const;
 }
 
 export function getDictionaryVisibleDiagnosisRegistryWhere() {
   return {
     status: DiagnosisRegistryStatus.ACTIVE,
+    active: true,
   } as const;
 }

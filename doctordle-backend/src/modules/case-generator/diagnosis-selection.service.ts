@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { DiagnosisRegistryStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service.js';
+import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service.js';
 import type { PlannedGenerationDiagnosis } from './case-generator.types.js';
 
 const RECENT_USE_WINDOW_DAYS = 30;
@@ -25,7 +26,11 @@ export type DiagnosisSelectionResult = {
 
 @Injectable()
 export class DiagnosisSelectionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    private readonly lifecyclePolicy?: DiagnosisRegistryLifecyclePolicyService,
+  ) {}
 
   async selectDiagnoses(
     input: DiagnosisSelectionInput,
@@ -54,10 +59,12 @@ export class DiagnosisSelectionService {
       ? this.mapDifficultyFilter(input.difficulty)
       : undefined;
     const where: Prisma.DiagnosisRegistryWhereInput = {
-      active: true,
-      status: DiagnosisRegistryStatus.ACTIVE,
-      isPlayable: true,
-      isGeneratable: true,
+      ...(this.lifecyclePolicy?.getGeneratableRegistryWhere() ?? {
+        active: true,
+        status: DiagnosisRegistryStatus.ACTIVE,
+        isPlayable: true,
+        isGeneratable: true,
+      }),
       ...(input.specialty
         ? {
             specialty: {
