@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import {
   CaseEditorialStatus,
   DifferentialResolutionStatus,
@@ -27,6 +27,7 @@ import {
   type TeachingUnitCoverageMap,
 } from './teaching-unit-coverage.service';
 import { DiagnosisEditorialBriefService } from '../education/diagnosis-editorial-brief.service';
+import { DiagnosisEditorialOnboardingService } from './diagnosis-editorial-onboarding.service';
 
 type LifecycleState = 'complete' | 'warning' | 'blocked' | 'not_started';
 type ReadinessSeverity = 'info' | 'warning' | 'blocker';
@@ -78,6 +79,9 @@ type RegistryRow = {
   id: string;
   canonicalName: string;
   displayLabel: string;
+  onboardingStatus: string | null;
+  onboardingStartedAt: Date | null;
+  onboardingCompletedAt: Date | null;
   specialty: string | null;
   category: string | null;
   bodySystem: string | null;
@@ -112,6 +116,8 @@ export class DiagnosisEditorialWorkspaceService {
     private readonly caseQualityProjectionService: CaseQualityProjectionService,
     private readonly diagnosisGraphCandidatesService: DiagnosisGraphCandidatesService,
     private readonly differentialLinkService?: DifferentialLinkService,
+    @Optional()
+    private readonly diagnosisEditorialOnboardingService?: DiagnosisEditorialOnboardingService,
   ) {}
 
   async getFullWorkspace(diagnosisRegistryId: string) {
@@ -131,6 +137,7 @@ export class DiagnosisEditorialWorkspaceService {
       differentialCoverageResult,
       linkedDifferentialsResult,
       registryCandidateCountsResult,
+      onboardingResult,
     ] = await Promise.allSettled([
       this.diagnosisWorkspaceQualityService.getSummary(diagnosisRegistryId),
       this.teachingUnitCoverageService.getCoverage(diagnosisRegistryId),
@@ -148,6 +155,9 @@ export class DiagnosisEditorialWorkspaceService {
         diagnosisRegistryId,
       ),
       this.getRegistryCandidateCounts(diagnosisRegistryId),
+      this.diagnosisEditorialOnboardingService?.getOnboarding(
+        diagnosisRegistryId,
+      ),
     ]);
 
     const compositionWarnings = this.compositionWarnings({
@@ -179,6 +189,7 @@ export class DiagnosisEditorialWorkspaceService {
     const registryCandidateCounts =
       this.valueOrNull(registryCandidateCountsResult) ??
       this.emptyRegistryCandidateCounts();
+    const onboarding = this.valueOrNull(onboardingResult) ?? null;
     const cases = this.buildCases(registry.cases);
     const coverageMatrix = this.buildCoverageMatrix({
       coverage,
@@ -217,7 +228,18 @@ export class DiagnosisEditorialWorkspaceService {
         category: registry.category,
         bodySystem: registry.bodySystem,
         difficultyBand: registry.difficultyBand,
+        onboardingStatus: registry.onboardingStatus,
+        onboardingStartedAt: registry.onboardingStartedAt
+          ? this.toIso(registry.onboardingStartedAt)
+          : null,
+        onboardingCompletedAt: registry.onboardingCompletedAt
+          ? this.toIso(registry.onboardingCompletedAt)
+          : null,
       },
+      onboarding,
+      onboardingStatus: onboarding?.onboardingStatus ?? registry.onboardingStatus,
+      onboardingProgress: onboarding?.progress ?? null,
+      onboardingRecommendations: onboarding?.recommendedActions ?? [],
       lifecycle,
       workspaceSummary: {
         status:
@@ -301,6 +323,9 @@ export class DiagnosisEditorialWorkspaceService {
         id: true,
         canonicalName: true,
         displayLabel: true,
+        onboardingStatus: true,
+        onboardingStartedAt: true,
+        onboardingCompletedAt: true,
         specialty: true,
         category: true,
         bodySystem: true,

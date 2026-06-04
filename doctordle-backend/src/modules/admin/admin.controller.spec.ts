@@ -36,6 +36,11 @@ describe('AdminController generateCases', () => {
     };
     const differentialMappingService = {};
     const diagnosisRegistryCandidateService = {};
+    const diagnosisEditorialOnboardingService = {
+      getOnboarding: jest.fn().mockResolvedValue({ onboardingStatus: 'NEW' }),
+      updateStatus: jest.fn().mockResolvedValue({ onboardingStatus: 'COMPLETE' }),
+      getSummary: jest.fn().mockResolvedValue({ newlyCreatedDiagnoses: 0 }),
+    };
 
     return {
       caseGenerator,
@@ -50,11 +55,13 @@ describe('AdminController generateCases', () => {
         diagnosisEditorialBriefService as never,
         differentialMappingService as never,
         diagnosisRegistryCandidateService as never,
+        diagnosisEditorialOnboardingService as never,
       ),
       targetedCaseGenerationService,
       teachingRulesAdminService,
       diagnosisEditorialBriefService,
       diagnosisEditorialWorkspaceService,
+      diagnosisEditorialOnboardingService,
     };
   }
 
@@ -193,6 +200,34 @@ describe('AdminController generateCases', () => {
     expect(diagnosisEditorialBriefService.reviewBrief).toHaveBeenCalledWith(
       '11111111-1111-4111-8111-111111111111',
       'activate',
+    );
+  });
+
+  it('gets registry onboarding state', async () => {
+    const { controller, diagnosisEditorialOnboardingService } =
+      buildController();
+
+    await controller.getDiagnosisRegistryOnboarding(
+      '11111111-1111-4111-8111-111111111111',
+    );
+
+    expect(
+      diagnosisEditorialOnboardingService.getOnboarding,
+    ).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
+  });
+
+  it('updates registry onboarding status', async () => {
+    const { controller, diagnosisEditorialOnboardingService } =
+      buildController();
+
+    await controller.updateDiagnosisRegistryOnboardingStatus(
+      '11111111-1111-4111-8111-111111111111',
+      { action: 'mark_complete' },
+    );
+
+    expect(diagnosisEditorialOnboardingService.updateStatus).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111',
+      'mark_complete',
     );
   });
 

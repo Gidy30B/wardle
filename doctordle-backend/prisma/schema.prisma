@@ -88,6 +88,16 @@ enum DiagnosisRegistryStatus {
   DRAFT
 }
 
+enum DiagnosisEditorialOnboardingStatus {
+  NEW
+  RULES_STARTED
+  BRIEF_STARTED
+  EDUCATION_STARTED
+  CASE_STARTED
+  READY_FOR_REVIEW
+  COMPLETE
+}
+
 enum DiagnosisDifficultyBand {
   BASIC
   INTERMEDIATE
@@ -246,6 +256,9 @@ model DiagnosisRegistry {
   displayLabel                          String
   status                                DiagnosisRegistryStatus        @default(ACTIVE)
   active                                Boolean                        @default(true)
+  onboardingStatus                      DiagnosisEditorialOnboardingStatus?
+  onboardingStartedAt                   DateTime?
+  onboardingCompletedAt                 DateTime?
   isDescriptive                         Boolean                        @default(false)
   isCompositional                       Boolean                        @default(false)
   searchPriority                        Int                            @default(0)
@@ -318,6 +331,7 @@ model DiagnosisRegistry {
   strictMatchedAttempts                 Attempt[]                      @relation("AttemptStrictMatchedDiagnosisRegistry")
 
   @@index([status])
+  @@index([onboardingStatus])
   @@index([active])
   @@index([displayLabel])
   @@index([searchPriority])
@@ -702,11 +716,18 @@ model DiagnosisRegistryCandidate {
   reviewedAt                  DateTime?
   reviewNote                  String?
   createdRegistryId           String?
+  approvedByUserId            String?
+  approvedAt                  DateTime?
+  mergeTargetCandidateId      String?
+  creationSnapshot            Json?
   createdAt                   DateTime                         @default(now())
   updatedAt                   DateTime                         @updatedAt
   contextDiagnosisRegistry    DiagnosisRegistry?               @relation("DiagnosisRegistryCandidateContextDiagnosis", fields: [contextDiagnosisRegistryId], references: [id], onDelete: SetNull)
   reviewerUser                User?                            @relation("DiagnosisRegistryCandidateReviewer", fields: [reviewerUserId], references: [id], onDelete: SetNull)
   createdRegistry             DiagnosisRegistry?               @relation("DiagnosisRegistryCandidateCreatedDiagnosis", fields: [createdRegistryId], references: [id], onDelete: SetNull)
+  approvedByUser              User?                            @relation("DiagnosisRegistryCandidateApprovedByUser", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  mergeTargetCandidate        DiagnosisRegistryCandidate?      @relation("DiagnosisRegistryCandidateMergeTarget", fields: [mergeTargetCandidateId], references: [id], onDelete: SetNull)
+  mergedRegistryCandidates    DiagnosisRegistryCandidate[]     @relation("DiagnosisRegistryCandidateMergeTarget")
 
   @@unique([sourceMappingId, proposedCanonicalNormalized])
   @@index([proposedCanonicalNormalized])
@@ -716,6 +737,8 @@ model DiagnosisRegistryCandidate {
   @@index([status])
   @@index([reviewerUserId])
   @@index([createdRegistryId])
+  @@index([approvedByUserId])
+  @@index([mergeTargetCandidateId])
   @@index([createdAt])
 }
 
@@ -940,6 +963,7 @@ model User {
   reviewedCaseDifferentialMappings      CaseDifferentialMapping[]      @relation("CaseDifferentialMappingReviewedByUser")
   reviewedEducationDifferentialMappings EducationDifferentialMapping[] @relation("EducationDifferentialMappingReviewedByUser")
   reviewedDiagnosisRegistryCandidates   DiagnosisRegistryCandidate[]   @relation("DiagnosisRegistryCandidateReviewer")
+  approvedDiagnosisRegistryCandidates   DiagnosisRegistryCandidate[]   @relation("DiagnosisRegistryCandidateApprovedByUser")
   primaryOrganization                   Organization?                  @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
   organizations                         UserOrganization[]
 

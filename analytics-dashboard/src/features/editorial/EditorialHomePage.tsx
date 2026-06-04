@@ -3,7 +3,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   getDiagnosisRegistryCandidateSummary,
+  getDiagnosisRegistryOnboardingSummary,
   searchDiagnosisRegistry,
+  type DiagnosisEditorialOnboardingSummary,
   type DiagnosisRegistryCandidateQueueSummary,
   type DiagnosisRegistrySearchItem,
 } from '../../api/admin';
@@ -64,6 +66,8 @@ export default function EditorialHomePage() {
   const [queueSummaryError, setQueueSummaryError] = useState<string | null>(
     null,
   );
+  const [onboardingSummary, setOnboardingSummary] =
+    useState<DiagnosisEditorialOnboardingSummary | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -132,15 +136,20 @@ export default function EditorialHomePage() {
     async function loadQueueSummary() {
       try {
         setQueueSummaryError(null);
-        const summary = await getDiagnosisRegistryCandidateSummary(client);
+        const [summary, onboarding] = await Promise.all([
+          getDiagnosisRegistryCandidateSummary(client),
+          getDiagnosisRegistryOnboardingSummary(client),
+        ]);
         if (active) {
           setQueueSummary(summary);
+          setOnboardingSummary(onboarding);
         }
       } catch (summaryError) {
         if (!active) {
           return;
         }
         setQueueSummary(null);
+        setOnboardingSummary(null);
         setQueueSummaryError(
           summaryError instanceof Error
             ? summaryError.message
@@ -257,6 +266,37 @@ export default function EditorialHomePage() {
                 label="Pending candidates"
                 value={queueSummary?.pendingRegistryCandidateCount}
                 helper="Candidate queue needing review"
+              />
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-base font-semibold text-slate-900">
+              Registry onboarding
+            </p>
+            <p className="mt-1 text-sm text-slate-500">
+              Newly created draft diagnoses and missing editorial assets.
+            </p>
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
+              <QueueMetric
+                label="New diagnoses"
+                value={onboardingSummary?.newlyCreatedDiagnoses}
+                helper="Created from candidates"
+              />
+              <QueueMetric
+                label="Missing rules"
+                value={onboardingSummary?.diagnosesMissingRules}
+                helper="Need curriculum start"
+              />
+              <QueueMetric
+                label="Missing education"
+                value={onboardingSummary?.diagnosesMissingEducation}
+                helper="Need education draft"
+              />
+              <QueueMetric
+                label="Ready review"
+                value={onboardingSummary?.readyForReviewDiagnoses}
+                helper="Awaiting senior check"
               />
             </div>
           </section>

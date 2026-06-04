@@ -1,8 +1,11 @@
 import { useAuth } from '@clerk/clerk-react';
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
+  createRegistryFromCandidate,
   getDiagnosisRegistryCandidates,
   reviewDiagnosisRegistryCandidate,
+  type CreateRegistryFromCandidateResult,
   type DiagnosisRegistryCandidate,
   type DiagnosisRegistryCandidateDuplicateSuggestions,
   type DiagnosisRegistryCandidateStatus,
@@ -38,6 +41,10 @@ export default function RegistryCandidatesPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [candidateToCreate, setCandidateToCreate] =
+    useState<DiagnosisRegistryCandidate | null>(null);
+  const [creationResult, setCreationResult] =
+    useState<CreateRegistryFromCandidateResult | null>(null);
 
   async function load() {
     try {
@@ -76,6 +83,7 @@ export default function RegistryCandidatesPage() {
     try {
       setBusyId(candidate.id);
       setActionError(null);
+      setCreationResult(null);
       await action();
       await load();
     } catch (reviewError) {
@@ -129,6 +137,31 @@ export default function RegistryCandidatesPage() {
         note: note?.trim() || undefined,
       }),
     );
+  }
+
+  async function confirmCreateRegistry(candidate: DiagnosisRegistryCandidate) {
+    if (!access.canPublishEditorial) {
+      setActionError('Requires senior editor');
+      return;
+    }
+
+    try {
+      setBusyId(candidate.id);
+      setActionError(null);
+      setCreationResult(null);
+      const result = await createRegistryFromCandidate(client, candidate.id);
+      setCreationResult(result);
+      setCandidateToCreate(null);
+      await load();
+    } catch (createError) {
+      setActionError(
+        createError instanceof Error
+          ? createError.message
+          : 'Registry creation failed.',
+      );
+    } finally {
+      setBusyId(null);
+    }
   }
 
   if (access.status === 'loading') {
@@ -194,6 +227,10 @@ export default function RegistryCandidatesPage() {
         <ErrorState title="Action failed" message={actionError} />
       ) : null}
 
+      {creationResult ? (
+        <RegistryCreationSuccess result={creationResult} />
+      ) : null}
+
       {loading ? (
         <LoadingState title="Loading registry candidates" />
       ) : error ? (
@@ -209,6 +246,7 @@ export default function RegistryCandidatesPage() {
               onMarkNeedsReview={() => markNeedsReview(candidate)}
               onReject={() => reject(candidate)}
               onMergeDuplicate={() => mergeDuplicate(candidate)}
+              onCreateRegistry={() => setCandidateToCreate(candidate)}
             />
           ))}
         </div>
@@ -217,6 +255,15 @@ export default function RegistryCandidatesPage() {
           No registry candidates match the current filters.
         </div>
       )}
+
+      {candidateToCreate ? (
+        <CreateRegistryConfirmationModal
+          candidate={candidateToCreate}
+          busy={busyId === candidateToCreate.id}
+          onClose={() => setCandidateToCreate(null)}
+          onConfirm={() => void confirmCreateRegistry(candidateToCreate)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -228,6 +275,7 @@ function RegistryCandidateCard({
   onMarkNeedsReview,
   onReject,
   onMergeDuplicate,
+  onCreateRegistry,
 }: {
   candidate: DiagnosisRegistryCandidate;
   busy: boolean;
@@ -235,9 +283,12 @@ function RegistryCandidateCard({
   onMarkNeedsReview: () => void;
   onReject: () => void;
   onMergeDuplicate: () => void;
+  onCreateRegistry: () => void;
 }) {
   const aliases = getStringArray(candidate.proposedAliases);
   const suggestions = getDuplicateSuggestions(candidate);
+  const canCreateRegistry =
+    canReview && !['CREATED', 'REJECTED', 'MERGED'].includes(candidate.status);
 
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -279,6 +330,15 @@ function RegistryCandidateCard({
           >
             Reject
           </button>
+          <button
+            type="button"
+            onClick={onCreateRegistry}
+            disabled={!canCreateRegistry || busy}
+            className="rounded-md border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+            title={canReview ? undefined : 'Requires senior editor'}
+          >
+            Create registry entry
+          </button>
         </div>
       </div>
 
@@ -319,12 +379,182 @@ function RegistryCandidateCard({
         </section>
       ) : null}
 
+      {candidate.createdRegistry ? (
+        <section className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+            Created registry
+          </p>
+          <Link
+            to={`/editorial/diagnoses/${candidate.createdRegistry.id}`}
+            className="mt-1 block text-sm font-semibold text-emerald-900 underline"
+          >
+            {candidate.createdRegistry.displayLabel}
+          </Link>
+        </section>
+      ) : null}
+
       {!canReview ? (
         <p className="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">
           Review actions require senior editor access.
         </p>
       ) : null}
     </article>
+  );
+}
+
+function CreateRegistryConfirmationModal({
+  candidate,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  candidate: DiagnosisRegistryCandidate;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const aliases = getStringArray(candidate.proposedAliases);
+  const suggestions = getDuplicateSuggestions(candidate);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+      <section className="w-full max-w-2xl rounded-xl bg-white p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-600">
+              Creates a new canonical diagnosis identity
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-slate-900">
+              Create registry entry
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-600"
+          >
+            Close
+          </button>
+        </div>
+
+        <dl className="mt-4 grid gap-3 md:grid-cols-2">
+          <InfoItem label="Canonical" value={candidate.proposedCanonicalName} />
+          <InfoItem
+            label="Display label"
+            value={candidate.proposedDisplayLabel}
+          />
+          <InfoItem
+            label="Source differential"
+            value={candidate.sourceRawText}
+          />
+          <InfoItem
+            label="Context"
+            value={
+              candidate.contextDiagnosisRegistry?.displayLabel ?? 'Unknown'
+            }
+          />
+        </dl>
+
+        <section className="mt-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Aliases
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            {aliases.length ? aliases.join(', ') : 'No aliases proposed.'}
+          </p>
+        </section>
+
+        <DuplicateSuggestions suggestions={suggestions} />
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {busy ? 'Creating...' : 'Create registry entry'}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function RegistryCreationSuccess({
+  result,
+}: {
+  result: CreateRegistryFromCandidateResult;
+}) {
+  const workspacePath = `/editorial/diagnoses/${result.registry.id}`;
+  return (
+    <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-emerald-900">
+            Registry entry created
+          </p>
+          <Link
+            to={workspacePath}
+            className="mt-1 block text-sm text-emerald-800 underline"
+          >
+            {result.registry.displayLabel}
+          </Link>
+        </div>
+        <StatusBadge
+          status={`${result.mappingsResolvedCount} mappings resolved`}
+          tone="info"
+        />
+        <StatusBadge
+          status={`${result.structuredLinksUpdatedCount} links synced`}
+          tone="info"
+        />
+      </div>
+      {result.rejectedAliases.length ? (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
+            Alias warnings
+          </p>
+          <ul className="mt-2 space-y-1 text-sm text-amber-900">
+            {result.rejectedAliases.map((alias) => (
+              <li key={`${alias.term}-${alias.reason}`}>
+                {alias.term}: {alias.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <div className="mt-4 rounded-lg border border-emerald-200 bg-white/70 p-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-800">
+          Next editorial steps
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {[
+            'Open workspace',
+            'Seed teaching rules',
+            'Generate editorial brief',
+            'Generate education draft',
+            'Generate targeted case',
+          ].map((label) => (
+            <Link
+              key={label}
+              to={workspacePath}
+              className="rounded-md border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50"
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 

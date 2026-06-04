@@ -820,6 +820,7 @@ function OverviewTab({
   return (
     <div className="space-y-4">
       <LifecycleBar lifecycle={workspace.lifecycle} />
+      <OnboardingCard workspace={workspace} onTabChange={onTabChange} />
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <WorkspaceSummaryCard workspace={workspace} />
         <CoverageScoreCard workspace={workspace} />
@@ -842,6 +843,92 @@ function OverviewTab({
       </div>
       <CoverageGapsCard gaps={workspace.coverageGaps} onGapSelect={onGapSelect} />
     </div>
+  );
+}
+
+function OnboardingCard({
+  workspace,
+  onTabChange,
+}: {
+  workspace: DiagnosisEditorialWorkspace;
+  onTabChange: (tab: WorkspaceTab) => void;
+}) {
+  const onboarding = workspace.onboarding;
+  if (!onboarding) {
+    return null;
+  }
+
+  return (
+    <CompactPanel title="Registry onboarding">
+      <div className="grid gap-3 lg:grid-cols-[240px_1fr]">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Progress
+          </p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">
+            {onboarding.progress.percent}%
+          </p>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+            <div
+              className="h-full rounded-full bg-emerald-600"
+              style={{ width: `${onboarding.progress.percent}%` }}
+            />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <StatusBadge status={formatLabel(onboarding.onboardingStatus)} />
+            <StatusBadge status={formatLabel(onboarding.readiness)} tone="info" />
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Missing components
+            </p>
+            {onboarding.missingComponents.length ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {onboarding.missingComponents.map((component) => (
+                  <StatusBadge
+                    key={component}
+                    status={formatLabel(component)}
+                    tone="warning"
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-slate-600">
+                Core editorial assets are present.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Recommended actions
+            </p>
+            {onboarding.recommendedActions.length ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {onboarding.recommendedActions.slice(0, 6).map((action) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    onClick={() => onTabChange(action.targetTab)}
+                    className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    title={action.reason}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-slate-600">
+                No onboarding recommendations remain.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </CompactPanel>
   );
 }
 

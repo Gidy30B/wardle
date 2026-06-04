@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  DiagnosisEditorialOnboardingStatus,
   DiagnosisRegistryCandidateStatus,
   DifferentialResolutionStatus,
 } from '@prisma/client';
@@ -14,10 +15,18 @@ function createFixture() {
     caseDifferentialMapping: {
       findUnique: jest.fn(),
       count: jest.fn().mockResolvedValue(0),
+      update: jest.fn(async (args) => ({
+        id: args.where.id,
+        ...args.data,
+      })),
     },
     educationDifferentialMapping: {
       findUnique: jest.fn(),
       count: jest.fn().mockResolvedValue(0),
+      update: jest.fn(async (args) => ({
+        id: args.where.id,
+        ...args.data,
+      })),
     },
     diagnosisRegistryCandidate: {
       count: jest.fn().mockResolvedValue(0),
@@ -35,15 +44,38 @@ function createFixture() {
     },
     diagnosisRegistry: {
       findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn().mockResolvedValue({
+        id: 'registry-created',
+        displayLabel: 'Rare Mimic Syndrome',
+        canonicalNormalized: 'rare mimic syndrome',
+      }),
+      create: jest.fn(async (args) => ({
+        id: 'registry-created',
+        ...args.data,
+      })),
     },
     diagnosisAlias: {
       findMany: jest.fn().mockResolvedValue([]),
+      upsert: jest.fn(async (args) => ({
+        id: 'alias-created',
+        term: args.create.term,
+        normalizedTerm: args.create.normalizedTerm,
+      })),
     },
+    $transaction: jest.fn(async (handler) => handler(prisma)),
+  };
+  const differentialLinkService = {
+    syncCaseMappingRow: jest.fn().mockResolvedValue({ action: 'created' }),
+    syncEducationMappingRow: jest.fn().mockResolvedValue({ action: 'created' }),
   };
 
   return {
     prisma,
-    service: new DiagnosisRegistryCandidateService(prisma as never),
+    differentialLinkService,
+    service: new DiagnosisRegistryCandidateService(
+      prisma as never,
+      differentialLinkService as never,
+    ),
   };
 }
 
@@ -228,9 +260,144 @@ describe('DiagnosisRegistryCandidateService', () => {
         }),
       }),
     );
-    expect(
-      (prisma.diagnosisRegistry as Record<string, unknown>).create,
-    ).toBeUndefined();
+    expect(prisma.diagnosisRegistry.create).not.toHaveBeenCalled();
+  });
+
+  it('creates a draft registry from a candidate and resolves the source mapping', async () => {
+    const { prisma, differentialLinkService, service } = createFixture();
+    prisma.diagnosisRegistryCandidate.findUnique.mockResolvedValue({
+      id: 'candidate-1',
+      proposedCanonicalName: 'Rare Mimic Syndrome',
+      proposedCanonicalNormalized: 'rare mimic syndrome',
+      proposedDisplayLabel: 'Rare Mimic Syndrome',
+      proposedAliases: ['Rare Mimic'],
+      sourceMappingId: 'map-1',
+      sourceRawText: 'Rare Mimic Syndrome',
+      status: DiagnosisRegistryCandidateStatus.CANDIDATE,
+      createdRegistryId: null,
+    });
+    prisma.caseDifferentialMapping.findUnique
+      .mockResolvedValueOnce({ id: 'map-1' })
+      .mockResolvedValueOnce({
+        ...unresolvedCaseMapping(),
+        status: DifferentialResolutionStatus.RESOLVED,
+        resolvedDiagnosisRegistryId: 'registry-created',
+      });
+    const result = await service.createRegistryFromCandidate(
+      'candidate-1',
+      'senior-1',
+    );
+
+    expect(prisma.diagnosisRegistry.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'DRAFT',
+          active: false,
+          onboardingStatus: DiagnosisEditorialOnboardingStatus.NEW,
+          onboardingStartedAt: expect.any(Date),
+          isPlayable: false,
+          isGeneratable: false,
+        }),
+      }),
+    );
+    expect(prisma.diagnosisAlias.upsert).toHaveBeenCalled();
+    expect(prisma.caseDifferentialMapping.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: DifferentialResolutionStatus.RESOLVED,
+          resolvedDiagnosisRegistryId: 'registry-created',
+        }),
+      }),
+    );
+    expect(differentialLinkService.syncCaseMappingRow).toHaveBeenCalled();
+    expect(prisma.diagnosisRegistryCandidate.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: DiagnosisRegistryCandidateStatus.CREATED,
+          createdRegistryId: 'registry-created',
+          approvedByUserId: 'senior-1',
+        }),
+      }),
+    );
+    expect(result.mappingsResolvedCount).toBe(1);
+    expect(result.structuredLinksUpdatedCount).toBe(1);
+  });
+
+  it('blocks candidate creation when canonical registry already exists', async () => {
+    const { prisma, service } = createFixture();
+    prisma.diagnosisRegistryCandidate.findUnique.mockResolvedValue({
+      id: 'candidate-1',
+      proposedCanonicalName: 'Rare Mimic Syndrome',
+      proposedDisplayLabel: 'Rare Mimic Syndrome',
+      proposedAliases: [],
+      sourceMappingId: null,
+      sourceRawText: 'Rare Mimic Syndrome',
+      status: DiagnosisRegistryCandidateStatus.CANDIDATE,
+      createdRegistryId: null,
+    });
+    prisma.diagnosisRegistry.findMany.mockResolvedValue([
+      {
+        id: 'registry-existing',
+        canonicalName: 'Rare Mimic Syndrome',
+        displayLabel: 'Rare Mimic Syndrome',
+        status: 'ACTIVE',
+      },
+    ]);
+
+    await expect(
+      service.createRegistryFromCandidate('candidate-1', 'senior-1'),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.diagnosisRegistry.create).not.toHaveBeenCalled();
+  });
+
+  it('skips invalid aliases with warnings instead of failing creation', async () => {
+    const { prisma, service } = createFixture();
+    prisma.diagnosisRegistryCandidate.findUnique.mockResolvedValue({
+      id: 'candidate-1',
+      proposedCanonicalName: 'Rare Mimic Syndrome',
+      proposedDisplayLabel: 'Rare Mimic Syndrome',
+      proposedAliases: ['Rare Mimic'],
+      sourceMappingId: null,
+      sourceRawText: 'Rare Mimic Syndrome',
+      status: DiagnosisRegistryCandidateStatus.NEEDS_REVIEW,
+      createdRegistryId: null,
+    });
+    prisma.diagnosisRegistry.findMany.mockResolvedValueOnce([]);
+    prisma.diagnosisAlias.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'alias-existing',
+          diagnosisRegistryId: 'other-registry',
+          term: 'Rare Mimic',
+          normalizedTerm: 'rare mimic',
+          kind: 'ACCEPTED',
+          acceptedForMatch: true,
+          diagnosis: { id: 'other-registry', displayLabel: 'Other Registry' },
+        },
+      ]);
+
+    const result = await service.createRegistryFromCandidate(
+      'candidate-1',
+      'senior-1',
+    );
+
+    expect(result.rejectedAliases).toHaveLength(1);
+    expect(result.createdAliases).toHaveLength(0);
+    expect(prisma.diagnosisRegistryCandidate.update).toHaveBeenCalled();
+  });
+
+  it('cannot recreate an already-created candidate', async () => {
+    const { prisma, service } = createFixture();
+    prisma.diagnosisRegistryCandidate.findUnique.mockResolvedValue({
+      id: 'candidate-1',
+      status: DiagnosisRegistryCandidateStatus.CREATED,
+      createdRegistryId: 'registry-created',
+    });
+
+    await expect(
+      service.createRegistryFromCandidate('candidate-1', 'senior-1'),
+    ).rejects.toThrow(ConflictException);
   });
 
   it('rejects candidates', async () => {

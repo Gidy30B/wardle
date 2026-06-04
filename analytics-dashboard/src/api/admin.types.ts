@@ -393,8 +393,50 @@ export type DiagnosisRegistryCandidate = {
     displayLabel: string;
     canonicalName: string;
   } | null;
+  approvedByUserId: string | null;
+  approvedByUser: {
+    id: string;
+    email: string | null;
+    username: string | null;
+  } | null;
+  approvedAt: string | null;
+  mergeTargetCandidateId: string | null;
+  mergeTargetCandidate: {
+    id: string;
+    proposedDisplayLabel: string;
+    status: DiagnosisRegistryCandidateStatus;
+  } | null;
+  creationSnapshot: JsonValue | null;
+  sourceMapping?: JsonValue | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type CreateRegistryFromCandidateResult = {
+  candidate: DiagnosisRegistryCandidate;
+  registry: {
+    id: string;
+    canonicalName: string;
+    canonicalNormalized: string;
+    displayLabel: string;
+    status: DiagnosisRegistryStatus;
+    active: boolean;
+    onboardingStatus?: DiagnosisEditorialOnboardingStatus | null;
+    onboardingStartedAt?: string | null;
+    isPlayable: boolean;
+    isGeneratable: boolean;
+  };
+  createdAliases: Array<{
+    aliasId: string;
+    term: string;
+    normalizedTerm: string;
+  }>;
+  rejectedAliases: Array<{
+    term: string;
+    reason: string;
+  }>;
+  mappingsResolvedCount: number;
+  structuredLinksUpdatedCount: number;
 };
 
 export type RegistryCandidateFilters = {
@@ -406,6 +448,27 @@ export type DiagnosisRegistryCandidateQueueSummary = {
   registryCandidateCount: number;
   unresolvedDifferentialCount: number;
   pendingRegistryCandidateCount: number;
+};
+
+export type DiagnosisEditorialOnboardingStatus =
+  | 'NEW'
+  | 'RULES_STARTED'
+  | 'BRIEF_STARTED'
+  | 'EDUCATION_STARTED'
+  | 'CASE_STARTED'
+  | 'READY_FOR_REVIEW'
+  | 'COMPLETE';
+
+export type DiagnosisEditorialOnboardingAction =
+  | 'mark_ready_for_review'
+  | 'mark_complete'
+  | 'reopen';
+
+export type DiagnosisEditorialOnboardingSummary = {
+  newlyCreatedDiagnoses: number;
+  diagnosesMissingRules: number;
+  diagnosesMissingEducation: number;
+  readyForReviewDiagnoses: number;
 };
 
 export type CreateRegistryCandidatePayload = {
@@ -1004,6 +1067,43 @@ export type WorkspaceRecommendedAction = {
   targetEndpoint?: string;
 };
 
+export type DiagnosisEditorialOnboarding = {
+  diagnosis: {
+    id: string;
+    canonicalName: string;
+    displayLabel: string;
+    status: DiagnosisRegistryStatus | string;
+    active: boolean;
+    isPlayable: boolean;
+    isGeneratable: boolean;
+  };
+  onboardingStatus: DiagnosisEditorialOnboardingStatus;
+  onboardingStartedAt: string | null;
+  onboardingCompletedAt: string | null;
+  readiness: 'in_progress' | 'ready_for_review' | 'complete' | string;
+  progress: {
+    completedComponents: number;
+    totalComponents: number;
+    percent: number;
+  };
+  missingComponents: string[];
+  recommendedActions: Array<{
+    id: string;
+    label: string;
+    targetTab: WorkspaceTargetTab;
+    reason: string;
+  }>;
+  existingAssets: {
+    teachingRules: number;
+    editorialBrief: number;
+    education: number;
+    cases: number;
+    graphFacts: number;
+    graphCandidates: number;
+    unresolvedDifferentials: number;
+  };
+};
+
 export type WorkspaceAvailableAction = {
   id: string;
   label: string;
@@ -1024,7 +1124,14 @@ export type DiagnosisEditorialWorkspace = {
     category: string | null;
     bodySystem: string | null;
     difficultyBand: string | null;
+    onboardingStatus?: DiagnosisEditorialOnboardingStatus | null;
+    onboardingStartedAt?: string | null;
+    onboardingCompletedAt?: string | null;
   };
+  onboarding?: DiagnosisEditorialOnboarding | null;
+  onboardingStatus?: DiagnosisEditorialOnboardingStatus | null;
+  onboardingProgress?: DiagnosisEditorialOnboarding['progress'] | null;
+  onboardingRecommendations?: DiagnosisEditorialOnboarding['recommendedActions'];
   lifecycle: WorkspaceLifecycle;
   workspaceSummary: {
     status: DiagnosisWorkspaceOverallStatus | 'ready' | 'needs_review' | string;

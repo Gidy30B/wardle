@@ -11,7 +11,10 @@ function permissionFor(methodName: keyof AdminController) {
 describe('AdminController editorial permissions', () => {
   it.each([
     'getFullDiagnosisEditorialWorkspace',
+    'getDiagnosisRegistryCandidate',
     'getDiagnosisRegistryCandidateSummary',
+    'getDiagnosisRegistryOnboarding',
+    'getDiagnosisRegistryOnboardingSummary',
     'listDiagnosisRegistryCandidates',
     'searchDiagnosisRegistry',
     'generateDiagnosisTeachingRules',
@@ -27,8 +30,10 @@ describe('AdminController editorial permissions', () => {
   it.each([
     'reviewTeachingRule',
     'reviewDiagnosisEditorialBrief',
+    'createRegistryFromCandidate',
     'createRegistryCandidateFromDifferentialMapping',
     'reviewDiagnosisRegistryCandidate',
+    'updateDiagnosisRegistryOnboardingStatus',
     'submitReview',
     'markReadyToPublish',
   ] as Array<keyof AdminController>)(

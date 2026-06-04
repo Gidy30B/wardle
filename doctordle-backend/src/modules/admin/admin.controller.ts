@@ -24,6 +24,10 @@ import { CaseGeneratorService } from '../case-generator/case-generator.service';
 import { AdminGuard } from './admin.guard';
 import { CaseReviewService } from './case-review.service';
 import { DiagnosisEditorialWorkspaceService } from './diagnosis-editorial-workspace.service';
+import {
+  DiagnosisEditorialOnboardingService,
+  type OnboardingStatusAction,
+} from './diagnosis-editorial-onboarding.service';
 import { DiagnosisWorkspaceQualityService } from './diagnosis-workspace-quality.service';
 import { TeachingUnitCoverageService } from './teaching-unit-coverage.service';
 import {
@@ -72,6 +76,7 @@ export class AdminController {
     private readonly diagnosisEditorialBriefService: DiagnosisEditorialBriefService,
     private readonly differentialMappingService: DifferentialMappingService,
     private readonly diagnosisRegistryCandidateService: DiagnosisRegistryCandidateService,
+    private readonly diagnosisEditorialOnboardingService: DiagnosisEditorialOnboardingService,
   ) {}
 
   @Get('cases')
@@ -165,6 +170,26 @@ export class AdminController {
     return this.diagnosisRegistryCandidateService.getQueueSummary();
   }
 
+  @Get('diagnosis-registry/candidates/:candidateId')
+  @EditorialAccess()
+  async getDiagnosisRegistryCandidate(
+    @Param('candidateId', new ParseUUIDPipe()) candidateId: string,
+  ) {
+    return this.diagnosisRegistryCandidateService.getCandidate(candidateId);
+  }
+
+  @Post('diagnosis-registry/candidates/:candidateId/create-registry')
+  @SeniorEditorialAccess()
+  async createRegistryFromCandidate(
+    @Param('candidateId', new ParseUUIDPipe()) candidateId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.diagnosisRegistryCandidateService.createRegistryFromCandidate(
+      candidateId,
+      request.user.id,
+    );
+  }
+
   @Post('diagnosis-registry/candidates/:candidateId/review')
   @SeniorEditorialAccess()
   async reviewDiagnosisRegistryCandidate(
@@ -176,6 +201,36 @@ export class AdminController {
       candidateId,
       request.user.id,
       body,
+    );
+  }
+
+  @Get('diagnosis-registry/onboarding/summary')
+  @EditorialAccess()
+  async getDiagnosisRegistryOnboardingSummary() {
+    return this.diagnosisEditorialOnboardingService.getSummary();
+  }
+
+  @Get('diagnosis-registry/:diagnosisRegistryId/onboarding')
+  @EditorialAccess()
+  async getDiagnosisRegistryOnboarding(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+  ) {
+    return this.diagnosisEditorialOnboardingService.getOnboarding(
+      diagnosisRegistryId,
+    );
+  }
+
+  @Post('diagnosis-registry/:diagnosisRegistryId/onboarding/update-status')
+  @SeniorEditorialAccess()
+  async updateDiagnosisRegistryOnboardingStatus(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Body() body: { action?: OnboardingStatusAction },
+  ) {
+    return this.diagnosisEditorialOnboardingService.updateStatus(
+      diagnosisRegistryId,
+      body.action as OnboardingStatusAction,
     );
   }
 

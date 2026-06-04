@@ -16,6 +16,7 @@ import { CaseReviewService } from './case-review.service';
 import { CaseQualityProjectionService } from './case-quality-projection.service';
 import { DiagnosisWorkspaceQualityService } from './diagnosis-workspace-quality.service';
 import { DiagnosisEditorialWorkspaceService } from './diagnosis-editorial-workspace.service';
+import { DiagnosisEditorialOnboardingService } from './diagnosis-editorial-onboarding.service';
 import { TeachingUnitCoverageService } from './teaching-unit-coverage.service';
 import { TeachingRulesAdminService } from './teaching-rules-admin.service';
 import { TargetedCaseGenerationService } from './targeted-case-generation.service';
@@ -49,6 +50,7 @@ import { DiagnosisRegistryCandidateService } from '../diagnosis-registry/diagnos
     CaseQualityProjectionService,
     DiagnosisWorkspaceQualityService,
     DiagnosisEditorialWorkspaceService,
+    DiagnosisEditorialOnboardingService,
     TeachingUnitCoverageService,
     TeachingRulesAdminService,
     TargetedCaseGenerationService,

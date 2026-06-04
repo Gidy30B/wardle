@@ -595,7 +595,7 @@ export class DiagnosisEducationService {
         displayLabel: string;
         canonicalName: string;
       };
-    }>,
+    }> = [],
   ) {
     return links.map((link) => ({
       id: link.id,

@@ -8,9 +8,13 @@ import type {
   CreateDiagnosisAndLinkPayload,
   CreateDiagnosisRegistryPayload,
   CreateDiagnosisRegistryResult,
+  CreateRegistryFromCandidateResult,
   CreateRegistryCandidatePayload,
   DashboardPayload,
   DiagnosisEditorialBrief,
+  DiagnosisEditorialOnboarding,
+  DiagnosisEditorialOnboardingAction,
+  DiagnosisEditorialOnboardingSummary,
   DiagnosisEditorialWorkspace,
   DiagnosisEditorialBriefResponse,
   DiagnosisEditorialBriefReviewAction,
@@ -148,9 +152,47 @@ export function getDiagnosisRegistryCandidates(
   );
 }
 
+export function getDiagnosisRegistryCandidate(client: ApiClient, id: string) {
+  return client.get<DiagnosisRegistryCandidate>(
+    `/admin/diagnosis-registry/candidates/${id}`,
+  );
+}
+
 export function getDiagnosisRegistryCandidateSummary(client: ApiClient) {
   return client.get<DiagnosisRegistryCandidateQueueSummary>(
     '/admin/diagnosis-registry/candidates/summary',
+  );
+}
+
+export function getDiagnosisRegistryOnboardingSummary(client: ApiClient) {
+  return client.get<DiagnosisEditorialOnboardingSummary>(
+    '/admin/diagnosis-registry/onboarding/summary',
+  );
+}
+
+export function getDiagnosisRegistryOnboarding(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.get<DiagnosisEditorialOnboarding>(
+    `/admin/diagnosis-registry/${diagnosisRegistryId}/onboarding`,
+  );
+}
+
+export function updateDiagnosisRegistryOnboardingStatus(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  action: DiagnosisEditorialOnboardingAction,
+) {
+  return client.post<DiagnosisEditorialOnboarding>(
+    `/admin/diagnosis-registry/${diagnosisRegistryId}/onboarding/update-status`,
+    { action },
+  );
+}
+
+export function createRegistryFromCandidate(client: ApiClient, id: string) {
+  return client.post<CreateRegistryFromCandidateResult>(
+    `/admin/diagnosis-registry/candidates/${id}/create-registry`,
   );
 }
 
