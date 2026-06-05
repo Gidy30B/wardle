@@ -59,14 +59,7 @@ export function useConsoleAccess(): ConsoleAccessState {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isLoaded) {
-      return;
-    }
-
-    if (!isSignedIn) {
-      setViewer(null);
-      setStatus('signed-out');
-      setError(null);
+    if (!isLoaded || !isSignedIn) {
       return;
     }
 
@@ -105,13 +98,21 @@ export function useConsoleAccess(): ConsoleAccessState {
     };
   }, [client, isLoaded, isSignedIn]);
 
-  const role = viewer?.role ?? USER_ROLES.USER;
+  const effectiveViewer = isSignedIn ? viewer : null;
+  const effectiveStatus: ConsoleAccessStatus = !isLoaded
+    ? 'loading'
+    : !isSignedIn
+      ? 'signed-out'
+      : status;
+  const role = effectiveViewer?.role ?? USER_ROLES.USER;
   const email =
-    user?.primaryEmailAddress?.emailAddress ?? viewer?.email ?? 'unknown@example.com';
+    user?.primaryEmailAddress?.emailAddress ??
+    effectiveViewer?.email ??
+    'unknown@example.com';
   const displayName = user?.fullName ?? user?.username ?? email;
 
   return {
-    status,
+    status: effectiveStatus,
     role,
     isAdmin: isAdminRole(role),
     canAccessEditorial: canAccessEditorialRole(role),
@@ -119,7 +120,7 @@ export function useConsoleAccess(): ConsoleAccessState {
     canAccessAdminOps: canAccessAdminOpsRole(role),
     email,
     displayName,
-    viewer,
-    error,
+    viewer: effectiveViewer,
+    error: effectiveStatus === 'signed-out' ? null : error,
   };
 }

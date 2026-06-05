@@ -11,9 +11,9 @@ import type {
 import {
   ALL_FILTERS,
   DIFFICULTY_ACTIVE_STYLES,
-  MOBILE_SPECIALTY_ICONS,
   TRACK_LABEL,
 } from "../learn.constants";
+import { MobileSpecialtyIcon } from "../../specialties/SpecialtyIcon";
 import {
   formatArchiveCaseLabel,
   formatAverageClues,
@@ -257,8 +257,6 @@ export function MobileSpecialtyCard({
           ? "bg-[var(--wardle-color-amber)]"
           : "bg-rose-400";
   const progressWidth = accuracy === null ? 0 : accuracy;
-  const icon = getMobileSpecialtyIcon(specialty.key);
-
   return (
     <button
       type="button"
@@ -266,11 +264,11 @@ export function MobileSpecialtyCard({
       className="wardle-learn-fade w-full overflow-hidden rounded-[16px] border border-white/[0.12] bg-white/[0.055] px-3.5 py-3 text-left transition active:scale-[0.99] hover:bg-white/[0.08]"
     >
       <div className="flex min-w-0 items-center gap-3">
-        <span
-          className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] text-[17px] ${icon.tone}`}
-        >
-          {icon.icon}
-        </span>
+        <MobileSpecialtyIcon
+          specialty={specialty.label || specialty.key}
+          className="h-[38px] w-[38px] rounded-[11px]"
+          iconClassName="h-[17px] w-[17px]"
+        />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[14px] font-bold text-[var(--wardle-color-mint)]">
             {specialty.label}
@@ -336,7 +334,6 @@ export function MobileSpecialtyCasesScreen({
   const specialtyKey = cases[0]
     ? getCaseSpecialty(cases[0]).key
     : normalizeFilterKey(specialtyLabel);
-  const icon = getMobileSpecialtyIcon(specialtyKey);
 
   return (
     <div className="min-w-0 pb-6">
@@ -356,11 +353,11 @@ export function MobileSpecialtyCasesScreen({
       <section className="space-y-4 px-5 pt-4">
         <div className="rounded-[16px] border border-white/[0.12] bg-white/[0.055] p-4">
           <div className="mb-3.5 flex items-center gap-3">
-            <span
-              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] text-[22px] ${icon.tone}`}
-            >
-              {icon.icon}
-            </span>
+            <MobileSpecialtyIcon
+              specialty={specialtyLabel || specialtyKey}
+              className="h-12 w-12 rounded-[14px]"
+              iconClassName="h-[22px] w-[22px]"
+            />
             <span className="min-w-0">
               <span className="block truncate text-[18px] font-black text-[var(--wardle-color-mint)]">
                 {specialtyLabel}
@@ -534,7 +531,6 @@ export function MobileCaseCard({
   const diagnosis = getCaseDiagnosisLabel(item);
   const caseLabel = formatArchiveCaseLabel(item);
   const specialty = getCaseSpecialty(item);
-  const icon = getMobileSpecialtyIcon(specialty.key);
 
   return (
     <button
@@ -542,11 +538,11 @@ export function MobileCaseCard({
       onClick={onSelect}
       className="wardle-learn-fade flex w-full min-w-0 items-center gap-3 rounded-[14px] border border-white/[0.12] bg-white/[0.055] px-3.5 py-3 text-left transition active:scale-[0.99] hover:bg-white/[0.08]"
     >
-      <span
-        className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] text-[15px] ${icon.tone}`}
-      >
-        {icon.icon}
-      </span>
+      <MobileSpecialtyIcon
+        specialty={specialty.label || specialty.key}
+        className="h-[34px] w-[34px] rounded-[10px]"
+        iconClassName="h-[15px] w-[15px]"
+      />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13px] font-bold text-[var(--wardle-color-mint)]">
           {diagnosis}
@@ -1120,11 +1116,3 @@ export function ArchiveEmptyState({
   );
 }
 
-export function getMobileSpecialtyIcon(key: string) {
-  return (
-    MOBILE_SPECIALTY_ICONS[key] ?? {
-      icon: "🩺",
-      tone: "bg-white/[0.08] text-white/70",
-    }
-  );
-}

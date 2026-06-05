@@ -3,7 +3,11 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
-import { CaseEditorialStatus, PublishTrack } from '@prisma/client';
+import {
+  CaseEditorialStatus,
+  DiagnosisRegistryStatus,
+  PublishTrack,
+} from '@prisma/client';
 import {
   DailyCasesService,
   getTrackPriority,
@@ -24,6 +28,7 @@ type StoreCase = {
     id: string;
     displayLabel?: string | null;
     canonicalName?: string | null;
+    status: DiagnosisRegistryStatus;
     active: boolean;
     isPlayable: boolean;
   } | null;
@@ -101,6 +106,7 @@ function createDailyCasesFixture(options?: { forceCreateRace?: boolean }) {
               id: diagnosisRegistryId,
               displayLabel: item.title,
               canonicalName: item.title,
+              status: DiagnosisRegistryStatus.ACTIVE,
               active: true,
               isPlayable: true,
             }
@@ -500,6 +506,7 @@ function addScheduleCase(
             id: `registry-${overrides.id}`,
             displayLabel: overrides.title ?? overrides.id,
             canonicalName: overrides.title ?? overrides.id,
+            status: DiagnosisRegistryStatus.ACTIVE,
             active: true,
             isPlayable: true,
           }

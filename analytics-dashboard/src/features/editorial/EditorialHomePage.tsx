@@ -16,6 +16,7 @@ import {
   useConsoleAccess,
   type ConsoleAccessState,
 } from '../../hooks/useConsoleAccess';
+import { SpecialtyIcon } from '../specialties/specialty-icons';
 
 const quickLinks = [
   {
@@ -27,6 +28,16 @@ const quickLinks = [
     to: '/cases',
     label: 'Browse cases',
     description: 'Review individual generated cases and diagnosis links.',
+  },
+  {
+    to: '/editorial/coverage',
+    label: 'Coverage Dashboard',
+    description: 'Review curriculum coverage across diagnoses and specialties.',
+  },
+  {
+    to: '/editorial/planner',
+    label: 'Curriculum Planner',
+    description: 'Prioritize editorial roadmap work from coverage gaps.',
   },
   {
     to: '/editorial/differentials',
@@ -415,12 +426,16 @@ function DiagnosisSearchResults({
                 {result.canonicalName}
               </p>
               <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-600">
-                {[
-                  result.specialty,
-                  result.bodySystem,
-                  result.category,
-                  result.difficultyBand,
-                ]
+                {result.specialty ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1">
+                    <SpecialtyIcon
+                      specialty={result.specialty}
+                      className="h-3.5 w-3.5"
+                    />
+                    {formatLabel(result.specialty)}
+                  </span>
+                ) : null}
+                {[result.bodySystem, result.category, result.difficultyBand]
                   .filter(Boolean)
                   .map((item) => (
                     <span

@@ -29,6 +29,7 @@ import {
 import { DiagnosisEditorialBriefService } from '../education/diagnosis-editorial-brief.service';
 import { DiagnosisEditorialOnboardingService } from './diagnosis-editorial-onboarding.service';
 import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
+import { EvidenceCoverageService } from './evidence-coverage.service';
 
 type LifecycleState = 'complete' | 'warning' | 'blocked' | 'not_started';
 type ReadinessSeverity = 'info' | 'warning' | 'blocker';
@@ -121,6 +122,8 @@ export class DiagnosisEditorialWorkspaceService {
     private readonly diagnosisEditorialOnboardingService?: DiagnosisEditorialOnboardingService,
     @Optional()
     private readonly diagnosisRegistryLifecyclePolicyService?: DiagnosisRegistryLifecyclePolicyService,
+    @Optional()
+    private readonly evidenceCoverageService?: EvidenceCoverageService,
   ) {}
 
   async getFullWorkspace(diagnosisRegistryId: string) {
@@ -139,9 +142,12 @@ export class DiagnosisEditorialWorkspaceService {
       differentialSummaryResult,
       differentialCoverageResult,
       linkedDifferentialsResult,
+      teachingRelationshipsResult,
+      evidenceGraphResult,
       registryCandidateCountsResult,
       onboardingResult,
       lifecycleGovernanceResult,
+      evidenceCoverageResult,
     ] = await Promise.allSettled([
       this.diagnosisWorkspaceQualityService.getSummary(diagnosisRegistryId),
       this.teachingUnitCoverageService.getCoverage(diagnosisRegistryId),
@@ -158,6 +164,8 @@ export class DiagnosisEditorialWorkspaceService {
       this.differentialLinkService?.getLinkedDifferentialsForDiagnosis(
         diagnosisRegistryId,
       ),
+      this.getTeachingRelationships(diagnosisRegistryId),
+      this.getEvidenceGraph(diagnosisRegistryId),
       this.getRegistryCandidateCounts(diagnosisRegistryId),
       this.diagnosisEditorialOnboardingService?.getOnboarding(
         diagnosisRegistryId,
@@ -165,6 +173,7 @@ export class DiagnosisEditorialWorkspaceService {
       this.diagnosisRegistryLifecyclePolicyService?.getLifecycle(
         diagnosisRegistryId,
       ),
+      this.evidenceCoverageService?.getDiagnosis(diagnosisRegistryId),
     ]);
 
     const compositionWarnings = this.compositionWarnings({
@@ -193,12 +202,17 @@ export class DiagnosisEditorialWorkspaceService {
       this.emptyDifferentialCoverage();
     const linkedDifferentials =
       this.valueOrNull(linkedDifferentialsResult) ?? [];
+    const teachingRelationships =
+      this.valueOrNull(teachingRelationshipsResult) ?? [];
+    const evidenceGraph =
+      this.valueOrNull(evidenceGraphResult) ?? this.emptyEvidenceGraph();
     const registryCandidateCounts =
       this.valueOrNull(registryCandidateCountsResult) ??
       this.emptyRegistryCandidateCounts();
     const onboarding = this.valueOrNull(onboardingResult) ?? null;
     const lifecycleGovernance =
       this.valueOrNull(lifecycleGovernanceResult) ?? null;
+    const evidenceCoverage = this.valueOrNull(evidenceCoverageResult) ?? null;
     const cases = this.buildCases(registry.cases);
     const coverageMatrix = this.buildCoverageMatrix({
       coverage,
@@ -305,7 +319,10 @@ export class DiagnosisEditorialWorkspaceService {
           ).length,
         candidates: graphCandidates,
         factsSummary: this.graphFactsSummary(registry.graphFacts),
+        teachingRelationships,
       },
+      evidenceGraph,
+      evidenceCoverage,
       linkedDifferentials,
       editorialLearning: {
         available: revisions.length >= 2,
@@ -396,6 +413,109 @@ export class DiagnosisEditorialWorkspaceService {
         },
       },
     });
+  }
+
+  private async getTeachingRelationships(diagnosisRegistryId: string) {
+    return this.prisma.diagnosisTeachingRelationship.findMany({
+      where: {
+        OR: [
+          { sourceDiagnosisRegistryId: diagnosisRegistryId },
+          { targetDiagnosisRegistryId: diagnosisRegistryId },
+        ],
+      },
+      include: {
+        sourceDiagnosisRegistry: {
+          select: { id: true, displayLabel: true, canonicalName: true },
+        },
+        targetDiagnosisRegistry: {
+          select: { id: true, displayLabel: true, canonicalName: true },
+        },
+        supportingGraphFact: {
+          select: { id: true, type: true, label: true, status: true },
+        },
+        supportingTeachingRule: {
+          select: { id: true, stableKey: true, title: true, status: true },
+        },
+      },
+      orderBy: [
+        {
+          status: 'asc',
+        },
+        { updatedAt: 'desc' },
+      ],
+      take: 100,
+    });
+  }
+
+  private async getEvidenceGraph(diagnosisRegistryId: string) {
+    const relationships =
+      await this.prisma.diagnosisEvidenceRelationship.findMany({
+        where: { diagnosisRegistryId },
+        include: {
+          evidenceNode: true,
+          supportingTeachingRelationship: {
+            select: {
+              id: true,
+              relationshipType: true,
+              teachingPurpose: true,
+              status: true,
+            },
+          },
+          supportingTeachingRule: {
+            select: { id: true, stableKey: true, title: true, status: true },
+          },
+          supportingCase: {
+            select: { id: true, title: true, editorialStatus: true },
+          },
+        },
+        orderBy: [
+          { status: 'asc' },
+          { discriminatorWeight: 'desc' },
+          { strength: 'desc' },
+          { updatedAt: 'desc' },
+        ],
+        take: 150,
+      });
+    const active = relationships.filter(
+      (relationship) => relationship.status === 'ACTIVE',
+    );
+
+    return {
+      summary: {
+        total: relationships.length,
+        active: active.length,
+        discriminatorEvidence: relationships.filter(
+          (relationship) =>
+            relationship.relationshipType === 'DISCRIMINATES' ||
+            relationship.discriminatorWeight >= 3,
+        ).length,
+        weakEvidenceCoverage: active.filter(
+          (relationship) => relationship.strength <= 1,
+        ).length,
+        byType: relationships.reduce<Record<string, number>>(
+          (acc, relationship) => {
+            const type = relationship.evidenceNode.evidenceType;
+            acc[type] = (acc[type] ?? 0) + 1;
+            return acc;
+          },
+          {},
+        ),
+      },
+      relationships,
+    };
+  }
+
+  private emptyEvidenceGraph() {
+    return {
+      summary: {
+        total: 0,
+        active: 0,
+        discriminatorEvidence: 0,
+        weakEvidenceCoverage: 0,
+        byType: {},
+      },
+      relationships: [],
+    };
   }
 
   private async getDifferentialResolutionSummary(diagnosisRegistryId: string) {

@@ -229,6 +229,74 @@ export type DiagnosisGraphCandidateStatus =
 
 export type DiagnosisGraphFactStatus = 'ACTIVE' | 'ARCHIVED';
 
+export type DiagnosisTeachingRelationshipType =
+  | 'DIFFERENTIAL_DISCRIMINATOR'
+  | 'MIMIC_CONFUSION'
+  | 'SHARED_PRESENTATION'
+  | 'ESCALATION_CONTRAST'
+  | 'MANAGEMENT_CONTRAST'
+  | 'INVESTIGATION_CONTRAST'
+  | 'COMPLICATION_RELATIONSHIP';
+
+export type DiagnosisTeachingRelationshipPurpose =
+  | 'TEACH_DISCRIMINATOR'
+  | 'PREVENT_COMMON_ERROR'
+  | 'BUILD_DDX_CLUSTER'
+  | 'SUPPORT_CASE_GENERATION'
+  | 'SUPPORT_EDUCATION'
+  | 'SUPPORT_RECALL';
+
+export type DiagnosisTeachingRelationshipStatus =
+  | 'CANDIDATE'
+  | 'NEEDS_REVIEW'
+  | 'ACTIVE'
+  | 'REJECTED'
+  | 'DEPRECATED';
+
+export type EvidenceType =
+  | 'SYMPTOM'
+  | 'EXAM'
+  | 'LAB'
+  | 'IMAGING'
+  | 'RISK_FACTOR'
+  | 'HISTORY'
+  | 'MANAGEMENT'
+  | 'COMPLICATION'
+  | 'EPIDEMIOLOGY';
+
+export type ClinicalCategory =
+  | 'PAIN'
+  | 'BLEEDING'
+  | 'INFECTION'
+  | 'NEUROLOGIC'
+  | 'RESPIRATORY'
+  | 'CARDIOVASCULAR'
+  | 'GI'
+  | 'ENDOCRINE'
+  | 'RENAL'
+  | 'TRAUMA'
+  | 'OTHER';
+
+export type EvidenceNodeStatus =
+  | 'CANDIDATE'
+  | 'ACTIVE'
+  | 'REJECTED'
+  | 'DEPRECATED';
+
+export type DiagnosisEvidenceRelationshipType =
+  | 'SUPPORTS'
+  | 'DISCRIMINATES'
+  | 'ESCALATES'
+  | 'RULES_OUT'
+  | 'COMPLICATION_SIGNAL'
+  | 'MANAGEMENT_SIGNAL';
+
+export type DiagnosisEvidenceRelationshipStatus =
+  | 'CANDIDATE'
+  | 'ACTIVE'
+  | 'REJECTED'
+  | 'DEPRECATED';
+
 export type DifferentialResolutionStatus =
   | 'RESOLVED'
   | 'AMBIGUOUS'
@@ -561,6 +629,133 @@ export type DiagnosisGraphCandidateFilters = {
   type?: DiagnosisGraphCandidateType;
   status?: DiagnosisGraphCandidateStatus;
   sourceType?: DiagnosisGraphSourceType;
+};
+
+export type DiagnosisTeachingRelationship = {
+  id: string;
+  sourceDiagnosisRegistryId: string;
+  targetDiagnosisRegistryId: string;
+  relationshipType: DiagnosisTeachingRelationshipType;
+  teachingPurpose: DiagnosisTeachingRelationshipPurpose;
+  discriminatorSummary: string | null;
+  commonConfusionReason: string | null;
+  learnerPitfall: string | null;
+  suggestedTeachingRuleStableKey: string | null;
+  supportingGraphFactId: string | null;
+  supportingDifferentialLinkId: string | null;
+  supportingTeachingRuleId: string | null;
+  strength: number;
+  status: DiagnosisTeachingRelationshipStatus;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  sourceDiagnosisRegistry: {
+    id: string;
+    displayLabel: string;
+    canonicalName: string;
+  };
+  targetDiagnosisRegistry: {
+    id: string;
+    displayLabel: string;
+    canonicalName: string;
+  };
+  supportingGraphFact?: {
+    id: string;
+    type: DiagnosisGraphCandidateType;
+    label: string;
+    status: DiagnosisGraphFactStatus;
+  } | null;
+  supportingTeachingRule?: {
+    id: string;
+    stableKey: string;
+    title: string;
+    status: string;
+  } | null;
+  readiness?: {
+    ready: boolean;
+    reasons: string[];
+  };
+};
+
+export type DiagnosisTeachingRelationshipReviewAction =
+  | 'activate'
+  | 'reject'
+  | 'deprecate'
+  | 'needs_review';
+
+export type DiagnosisTeachingRelationshipGenerateResult = {
+  createdCount: number;
+  existingCount: number;
+  skippedCount: number;
+  relationships: DiagnosisTeachingRelationship[];
+};
+
+export type EvidenceNode = {
+  id: string;
+  normalizedKey: string;
+  displayLabel: string;
+  evidenceType: EvidenceType;
+  clinicalCategory: ClinicalCategory;
+  synonyms: JsonValue | null;
+  status: EvidenceNodeStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DiagnosisEvidenceRelationship = {
+  id: string;
+  diagnosisRegistryId: string;
+  evidenceNodeId: string;
+  relationshipType: DiagnosisEvidenceRelationshipType;
+  strength: number;
+  discriminatorWeight: number;
+  reasoningSummary: string | null;
+  contradictoryDiagnosisIds: JsonValue | null;
+  supportingTeachingRelationshipId: string | null;
+  supportingTeachingRuleId: string | null;
+  supportingCaseId: string | null;
+  status: DiagnosisEvidenceRelationshipStatus;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  evidenceNode: EvidenceNode;
+  supportingTeachingRelationship?: {
+    id: string;
+    relationshipType: DiagnosisTeachingRelationshipType;
+    teachingPurpose: DiagnosisTeachingRelationshipPurpose;
+    status: DiagnosisTeachingRelationshipStatus;
+    targetDiagnosisRegistry?: {
+      id: string;
+      displayLabel: string;
+      canonicalName: string;
+    };
+  } | null;
+  supportingTeachingRule?: {
+    id: string;
+    stableKey: string;
+    title: string;
+    status: string;
+  } | null;
+  supportingCase?: {
+    id: string;
+    title: string;
+    editorialStatus: CaseEditorialStatus | string | null;
+  } | null;
+  readiness?: {
+    ready: boolean;
+    reasons: string[];
+  };
+};
+
+export type EvidenceGraphReviewAction = 'activate' | 'reject' | 'deprecate';
+
+export type EvidenceGraphGenerateResult = {
+  createdCount: number;
+  existingCount: number;
+  skippedCount: number;
+  relationships: DiagnosisEvidenceRelationship[];
 };
 
 export type RejectDiagnosisGraphCandidatePayload = {
@@ -1222,6 +1417,7 @@ export type DiagnosisEditorialWorkspace = {
     candidateCount: number;
     reviewableCandidateCount: number;
     candidates: DiagnosisGraphCandidate[];
+    teachingRelationships: DiagnosisTeachingRelationship[];
     factsSummary: {
       total: number;
       byType: Record<string, number>;
@@ -1234,6 +1430,17 @@ export type DiagnosisEditorialWorkspace = {
       }>;
     };
   };
+  evidenceGraph: {
+    summary: {
+      total: number;
+      active: number;
+      discriminatorEvidence: number;
+      weakEvidenceCoverage: number;
+      byType: Record<string, number>;
+    };
+    relationships: DiagnosisEvidenceRelationship[];
+  };
+  evidenceCoverage: EvidenceCoverageDiagnosis | null;
   linkedDifferentials?: StructuredDifferentialLink[];
   editorialLearning: {
     available: boolean;
@@ -1447,6 +1654,421 @@ export type EditorialInboxSummary = {
 export type EditorialInboxResponse = {
   summary: EditorialInboxSummary;
   items: EditorialInboxItem[];
+};
+
+export type EditorialCoverageWeakness =
+  | 'missing_teaching_rules'
+  | 'weak_teaching_rules'
+  | 'missing_required_differentials'
+  | 'weak_differential_breadth'
+  | 'unresolved_differentials'
+  | 'missing_playable_cases'
+  | 'missing_graph_coverage'
+  | 'stalled_onboarding'
+  | 'duplicate_risk'
+  | 'merge_risk';
+
+export type EvidenceReadinessTier = 'ready' | 'partial' | 'weak';
+
+export type EvidenceCoverageWeakness =
+  | 'missing_evidence_graph'
+  | 'missing_discriminator_evidence'
+  | 'weak_evidence_diversity'
+  | 'missing_case_evidence'
+  | 'missing_education_evidence'
+  | 'missing_rule_evidence'
+  | 'missing_teaching_relationship_evidence'
+  | 'overused_evidence_pattern'
+  | 'missing_imaging_discriminator'
+  | 'missing_lab_discriminator'
+  | 'weak_escalation_evidence'
+  | 'weak_complication_evidence'
+  | 'missing_management_contrast';
+
+export type EvidenceCoverageFilters = {
+  specialty?: string;
+  evidenceWeakness?: EvidenceCoverageWeakness | '';
+  readinessTier?: EvidenceReadinessTier | '';
+  playableOnly?: boolean;
+  onboardingStatus?: DiagnosisEditorialOnboardingStatus | '';
+};
+
+export type EvidenceCoverageReadinessItem = {
+  score: number;
+  tier: EvidenceReadinessTier;
+  reasons: string[];
+};
+
+export type EvidenceCoverageDiagnosis = {
+  diagnosisRegistryId: string;
+  diagnosisName: string;
+  canonicalName: string;
+  specialty: string | null;
+  bodySystem: string | null;
+  category: string | null;
+  onboardingStatus: DiagnosisEditorialOnboardingStatus | null;
+  lifecycle: {
+    active: boolean;
+    playable: boolean;
+    generatable: boolean;
+    status: DiagnosisRegistryStatus;
+  };
+  coverageScore: number;
+  coverageBreakdown: {
+    evidenceNodeCount: number;
+    discriminatorEvidenceCount: number;
+    evidenceDiversityCount: number;
+    teachingRelationshipEvidenceCoverage: number;
+    caseEvidenceCoverage: number;
+    educationEvidenceCoverage: number;
+    ruleEvidenceCoverage: number;
+  };
+  coverageWeaknesses: EvidenceCoverageWeakness[];
+  evidenceByType: Record<string, number>;
+  missingEvidence: Array<{ type: EvidenceCoverageWeakness; label: string }>;
+  redundancy: {
+    overusedEvidence: Array<{ evidenceKey: string; count: number; reason: string }>;
+    lowDiversity: boolean;
+    repeatedDiscriminators: Array<{ evidenceKey: string; count: number }>;
+    shallowReasoningPatterns: string[];
+  };
+  generationReadiness: {
+    caseGeneration: EvidenceCoverageReadinessItem;
+    teachingRuleGeneration: EvidenceCoverageReadinessItem;
+    discriminatorGeneration: EvidenceCoverageReadinessItem;
+    differentialGeneration: EvidenceCoverageReadinessItem;
+  };
+  generationReadinessScore: number;
+  generationReadinessTier: EvidenceReadinessTier;
+  generationReadinessReasons: string[];
+  generationHooks: {
+    suggestedEvidenceExpansion: boolean;
+    suggestedDiscriminatorCoverage: boolean;
+    suggestedReasoningPathCoverage: boolean;
+    suggestedGenerationPrerequisites: string[];
+  };
+  targetUrl: string;
+};
+
+export type EvidenceCoverageOverview = {
+  generatedAt: string;
+  filters: EvidenceCoverageFilters;
+  summary: {
+    diagnosisCount: number;
+    averageCoverageScore: number;
+    averageGenerationReadinessScore: number;
+    readyDiagnoses: number;
+    partialDiagnoses: number;
+    weakDiagnoses: number;
+    diagnosesLackingDiscriminatorEvidence: number;
+    diagnosesWithWeakEvidenceDiversity: number;
+    overusedEvidencePatterns: number;
+    missingEvidenceGaps: number;
+  };
+  evidenceTypeDistribution: Record<string, number>;
+  weakDiagnoses: EvidenceCoverageDiagnosis[];
+  generationReadiness: {
+    caseGenerationReady: number;
+    teachingRuleGenerationReady: number;
+    discriminatorGenerationReady: number;
+    differentialGenerationReady: number;
+  };
+};
+
+export type EditorialCoverageFilters = {
+  specialty?: string;
+  lifecycleState?: DiagnosisRegistryStatus | '';
+  onboardingState?: DiagnosisEditorialOnboardingStatus | '';
+  coverageWeakness?: EditorialCoverageWeakness | '';
+  playableOnly?: boolean;
+};
+
+export type EditorialCoverageDiagnosis = {
+  diagnosisRegistryId: string;
+  diagnosisName: string;
+  canonicalName: string;
+  specialty: string | null;
+  bodySystem: string | null;
+  category: string | null;
+  lifecycleState: DiagnosisRegistryStatus;
+  onboardingState: DiagnosisEditorialOnboardingStatus | null;
+  lifecycle: {
+    active: boolean;
+    playable: boolean;
+    generatable: boolean;
+    readiness: string;
+  };
+  teaching: {
+    ruleCount: number;
+    activeRuleCount: number;
+    requiredDifferentialCount: number;
+    rulesWithoutRequiredDifferentials: number;
+    discriminatorRuleCount: number;
+  };
+  differentials: {
+    requiredDifferentialCoverage: number;
+    linkedDifferentialCount: number;
+    unresolvedMappings: number;
+    weakBreadth: boolean;
+    oneWayRelationships: number;
+  };
+  education: {
+    status: DiagnosisEducationStatus | null;
+    completeness: 'missing' | 'weak' | 'partial' | 'complete';
+    version: number | null;
+  };
+  inventory: {
+    caseCount: number;
+    playableCaseCount: number;
+    dailyInventoryCount: number;
+  };
+  graph: {
+    relationshipCount: number;
+    activeTeachingRelationshipCount: number;
+    mimicRelationshipCount: number;
+    pendingCandidateCount: number;
+  };
+  evidenceGraph: {
+    activeRelationshipCount: number;
+    discriminatorEvidenceCount: number;
+    evidenceDiversityCount: number;
+    weakDiversity: boolean;
+  };
+  evidenceCoverage: EvidenceCoverageDiagnosis | null;
+  risk: {
+    duplicateRisk: number;
+    mergeRisk: number;
+    reviewBacklog: number;
+  };
+  weaknesses: EditorialCoverageWeakness[];
+  recommendations: {
+    recommendedTeachingRuleGeneration: boolean;
+    recommendedDifferentialExpansion: boolean;
+    recommendedGraphExpansion: boolean;
+    recommendedTeachingRelationshipActivation: boolean;
+    recommendedEvidenceGraphExpansion: boolean;
+    recommendedCaseGeneration: boolean;
+  };
+  targetUrl: string;
+};
+
+export type EditorialCoverageSpecialty = {
+  specialty: string;
+  diagnosisCount: number;
+  playableDiagnosisCount: number;
+  caseCount: number;
+  dailyInventoryCount: number;
+  educationCoveragePercent: number;
+  graphCoveragePercent: number;
+  unresolvedDifferentialCount: number;
+  weakDiagnosisCount: number;
+};
+
+export type EditorialCoverageOverview = {
+  generatedAt: string;
+  filters: EditorialCoverageFilters;
+  globalSummary: {
+    diagnosisCount: number;
+    playableDiagnoses: number;
+    playableCases: number;
+    unresolvedDifferentials: number;
+    onboardingBacklog: number;
+    graphBacklog: number;
+    teachingRelationshipGaps: number;
+    evidenceCoverageGaps: number;
+    inventoryDaysRemaining: number;
+  };
+  inventory: {
+    approvedCases: number;
+    readyToPublishCases: number;
+    playableCases: number;
+    assignableCases: number;
+    scheduledDaysRemaining: number;
+    inventoryExhaustionForecast: {
+      scheduledDays: number;
+      assignableCases: number;
+      estimatedExhaustionDays: number;
+    };
+    diagnosesWithNoPlayableCases: number;
+  };
+  differentialCoverage: {
+    unresolvedDifferentials: number;
+    ambiguousMappings: number;
+    diagnosesWithWeakDifferentialBreadth: number;
+    orphanedDifferentialLinks: number;
+    oneWayDifferentialRelationships: number;
+  };
+  teachingCoverage: {
+    diagnosesMissingTeachingRules: number;
+    weakTeachingRuleDensity: number;
+    rulesWithoutRequiredDifferentials: number;
+    diagnosesLackingDiscriminatorTeaching: number;
+  };
+  graphCoverage: {
+    diagnosesWithoutGraphFacts: number;
+    weakMimicRelationships: number;
+    graphCandidatesPendingReview: number;
+    graphRelationshipDensity: number;
+    activeTeachingRelationships: number;
+    graphFactsWithoutTeachingRelationships: number;
+    differentialLinksWithoutTeachingRelationships: number;
+    diagnosesWithWeakTeachingGraphCoverage: number;
+  };
+  evidenceGraphCoverage: {
+    evidenceNodeCount: number;
+    activeEvidenceRelationships: number;
+    diagnosesLackingDiscriminatorEvidence: number;
+    weakEvidenceDiversity: number;
+    overusedEvidencePatterns: number;
+    evidenceCoverageGaps: number;
+  };
+  evidenceCoverageReadiness: EvidenceCoverageOverview['summary'];
+  reviewCoverage: {
+    inbox: EditorialInboxSummary;
+    stalledOnboarding: number;
+    reviewBacklogByType: EditorialInboxSummary['byType'];
+  };
+  weakDiagnoses: EditorialCoverageDiagnosis[];
+  specialties: EditorialCoverageSpecialty[];
+  recommendations: {
+    recommendedTeachingRuleGeneration: number;
+    recommendedDifferentialExpansion: number;
+    recommendedGraphExpansion: number;
+    recommendedTeachingRelationshipActivation: number;
+    recommendedEvidenceGraphExpansion: number;
+    recommendedCaseGeneration: number;
+  };
+};
+
+export type CurriculumPriorityTier = 'high' | 'medium' | 'low';
+
+export type CurriculumPlannerFilters = {
+  specialty?: string;
+  onboardingStatus?: DiagnosisEditorialOnboardingStatus | '';
+  onboardingState?: DiagnosisEditorialOnboardingStatus | '';
+  lifecycleState?: DiagnosisRegistryStatus | '';
+  lifecycleReadiness?: string;
+  priorityTier?: CurriculumPriorityTier | '';
+  track?: string;
+  playableOnly?: boolean;
+};
+
+export type CurriculumDependency = {
+  type: 'shared_differential' | 'mimic' | 'specialty' | 'teaching_rule' | 'graph';
+  diagnosisRegistryId: string;
+  diagnosisName: string;
+  strength: number;
+  reason: string;
+};
+
+export type CurriculumPlannerDiagnosis = {
+  diagnosisRegistryId: string;
+  diagnosisName: string;
+  specialty: string | null;
+  bodySystem: string | null;
+  category: string | null;
+  lifecycleReadiness: string;
+  onboardingState: DiagnosisEditorialOnboardingStatus | null;
+  track: string;
+  priorityScore: number;
+  priorityTier: CurriculumPriorityTier;
+  priorityReasons: string[];
+  blockers: string[];
+  missingAreas: string[];
+  dependencies: CurriculumDependency[];
+  recommendations: string[];
+  planningHooks: {
+    suggestedTeachingRuleExpansion: boolean;
+    suggestedDifferentialExpansion: boolean;
+    suggestedGraphExpansion: boolean;
+    suggestedTeachingRelationshipActivation: boolean;
+    suggestedEvidenceGraphExpansion: boolean;
+    suggestedEvidenceExpansion: boolean;
+    suggestedDiscriminatorCoverage: boolean;
+    suggestedReasoningPathCoverage: boolean;
+    suggestedGenerationPrerequisites: string[];
+    suggestedCaseGeneration: boolean;
+    suggestedReviewPriority: CurriculumPriorityTier;
+  };
+  evidenceCoverage: {
+    coverageScore: number;
+    generationReadinessScore: number;
+    generationReadinessTier: string;
+    weaknessCount: number;
+  } | null;
+  inventory: {
+    caseCount: number;
+    playableCaseCount: number;
+    dailyInventoryCount: number;
+    overused: boolean;
+    needsPlayableInventory: boolean;
+  };
+  targetUrl: string;
+};
+
+export type CurriculumTrack = {
+  track: string;
+  label: string;
+  diagnosisCount: number;
+  highPriorityCount: number;
+  averagePriorityScore: number;
+  specialties: string[];
+  missingAreas: string[];
+  diagnoses: Array<{
+    diagnosisRegistryId: string;
+    diagnosisName: string;
+    priorityScore: number;
+    targetUrl: string;
+  }>;
+};
+
+export type CurriculumDependencyCluster = {
+  type: CurriculumDependency['type'];
+  label: string;
+  diagnosisIds: string[];
+  diagnosisNames: string[];
+  strength: number;
+  reason: string;
+};
+
+export type CurriculumPlannerOverview = {
+  generatedAt: string;
+  filters: CurriculumPlannerFilters;
+  summary: {
+    diagnosisCount: number;
+    highPriorityDiagnoses: number;
+    specialtyRiskCount: number;
+    inventoryExhaustionRisk: number;
+    onboardingBottlenecks: number;
+    unresolvedDifferentialBacklog: number;
+  };
+  priorityDiagnoses: CurriculumPlannerDiagnosis[];
+  tracks: CurriculumTrack[];
+  dependencyClusters: CurriculumDependencyCluster[];
+  inventoryPlanning: {
+    overusedDiagnoses: CurriculumPlannerDiagnosis[];
+    noCaseDiagnoses: CurriculumPlannerDiagnosis[];
+    specialtiesAtRisk: Array<{
+      specialty: string;
+      diagnosisCount: number;
+      caseCount: number;
+      dailyInventoryCount: number;
+      weakDiagnosisCount: number;
+      riskScore: number;
+    }>;
+    projectedExhaustion: {
+      scheduledDays: number;
+      assignableCases: number;
+      estimatedExhaustionDays: number;
+    };
+  };
+  recommendations: Array<{
+    diagnosisRegistryId: string;
+    diagnosisName: string;
+    priorityScore: number;
+    recommendations: string[];
+    targetUrl: string;
+  }>;
 };
 
 export type RegistryMergeRelated = {
@@ -2016,4 +2638,25 @@ export type PublishResultsSummary = {
     };
     readyToPublishTransitions: number;
   };
+};
+
+export type CaseInventoryHealth = {
+  totalCases: number;
+  byEditorialStatus: Record<string, number>;
+  registry: {
+    activeCount: number;
+    playableCount: number;
+    generatableCount: number;
+  };
+  validPlayableClueCount: number;
+  schedulerEligibleCount: number;
+  alreadyScheduledCount: number;
+  invalidClueCases: Array<{
+    caseId: string;
+    title: string;
+    editorialStatus: string | null;
+    playableClueCount: number;
+    reasons: string[];
+    invalidClueTypes: string[];
+  }>;
 };

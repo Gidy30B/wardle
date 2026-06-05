@@ -7,12 +7,16 @@ import {
   createDiagnosisTeachingRule,
   generateDiagnosisEditorialBrief,
   generateDiagnosisTeachingRuleCandidates,
+  generateDiagnosisTeachingRelationshipCandidates,
+  generateEvidenceGraphCandidates,
   generateTargetedDiagnosisCase,
   getDiagnosisEditorialBrief,
   getDiagnosisEditorialWorkspace,
   regenerateDiagnosisEducationSection,
   reviewDiagnosisEditorialBrief,
   reviewDiagnosisTeachingRule,
+  reviewDiagnosisTeachingRelationship,
+  reviewEvidenceGraphRelationship,
   seedLegacyDiagnosisTeachingRules,
   updateDiagnosisRegistryLifecycle,
   updateDiagnosisEditorialBrief,
@@ -27,6 +31,10 @@ import {
   type DiagnosisEducationRevisionAnalysis,
   type DiagnosisEducationRevisionCompareResult,
   type DiagnosisGraphCandidate,
+  type DiagnosisEvidenceRelationship,
+  type EvidenceGraphReviewAction,
+  type DiagnosisTeachingRelationship,
+  type DiagnosisTeachingRelationshipReviewAction,
   type DiagnosisTeachingRuleReviewAction,
   type DiagnosisTeachingRulesResponse,
   type DiagnosisTeachingRuleWritePayload,
@@ -43,7 +51,7 @@ import {
   type WorkspaceReadinessItem,
   type WorkspaceRecommendedAction,
 } from '../../api/admin';
-import { createApiClient } from '../../api/client';
+import { createApiClient, type ApiClient } from '../../api/client';
 import ActionFeedback from '../../components/ui/ActionFeedback';
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
@@ -59,6 +67,7 @@ import RevisionCompareCard from '../cases/education/RevisionCompareCard';
 import RevisionHistoryCard from '../cases/education/RevisionHistoryCard';
 import TargetedCaseGenerationCard from '../cases/education/TargetedCaseGenerationCard';
 import TeachingRulesCard from '../cases/education/TeachingRulesCard';
+import { SpecialtyIcon } from '../specialties/specialty-icons';
 
 type WorkspaceTab =
   | 'overview'
@@ -668,6 +677,12 @@ export default function EditorialDiagnosisWorkspacePage() {
               workspace={workspace}
               selectedRow={selectedCoverageRow}
               onRowSelect={openCoverageRow}
+              access={access}
+              client={client}
+              onRefresh={refreshWorkspace}
+              showError={showError}
+              showPending={showPending}
+              showSuccess={showSuccess}
             />
           ) : null}
         </main>
@@ -708,7 +723,6 @@ function WorkspaceHeader({
     workspace.diagnosis.canonicalName.toLowerCase() !==
       workspace.diagnosis.displayLabel.toLowerCase();
   const taxonomy = [
-    workspace.diagnosis.specialty,
     workspace.diagnosis.bodySystem,
     workspace.diagnosis.category,
     workspace.diagnosis.difficultyBand,
@@ -730,8 +744,17 @@ function WorkspaceHeader({
                 {workspace.diagnosis.canonicalName}
               </p>
             ) : null}
-            {taxonomy.length ? (
+            {workspace.diagnosis.specialty || taxonomy.length ? (
               <div className="mt-3 flex flex-wrap gap-2">
+                {workspace.diagnosis.specialty ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-sm text-slate-300">
+                    <SpecialtyIcon
+                      specialty={workspace.diagnosis.specialty}
+                      className="h-3.5 w-3.5"
+                    />
+                    {formatLabel(workspace.diagnosis.specialty)}
+                  </span>
+                ) : null}
                 {taxonomy.map((item) => (
                   <span
                     key={item}
@@ -1905,10 +1928,22 @@ function GraphTab({
   workspace,
   selectedRow,
   onRowSelect,
+  access,
+  client,
+  onRefresh,
+  showError,
+  showPending,
+  showSuccess,
 }: {
   workspace: DiagnosisEditorialWorkspace;
   selectedRow: WorkspaceCoverageMatrixRow | null;
   onRowSelect: (row: WorkspaceCoverageMatrixRow) => void;
+  access: ConsoleAccessState;
+  client: ApiClient;
+  onRefresh: () => Promise<void>;
+  showError: (message: string) => void;
+  showPending: (message: string) => void;
+  showSuccess: (message: string) => void;
 }) {
   return (
     <div className="space-y-4">
@@ -1928,6 +1963,28 @@ function GraphTab({
           Open graph candidate queue
         </Link>
       </CompactPanel>
+      <TeachingRelationshipPanel
+        diagnosisRegistryId={workspace.diagnosis.id}
+        relationships={workspace.graph.teachingRelationships ?? []}
+        access={access}
+        client={client}
+        onRefresh={onRefresh}
+        showError={showError}
+        showPending={showPending}
+        showSuccess={showSuccess}
+      />
+      <EvidenceGraphPanel
+        diagnosisRegistryId={workspace.diagnosis.id}
+        relationships={workspace.evidenceGraph?.relationships ?? []}
+        summary={workspace.evidenceGraph?.summary}
+        access={access}
+        client={client}
+        onRefresh={onRefresh}
+        showError={showError}
+        showPending={showPending}
+        showSuccess={showSuccess}
+      />
+      <EvidenceCoveragePanel coverage={workspace.evidenceCoverage} />
       <CoverageMatrixCard
         rows={workspace.coverageMatrix.filter(
           (row) => row.graphCoverage !== 'covered',
@@ -1938,6 +1995,540 @@ function GraphTab({
       <LinkedDifferentialsList links={workspace.linkedDifferentials ?? []} />
       <GraphCandidateList candidates={workspace.graph.candidates} />
     </div>
+  );
+}
+
+function EvidenceCoveragePanel({
+  coverage,
+}: {
+  coverage: DiagnosisEditorialWorkspace['evidenceCoverage'];
+}) {
+  if (!coverage) {
+    return (
+      <CompactPanel title="Evidence coverage">
+        <p className="text-sm text-slate-500">
+          Evidence coverage scoring is not available for this diagnosis yet.
+        </p>
+      </CompactPanel>
+    );
+  }
+
+  return (
+    <CompactPanel title="Evidence coverage">
+      <MetricGrid
+        items={[
+          { label: 'Coverage score', value: `${coverage.coverageScore}%` },
+          {
+            label: 'Readiness',
+            value: `${coverage.generationReadinessScore}% ${formatLabel(
+              coverage.generationReadinessTier,
+            )}`,
+          },
+          {
+            label: 'Discriminators',
+            value: coverage.coverageBreakdown.discriminatorEvidenceCount,
+          },
+          {
+            label: 'Diversity',
+            value: coverage.coverageBreakdown.evidenceDiversityCount,
+          },
+          {
+            label: 'Case coverage',
+            value: `${coverage.coverageBreakdown.caseEvidenceCoverage}%`,
+          },
+          {
+            label: 'Education coverage',
+            value: `${coverage.coverageBreakdown.educationEvidenceCoverage}%`,
+          },
+        ]}
+      />
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        <ReadinessIndicator
+          label="Case generation"
+          readiness={coverage.generationReadiness.caseGeneration}
+        />
+        <ReadinessIndicator
+          label="Differential generation"
+          readiness={coverage.generationReadiness.differentialGeneration}
+        />
+        <ReadinessIndicator
+          label="Teaching generation"
+          readiness={coverage.generationReadiness.teachingRuleGeneration}
+        />
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <EvidenceList
+          title="Evidence gaps"
+          items={coverage.missingEvidence.map((item) => item.label)}
+          empty="No evidence gaps reported."
+        />
+        <EvidenceList
+          title="Overused evidence"
+          items={coverage.redundancy.overusedEvidence.map(
+            (item) => `${formatLabel(item.evidenceKey)} (${item.count})`,
+          )}
+          empty="No overused evidence patterns reported."
+        />
+      </div>
+      {coverage.generationHooks.suggestedGenerationPrerequisites.length ? (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+            Generation prerequisites
+          </p>
+          <p className="mt-2 text-sm text-amber-900">
+            {coverage.generationHooks.suggestedGenerationPrerequisites.join(', ')}
+          </p>
+        </div>
+      ) : null}
+    </CompactPanel>
+  );
+}
+
+function ReadinessIndicator({
+  label,
+  readiness,
+}: {
+  label: string;
+  readiness: {
+    score: number;
+    tier: string;
+    reasons: string[];
+  };
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-slate-900">{label}</p>
+        <StatusBadge
+          status={`${readiness.score}% ${readiness.tier}`}
+          tone={readiness.tier === 'weak' ? 'warning' : 'info'}
+        />
+      </div>
+      <p className="mt-2 text-xs text-slate-600">
+        {readiness.reasons.slice(0, 2).join(', ') || 'Ready prerequisites met'}
+      </p>
+    </div>
+  );
+}
+
+function EvidenceList({
+  title,
+  items,
+  empty,
+}: {
+  title: string;
+  items: string[];
+  empty: string;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+      </p>
+      {items.length ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {items.slice(0, 8).map((item) => (
+            <span
+              key={item}
+              className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600"
+            >
+              {item}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-slate-500">{empty}</p>
+      )}
+    </div>
+  );
+}
+
+function EvidenceGraphPanel({
+  diagnosisRegistryId,
+  relationships,
+  summary,
+  access,
+  client,
+  onRefresh,
+  showError,
+  showPending,
+  showSuccess,
+}: {
+  diagnosisRegistryId: string;
+  relationships: DiagnosisEvidenceRelationship[];
+  summary?: DiagnosisEditorialWorkspace['evidenceGraph']['summary'];
+  access: ConsoleAccessState;
+  client: ApiClient;
+  onRefresh: () => Promise<void>;
+  showError: (message: string) => void;
+  showPending: (message: string) => void;
+  showSuccess: (message: string) => void;
+}) {
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const grouped = useMemo(() => groupEvidenceRelationships(relationships), [relationships]);
+
+  async function generateCandidates() {
+    try {
+      setBusyAction('generate-evidence');
+      showPending('Generating evidence graph candidates...');
+      const result = await generateEvidenceGraphCandidates(
+        client,
+        diagnosisRegistryId,
+      );
+      await onRefresh();
+      showSuccess(`Generated ${result.createdCount} evidence candidates.`);
+    } catch (error) {
+      showError(errorMessage(error, 'Failed to generate evidence graph.'));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function reviewRelationship(
+    id: string,
+    action: EvidenceGraphReviewAction,
+  ) {
+    try {
+      setBusyAction(`${action}:${id}`);
+      showPending('Updating evidence relationship...');
+      await reviewEvidenceGraphRelationship(client, id, action);
+      await onRefresh();
+      showSuccess('Evidence relationship updated.');
+    } catch (error) {
+      showError(errorMessage(error, 'Failed to update evidence relationship.'));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">Evidence graph</p>
+          <p className="text-xs text-slate-500">
+            Findings, clues, labs, imaging, and reasoning evidence linked to this diagnosis.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={generateCandidates}
+          disabled={busyAction !== null}
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Generate candidates
+        </button>
+      </div>
+      <MetricGrid
+        items={[
+          { label: 'Evidence', value: summary?.total ?? 0 },
+          { label: 'Active', value: summary?.active ?? 0 },
+          { label: 'Discriminators', value: summary?.discriminatorEvidence ?? 0 },
+          { label: 'Weak coverage', value: summary?.weakEvidenceCoverage ?? 0 },
+        ]}
+      />
+      {relationships.length ? (
+        <div className="space-y-4 border-t border-slate-200 px-4 py-4">
+          {grouped.map(([type, items]) => (
+            <div key={type}>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {formatLabel(type)}
+              </p>
+              <div className="mt-2 grid gap-2">
+                {items.slice(0, 12).map((relationship) => (
+                  <div
+                    key={relationship.id}
+                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {relationship.evidenceNode.displayLabel}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-600">
+                          {formatLabel(relationship.relationshipType)} · strength{' '}
+                          {relationship.strength} · discriminator{' '}
+                          {relationship.discriminatorWeight}
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        {formatLabel(relationship.status)}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-600">
+                      {relationship.reasoningSummary || 'No reasoning summary yet.'}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                      {relationship.supportingCase ? (
+                        <Link
+                          to={`/cases/${relationship.supportingCase.id}`}
+                          className="font-semibold text-slate-800 underline"
+                        >
+                          Open case
+                        </Link>
+                      ) : null}
+                      {relationship.supportingTeachingRule ? (
+                        <Link
+                          to={`/editorial/diagnoses/${diagnosisRegistryId}?tab=teaching-rules`}
+                          className="font-semibold text-slate-800 underline"
+                        >
+                          Open rule
+                        </Link>
+                      ) : null}
+                      {relationship.supportingTeachingRelationship ? (
+                        <span className="text-slate-500">
+                          Teaching relationship linked
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <RelationshipActionButton
+                        label="Activate"
+                        disabled={!access.canPublishEditorial || busyAction !== null}
+                        onClick={() =>
+                          reviewRelationship(relationship.id, 'activate')
+                        }
+                      />
+                      <RelationshipActionButton
+                        label="Reject"
+                        disabled={!access.canPublishEditorial || busyAction !== null}
+                        onClick={() => reviewRelationship(relationship.id, 'reject')}
+                      />
+                      <RelationshipActionButton
+                        label="Deprecate"
+                        disabled={!access.canPublishEditorial || busyAction !== null}
+                        onClick={() =>
+                          reviewRelationship(relationship.id, 'deprecate')
+                        }
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="border-t border-slate-200 px-4 py-6 text-sm text-slate-500">
+          No evidence relationships have been created for this diagnosis yet.
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TeachingRelationshipPanel({
+  diagnosisRegistryId,
+  relationships,
+  access,
+  client,
+  onRefresh,
+  showError,
+  showPending,
+  showSuccess,
+}: {
+  diagnosisRegistryId: string;
+  relationships: DiagnosisTeachingRelationship[];
+  access: ConsoleAccessState;
+  client: ApiClient;
+  onRefresh: () => Promise<void>;
+  showError: (message: string) => void;
+  showPending: (message: string) => void;
+  showSuccess: (message: string) => void;
+}) {
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const canReview = access.canPublishEditorial;
+
+  async function generateCandidates() {
+    try {
+      setBusyAction('generate');
+      showPending('Generating teaching relationship candidates...');
+      const result = await generateDiagnosisTeachingRelationshipCandidates(
+        client,
+        diagnosisRegistryId,
+      );
+      await onRefresh();
+      showSuccess(
+        `Generated ${result.createdCount} teaching relationship candidates.`,
+      );
+    } catch (error) {
+      showError(errorMessage(error, 'Failed to generate teaching relationships.'));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function reviewRelationship(
+    id: string,
+    action: DiagnosisTeachingRelationshipReviewAction,
+  ) {
+    try {
+      setBusyAction(`${action}:${id}`);
+      showPending('Updating teaching relationship...');
+      await reviewDiagnosisTeachingRelationship(client, id, action);
+      await onRefresh();
+      showSuccess('Teaching relationship updated.');
+    } catch (error) {
+      showError(errorMessage(error, 'Failed to update teaching relationship.'));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">Teaching graph</p>
+          <p className="text-xs text-slate-500">
+            Reviewed teaching relationships layered over graph and differential evidence.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={generateCandidates}
+          disabled={busyAction !== null}
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Generate candidates
+        </button>
+      </div>
+      {relationships.length ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Relationship</th>
+                <th className="px-4 py-3">Teaching intent</th>
+                <th className="px-4 py-3">Evidence</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {relationships.slice(0, 30).map((relationship) => (
+                <tr key={relationship.id}>
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-slate-900">
+                      {relationship.sourceDiagnosisRegistry.displayLabel}{' '}
+                      {'->'}{' '}
+                      <Link
+                        to={`/editorial/diagnoses/${relationship.targetDiagnosisRegistryId}`}
+                        className="underline"
+                      >
+                        {relationship.targetDiagnosisRegistry.displayLabel}
+                      </Link>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {formatLabel(relationship.relationshipType)} · strength{' '}
+                      {relationship.strength}
+                    </p>
+                  </td>
+                  <td className="max-w-md px-4 py-3 text-slate-700">
+                    <p className="font-medium">
+                      {formatLabel(relationship.teachingPurpose)}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      {relationship.discriminatorSummary ||
+                        relationship.commonConfusionReason ||
+                        relationship.learnerPitfall ||
+                        'No teaching summary yet.'}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-600">
+                    {relationship.supportingGraphFact ? (
+                      <span>
+                        Graph: {formatLabel(relationship.supportingGraphFact.type)}
+                      </span>
+                    ) : relationship.supportingTeachingRule ? (
+                      <span>
+                        Rule:{' '}
+                        <Link
+                          to={`/editorial/diagnoses/${diagnosisRegistryId}?tab=teaching-rules`}
+                          className="underline"
+                        >
+                          {relationship.supportingTeachingRule.title}
+                        </Link>
+                      </span>
+                    ) : relationship.supportingDifferentialLinkId ? (
+                      <span>{relationship.supportingDifferentialLinkId}</span>
+                    ) : (
+                      <span>No linked evidence</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-slate-700">
+                    {formatLabel(relationship.status)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-2">
+                      <RelationshipActionButton
+                        label="Activate"
+                        disabled={!canReview || busyAction !== null}
+                        onClick={() =>
+                          reviewRelationship(relationship.id, 'activate')
+                        }
+                      />
+                      <RelationshipActionButton
+                        label="Reject"
+                        disabled={!canReview || busyAction !== null}
+                        onClick={() =>
+                          reviewRelationship(relationship.id, 'reject')
+                        }
+                      />
+                      <RelationshipActionButton
+                        label="Deprecate"
+                        disabled={!canReview || busyAction !== null}
+                        onClick={() =>
+                          reviewRelationship(relationship.id, 'deprecate')
+                        }
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="px-4 py-6 text-sm text-slate-500">
+          No teaching relationships have been created for this diagnosis yet.
+        </div>
+      )}
+    </section>
+  );
+}
+
+function RelationshipActionButton({
+  label,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {label}
+    </button>
+  );
+}
+
+function groupEvidenceRelationships(
+  relationships: DiagnosisEvidenceRelationship[],
+) {
+  const grouped = new Map<string, DiagnosisEvidenceRelationship[]>();
+  for (const relationship of relationships) {
+    const type = relationship.evidenceNode.evidenceType;
+    grouped.set(type, [...(grouped.get(type) ?? []), relationship]);
+  }
+  return [...grouped.entries()].sort(([left], [right]) =>
+    left.localeCompare(right),
   );
 }
 

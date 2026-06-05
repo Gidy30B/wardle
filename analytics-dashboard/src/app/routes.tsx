@@ -5,6 +5,8 @@ import CasesPage from '../features/cases/CasesPage';
 import DashboardPage from '../features/dashboard/DashboardPage';
 import DiagnosisGraphCandidatesPage from '../features/diagnosis-graph/DiagnosisGraphCandidatesPage';
 import EditorialDiagnosisWorkspacePage from '../features/editorial/EditorialDiagnosisWorkspacePage';
+import EditorialCoverageDashboardPage from '../features/editorial/EditorialCoverageDashboardPage';
+import CurriculumPlannerPage from '../features/editorial/CurriculumPlannerPage';
 import EditorialHomePage from '../features/editorial/EditorialHomePage';
 import EditorialReviewInboxPage from '../features/editorial/EditorialReviewInboxPage';
 import RegistryCandidatesPage from '../features/editorial/RegistryCandidatesPage';
@@ -51,6 +53,14 @@ const routeContext: Record<string, { title: string; subtitle: string }> = {
   '/editorial/inbox': {
     title: 'Review Inbox',
     subtitle: 'Unified editorial review queues',
+  },
+  '/editorial/coverage': {
+    title: 'Coverage Dashboard',
+    subtitle: 'Curriculum coverage, inventory, graph, and teaching gaps',
+  },
+  '/editorial/planner': {
+    title: 'Curriculum Planner',
+    subtitle: 'Prioritized editorial roadmap from coverage gaps',
   },
   '/editorial/differentials': {
     title: 'Differentials',
@@ -202,6 +212,14 @@ export default function AppRoutes() {
         <Route path="/publish" element={<PublishPage />} />
         <Route path="/editorial" element={<EditorialHomePage />} />
         <Route path="/editorial/inbox" element={<EditorialReviewInboxPage />} />
+        <Route
+          path="/editorial/coverage"
+          element={<EditorialCoverageDashboardPage />}
+        />
+        <Route
+          path="/editorial/planner"
+          element={<CurriculumPlannerPage />}
+        />
         <Route
           path="/editorial/differentials"
           element={<UnresolvedDifferentialsPage />}

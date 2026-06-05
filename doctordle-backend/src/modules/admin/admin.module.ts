@@ -23,6 +23,11 @@ import { TeachingUnitCoverageService } from './teaching-unit-coverage.service';
 import { TeachingRulesAdminService } from './teaching-rules-admin.service';
 import { TargetedCaseGenerationService } from './targeted-case-generation.service';
 import { EditorialReviewInboxService } from './editorial-review-inbox.service';
+import { EditorialCoverageDashboardService } from './editorial-coverage-dashboard.service';
+import { CurriculumPlanningService } from './curriculum-planning.service';
+import { DiagnosisTeachingRelationshipService } from './diagnosis-teaching-relationship.service';
+import { EvidenceGraphService } from './evidence-graph.service';
+import { EvidenceCoverageService } from './evidence-coverage.service';
 import { EducationRevisionQualityAnalyzer } from '../education/education-revision-quality-analyzer.service';
 import { EducationDraftQualityValidator } from '../education/education-draft-quality-validator.service';
 import { EducationKnowledgeRulesService } from '../education/education-knowledge-rules.service';
@@ -62,6 +67,11 @@ import { DiagnosisRegistryMergeExecutionService } from '../diagnosis-registry/di
     TeachingUnitCoverageService,
     TeachingRulesAdminService,
     EditorialReviewInboxService,
+    EditorialCoverageDashboardService,
+    CurriculumPlanningService,
+    DiagnosisTeachingRelationshipService,
+    EvidenceGraphService,
+    EvidenceCoverageService,
     TargetedCaseGenerationService,
     EducationRevisionQualityAnalyzer,
     EducationDraftQualityValidator,

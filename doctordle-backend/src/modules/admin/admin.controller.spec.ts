@@ -33,6 +33,34 @@ describe('AdminController generateCases', () => {
         .fn()
         .mockResolvedValue({ rulesUpserted: 0 }),
     };
+    const editorialCoverageDashboardService = {
+      getOverview: jest.fn().mockResolvedValue({ globalSummary: {} }),
+      getDiagnoses: jest.fn().mockResolvedValue([]),
+      getSpecialties: jest.fn().mockResolvedValue([]),
+    };
+    const curriculumPlanningService = {
+      getOverview: jest.fn().mockResolvedValue({ summary: {} }),
+      getDiagnoses: jest.fn().mockResolvedValue([]),
+      getTracks: jest.fn().mockResolvedValue([]),
+    };
+    const diagnosisTeachingRelationshipService = {
+      listRelationships: jest.fn().mockResolvedValue([]),
+      generateCandidates: jest.fn().mockResolvedValue({ createdCount: 0 }),
+      reviewRelationship: jest.fn().mockResolvedValue({ id: 'relationship-1' }),
+      listForDiagnosis: jest.fn().mockResolvedValue([]),
+    };
+    const evidenceGraphService = {
+      listNodes: jest.fn().mockResolvedValue([]),
+      listRelationships: jest.fn().mockResolvedValue([]),
+      generateCandidates: jest.fn().mockResolvedValue({ createdCount: 0 }),
+      reviewRelationship: jest.fn().mockResolvedValue({ id: 'evidence-1' }),
+      getForDiagnosis: jest.fn().mockResolvedValue({ relationships: [] }),
+    };
+    const evidenceCoverageService = {
+      getOverview: jest.fn().mockResolvedValue({ summary: {} }),
+      getDiagnoses: jest.fn().mockResolvedValue([]),
+      getDiagnosis: jest.fn().mockResolvedValue({ diagnosisRegistryId: 'registry-1' }),
+    };
     const diagnosisEditorialBriefService = {
       getBrief: jest.fn().mockResolvedValue({ brief: null }),
       generateBrief: jest.fn().mockResolvedValue({ id: 'brief-1' }),
@@ -71,6 +99,11 @@ describe('AdminController generateCases', () => {
         editorialReviewInboxService as never,
         targetedCaseGenerationService as never,
         teachingRulesAdminService as never,
+        editorialCoverageDashboardService as never,
+        curriculumPlanningService as never,
+        diagnosisTeachingRelationshipService as never,
+        evidenceGraphService as never,
+        evidenceCoverageService as never,
         diagnosisEditorialBriefService as never,
         differentialMappingService as never,
         diagnosisRegistryCandidateService as never,
@@ -83,6 +116,11 @@ describe('AdminController generateCases', () => {
       caseInventoryHealthService,
       editorialReviewInboxService,
       teachingRulesAdminService,
+      editorialCoverageDashboardService,
+      curriculumPlanningService,
+      diagnosisTeachingRelationshipService,
+      evidenceGraphService,
+      evidenceCoverageService,
       diagnosisEditorialBriefService,
       diagnosisEditorialWorkspaceService,
       diagnosisEditorialOnboardingService,
@@ -107,6 +145,32 @@ describe('AdminController generateCases', () => {
         diagnosisRegistryIds: ['11111111-1111-4111-8111-111111111111'],
       }),
     );
+  });
+
+  it('gets curriculum planner overview with filters', async () => {
+    const { controller, curriculumPlanningService } = buildController();
+
+    await controller.getCurriculumPlannerOverview(
+      'Cardiology',
+      'RULES_STARTED',
+      undefined,
+      'active',
+      'ACTIVE',
+      'high',
+      'chest_pain',
+      'true',
+    );
+
+    expect(curriculumPlanningService.getOverview).toHaveBeenCalledWith({
+      specialty: 'Cardiology',
+      onboardingStatus: 'RULES_STARTED',
+      onboardingState: undefined,
+      lifecycleReadiness: 'active',
+      lifecycleState: 'ACTIVE',
+      priorityTier: 'high',
+      track: 'chest_pain',
+      playableOnly: true,
+    });
   });
 
   it('gets editorial review inbox with filters', async () => {
@@ -137,6 +201,73 @@ describe('AdminController generateCases', () => {
     await controller.getCaseInventoryHealth();
 
     expect(caseInventoryHealthService.getInventoryHealth).toHaveBeenCalled();
+  });
+
+  it('generates diagnosis teaching relationship candidates', async () => {
+    const { controller, diagnosisTeachingRelationshipService } =
+      buildController();
+
+    await controller.generateDiagnosisTeachingRelationshipCandidates({
+      diagnosisRegistryId: '11111111-1111-4111-8111-111111111111',
+    });
+
+    expect(
+      diagnosisTeachingRelationshipService.generateCandidates,
+    ).toHaveBeenCalledWith({
+      diagnosisRegistryId: '11111111-1111-4111-8111-111111111111',
+    });
+  });
+
+  it('generates evidence graph candidates', async () => {
+    const { controller, evidenceGraphService } = buildController();
+
+    await controller.generateEvidenceGraphCandidates({
+      diagnosisRegistryId: '11111111-1111-4111-8111-111111111111',
+    });
+
+    expect(evidenceGraphService.generateCandidates).toHaveBeenCalledWith({
+      diagnosisRegistryId: '11111111-1111-4111-8111-111111111111',
+    });
+  });
+
+  it('gets editorial coverage overview with filters', async () => {
+    const { controller, editorialCoverageDashboardService } = buildController();
+
+    await controller.getEditorialCoverageOverview(
+      'Cardiology',
+      'ACTIVE',
+      'COMPLETE',
+      'missing_graph_coverage',
+      'true',
+    );
+
+    expect(editorialCoverageDashboardService.getOverview).toHaveBeenCalledWith({
+      specialty: 'Cardiology',
+      lifecycleState: 'ACTIVE',
+      onboardingState: 'COMPLETE',
+      coverageWeakness: 'missing_graph_coverage',
+      playableOnly: true,
+    });
+  });
+
+  it('gets evidence coverage overview with advisory filters', async () => {
+    const { controller, evidenceCoverageService } = buildController();
+
+    await controller.getEvidenceCoverageOverview(
+      'Cardiology',
+      'missing_lab_discriminator',
+      'weak',
+      'true',
+      'READY_FOR_REVIEW',
+    );
+
+    expect(evidenceCoverageService.getOverview).toHaveBeenCalledWith({
+      specialty: 'Cardiology',
+      evidenceWeakness: 'missing_lab_discriminator',
+      readinessTier: 'weak',
+      playableOnly: true,
+      onboardingStatus: 'READY_FOR_REVIEW',
+    });
   });
 
   it('generates a targeted case from diagnosis workspace payload', async () => {

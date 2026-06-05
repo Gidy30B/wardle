@@ -3,6 +3,8 @@ import { NavLink } from 'react-router-dom';
 const editorialNavigationItems = [
   { to: '/editorial', label: 'Editorial', icon: 'E' },
   { to: '/editorial/inbox', label: 'Review Inbox', icon: 'I' },
+  { to: '/editorial/coverage', label: 'Coverage Dashboard', icon: 'V' },
+  { to: '/editorial/planner', label: 'Curriculum Planner', icon: 'L' },
   { to: '/editorial/differentials', label: 'Differentials', icon: 'D' },
   { to: '/editorial/registry-candidates', label: 'Registry Queue', icon: 'R' },
 ];

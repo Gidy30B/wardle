@@ -228,7 +228,9 @@ export class CaseAssignmentService {
     }
 
     if (
-      !this.isRegistryPlayable(caseRecord.diagnosisRegistry)
+      !this.caseEligibilityPolicy.isRegistryPlayable(
+        caseRecord.diagnosisRegistry,
+      )
     ) {
       return 'registry_not_playable';
     }
@@ -738,35 +740,6 @@ export class CaseAssignmentService {
       track: dailyCase.track,
       sequenceIndex: dailyCase.sequenceIndex,
     };
-  }
-
-  private isRegistryPlayable(
-    registry:
-      | {
-          status?: DiagnosisRegistryStatus;
-          active: boolean;
-          isPlayable: boolean;
-        }
-      | null,
-  ): boolean {
-    if (!registry) {
-      return false;
-    }
-
-    if (this.lifecyclePolicy && registry.status) {
-      return this.lifecyclePolicy.isPlayable({
-        status: registry.status,
-        active: registry.active,
-        isPlayable: registry.isPlayable,
-      });
-    }
-
-    return (
-      (registry.status === undefined ||
-        registry.status === DiagnosisRegistryStatus.ACTIVE) &&
-      registry.active &&
-      registry.isPlayable
-    );
   }
 
   private getSlotKey(

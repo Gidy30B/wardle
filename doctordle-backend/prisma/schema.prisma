@@ -216,6 +216,82 @@ enum DiagnosisGraphFactStatus {
   ARCHIVED
 }
 
+enum DiagnosisTeachingRelationshipType {
+  DIFFERENTIAL_DISCRIMINATOR
+  MIMIC_CONFUSION
+  SHARED_PRESENTATION
+  ESCALATION_CONTRAST
+  MANAGEMENT_CONTRAST
+  INVESTIGATION_CONTRAST
+  COMPLICATION_RELATIONSHIP
+}
+
+enum DiagnosisTeachingRelationshipPurpose {
+  TEACH_DISCRIMINATOR
+  PREVENT_COMMON_ERROR
+  BUILD_DDX_CLUSTER
+  SUPPORT_CASE_GENERATION
+  SUPPORT_EDUCATION
+  SUPPORT_RECALL
+}
+
+enum DiagnosisTeachingRelationshipStatus {
+  CANDIDATE
+  NEEDS_REVIEW
+  ACTIVE
+  REJECTED
+  DEPRECATED
+}
+
+enum EvidenceType {
+  SYMPTOM
+  EXAM
+  LAB
+  IMAGING
+  RISK_FACTOR
+  HISTORY
+  MANAGEMENT
+  COMPLICATION
+  EPIDEMIOLOGY
+}
+
+enum ClinicalCategory {
+  PAIN
+  BLEEDING
+  INFECTION
+  NEUROLOGIC
+  RESPIRATORY
+  CARDIOVASCULAR
+  GI
+  ENDOCRINE
+  RENAL
+  TRAUMA
+  OTHER
+}
+
+enum EvidenceNodeStatus {
+  CANDIDATE
+  ACTIVE
+  REJECTED
+  DEPRECATED
+}
+
+enum DiagnosisEvidenceRelationshipType {
+  SUPPORTS
+  DISCRIMINATES
+  ESCALATES
+  RULES_OUT
+  COMPLICATION_SIGNAL
+  MANAGEMENT_SIGNAL
+}
+
+enum DiagnosisEvidenceRelationshipStatus {
+  CANDIDATE
+  ACTIVE
+  REJECTED
+  DEPRECATED
+}
+
 model Diagnosis {
   id            String               @id @default(uuid())
   name          String               @unique
@@ -249,21 +325,21 @@ model Synonym {
 }
 
 model DiagnosisRegistry {
-  id                                    String                         @id @default(uuid())
-  legacyDiagnosisId                     String?                        @unique
+  id                                    String                              @id @default(uuid())
+  legacyDiagnosisId                     String?                             @unique
   canonicalName                         String
-  canonicalNormalized                   String                         @unique
+  canonicalNormalized                   String                              @unique
   displayLabel                          String
-  status                                DiagnosisRegistryStatus        @default(ACTIVE)
-  active                                Boolean                        @default(true)
+  status                                DiagnosisRegistryStatus             @default(ACTIVE)
+  active                                Boolean                             @default(true)
   onboardingStatus                      DiagnosisEditorialOnboardingStatus?
   onboardingStartedAt                   DateTime?
   onboardingCompletedAt                 DateTime?
   activationReviewedByUserId            String?
   activationReviewedAt                  DateTime?
-  isDescriptive                         Boolean                        @default(false)
-  isCompositional                       Boolean                        @default(false)
-  searchPriority                        Int                            @default(0)
+  isDescriptive                         Boolean                             @default(false)
+  isCompositional                       Boolean                             @default(false)
+  searchPriority                        Int                                 @default(0)
   icd10Code                             String?
   icd11Code                             String?
   /// Educational or disease grouping.
@@ -298,10 +374,10 @@ model DiagnosisRegistry {
   urgencyLevel                          DiagnosisUrgencyLevel?
   /// Whether this diagnosis can appear as a playable answer.
   /// Some registry rows may exist only for aliases, mappings, or future use.
-  isPlayable                            Boolean                        @default(true)
+  isPlayable                            Boolean                             @default(true)
   /// Whether the generator is allowed to create new cases for this diagnosis.
   /// Some diagnoses may be playable manually but not suitable for automated generation.
-  isGeneratable                         Boolean                        @default(true)
+  isGeneratable                         Boolean                             @default(true)
   /// Optional clue-type guidance for generation.
   /// Example: ["history", "exam", "labs", "imaging"].
   preferredClueTypes                    Json?
@@ -309,29 +385,32 @@ model DiagnosisRegistry {
   /// Example: ["imaging"] for diagnoses where imaging is not central.
   excludedClueTypes                     Json?
   notes                                 String?
-  createdAt                             DateTime                       @default(now())
-  updatedAt                             DateTime                       @updatedAt
-  legacyDiagnosis                       Diagnosis?                     @relation("LegacyDiagnosisRegistry", fields: [legacyDiagnosisId], references: [id], onDelete: SetNull)
-  activationReviewedByUser              User?                          @relation("DiagnosisRegistryActivationReviewedByUser", fields: [activationReviewedByUserId], references: [id], onDelete: SetNull)
+  createdAt                             DateTime                            @default(now())
+  updatedAt                             DateTime                            @updatedAt
+  legacyDiagnosis                       Diagnosis?                          @relation("LegacyDiagnosisRegistry", fields: [legacyDiagnosisId], references: [id], onDelete: SetNull)
+  activationReviewedByUser              User?                               @relation("DiagnosisRegistryActivationReviewedByUser", fields: [activationReviewedByUserId], references: [id], onDelete: SetNull)
   aliases                               DiagnosisAlias[]
-  cases                                 Case[]                         @relation("CaseDiagnosisRegistry")
-  caseRevisions                         CaseRevision[]                 @relation("CaseRevisionDiagnosisRegistry")
+  cases                                 Case[]                              @relation("CaseDiagnosisRegistry")
+  caseRevisions                         CaseRevision[]                      @relation("CaseRevisionDiagnosisRegistry")
   education                             DiagnosisEducation?
-  graphCandidates                       DiagnosisGraphCandidate[]      @relation("DiagnosisGraphCandidateDiagnosis")
-  targetedGraphCandidates               DiagnosisGraphCandidate[]      @relation("DiagnosisGraphCandidateTargetDiagnosis")
-  graphFacts                            DiagnosisGraphFact[]           @relation("DiagnosisGraphFactDiagnosis")
-  targetedGraphFacts                    DiagnosisGraphFact[]           @relation("DiagnosisGraphFactTargetDiagnosis")
-  resolvedCaseDifferentialMappings      CaseDifferentialMapping[]      @relation("CaseDifferentialMappingResolvedDiagnosis")
-  educationDifferentialMappings         EducationDifferentialMapping[] @relation("EducationDifferentialMappingDiagnosis")
-  resolvedEducationDifferentialMappings EducationDifferentialMapping[] @relation("EducationDifferentialMappingResolvedDiagnosis")
-  contextualRegistryCandidates          DiagnosisRegistryCandidate[]   @relation("DiagnosisRegistryCandidateContextDiagnosis")
-  createdRegistryCandidates             DiagnosisRegistryCandidate[]   @relation("DiagnosisRegistryCandidateCreatedDiagnosis")
+  graphCandidates                       DiagnosisGraphCandidate[]           @relation("DiagnosisGraphCandidateDiagnosis")
+  targetedGraphCandidates               DiagnosisGraphCandidate[]           @relation("DiagnosisGraphCandidateTargetDiagnosis")
+  graphFacts                            DiagnosisGraphFact[]                @relation("DiagnosisGraphFactDiagnosis")
+  targetedGraphFacts                    DiagnosisGraphFact[]                @relation("DiagnosisGraphFactTargetDiagnosis")
+  sourceTeachingRelationships           DiagnosisTeachingRelationship[]     @relation("DiagnosisTeachingRelationshipSource")
+  targetTeachingRelationships           DiagnosisTeachingRelationship[]     @relation("DiagnosisTeachingRelationshipTarget")
+  evidenceRelationships                 DiagnosisEvidenceRelationship[]
+  resolvedCaseDifferentialMappings      CaseDifferentialMapping[]           @relation("CaseDifferentialMappingResolvedDiagnosis")
+  educationDifferentialMappings         EducationDifferentialMapping[]      @relation("EducationDifferentialMappingDiagnosis")
+  resolvedEducationDifferentialMappings EducationDifferentialMapping[]      @relation("EducationDifferentialMappingResolvedDiagnosis")
+  contextualRegistryCandidates          DiagnosisRegistryCandidate[]        @relation("DiagnosisRegistryCandidateContextDiagnosis")
+  createdRegistryCandidates             DiagnosisRegistryCandidate[]        @relation("DiagnosisRegistryCandidateCreatedDiagnosis")
   caseDifferentialLinks                 CaseDifferentialLink[]
   educationDifferentialLinks            EducationDifferentialLink[]
   teachingRules                         DiagnosisTeachingRule[]
   editorialBrief                        DiagnosisEditorialBrief?
-  selectedAttempts                      Attempt[]                      @relation("AttemptSelectedDiagnosisRegistry")
-  strictMatchedAttempts                 Attempt[]                      @relation("AttemptStrictMatchedDiagnosisRegistry")
+  selectedAttempts                      Attempt[]                           @relation("AttemptSelectedDiagnosisRegistry")
+  strictMatchedAttempts                 Attempt[]                           @relation("AttemptStrictMatchedDiagnosisRegistry")
 
   @@index([status])
   @@index([onboardingStatus])
@@ -348,7 +427,7 @@ model DiagnosisRegistry {
 }
 
 model DiagnosisTeachingRule {
-  id                       String            @id @default(uuid())
+  id                       String                          @id @default(uuid())
   diagnosisRegistryId      String
   stableKey                String
   title                    String
@@ -359,16 +438,18 @@ model DiagnosisTeachingRule {
   requiredDifferentials    Json?
   expectedEvidence         Json?
   difficultyHints          Json?
-  avoidTooEarly            Boolean           @default(false)
-  appliesToEducation       Boolean           @default(true)
-  appliesToCaseGeneration  Boolean           @default(true)
-  appliesToGraph           Boolean           @default(false)
+  avoidTooEarly            Boolean                         @default(false)
+  appliesToEducation       Boolean                         @default(true)
+  appliesToCaseGeneration  Boolean                         @default(true)
+  appliesToGraph           Boolean                         @default(false)
   status                   String
   source                   String
-  version                  Int               @default(1)
-  createdAt                DateTime          @default(now())
-  updatedAt                DateTime          @updatedAt
-  diagnosisRegistry        DiagnosisRegistry @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  version                  Int                             @default(1)
+  createdAt                DateTime                        @default(now())
+  updatedAt                DateTime                        @updatedAt
+  diagnosisRegistry        DiagnosisRegistry               @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  teachingRelationships    DiagnosisTeachingRelationship[] @relation("DiagnosisTeachingRelationshipTeachingRule")
+  evidenceRelationships    DiagnosisEvidenceRelationship[] @relation("DiagnosisEvidenceRelationshipTeachingRule")
 
   @@unique([diagnosisRegistryId, stableKey])
   @@index([diagnosisRegistryId])
@@ -501,23 +582,24 @@ model DiagnosisGraphCandidate {
 }
 
 model DiagnosisGraphFact {
-  id                        String                      @id @default(uuid())
+  id                        String                          @id @default(uuid())
   diagnosisRegistryId       String
   type                      DiagnosisGraphCandidateType
   label                     String
   normalizedLabel           String
-  dedupeKey                 String                      @unique
+  dedupeKey                 String                          @unique
   payload                   Json?
   targetDiagnosisRegistryId String?
-  status                    DiagnosisGraphFactStatus    @default(ACTIVE)
-  sourceCandidateId         String?                     @unique
+  status                    DiagnosisGraphFactStatus        @default(ACTIVE)
+  sourceCandidateId         String?                         @unique
   provenance                Json?
-  createdAt                 DateTime                    @default(now())
-  updatedAt                 DateTime                    @updatedAt
-  diagnosisRegistry         DiagnosisRegistry           @relation("DiagnosisGraphFactDiagnosis", fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
-  targetDiagnosisRegistry   DiagnosisRegistry?          @relation("DiagnosisGraphFactTargetDiagnosis", fields: [targetDiagnosisRegistryId], references: [id], onDelete: SetNull)
-  sourceCandidate           DiagnosisGraphCandidate?    @relation("DiagnosisGraphFactSourceCandidate", fields: [sourceCandidateId], references: [id], onDelete: SetNull)
-  promotedCandidates        DiagnosisGraphCandidate[]   @relation("DiagnosisGraphCandidatePromotedFact")
+  createdAt                 DateTime                        @default(now())
+  updatedAt                 DateTime                        @updatedAt
+  diagnosisRegistry         DiagnosisRegistry               @relation("DiagnosisGraphFactDiagnosis", fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  targetDiagnosisRegistry   DiagnosisRegistry?              @relation("DiagnosisGraphFactTargetDiagnosis", fields: [targetDiagnosisRegistryId], references: [id], onDelete: SetNull)
+  sourceCandidate           DiagnosisGraphCandidate?        @relation("DiagnosisGraphFactSourceCandidate", fields: [sourceCandidateId], references: [id], onDelete: SetNull)
+  promotedCandidates        DiagnosisGraphCandidate[]       @relation("DiagnosisGraphCandidatePromotedFact")
+  teachingRelationships     DiagnosisTeachingRelationship[] @relation("DiagnosisTeachingRelationshipGraphFact")
 
   @@unique([diagnosisRegistryId, type, normalizedLabel, targetDiagnosisRegistryId])
   @@index([dedupeKey])
@@ -526,6 +608,98 @@ model DiagnosisGraphFact {
   @@index([status])
   @@index([normalizedLabel])
   @@index([targetDiagnosisRegistryId])
+}
+
+model DiagnosisTeachingRelationship {
+  id                             String                               @id @default(uuid())
+  sourceDiagnosisRegistryId      String
+  targetDiagnosisRegistryId      String
+  relationshipType               DiagnosisTeachingRelationshipType
+  teachingPurpose                DiagnosisTeachingRelationshipPurpose
+  discriminatorSummary           String?
+  commonConfusionReason          String?
+  learnerPitfall                 String?
+  suggestedTeachingRuleStableKey String?
+  supportingGraphFactId          String?
+  supportingDifferentialLinkId   String?
+  supportingTeachingRuleId       String?
+  strength                       Int                                  @default(1)
+  status                         DiagnosisTeachingRelationshipStatus  @default(CANDIDATE)
+  reviewedByUserId               String?
+  reviewedAt                     DateTime?
+  createdAt                      DateTime                             @default(now())
+  updatedAt                      DateTime                             @updatedAt
+  sourceDiagnosisRegistry        DiagnosisRegistry                    @relation("DiagnosisTeachingRelationshipSource", fields: [sourceDiagnosisRegistryId], references: [id], onDelete: Cascade)
+  targetDiagnosisRegistry        DiagnosisRegistry                    @relation("DiagnosisTeachingRelationshipTarget", fields: [targetDiagnosisRegistryId], references: [id], onDelete: Cascade)
+  supportingGraphFact            DiagnosisGraphFact?                  @relation("DiagnosisTeachingRelationshipGraphFact", fields: [supportingGraphFactId], references: [id], onDelete: SetNull)
+  supportingTeachingRule         DiagnosisTeachingRule?               @relation("DiagnosisTeachingRelationshipTeachingRule", fields: [supportingTeachingRuleId], references: [id], onDelete: SetNull)
+  reviewedByUser                 User?                                @relation("DiagnosisTeachingRelationshipReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  evidenceRelationships          DiagnosisEvidenceRelationship[]      @relation("DiagnosisEvidenceRelationshipTeachingRelationship")
+
+  @@unique([sourceDiagnosisRegistryId, targetDiagnosisRegistryId, relationshipType, teachingPurpose])
+  @@index([sourceDiagnosisRegistryId])
+  @@index([targetDiagnosisRegistryId])
+  @@index([status])
+  @@index([relationshipType])
+  @@index([teachingPurpose])
+  @@index([supportingGraphFactId])
+  @@index([supportingDifferentialLinkId])
+  @@index([supportingTeachingRuleId])
+  @@index([reviewedByUserId])
+}
+
+model EvidenceNode {
+  id                     String                          @id @default(uuid())
+  normalizedKey          String                          @unique
+  displayLabel           String
+  evidenceType           EvidenceType
+  clinicalCategory       ClinicalCategory
+  synonyms               Json?
+  status                 EvidenceNodeStatus              @default(CANDIDATE)
+  createdAt              DateTime                        @default(now())
+  updatedAt              DateTime                        @updatedAt
+  diagnosisRelationships DiagnosisEvidenceRelationship[]
+
+  @@index([evidenceType])
+  @@index([clinicalCategory])
+  @@index([status])
+  @@index([displayLabel])
+}
+
+model DiagnosisEvidenceRelationship {
+  id                               String                              @id @default(uuid())
+  diagnosisRegistryId              String
+  evidenceNodeId                   String
+  relationshipType                 DiagnosisEvidenceRelationshipType
+  strength                         Int                                 @default(1)
+  discriminatorWeight              Int                                 @default(0)
+  reasoningSummary                 String?
+  contradictoryDiagnosisIds        Json?
+  supportingTeachingRelationshipId String?
+  supportingTeachingRuleId         String?
+  supportingCaseId                 String?
+  status                           DiagnosisEvidenceRelationshipStatus @default(CANDIDATE)
+  reviewedByUserId                 String?
+  reviewedAt                       DateTime?
+  createdAt                        DateTime                            @default(now())
+  updatedAt                        DateTime                            @updatedAt
+  diagnosisRegistry                DiagnosisRegistry                   @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  evidenceNode                     EvidenceNode                        @relation(fields: [evidenceNodeId], references: [id], onDelete: Cascade)
+  supportingTeachingRelationship   DiagnosisTeachingRelationship?      @relation("DiagnosisEvidenceRelationshipTeachingRelationship", fields: [supportingTeachingRelationshipId], references: [id], onDelete: SetNull)
+  supportingTeachingRule           DiagnosisTeachingRule?              @relation("DiagnosisEvidenceRelationshipTeachingRule", fields: [supportingTeachingRuleId], references: [id], onDelete: SetNull)
+  supportingCase                   Case?                               @relation("DiagnosisEvidenceRelationshipCase", fields: [supportingCaseId], references: [id], onDelete: SetNull)
+  reviewedByUser                   User?                               @relation("DiagnosisEvidenceRelationshipReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([diagnosisRegistryId, evidenceNodeId, relationshipType])
+  @@index([diagnosisRegistryId])
+  @@index([evidenceNodeId])
+  @@index([relationshipType])
+  @@index([status])
+  @@index([discriminatorWeight])
+  @@index([supportingTeachingRelationshipId])
+  @@index([supportingTeachingRuleId])
+  @@index([supportingCaseId])
+  @@index([reviewedByUserId])
 }
 
 model DiagnosisAlias {
@@ -550,22 +724,22 @@ model DiagnosisAlias {
 }
 
 model Case {
-  id                         String                    @id @default(uuid())
-  publicNumber               Int?                      @unique
+  id                         String                          @id @default(uuid())
+  publicNumber               Int?                            @unique
   title                      String
-  date                       DateTime                  @unique
+  date                       DateTime                        @unique
   difficulty                 String
   history                    String
   symptoms                   String[]
   labs                       Json?
   clues                      Json?
   explanation                Json?
-  differentials              String[]                  @default([])
+  differentials              String[]                        @default([])
   editorialStatus            CaseEditorialStatus?
   approvedAt                 DateTime?
   publishedAt                DateTime?
   approvedByUserId           String?
-  currentRevisionId          String?                   @unique
+  currentRevisionId          String?                         @unique
   diagnosisId                String?
   diagnosisRegistryId        String?
   proposedDiagnosisText      String
@@ -573,10 +747,10 @@ model Case {
   diagnosisMappingMethod     DiagnosisMappingMethod
   diagnosisMappingConfidence Float?
   diagnosisEditorialNote     String?
-  diagnosis                  Diagnosis?                @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
-  diagnosisRegistry          DiagnosisRegistry?        @relation("CaseDiagnosisRegistry", fields: [diagnosisRegistryId], references: [id], onDelete: SetNull)
-  approvedBy                 User?                     @relation("CaseApprovedByUser", fields: [approvedByUserId], references: [id], onDelete: SetNull)
-  currentRevision            CaseRevision?             @relation("CaseCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
+  diagnosis                  Diagnosis?                      @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
+  diagnosisRegistry          DiagnosisRegistry?              @relation("CaseDiagnosisRegistry", fields: [diagnosisRegistryId], references: [id], onDelete: SetNull)
+  approvedBy                 User?                           @relation("CaseApprovedByUser", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  currentRevision            CaseRevision?                   @relation("CaseCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
   attempts                   Attempt[]
   sessions                   GameSession[]
   dailyCases                 DailyCase[]
@@ -584,9 +758,10 @@ model Case {
   explanations               ExplanationContent[]
   validationRuns             CaseValidationRun[]
   reviews                    CaseReview[]
-  revisions                  CaseRevision[]            @relation("CaseRevisions")
+  revisions                  CaseRevision[]                  @relation("CaseRevisions")
   differentialMappings       CaseDifferentialMapping[]
   differentialLinks          CaseDifferentialLink[]
+  evidenceRelationships      DiagnosisEvidenceRelationship[] @relation("DiagnosisEvidenceRelationshipCase")
 
   @@index([diagnosisId])
   @@index([diagnosisRegistryId])
@@ -949,45 +1124,47 @@ model Attempt {
 }
 
 model User {
-  id                                    String                         @id
-  clerkId                               String?                        @unique
-  email                                 String?
-  username                              String?
-  normalizedUsername                    String?                        @unique
-  trainingLevel                         String?
-  country                               String?
-  individualMode                        Boolean                        @default(true)
-  onboardingStatus                      UserOnboardingStatus           @default(PROFILE_REQUIRED)
-  onboardingCompletedAt                 DateTime?
-  primaryOrganizationId                 String?
-  role                                  String                         @default("user")
-  subscriptionTier                      String                         @default("free")
-  lastPlayedAt                          DateTime?
-  createdAt                             DateTime                       @default(now())
-  updatedAt                             DateTime                       @updatedAt
-  sessions                              GameSession[]
-  attempts                              Attempt[]
-  stats                                 UserStats?
-  progress                              UserProgress?
-  settings                              UserSettings?
-  notifications                         Notification[]
-  notificationPreferences               NotificationPreference[]
-  pushDeviceTokens                      PushDeviceToken[]
-  leaderboard                           LeaderboardEntry[]
-  approvedCases                         Case[]                         @relation("CaseApprovedByUser")
-  createdCaseRevisions                  CaseRevision[]                 @relation("CaseRevisionCreatedByUser")
-  triggeredCaseValidations              CaseValidationRun[]            @relation("CaseValidationRunTriggeredByUser")
-  caseReviews                           CaseReview[]                   @relation("CaseReviewReviewerUser")
-  reviewedDiagnosisEducation            DiagnosisEducation[]           @relation("DiagnosisEducationReviewedByUser")
-  createdDiagnosisEducationRevisions    DiagnosisEducationRevision[]   @relation("DiagnosisEducationRevisionCreatedByUser")
-  reviewedDiagnosisGraphCandidates      DiagnosisGraphCandidate[]      @relation("DiagnosisGraphCandidateReviewedByUser")
-  reviewedCaseDifferentialMappings      CaseDifferentialMapping[]      @relation("CaseDifferentialMappingReviewedByUser")
-  reviewedEducationDifferentialMappings EducationDifferentialMapping[] @relation("EducationDifferentialMappingReviewedByUser")
-  reviewedDiagnosisRegistryCandidates   DiagnosisRegistryCandidate[]   @relation("DiagnosisRegistryCandidateReviewer")
-  approvedDiagnosisRegistryCandidates   DiagnosisRegistryCandidate[]   @relation("DiagnosisRegistryCandidateApprovedByUser")
-  activationReviewedDiagnoses           DiagnosisRegistry[]            @relation("DiagnosisRegistryActivationReviewedByUser")
-  primaryOrganization                   Organization?                  @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
-  organizations                         UserOrganization[]
+  id                                     String                          @id
+  clerkId                                String?                         @unique
+  email                                  String?
+  username                               String?
+  normalizedUsername                     String?                         @unique
+  trainingLevel                          String?
+  country                                String?
+  individualMode                         Boolean                         @default(true)
+  onboardingStatus                       UserOnboardingStatus            @default(PROFILE_REQUIRED)
+  onboardingCompletedAt                  DateTime?
+  primaryOrganizationId                  String?
+  role                                   String                          @default("user")
+  subscriptionTier                       String                          @default("free")
+  lastPlayedAt                           DateTime?
+  createdAt                              DateTime                        @default(now())
+  updatedAt                              DateTime                        @updatedAt
+  sessions                               GameSession[]
+  attempts                               Attempt[]
+  stats                                  UserStats?
+  progress                               UserProgress?
+  settings                               UserSettings?
+  notifications                          Notification[]
+  notificationPreferences                NotificationPreference[]
+  pushDeviceTokens                       PushDeviceToken[]
+  leaderboard                            LeaderboardEntry[]
+  approvedCases                          Case[]                          @relation("CaseApprovedByUser")
+  createdCaseRevisions                   CaseRevision[]                  @relation("CaseRevisionCreatedByUser")
+  triggeredCaseValidations               CaseValidationRun[]             @relation("CaseValidationRunTriggeredByUser")
+  caseReviews                            CaseReview[]                    @relation("CaseReviewReviewerUser")
+  reviewedDiagnosisEducation             DiagnosisEducation[]            @relation("DiagnosisEducationReviewedByUser")
+  createdDiagnosisEducationRevisions     DiagnosisEducationRevision[]    @relation("DiagnosisEducationRevisionCreatedByUser")
+  reviewedDiagnosisGraphCandidates       DiagnosisGraphCandidate[]       @relation("DiagnosisGraphCandidateReviewedByUser")
+  reviewedDiagnosisTeachingRelationships DiagnosisTeachingRelationship[] @relation("DiagnosisTeachingRelationshipReviewedByUser")
+  reviewedDiagnosisEvidenceRelationships DiagnosisEvidenceRelationship[] @relation("DiagnosisEvidenceRelationshipReviewedByUser")
+  reviewedCaseDifferentialMappings       CaseDifferentialMapping[]       @relation("CaseDifferentialMappingReviewedByUser")
+  reviewedEducationDifferentialMappings  EducationDifferentialMapping[]  @relation("EducationDifferentialMappingReviewedByUser")
+  reviewedDiagnosisRegistryCandidates    DiagnosisRegistryCandidate[]    @relation("DiagnosisRegistryCandidateReviewer")
+  approvedDiagnosisRegistryCandidates    DiagnosisRegistryCandidate[]    @relation("DiagnosisRegistryCandidateApprovedByUser")
+  activationReviewedDiagnoses            DiagnosisRegistry[]             @relation("DiagnosisRegistryActivationReviewedByUser")
+  primaryOrganization                    Organization?                   @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
+  organizations                          UserOrganization[]
 
   @@index([role])
   @@index([subscriptionTier])

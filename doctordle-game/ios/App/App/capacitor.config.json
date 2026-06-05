@@ -2,6 +2,11 @@
 	"appId": "app.wardle.medcase",
 	"appName": "Wardle",
 	"webDir": "dist",
+	"server": {
+		"hostname": "www.wardle.it.com",
+		"androidScheme": "https",
+		"iosScheme": "https"
+	},
 	"ios": {
 		"contentInset": "always",
 		"backgroundColor": "#1E1E2C",
@@ -29,8 +34,8 @@
 			"splashImmersive": true
 		},
 		"StatusBar": {
-			"style": "DARK",
-			"backgroundColor": "#1A3C5E",
+			"style": "LIGHT",
+			"backgroundColor": "#1E1E2C",
 			"overlaysWebView": false
 		},
 		"Keyboard": {
@@ -41,8 +46,11 @@
 	},
 	"packageClassList": [
 		"AppPlugin",
+		"FilesystemPlugin",
 		"HapticsPlugin",
 		"KeyboardPlugin",
+		"PushNotificationsPlugin",
+		"SharePlugin",
 		"SplashScreenPlugin",
 		"StatusBarPlugin"
 	]

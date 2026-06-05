@@ -33,6 +33,26 @@ import { DiagnosisWorkspaceQualityService } from './diagnosis-workspace-quality.
 import { TeachingUnitCoverageService } from './teaching-unit-coverage.service';
 import { EditorialReviewInboxService } from './editorial-review-inbox.service';
 import {
+  EditorialCoverageDashboardService,
+  type EditorialCoverageQuery,
+} from './editorial-coverage-dashboard.service';
+import {
+  CurriculumPlanningService,
+  type CurriculumPlannerQuery,
+} from './curriculum-planning.service';
+import {
+  DiagnosisTeachingRelationshipService,
+  type TeachingRelationshipReviewAction,
+} from './diagnosis-teaching-relationship.service';
+import {
+  EvidenceGraphService,
+  type EvidenceGraphReviewAction,
+} from './evidence-graph.service';
+import {
+  EvidenceCoverageService,
+  type EvidenceCoverageQuery,
+} from './evidence-coverage.service';
+import {
   TargetedCaseGenerationService,
   type TargetedCaseGenerationPayload,
 } from './targeted-case-generation.service';
@@ -83,6 +103,11 @@ export class AdminController {
     private readonly editorialReviewInboxService: EditorialReviewInboxService,
     private readonly targetedCaseGenerationService: TargetedCaseGenerationService,
     private readonly teachingRulesAdminService: TeachingRulesAdminService,
+    private readonly editorialCoverageDashboardService: EditorialCoverageDashboardService,
+    private readonly curriculumPlanningService: CurriculumPlanningService,
+    private readonly diagnosisTeachingRelationshipService: DiagnosisTeachingRelationshipService,
+    private readonly evidenceGraphService: EvidenceGraphService,
+    private readonly evidenceCoverageService: EvidenceCoverageService,
     private readonly diagnosisEditorialBriefService: DiagnosisEditorialBriefService,
     private readonly differentialMappingService: DifferentialMappingService,
     private readonly diagnosisRegistryCandidateService: DiagnosisRegistryCandidateService,
@@ -142,6 +167,144 @@ export class AdminController {
     });
   }
 
+  @Get('editorial/coverage/overview')
+  @EditorialAccess()
+  async getEditorialCoverageOverview(
+    @Query('specialty') specialty?: string,
+    @Query('lifecycleState') lifecycleState?: string,
+    @Query('onboardingState') onboardingState?: string,
+    @Query('coverageWeakness') coverageWeakness?: string,
+    @Query('playableOnly') playableOnly?: string,
+  ) {
+    return this.editorialCoverageDashboardService.getOverview(
+      this.parseCoverageQuery({
+        specialty,
+        lifecycleState,
+        onboardingState,
+        coverageWeakness,
+        playableOnly,
+      }),
+    );
+  }
+
+  @Get('editorial/coverage/diagnoses')
+  @EditorialAccess()
+  async getEditorialCoverageDiagnoses(
+    @Query('specialty') specialty?: string,
+    @Query('lifecycleState') lifecycleState?: string,
+    @Query('onboardingState') onboardingState?: string,
+    @Query('coverageWeakness') coverageWeakness?: string,
+    @Query('playableOnly') playableOnly?: string,
+  ) {
+    return this.editorialCoverageDashboardService.getDiagnoses(
+      this.parseCoverageQuery({
+        specialty,
+        lifecycleState,
+        onboardingState,
+        coverageWeakness,
+        playableOnly,
+      }),
+    );
+  }
+
+  @Get('editorial/coverage/specialties')
+  @EditorialAccess()
+  async getEditorialCoverageSpecialties(
+    @Query('specialty') specialty?: string,
+    @Query('lifecycleState') lifecycleState?: string,
+    @Query('onboardingState') onboardingState?: string,
+    @Query('coverageWeakness') coverageWeakness?: string,
+    @Query('playableOnly') playableOnly?: string,
+  ) {
+    return this.editorialCoverageDashboardService.getSpecialties(
+      this.parseCoverageQuery({
+        specialty,
+        lifecycleState,
+        onboardingState,
+        coverageWeakness,
+        playableOnly,
+      }),
+    );
+  }
+
+  @Get('editorial/planner/overview')
+  @EditorialAccess()
+  async getCurriculumPlannerOverview(
+    @Query('specialty') specialty?: string,
+    @Query('onboardingStatus') onboardingStatus?: string,
+    @Query('onboardingState') onboardingState?: string,
+    @Query('lifecycleReadiness') lifecycleReadiness?: string,
+    @Query('lifecycleState') lifecycleState?: string,
+    @Query('priorityTier') priorityTier?: string,
+    @Query('track') track?: string,
+    @Query('playableOnly') playableOnly?: string,
+  ) {
+    return this.curriculumPlanningService.getOverview(
+      this.parsePlannerQuery({
+        specialty,
+        onboardingStatus,
+        onboardingState,
+        lifecycleReadiness,
+        lifecycleState,
+        priorityTier,
+        track,
+        playableOnly,
+      }),
+    );
+  }
+
+  @Get('editorial/planner/diagnoses')
+  @EditorialAccess()
+  async getCurriculumPlannerDiagnoses(
+    @Query('specialty') specialty?: string,
+    @Query('onboardingStatus') onboardingStatus?: string,
+    @Query('onboardingState') onboardingState?: string,
+    @Query('lifecycleReadiness') lifecycleReadiness?: string,
+    @Query('lifecycleState') lifecycleState?: string,
+    @Query('priorityTier') priorityTier?: string,
+    @Query('track') track?: string,
+    @Query('playableOnly') playableOnly?: string,
+  ) {
+    return this.curriculumPlanningService.getDiagnoses(
+      this.parsePlannerQuery({
+        specialty,
+        onboardingStatus,
+        onboardingState,
+        lifecycleReadiness,
+        lifecycleState,
+        priorityTier,
+        track,
+        playableOnly,
+      }),
+    );
+  }
+
+  @Get('editorial/planner/tracks')
+  @EditorialAccess()
+  async getCurriculumPlannerTracks(
+    @Query('specialty') specialty?: string,
+    @Query('onboardingStatus') onboardingStatus?: string,
+    @Query('onboardingState') onboardingState?: string,
+    @Query('lifecycleReadiness') lifecycleReadiness?: string,
+    @Query('lifecycleState') lifecycleState?: string,
+    @Query('priorityTier') priorityTier?: string,
+    @Query('track') track?: string,
+    @Query('playableOnly') playableOnly?: string,
+  ) {
+    return this.curriculumPlanningService.getTracks(
+      this.parsePlannerQuery({
+        specialty,
+        onboardingStatus,
+        onboardingState,
+        lifecycleReadiness,
+        lifecycleState,
+        priorityTier,
+        track,
+        playableOnly,
+      }),
+    );
+  }
+
   @Get('differential-mappings/unresolved')
   @EditorialAccess()
   async listUnresolvedDifferentialMappings(
@@ -154,6 +317,159 @@ export class AdminController {
       diagnosisRegistryId: diagnosisRegistryId || undefined,
       status: this.parseDifferentialStatus(status),
     });
+  }
+
+  @Get('diagnosis-teaching-relationships')
+  @EditorialAccess()
+  async listDiagnosisTeachingRelationships(
+    @Query('diagnosisRegistryId') diagnosisRegistryId?: string,
+    @Query('sourceDiagnosisRegistryId') sourceDiagnosisRegistryId?: string,
+    @Query('targetDiagnosisRegistryId') targetDiagnosisRegistryId?: string,
+    @Query('status') status?: string,
+    @Query('purpose') purpose?: string,
+    @Query('relationshipType') relationshipType?: string,
+  ) {
+    return this.diagnosisTeachingRelationshipService.listRelationships({
+      diagnosisRegistryId,
+      sourceDiagnosisRegistryId,
+      targetDiagnosisRegistryId,
+      status,
+      purpose,
+      relationshipType,
+    });
+  }
+
+  @Get('evidence-graph/nodes')
+  @EditorialAccess()
+  async listEvidenceGraphNodes(
+    @Query('q') q?: string,
+    @Query('evidenceType') evidenceType?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.evidenceGraphService.listNodes({ q, evidenceType, status });
+  }
+
+  @Get('evidence-graph/relationships')
+  @EditorialAccess()
+  async listEvidenceGraphRelationships(
+    @Query('diagnosisRegistryId') diagnosisRegistryId?: string,
+    @Query('evidenceNodeId') evidenceNodeId?: string,
+    @Query('evidenceType') evidenceType?: string,
+    @Query('relationshipType') relationshipType?: string,
+    @Query('status') status?: string,
+    @Query('minDiscriminatorWeight') minDiscriminatorWeight?: string,
+  ) {
+    return this.evidenceGraphService.listRelationships({
+      diagnosisRegistryId,
+      evidenceNodeId,
+      evidenceType,
+      relationshipType,
+      status,
+      minDiscriminatorWeight: minDiscriminatorWeight
+        ? Number(minDiscriminatorWeight)
+        : undefined,
+    });
+  }
+
+  @Post('evidence-graph/candidates/generate')
+  @EditorialAccess()
+  async generateEvidenceGraphCandidates(
+    @Body() body: { diagnosisRegistryId?: string } = {},
+  ) {
+    return this.evidenceGraphService.generateCandidates({
+      diagnosisRegistryId: body.diagnosisRegistryId,
+    });
+  }
+
+  @Post('evidence-graph/relationships/:id/review')
+  @SeniorEditorialAccess()
+  async reviewEvidenceGraphRelationship(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: { action?: EvidenceGraphReviewAction },
+  ) {
+    return this.evidenceGraphService.reviewRelationship(
+      id,
+      request.user.id,
+      body,
+    );
+  }
+
+  @Get('evidence-coverage/overview')
+  @EditorialAccess()
+  async getEvidenceCoverageOverview(
+    @Query('specialty') specialty?: string,
+    @Query('evidenceWeakness') evidenceWeakness?: string,
+    @Query('readinessTier') readinessTier?: string,
+    @Query('playableOnly') playableOnly?: string,
+    @Query('onboardingStatus') onboardingStatus?: string,
+  ) {
+    return this.evidenceCoverageService.getOverview(
+      this.parseEvidenceCoverageQuery({
+        specialty,
+        evidenceWeakness,
+        readinessTier,
+        playableOnly,
+        onboardingStatus,
+      }),
+    );
+  }
+
+  @Get('evidence-coverage/diagnoses')
+  @EditorialAccess()
+  async getEvidenceCoverageDiagnoses(
+    @Query('specialty') specialty?: string,
+    @Query('evidenceWeakness') evidenceWeakness?: string,
+    @Query('readinessTier') readinessTier?: string,
+    @Query('playableOnly') playableOnly?: string,
+    @Query('onboardingStatus') onboardingStatus?: string,
+  ) {
+    return this.evidenceCoverageService.getDiagnoses(
+      this.parseEvidenceCoverageQuery({
+        specialty,
+        evidenceWeakness,
+        readinessTier,
+        playableOnly,
+        onboardingStatus,
+      }),
+    );
+  }
+
+  @Get('evidence-coverage/:diagnosisRegistryId')
+  @EditorialAccess()
+  async getEvidenceCoverageDiagnosis(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+  ) {
+    return this.evidenceCoverageService.getDiagnosis(diagnosisRegistryId);
+  }
+
+  @Post('diagnosis-teaching-relationships/candidates/generate')
+  @EditorialAccess()
+  async generateDiagnosisTeachingRelationshipCandidates(
+    @Body() body: { diagnosisRegistryId?: string } = {},
+  ) {
+    return this.diagnosisTeachingRelationshipService.generateCandidates({
+      diagnosisRegistryId: body.diagnosisRegistryId,
+    });
+  }
+
+  @Post('diagnosis-teaching-relationships/:id/review')
+  @SeniorEditorialAccess()
+  async reviewDiagnosisTeachingRelationship(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: AuthenticatedRequest,
+    @Body()
+    body: {
+      action?: TeachingRelationshipReviewAction;
+      note?: string;
+    },
+  ) {
+    return this.diagnosisTeachingRelationshipService.reviewRelationship(
+      id,
+      request.user.id,
+      body,
+    );
   }
 
   @Post('differential-mappings/:mappingId/resolve')
@@ -300,6 +616,26 @@ export class AdminController {
     return this.diagnosisRegistryMergeAnalysisService.getMergeRelated(
       diagnosisRegistryId,
     );
+  }
+
+  @Get('diagnosis-registry/:diagnosisRegistryId/teaching-relationships')
+  @EditorialAccess()
+  async getDiagnosisRegistryTeachingRelationships(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+  ) {
+    return this.diagnosisTeachingRelationshipService.listForDiagnosis(
+      diagnosisRegistryId,
+    );
+  }
+
+  @Get('diagnosis-registry/:diagnosisRegistryId/evidence-graph')
+  @EditorialAccess()
+  async getDiagnosisRegistryEvidenceGraph(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+  ) {
+    return this.evidenceGraphService.getForDiagnosis(diagnosisRegistryId);
   }
 
   @Get('diagnosis-registry/:diagnosisRegistryId/lifecycle')
@@ -801,6 +1137,63 @@ export class AdminController {
     throw new BadRequestException(
       'Invalid diagnosis registry candidate status',
     );
+  }
+
+  private parseCoverageQuery(query: {
+    specialty?: string;
+    lifecycleState?: string;
+    onboardingState?: string;
+    coverageWeakness?: string;
+    playableOnly?: string;
+  }): EditorialCoverageQuery {
+    return {
+      specialty: query.specialty || undefined,
+      lifecycleState: query.lifecycleState || undefined,
+      onboardingState: query.onboardingState || undefined,
+      coverageWeakness: query.coverageWeakness || undefined,
+      playableOnly:
+        query.playableOnly === 'true' || query.playableOnly === '1',
+    };
+  }
+
+  private parsePlannerQuery(query: {
+    specialty?: string;
+    onboardingStatus?: string;
+    onboardingState?: string;
+    lifecycleReadiness?: string;
+    lifecycleState?: string;
+    priorityTier?: string;
+    track?: string;
+    playableOnly?: string;
+  }): CurriculumPlannerQuery {
+    return {
+      specialty: query.specialty || undefined,
+      onboardingStatus: query.onboardingStatus || undefined,
+      onboardingState: query.onboardingState || undefined,
+      lifecycleReadiness: query.lifecycleReadiness || undefined,
+      lifecycleState: query.lifecycleState || undefined,
+      priorityTier: query.priorityTier || undefined,
+      track: query.track || undefined,
+      playableOnly:
+        query.playableOnly === 'true' || query.playableOnly === '1',
+    };
+  }
+
+  private parseEvidenceCoverageQuery(query: {
+    specialty?: string;
+    evidenceWeakness?: string;
+    readinessTier?: string;
+    playableOnly?: string;
+    onboardingStatus?: string;
+  }): EvidenceCoverageQuery {
+    return {
+      specialty: query.specialty || undefined,
+      evidenceWeakness: query.evidenceWeakness || undefined,
+      readinessTier: query.readinessTier || undefined,
+      onboardingStatus: query.onboardingStatus || undefined,
+      playableOnly:
+        query.playableOnly === 'true' || query.playableOnly === '1',
+    };
   }
 
   private parseLifecycleAction(

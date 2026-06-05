@@ -6,6 +6,7 @@ import {
 import {
   DiagnosisAliasKind,
   DiagnosisRegistryStatus,
+  DiagnosisTeachingRelationshipStatus,
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
@@ -97,6 +98,7 @@ export class DiagnosisRegistryMergeExecutionService {
       await this.reassignSimpleReferences(tx, analysis, summary);
       await this.reassignDifferentialLinks(tx, analysis, summary);
       await this.reassignGraphRows(tx, analysis, summary);
+      await this.reassignTeachingRelationships(tx, analysis, summary);
       await this.reassignAttempts(tx, analysis, summary);
 
       await tx.diagnosisRegistry.update({
@@ -446,6 +448,76 @@ export class DiagnosisRegistryMergeExecutionService {
       'diagnosisGraphCandidateTarget',
       targetedCandidates.count,
     );
+  }
+
+  private async reassignTeachingRelationships(
+    tx: Prisma.TransactionClient,
+    analysis: RegistryMergeAnalysis,
+    summary: ReassignmentSummary,
+  ) {
+    const relationships = await tx.diagnosisTeachingRelationship.findMany({
+      where: {
+        OR: [
+          { sourceDiagnosisRegistryId: analysis.source.id },
+          { targetDiagnosisRegistryId: analysis.source.id },
+        ],
+      },
+      select: {
+        id: true,
+        sourceDiagnosisRegistryId: true,
+        targetDiagnosisRegistryId: true,
+        relationshipType: true,
+        teachingPurpose: true,
+      },
+    });
+
+    for (const relationship of relationships) {
+      const nextSourceId =
+        relationship.sourceDiagnosisRegistryId === analysis.source.id
+          ? analysis.target.id
+          : relationship.sourceDiagnosisRegistryId;
+      const nextTargetId =
+        relationship.targetDiagnosisRegistryId === analysis.source.id
+          ? analysis.target.id
+          : relationship.targetDiagnosisRegistryId;
+
+      if (nextSourceId === nextTargetId) {
+        await tx.diagnosisTeachingRelationship.update({
+          where: { id: relationship.id },
+          data: { status: DiagnosisTeachingRelationshipStatus.DEPRECATED },
+        });
+        this.skip(summary, 'diagnosisTeachingRelationship');
+        continue;
+      }
+
+      const duplicate = await tx.diagnosisTeachingRelationship.findFirst({
+        where: {
+          id: { not: relationship.id },
+          sourceDiagnosisRegistryId: nextSourceId,
+          targetDiagnosisRegistryId: nextTargetId,
+          relationshipType: relationship.relationshipType,
+          teachingPurpose: relationship.teachingPurpose,
+        },
+        select: { id: true },
+      });
+      if (duplicate) {
+        await tx.diagnosisTeachingRelationship.update({
+          where: { id: relationship.id },
+          data: { status: DiagnosisTeachingRelationshipStatus.DEPRECATED },
+        });
+        this.skip(summary, 'diagnosisTeachingRelationship');
+        continue;
+      }
+
+      await tx.diagnosisTeachingRelationship.update({
+        where: { id: relationship.id },
+        data: {
+          sourceDiagnosisRegistryId: nextSourceId,
+          targetDiagnosisRegistryId: nextTargetId,
+        },
+      });
+      this.record(summary, 'diagnosisTeachingRelationship', 1);
+    }
   }
 
   private async reassignAttempts(

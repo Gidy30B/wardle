@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test": "node --experimental-strip-types src/features/game/react/specialties/specialty-icon-registry.test.ts",
     "preview": "vite preview",
     "cap:sync": "npm run build && cap sync",
     "cap:open:ios": "cap open ios",

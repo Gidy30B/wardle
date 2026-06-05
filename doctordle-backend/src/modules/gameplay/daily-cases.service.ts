@@ -756,7 +756,9 @@ export class DailyCasesService {
     if (
       !caseRecord.diagnosisRegistryId?.trim() ||
       caseRecord.diagnosisMappingStatus !== 'MATCHED' ||
-      !this.isScheduleRegistryPlayable(caseRecord.diagnosisRegistry)
+      !this.caseEligibilityPolicy.isRegistryPlayable(
+        caseRecord.diagnosisRegistry,
+      )
     ) {
       return 'missing_diagnosis';
     }
@@ -781,28 +783,6 @@ export class DailyCasesService {
       track: dailyCase.track,
       sequenceIndex: dailyCase.sequenceIndex,
     };
-  }
-
-  private isScheduleRegistryPlayable(
-    registry:
-      | {
-          status: DiagnosisRegistryStatus;
-          active: boolean;
-          isPlayable: boolean;
-        }
-      | null
-      | undefined,
-  ): boolean {
-    if (!registry) {
-      return false;
-    }
-
-    return (
-      this.lifecyclePolicy?.isPlayable(registry) ??
-      (registry.status === DiagnosisRegistryStatus.ACTIVE &&
-        registry.active &&
-        registry.isPlayable)
-    );
   }
 
   private toDateKey(date: Date): string {

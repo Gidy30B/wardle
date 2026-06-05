@@ -130,6 +130,19 @@ function tx() {
       update: jest.fn().mockResolvedValue({ id: 'candidate-1' }),
       updateMany: jest.fn().mockResolvedValue({ count: 8 }),
     },
+    diagnosisTeachingRelationship: {
+      findMany: jest.fn().mockResolvedValue([
+        {
+          id: 'relationship-1',
+          sourceDiagnosisRegistryId: 'source',
+          targetDiagnosisRegistryId: 'other',
+          relationshipType: 'MIMIC_CONFUSION',
+          teachingPurpose: 'PREVENT_COMMON_ERROR',
+        },
+      ]),
+      findFirst: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockResolvedValue({ id: 'relationship-1' }),
+    },
     attempt: {
       updateMany: jest.fn().mockResolvedValue({ count: 9 }),
     },
@@ -231,6 +244,15 @@ describe('DiagnosisRegistryMergeExecutionService', () => {
       transactionClient.diagnosisRegistryMergeLog.create,
     ).toHaveBeenCalled();
     expect(transactionClient.diagnosisRegistry.delete).not.toHaveBeenCalled();
+    expect(
+      transactionClient.diagnosisTeachingRelationship.update,
+    ).toHaveBeenCalledWith({
+      where: { id: 'relationship-1' },
+      data: {
+        sourceDiagnosisRegistryId: 'target',
+        targetDiagnosisRegistryId: 'other',
+      },
+    });
   });
 
   it('skips duplicate differential links safely', async () => {
@@ -247,6 +269,36 @@ describe('DiagnosisRegistryMergeExecutionService', () => {
 
     expect(transactionClient.caseDifferentialLink.update).not.toHaveBeenCalled();
     expect(result.reassignmentSummary.referencesSkipped.caseDifferentialLink).toBe(1);
+  });
+
+  it('deprecates teaching relationships that would become self-links', async () => {
+    const { service, tx: transactionClient } = serviceFor();
+    transactionClient.diagnosisTeachingRelationship.findMany.mockResolvedValue([
+      {
+        id: 'relationship-self',
+        sourceDiagnosisRegistryId: 'source',
+        targetDiagnosisRegistryId: 'target',
+        relationshipType: 'MIMIC_CONFUSION',
+        teachingPurpose: 'PREVENT_COMMON_ERROR',
+      },
+    ]);
+
+    const result = await service.executeMerge({
+      sourceDiagnosisRegistryId: 'source',
+      targetDiagnosisRegistryId: 'target',
+      performedByUserId: 'senior-1',
+    });
+
+    expect(
+      transactionClient.diagnosisTeachingRelationship.update,
+    ).toHaveBeenCalledWith({
+      where: { id: 'relationship-self' },
+      data: { status: 'DEPRECATED' },
+    });
+    expect(
+      result.reassignmentSummary.referencesSkipped
+        .diagnosisTeachingRelationship,
+    ).toBe(1);
   });
 
   it('skips aliases that would collide with the target', async () => {

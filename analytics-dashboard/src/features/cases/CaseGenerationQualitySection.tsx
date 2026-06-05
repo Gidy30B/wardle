@@ -1,4 +1,6 @@
+import type { ReactNode } from 'react';
 import EmptyState from '../../components/ui/EmptyState';
+import { SpecialtyIcon } from '../specialties/specialty-icons';
 import CaseDetailSection from './CaseDetailSection';
 import type { GenerationQualityMetadata } from './case.transforms';
 import { formatLabel } from './cases.helpers';
@@ -42,10 +44,12 @@ function formatValue(value: string | number | boolean | null | undefined) {
 function MetricCard({
   label,
   value,
+  valueNode,
   accent,
 }: {
   label: string;
   value: string | number | boolean | null | undefined;
+  valueNode?: ReactNode;
   accent?: string;
 }) {
   return (
@@ -54,7 +58,7 @@ function MetricCard({
         {label}
       </dt>
       <dd className={['mt-2 text-sm font-semibold', accent ?? 'text-slate-900'].join(' ')}>
-        {formatValue(value)}
+        {valueNode ?? formatValue(value)}
       </dd>
     </div>
   );
@@ -264,7 +268,21 @@ export default function CaseGenerationQualitySection({
             />
             <MetricCard label="Difficulty" value={quality.estimatedDifficulty} />
             <MetricCard label="Solve clue" value={quality.estimatedSolveClue} />
-            <MetricCard label="Specialty" value={quality.specialty} />
+            <MetricCard
+              label="Specialty"
+              value={quality.specialty}
+              valueNode={
+                quality.specialty ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <SpecialtyIcon
+                      specialty={quality.specialty}
+                      className="h-3.5 w-3.5 text-slate-500"
+                    />
+                    {formatLabel(quality.specialty)}
+                  </span>
+                ) : undefined
+              }
+            />
             <MetricCard label="Acuity" value={quality.acuity} />
             <MetricCard label="Differentials" value={quality.differentialCount} />
             <MetricCard label="Labs" value={quality.hasLabs} />

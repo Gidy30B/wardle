@@ -120,30 +120,4 @@ export const TRACK_LABEL: Record<string, string> = {
   PRACTICE: "Practice",
 };
 
-export const MOBILE_SPECIALTY_ICONS: Record<string, { icon: string; tone: string }> = {
-  cardiology: { icon: "❤️", tone: "bg-rose-400/[0.15] text-rose-300" },
-  rheumatology: { icon: "🦴", tone: "bg-violet-400/[0.15] text-violet-300" },
-  surgery: {
-    icon: "🔪",
-    tone: "bg-[rgba(0,180,166,0.15)] text-[var(--wardle-color-teal)]",
-  },
-  "general-surgery": {
-    icon: "🔪",
-    tone: "bg-[rgba(0,180,166,0.15)] text-[var(--wardle-color-teal)]",
-  },
-  respiratory: { icon: "🫁", tone: "bg-blue-400/[0.15] text-blue-300" },
-  neurology: { icon: "🧠", tone: "bg-orange-400/[0.15] text-orange-300" },
-  gastroenterology: {
-    icon: "🫀",
-    tone: "bg-emerald-400/[0.15] text-emerald-300",
-  },
-  gi: { icon: "🫀", tone: "bg-emerald-400/[0.15] text-emerald-300" },
-  endocrinology: { icon: "⚗️", tone: "bg-amber-400/[0.15] text-amber-300" },
-  haematology: { icon: "🩸", tone: "bg-red-400/[0.15] text-red-300" },
-  hematology: { icon: "🩸", tone: "bg-red-400/[0.15] text-red-300" },
-  oncology: { icon: "🔬", tone: "bg-fuchsia-400/[0.15] text-fuchsia-300" },
-  infectious: { icon: "🦠", tone: "bg-lime-400/[0.15] text-lime-300" },
-  "general-medicine": { icon: "🩺", tone: "bg-white/[0.08] text-white/70" },
-};
-
 

@@ -15,6 +15,17 @@ import type {
   DiagnosisEditorialOnboarding,
   DiagnosisEditorialOnboardingAction,
   DiagnosisEditorialOnboardingSummary,
+  EditorialCoverageDiagnosis,
+  EditorialCoverageFilters,
+  EditorialCoverageOverview,
+  EditorialCoverageSpecialty,
+  EvidenceCoverageDiagnosis,
+  EvidenceCoverageFilters,
+  EvidenceCoverageOverview,
+  CurriculumPlannerDiagnosis,
+  CurriculumPlannerFilters,
+  CurriculumPlannerOverview,
+  CurriculumTrack,
   DiagnosisEditorialWorkspace,
   DiagnosisRegistryLifecycleAction,
   DiagnosisRegistryLifecycleActionResult,
@@ -23,6 +34,12 @@ import type {
   DiagnosisEditorialBriefReviewAction,
   DiagnosisEditorialBriefWritePayload,
   DiagnosisTeachingRule,
+  DiagnosisTeachingRelationship,
+  DiagnosisTeachingRelationshipGenerateResult,
+  DiagnosisTeachingRelationshipReviewAction,
+  DiagnosisEvidenceRelationship,
+  EvidenceGraphGenerateResult,
+  EvidenceGraphReviewAction,
   DiagnosisTeachingRuleGenerateResult,
   DiagnosisTeachingRuleReviewAction,
   DiagnosisTeachingRulesResponse,
@@ -55,6 +72,7 @@ import type {
   GenerateCasesResult,
   GenerateTargetedCasePayload,
   GenerateTargetedCaseResult,
+  CaseInventoryHealth,
   LinkCaseDiagnosisPayload,
   MarkCaseReadyToPublishResult,
   PublishResultsSummary,
@@ -297,6 +315,57 @@ export function resolveMimicCandidate(
   );
 }
 
+export function generateDiagnosisTeachingRelationshipCandidates(
+  client: ApiClient,
+  diagnosisRegistryId?: string,
+) {
+  return client.post<DiagnosisTeachingRelationshipGenerateResult>(
+    '/admin/diagnosis-teaching-relationships/candidates/generate',
+    { diagnosisRegistryId },
+  );
+}
+
+export function reviewDiagnosisTeachingRelationship(
+  client: ApiClient,
+  id: string,
+  action: DiagnosisTeachingRelationshipReviewAction,
+) {
+  return client.post<DiagnosisTeachingRelationship>(
+    `/admin/diagnosis-teaching-relationships/${id}/review`,
+    { action },
+  );
+}
+
+export function getDiagnosisTeachingRelationships(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.get<DiagnosisTeachingRelationship[]>(
+    `/admin/diagnosis-registry/${diagnosisRegistryId}/teaching-relationships`,
+  );
+}
+
+export function generateEvidenceGraphCandidates(
+  client: ApiClient,
+  diagnosisRegistryId?: string,
+) {
+  return client.post<EvidenceGraphGenerateResult>(
+    '/admin/evidence-graph/candidates/generate',
+    { diagnosisRegistryId },
+  );
+}
+
+export function reviewEvidenceGraphRelationship(
+  client: ApiClient,
+  id: string,
+  action: EvidenceGraphReviewAction,
+) {
+  return client.post<DiagnosisEvidenceRelationship>(
+    `/admin/evidence-graph/relationships/${id}/review`,
+    { action },
+  );
+}
+
 export function fetchAdminViewer(client: ApiClient) {
   return client.get<AdminViewer>('/auth/me');
 }
@@ -332,6 +401,10 @@ export function getPublishResultsSummary(client: ApiClient) {
   return client.get<PublishResultsSummary>('/admin/summary/publish-results');
 }
 
+export function getCaseInventoryHealth(client: ApiClient) {
+  return client.get<CaseInventoryHealth>('/admin/cases/inventory-health');
+}
+
 export function getEditorialInbox(
   client: ApiClient,
   query: EditorialInboxQuery = {},
@@ -344,6 +417,144 @@ export function getEditorialInbox(
       specialty: query.specialty || undefined,
       limit: query.limit,
       page: query.page,
+    }),
+  );
+}
+
+export function getEditorialCoverageOverview(
+  client: ApiClient,
+  filters: EditorialCoverageFilters = {},
+) {
+  return client.get<EditorialCoverageOverview>(
+    withQuery('/admin/editorial/coverage/overview', {
+      specialty: filters.specialty || undefined,
+      lifecycleState: filters.lifecycleState || undefined,
+      onboardingState: filters.onboardingState || undefined,
+      coverageWeakness: filters.coverageWeakness || undefined,
+      playableOnly: filters.playableOnly ? 'true' : undefined,
+    }),
+  );
+}
+
+export function getEditorialCoverageDiagnoses(
+  client: ApiClient,
+  filters: EditorialCoverageFilters = {},
+) {
+  return client.get<EditorialCoverageDiagnosis[]>(
+    withQuery('/admin/editorial/coverage/diagnoses', {
+      specialty: filters.specialty || undefined,
+      lifecycleState: filters.lifecycleState || undefined,
+      onboardingState: filters.onboardingState || undefined,
+      coverageWeakness: filters.coverageWeakness || undefined,
+      playableOnly: filters.playableOnly ? 'true' : undefined,
+    }),
+  );
+}
+
+export function getEditorialCoverageSpecialties(
+  client: ApiClient,
+  filters: EditorialCoverageFilters = {},
+) {
+  return client.get<EditorialCoverageSpecialty[]>(
+    withQuery('/admin/editorial/coverage/specialties', {
+      specialty: filters.specialty || undefined,
+      lifecycleState: filters.lifecycleState || undefined,
+      onboardingState: filters.onboardingState || undefined,
+      coverageWeakness: filters.coverageWeakness || undefined,
+      playableOnly: filters.playableOnly ? 'true' : undefined,
+    }),
+  );
+}
+
+export function getEvidenceCoverageOverview(
+  client: ApiClient,
+  filters: EvidenceCoverageFilters = {},
+) {
+  return client.get<EvidenceCoverageOverview>(
+    withQuery('/admin/evidence-coverage/overview', {
+      specialty: filters.specialty || undefined,
+      evidenceWeakness: filters.evidenceWeakness || undefined,
+      readinessTier: filters.readinessTier || undefined,
+      onboardingStatus: filters.onboardingStatus || undefined,
+      playableOnly: filters.playableOnly ? 'true' : undefined,
+    }),
+  );
+}
+
+export function getEvidenceCoverageDiagnoses(
+  client: ApiClient,
+  filters: EvidenceCoverageFilters = {},
+) {
+  return client.get<EvidenceCoverageDiagnosis[]>(
+    withQuery('/admin/evidence-coverage/diagnoses', {
+      specialty: filters.specialty || undefined,
+      evidenceWeakness: filters.evidenceWeakness || undefined,
+      readinessTier: filters.readinessTier || undefined,
+      onboardingStatus: filters.onboardingStatus || undefined,
+      playableOnly: filters.playableOnly ? 'true' : undefined,
+    }),
+  );
+}
+
+export function getEvidenceCoverageDiagnosis(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.get<EvidenceCoverageDiagnosis>(
+    `/admin/evidence-coverage/${diagnosisRegistryId}`,
+  );
+}
+
+export function getCurriculumPlannerOverview(
+  client: ApiClient,
+  filters: CurriculumPlannerFilters = {},
+) {
+  return client.get<CurriculumPlannerOverview>(
+    withQuery('/admin/editorial/planner/overview', {
+      specialty: filters.specialty || undefined,
+      onboardingStatus:
+        filters.onboardingStatus || filters.onboardingState || undefined,
+      lifecycleState: filters.lifecycleState || undefined,
+      lifecycleReadiness: filters.lifecycleReadiness || undefined,
+      priorityTier: filters.priorityTier || undefined,
+      track: filters.track || undefined,
+      playableOnly: filters.playableOnly ? 'true' : undefined,
+    }),
+  );
+}
+
+export function getCurriculumPlannerDiagnoses(
+  client: ApiClient,
+  filters: CurriculumPlannerFilters = {},
+) {
+  return client.get<CurriculumPlannerDiagnosis[]>(
+    withQuery('/admin/editorial/planner/diagnoses', {
+      specialty: filters.specialty || undefined,
+      onboardingStatus:
+        filters.onboardingStatus || filters.onboardingState || undefined,
+      lifecycleState: filters.lifecycleState || undefined,
+      lifecycleReadiness: filters.lifecycleReadiness || undefined,
+      priorityTier: filters.priorityTier || undefined,
+      track: filters.track || undefined,
+      playableOnly: filters.playableOnly ? 'true' : undefined,
+    }),
+  );
+}
+
+export function getCurriculumPlannerTracks(
+  client: ApiClient,
+  filters: CurriculumPlannerFilters = {},
+) {
+  return client.get<CurriculumTrack[]>(
+    withQuery('/admin/editorial/planner/tracks', {
+      specialty: filters.specialty || undefined,
+      onboardingStatus:
+        filters.onboardingStatus || filters.onboardingState || undefined,
+      lifecycleState: filters.lifecycleState || undefined,
+      lifecycleReadiness: filters.lifecycleReadiness || undefined,
+      priorityTier: filters.priorityTier || undefined,
+      track: filters.track || undefined,
+      playableOnly: filters.playableOnly ? 'true' : undefined,
     }),
   );
 }

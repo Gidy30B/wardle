@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   compareDiagnosisEducationRevisions,
   createDiagnosisEducationForAdmin,
@@ -182,6 +182,29 @@ export default function DiagnosisEducationPanel({
   const canEdit = !isPublished;
   const canGenerate = Boolean(diagnosisRegistryId);
   const generateLabel = getGenerateActionLabel(education);
+
+  const resetRevisionCompare = useCallback(() => {
+    setRevisionCompare(null);
+    setRevisionCompareLoading(false);
+    setRevisionCompareError(null);
+    setCompareFromVersion(null);
+    setCompareToVersion(null);
+  }, []);
+
+  const applyRevisionHistory = useCallback(
+    (revisions: DiagnosisEducationRevisionAnalysis[]) => {
+      const sorted = sortRevisionsNewestFirst(revisions);
+      setRevisionHistory(sorted);
+
+      if (sorted.length >= 2) {
+        setCompareFromVersion(sorted[1].version);
+        setCompareToVersion(sorted[0].version);
+      } else {
+        resetRevisionCompare();
+      }
+    },
+    [resetRevisionCompare],
+  );
 
   useEffect(() => {
     if (!diagnosisRegistryId) {
@@ -443,7 +466,13 @@ export default function DiagnosisEducationPanel({
     return () => {
       active = false;
     };
-  }, [client, diagnosisLabel, diagnosisRegistryId]);
+  }, [
+    applyRevisionHistory,
+    client,
+    diagnosisLabel,
+    diagnosisRegistryId,
+    resetRevisionCompare,
+  ]);
 
   const preview = useMemo(() => toPreview(form, education), [education, form]);
 
@@ -518,28 +547,6 @@ export default function DiagnosisEducationPanel({
     diagnosisRegistryId,
     revisionHistory.length,
   ]);
-
-  function applyRevisionHistory(
-    revisions: DiagnosisEducationRevisionAnalysis[],
-  ) {
-    const sorted = sortRevisionsNewestFirst(revisions);
-    setRevisionHistory(sorted);
-
-    if (sorted.length >= 2) {
-      setCompareFromVersion(sorted[1].version);
-      setCompareToVersion(sorted[0].version);
-    } else {
-      resetRevisionCompare();
-    }
-  }
-
-  function resetRevisionCompare() {
-    setRevisionCompare(null);
-    setRevisionCompareLoading(false);
-    setRevisionCompareError(null);
-    setCompareFromVersion(null);
-    setCompareToVersion(null);
-  }
 
   async function refreshEducation() {
     if (!diagnosisRegistryId) {
