@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useUser } from '@clerk/clerk-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useApi } from '../../../../../lib/api'
 import { updateUserSettingsApi } from '../../../../profile/profile.api'
@@ -15,6 +16,7 @@ import {
 import { SettingsShell } from '../components/SettingsShell'
 import { SettingsStatusBadge } from '../components/SettingsStatusBadge'
 import { SettingsToggleRow } from '../components/SettingsToggleRow'
+import { PasswordSettingsPanel } from './PasswordSettingsPanel'
 
 export function AccountSettingsScreen({
   onBack,
@@ -25,6 +27,8 @@ export function AccountSettingsScreen({
   onSignOut: () => void
   organizationName: string | null
 }) {
+  const { user } = useUser()
+  const [showPasswordPanel, setShowPasswordPanel] = useState(false)
   const [anonData, setAnonData] = useState(DEFAULT_MOCK_PRIVACY_SETTINGS.anonData)
   const { request } = useApi()
   const queryClient = useQueryClient()
@@ -39,6 +43,10 @@ export function AccountSettingsScreen({
       void queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
     },
   })
+
+  if (showPasswordPanel) {
+    return <PasswordSettingsPanel onBack={() => setShowPasswordPanel(false)} />
+  }
 
   return (
     <SettingsShell>
@@ -69,9 +77,13 @@ export function AccountSettingsScreen({
         <SettingsActionRow
           icon="🔑"
           iconBg="rgba(26,60,94,0.55)"
-          label="Change password"
-          sublabel="Sent to your registered email"
-          onClick={() => {}}
+          label={user?.passwordEnabled ? 'Change password' : 'Add password'}
+          sublabel={
+            user?.passwordEnabled
+              ? 'Update your sign-in password'
+              : 'Set a password for email + password sign-in'
+          }
+          onClick={() => setShowPasswordPanel(true)}
           style={{ borderBottom: 'none' }}
         />
       </SettingsSection>
