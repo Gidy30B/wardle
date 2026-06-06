@@ -37,7 +37,7 @@ function normalizeClinicalText(value: string): string {
 
 const now = new Date();
 const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 4, 12, 0, 0));
-const seedVersion = 'flagship-nutritional-vitamin-d-deficiency-rickets-v1';
+const seedVersion = 'flagship-guillain-barre-syndrome-v1';
 
 function addUtcDays(date: Date, days: number): Date {
   const next = new Date(date);
@@ -100,132 +100,156 @@ const clues = [
     order: 0,
     type: 'history',
     value:
-      'An 18-month-old child is brought to clinic because of delayed motor milestones and difficulty standing without support.',
+      'A 29-year-old man presents with progressive difficulty walking over the past 3 days.',
   },
   {
     order: 1,
-    type: 'risk',
+    type: 'history',
     value:
-      'The child spends little time outdoors and is still primarily breastfed without vitamin supplementation.',
+      'He reports tingling in both feet that began one week after recovering from a severe diarrheal illness.',
   },
   {
     order: 2,
-    type: 'exam',
+    type: 'symptom',
     value:
-      'Examination reveals frontal bossing and a persistently large anterior fontanelle.',
+      'Weakness started in the legs and is now involving the thighs and hands bilaterally.',
   },
   {
     order: 3,
     type: 'exam',
     value:
-      'There is widening of the wrists and palpable beading along the costochondral junctions.',
+      'Neurological examination demonstrates symmetric flaccid weakness with markedly reduced deep tendon reflexes in both lower limbs.',
   },
   {
     order: 4,
-    type: 'investigation',
+    type: 'exam',
     value:
-      'Laboratory studies demonstrate markedly elevated alkaline phosphatase with abnormalities in calcium-phosphate metabolism.',
+      'There is mild bilateral facial weakness and difficulty coughing effectively, though sensation is largely preserved.',
   },
   {
     order: 5,
-    type: 'imaging',
+    type: 'investigation',
     value:
-      'Radiographs of the wrists show metaphyseal cupping, fraying, and widening of the growth plates.',
+      'Lumbar puncture reveals elevated CSF protein with a normal white blood cell count. Nerve conduction studies show demyelinating polyneuropathy.',
   },
 ] as const;
 
 const differentials = [
-  'Hypophosphatemic rickets',
-  'Osteogenesis imperfecta',
-  'Osteomalacia',
-  'Cerebral palsy',
+  'Transverse Myelitis',
+  'Myasthenia Gravis',
+  'Botulism',
+  'Acute Hypokalemic Paralysis',
 ];
 
 const explanation = {
-  diagnosis: 'Nutritional Vitamin D Deficiency Rickets',
+  diagnosis: 'Guillain-Barré Syndrome',
   summary:
-    'Delayed motor milestones, limited sunlight exposure, prolonged breastfeeding without supplementation, frontal bossing, large anterior fontanelle, rachitic rosary, wrist widening, elevated alkaline phosphatase, and metaphyseal cupping and fraying support nutritional vitamin D deficiency rickets.',
+    'Progressive ascending weakness and areflexia in a young adult one week after a diarrheal illness, with symmetric flaccid paralysis, bilateral facial weakness, albuminocytologic dissociation on CSF, and demyelinating polyneuropathy on nerve conduction studies confirm Guillain-Barré syndrome.',
   reasoning: [
-    'Delayed motor milestones and difficulty standing in a toddler suggest a disorder affecting musculoskeletal development or strength.',
-    'Limited sunlight exposure and breastfeeding without vitamin D supplementation create a strong nutritional risk profile for vitamin D deficiency.',
-    'Frontal bossing and a persistently large anterior fontanelle are classic skeletal manifestations of rickets.',
-    'Wrist widening and costochondral beading reflect expansion of unmineralized osteoid at active growth plates.',
-    'Markedly elevated alkaline phosphatase with calcium-phosphate abnormalities supports active defective bone mineralization.',
-    'Metaphyseal cupping, fraying, and widened growth plates on wrist radiographs confirm rickets in a child with open physes.',
+    'Progressive difficulty walking over 3 days in a young adult raises concern for an acute neurological process affecting motor function.',
+    'Tingling in both feet beginning one week after a diarrheal illness suggests a post-infectious peripheral nerve disorder.',
+    'Ascending symmetric leg-to-hand weakness localizes the disease to the peripheral nervous system and follows the classic GBS distribution.',
+    'Symmetric flaccid weakness with markedly reduced deep tendon reflexes confirms lower motor neuron disease at multiple levels.',
+    'Bilateral facial weakness and impaired cough indicate proximal spread to cranial nerves and raise immediate concern for respiratory failure.',
+    'Elevated CSF protein with normal cell count and demyelinating nerve conduction studies establish the diagnosis of Guillain-Barré syndrome.',
   ],
   keyFindings: [
-    'Delayed motor milestones',
-    'Difficulty standing without support',
-    'Limited sunlight exposure',
-    'Breastfeeding without vitamin supplementation',
-    'Frontal bossing',
-    'Persistently large anterior fontanelle',
-    'Wrist widening',
-    'Rachitic rosary',
-    'Elevated alkaline phosphatase',
-    'Metaphyseal cupping, fraying, and widened growth plates',
+    'Progressive difficulty walking over 3 days',
+    'Post-diarrheal onset with distal tingling',
+    'Ascending symmetric weakness involving legs and hands',
+    'Symmetric flaccid weakness',
+    'Markedly reduced deep tendon reflexes',
+    'Bilateral facial weakness',
+    'Difficulty coughing effectively',
+    'Largely preserved sensation',
+    'Albuminocytologic dissociation on CSF',
+    'Demyelinating polyneuropathy on nerve conduction studies',
   ],
   differentials,
   differentialAnalysis: [
     {
-      diagnosis: 'Hypophosphatemic rickets',
+      diagnosis: 'Transverse Myelitis',
       whyPlausibleEarly:
-        'Hypophosphatemic rickets can also cause bowed legs, growth concerns, and rachitic radiographic changes.',
-      ruledOutByClues: [
-        {
-          clueOrder: 1,
-          evidence: 'limited sunlight exposure and breastfeeding without vitamin supplementation',
-          reason:
-            'The nutritional risk profile strongly favors vitamin D deficiency over a renal phosphate-wasting disorder.',
-        },
-      ],
-      finalReasonLessLikely:
-        'Persistent hypophosphatemia despite vitamin D replacement or family history would raise concern for hypophosphatemic rickets.',
-    },
-    {
-      diagnosis: 'Osteogenesis imperfecta',
-      whyPlausibleEarly:
-        'Osteogenesis imperfecta is a pediatric bone disorder that may present with skeletal deformity or fragility.',
+        'Transverse myelitis can also cause acute leg weakness and may follow a respiratory or gastrointestinal infection.',
       ruledOutByClues: [
         {
           clueOrder: 3,
-          evidence: 'wrist widening and rachitic rosary',
+          evidence: 'symmetric flaccid weakness with markedly reduced deep tendon reflexes',
           reason:
-            'These growth plate expansion findings are more typical of rickets than collagen fragility.',
+            'Transverse myelitis produces upper motor neuron signs with hyperreflexia over time, not flaccid areflexic paralysis.',
         },
-      ],
-      finalReasonLessLikely:
-        'Recurrent fractures, blue sclerae, dentinogenesis imperfecta, and connective tissue fragility are not present.',
-    },
-    {
-      diagnosis: 'Osteomalacia',
-      whyPlausibleEarly:
-        'Osteomalacia is also caused by defective bone mineralization, often from vitamin D deficiency.',
-      ruledOutByClues: [
         {
           clueOrder: 5,
-          evidence: 'widening of the growth plates',
+          evidence: 'demyelinating polyneuropathy on nerve conduction studies',
           reason:
-            'Growth plate abnormalities occur in children with open physes and indicate rickets rather than adult osteomalacia.',
+            'Demyelinating polyneuropathy on NCS indicates peripheral nerve disease rather than a spinal cord lesion.',
         },
       ],
       finalReasonLessLikely:
-        'Osteomalacia affects adults after epiphyseal closure rather than toddlers with active growth plates.',
+        'Transverse myelitis would present with a sensory level, early bladder dysfunction, and eventual upper motor neuron signs — none of which are present here.',
     },
     {
-      diagnosis: 'Cerebral palsy',
+      diagnosis: 'Myasthenia Gravis',
       whyPlausibleEarly:
-        'Delayed motor milestones and difficulty standing can suggest a neurologic motor disorder.',
+        'Myasthenia gravis can cause generalized weakness and may involve facial muscles in young adults.',
       ruledOutByClues: [
         {
-          clueOrder: 4,
-          evidence: 'elevated alkaline phosphatase with calcium-phosphate abnormalities',
+          clueOrder: 3,
+          evidence: 'markedly reduced deep tendon reflexes',
           reason:
-            'Biochemical evidence of defective mineralization supports metabolic bone disease rather than isolated neurologic delay.',
+            'Myasthenia gravis is a neuromuscular junction disorder that does not cause areflexia.',
+        },
+        {
+          clueOrder: 5,
+          evidence: 'elevated CSF protein with albuminocytologic dissociation',
+          reason:
+            'CSF and nerve conduction findings are inconsistent with a neuromuscular junction disorder.',
         },
       ],
       finalReasonLessLikely:
-        'The skeletal abnormalities and radiographic findings indicate a metabolic bone disorder.',
+        'Myasthenia gravis produces fatigable weakness, preserved reflexes, no ascending pattern, and normal CSF findings.',
+    },
+    {
+      diagnosis: 'Botulism',
+      whyPlausibleEarly:
+        'Botulism causes acute flaccid paralysis and may follow a gastrointestinal illness with toxin ingestion.',
+      ruledOutByClues: [
+        {
+          clueOrder: 2,
+          evidence: 'weakness ascending from legs to hands bilaterally',
+          reason:
+            'Botulism produces descending paralysis beginning with cranial nerve involvement, not ascending peripheral weakness.',
+        },
+        {
+          clueOrder: 5,
+          evidence: 'albuminocytologic dissociation and demyelinating polyneuropathy on NCS',
+          reason:
+            'These findings indicate an immune-mediated peripheral neuropathy rather than a presynaptic toxin-mediated disorder.',
+        },
+      ],
+      finalReasonLessLikely:
+        'Botulism presents with descending paralysis, prominent early pupillary abnormalities, and autonomic features without CSF protein elevation.',
+    },
+    {
+      diagnosis: 'Acute Hypokalemic Paralysis',
+      whyPlausibleEarly:
+        'Acute hypokalemic paralysis can cause rapid-onset symmetric flaccid weakness, sometimes following a gastrointestinal illness with fluid and electrolyte loss.',
+      ruledOutByClues: [
+        {
+          clueOrder: 1,
+          evidence: 'tingling in both feet following the diarrheal illness',
+          reason:
+            'Sensory symptoms are not a feature of hypokalemic paralysis, which is a pure motor disorder.',
+        },
+        {
+          clueOrder: 5,
+          evidence: 'elevated CSF protein and demyelinating polyneuropathy on nerve conduction studies',
+          reason:
+            'CSF protein elevation and NCS abnormalities indicate peripheral nerve disease rather than an electrolyte disorder.',
+        },
+      ],
+      finalReasonLessLikely:
+        'Hypokalemic paralysis does not produce sensory symptoms, CSF protein elevation, or NCS changes, and weakness rapidly resolves with potassium replacement.',
     },
   ],
   generationQuality: {
@@ -236,86 +260,86 @@ const explanation = {
 };
 
 const educationForFrontend = {
-  title: 'Nutritional Vitamin D Deficiency Rickets',
+  title: 'Guillain-Barré Syndrome',
 
   summary: {
     definition:
-      'Rickets is a pediatric metabolic bone disease characterized by defective mineralization of the growth plate, most commonly due to vitamin D deficiency.',
+      'Guillain-Barré syndrome (GBS) is an acute immune-mediated polyneuropathy characterized by rapidly progressive ascending flaccid weakness and areflexia, typically triggered by a preceding respiratory or gastrointestinal infection.',
     highYieldTakeaway:
-      'Think nutritional vitamin D deficiency rickets in toddlers with delayed walking, low sunlight exposure or unsupplemented breastfeeding, skeletal deformities, and metaphyseal cupping or fraying on radiographs.',
+      'Think GBS in any patient with rapidly ascending symmetric weakness and areflexia following a recent infection — albuminocytologic dissociation on CSF and demyelinating findings on nerve conduction studies confirm the diagnosis.',
   },
 
   recognitionPattern: [
     {
-      pattern: 'Typical presentation',
+      pattern: 'Ascending paralysis pattern',
       whyItMatters:
-        'Toddlers may present with delayed walking, skeletal deformities, bone pain, hypotonia, or growth impairment.',
+        'Weakness begins distally in the legs and ascends proximally over days to weeks, reflecting a length-dependent peripheral neuropathy.',
     },
     {
-      pattern: 'Nutritional risk factors',
+      pattern: 'Post-infectious trigger',
       whyItMatters:
-        'Exclusive breastfeeding without vitamin D supplementation and limited sunlight exposure are major preventable risk factors.',
+        'GBS typically follows a respiratory or gastrointestinal infection by 1–3 weeks; Campylobacter jejuni is the most common preceding pathogen.',
     },
     {
-      pattern: 'Growth plate disease',
+      pattern: 'Peripheral nerve localization',
       whyItMatters:
-        'Clinical and radiographic abnormalities localize the disease to growing bones with open physes.',
+        'Flaccid weakness with absent or markedly reduced reflexes in an alert patient strongly localizes disease to the peripheral nervous system.',
     },
   ],
 
   keySymptoms: [
     {
-      symptom: 'Delayed motor milestones',
+      symptom: 'Progressive ascending weakness',
       significance:
-        'Delayed walking or difficulty standing may be the first clue to hypotonia or painful defective mineralization.',
+        'Ascending symmetric weakness starting in the distal legs is the hallmark presentation and may progress to involve the arms and respiratory muscles.',
     },
     {
-      symptom: 'Bone pain or irritability',
+      symptom: 'Distal tingling and paresthesias',
       significance:
-        'Children with active rickets may be uncomfortable, reluctant to walk, or less active.',
+        'Sensory symptoms in the feet often precede or accompany motor weakness and direct attention to peripheral nerve involvement.',
     },
   ],
 
   keySigns: [
     {
-      finding: 'Rachitic rosary',
+      finding: 'Areflexia or hyporeflexia',
       significance:
-        'Beading at the costochondral junctions occurs because of expansion of unmineralized osteoid.',
+        'Absent or markedly reduced deep tendon reflexes in an awake patient strongly suggest GBS and distinguish it from upper motor neuron lesions.',
     },
     {
-      finding: 'Wrist widening',
+      finding: 'Symmetric flaccid weakness',
       significance:
-        'Enlargement of the distal radius and ulna reflects growth plate expansion and active skeletal disease.',
+        'Diffuse flaccidity without increased tone distinguishes a peripheral nerve disorder from a central or neuromuscular junction lesion.',
     },
     {
-      finding: 'Frontal bossing and large anterior fontanelle',
+      finding: 'Bilateral facial weakness',
       significance:
-        'Skull findings support a chronic mineralization disorder in a young child.',
+        'Cranial nerve involvement indicates spread beyond limb muscles and signals increasing risk of respiratory compromise.',
     },
   ],
 
   examPearls: [
     {
       type: 'physical',
-      title: 'Rachitic rosary',
+      title: 'Areflexia with ascending weakness',
       content:
-        'Prominent beading at the costochondral junctions occurs due to expansion of unmineralized osteoid.',
+        'Absent or markedly reduced deep tendon reflexes in a patient with progressive ascending weakness is the cardinal clinical finding for GBS.',
       whyItMatters:
-        'This is a classic examination clue for rickets in children.',
+        'This combination localizes disease to the peripheral nervous system rather than the spinal cord or neuromuscular junction.',
       discriminator:
-        'Helps distinguish metabolic bone disease from isolated developmental delay.',
+        'Hyperreflexia or preserved reflexes argue against GBS and suggest a central or neuromuscular junction disorder.',
       trapAvoided:
-        'Avoid attributing delayed milestones purely to neurologic causes.',
+        'Avoid attributing progressive leg weakness to stroke or spinal cord disease without examining reflexes.',
     },
     {
       type: 'physical',
-      title: 'Wrist widening',
+      title: 'Respiratory assessment',
       content:
-        'Enlargement of the distal radius and ulna reflects growth plate expansion.',
+        'Forced vital capacity should be measured serially; a value below 20 mL/kg, rapidly declining trajectory, or inability to count to 20 in a single breath are thresholds for considering intubation.',
       whyItMatters:
-        'Wrist changes are among the earliest and most reliable skeletal findings.',
+        'Respiratory failure develops in up to 30% of patients and can occur rapidly even when limb weakness appears mild.',
       managementImplication:
-        'Presence of active skeletal disease supports urgent nutritional correction.',
+        'Early recognition of impending respiratory compromise prevents unplanned emergency intubation.',
     },
   ],
 
@@ -323,102 +347,153 @@ const educationForFrontend = {
 
   investigations: [
     {
-      test: 'Biochemical profile',
+      test: 'Lumbar puncture and CSF analysis',
       interpretation:
-        'Alkaline phosphatase is markedly elevated, while calcium and phosphate levels may be reduced.',
+        'Albuminocytologic dissociation — elevated protein with normal or near-normal cell count — is the classic finding, though it may be absent in the first week of illness.',
       whyItMatters:
-        'The biochemical pattern supports active defective bone mineralization.',
+        'CSF findings support the diagnosis and help exclude infectious or inflammatory causes of polyneuropathy.',
     },
     {
-      test: 'Radiographic findings',
+      test: 'Nerve conduction studies and electromyography',
       interpretation:
-        'X-rays classically demonstrate metaphyseal cupping, fraying, and widening.',
+        'Demyelinating features (slowed conduction velocity, prolonged distal latencies, conduction block) characterize AIDP; axonal variants show reduced compound action potential amplitudes.',
       whyItMatters:
-        'Characteristic radiographic changes help confirm the diagnosis.',
+        'NCS confirms peripheral nerve disease, establishes the subtype, and can inform prognosis.',
+    },
+    {
+      test: 'Serial forced vital capacity',
+      interpretation:
+        'Values below 20 mL/kg, rapid decline, or inability to count to 20 in one breath indicate high risk for respiratory failure.',
+      whyItMatters:
+        'Respiratory monitoring guides the timing of ICU admission and intubation.',
+    },
+    {
+      test: 'ECG and continuous cardiac monitoring',
+      interpretation:
+        'Dysautonomia may manifest as arrhythmias, tachycardia, or blood pressure fluctuations.',
+      whyItMatters:
+        'Cardiac dysautonomia is a major cause of mortality and requires continuous monitoring throughout the acute phase.',
     },
   ],
 
   pitfalls: [
     {
-      pitfall: 'Missing the diagnosis in delayed milestones',
+      pitfall: 'Normal CSF protein in early disease',
       consequence:
-        'Children with rickets may initially appear to have isolated developmental delay; careful musculoskeletal examination prevents delayed diagnosis.',
+        'Protein elevation often develops only after the first week; a normal result early does not exclude GBS and should not delay treatment when clinical suspicion is high.',
+    },
+    {
+      pitfall: 'Delayed respiratory monitoring',
+      consequence:
+        'Failure to measure vital capacity may delay recognition of impending respiratory failure and result in emergent rather than planned intubation.',
+    },
+    {
+      pitfall: 'Treating with steroids alone',
+      consequence:
+        'Corticosteroids are not effective for classic GBS and may worsen outcomes; first-line treatment is IVIg or plasmapheresis.',
     },
   ],
 
   managementOverview: [
     {
-      step: 'Vitamin D replacement',
+      step: 'Admit for monitoring',
       rationale:
-        'Therapeutic vitamin D with concurrent calcium supplementation allows remineralization and recovery of bone growth.',
+        'All patients require admission for close neurological assessment and serial vital capacity measurements given the risk of rapid deterioration.',
     },
     {
-      step: 'Nutritional counseling',
+      step: 'IV immunoglobulin or plasmapheresis',
       rationale:
-        'Caregivers should receive counseling regarding supplementation, adequate calcium intake, and safe sunlight exposure.',
+        'Both are equally effective first-line immunotherapies; choice depends on availability, patient factors, and contraindications.',
     },
     {
-      step: 'Correct underlying risk factors',
+      step: 'Respiratory support',
       rationale:
-        'Addressing diet, malabsorption risk, and adherence reduces recurrence and progression.',
+        'Mechanical ventilation is required if vital capacity falls below 20 mL/kg or respiratory failure develops; early elective intubation is safer than emergent.',
+    },
+    {
+      step: 'DVT prophylaxis and physiotherapy',
+      rationale:
+        'Immobile patients are at high risk for deep vein thrombosis; early physiotherapy supports rehabilitation and prevents complications of immobility.',
+    },
+    {
+      step: 'Dysautonomia management',
+      rationale:
+        'Cardiac monitoring and cautious management of blood pressure instability and arrhythmias are essential throughout the acute phase.',
     },
   ],
 
   differentialDistinguishers: [
     {
-      diagnosis: 'Hypophosphatemic rickets',
+      diagnosis: 'Transverse Myelitis',
       keySeparator:
-        'Often presents with persistent hypophosphatemia despite adequate vitamin D replacement and may have a family history.',
+        'Often presents with a sensory level, early bladder dysfunction, and eventual upper motor neuron signs with hyperreflexia; spinal cord lesion visible on MRI.',
     },
     {
-      diagnosis: 'Osteogenesis imperfecta',
+      diagnosis: 'Myasthenia Gravis',
       keySeparator:
-        'Associated with recurrent fractures, blue sclerae, dentinogenesis imperfecta, and connective tissue fragility.',
+        'Produces fatigable rather than fixed weakness with preserved deep tendon reflexes, no ascending pattern, and normal CSF findings.',
     },
     {
-      diagnosis: 'Osteomalacia',
+      diagnosis: 'Botulism',
       keySeparator:
-        'Affects defective mineralization in adults after epiphyseal closure rather than children with open growth plates.',
+        'Causes descending paralysis with prominent early pupillary abnormalities and autonomic features; no CSF protein elevation or demyelinating NCS pattern.',
     },
     {
-      diagnosis: 'Cerebral palsy',
+      diagnosis: 'Acute Hypokalemic Paralysis',
       keySeparator:
-        'Motor delay alone may suggest neurologic disease, but skeletal, biochemical, and radiographic findings indicate metabolic bone disease.',
+        'No sensory symptoms; reflexes recover rapidly with potassium correction; associated electrolyte abnormalities without CSF or NCS changes.',
     },
   ],
 
   complications: [
     {
-      complication: 'Permanent skeletal deformity',
+      complication: 'Respiratory failure',
       whyItMatters:
-        'Delayed recognition can lead to persistent bowed legs, growth impairment, and orthopedic complications.',
+        'Up to 30% of patients require mechanical ventilation; rapid deterioration can occur even when limb weakness appears mild.',
+    },
+    {
+      complication: 'Dysautonomia',
+      whyItMatters:
+        'Cardiac arrhythmias and hemodynamic instability require continuous monitoring and are a significant cause of mortality.',
+    },
+    {
+      complication: 'Persistent weakness and disability',
+      whyItMatters:
+        'Some patients have incomplete recovery with residual neurological deficits; early physiotherapy and rehabilitation improve long-term outcomes.',
     },
   ],
 
   recallPrompts: [
     {
       prompt:
-        'What radiographic findings are classically associated with rickets?',
+        'What CSF finding is classically associated with Guillain-Barré syndrome?',
       answer:
-        'Metaphyseal cupping, fraying, and widening of the growth plates.',
+        'Albuminocytologic dissociation: elevated protein with a normal or near-normal white blood cell count.',
     },
     {
       prompt:
-        'Which examination finding describes beading along the costochondral junctions?',
-      answer: 'Rachitic rosary.',
+        'Which organism most commonly precedes Guillain-Barré syndrome?',
+      answer:
+        'Campylobacter jejuni, following a diarrheal illness.',
+    },
+    {
+      prompt:
+        'What respiratory threshold should prompt consideration of mechanical ventilation in GBS?',
+      answer:
+        'Forced vital capacity below 20 mL/kg or a rapidly declining trajectory.',
     },
   ],
 
   references: [
-    'WHO guidance on nutritional rickets',
-    'Nelson Textbook of Pediatrics',
-    'Oxford Handbook of Paediatrics',
+    'Willison HJ, Jacobs BC, van Doorn PA. Guillain-Barré syndrome. Lancet. 2016;388(10045):717-727.',
+    'Wijdicks EFM, Klein CJ. Guillain-Barré Syndrome. Mayo Clin Proc. 2017;92(3):467-479.',
+    'van den Berg B et al. Guillain-Barré syndrome: pathogenesis, diagnosis, treatment and prognosis. Nat Rev Neurol. 2014;10(8):469-482.',
   ],
 };
 
 async function main() {
-  const canonicalName = 'nutritional vitamin d deficiency rickets';
-  const displayLabel = 'Nutritional Vitamin D Deficiency Rickets';
+  const canonicalName = 'guillain barre syndrome';
+  const displayLabel = 'Guillain-Barré Syndrome';
   const canonicalNormalized = normalizeClinicalText(canonicalName);
 
   const registry = await prisma.diagnosisRegistry.upsert({
@@ -428,24 +503,24 @@ async function main() {
       displayLabel,
       status: DiagnosisRegistryStatus.ACTIVE,
       active: true,
-      specialty: 'Paediatrics',
-      subspecialty: 'Metabolic Bone Disease',
-      category: 'Metabolic',
-      bodySystem: 'Musculoskeletal',
-      organSystem: 'Bone',
-      difficultyBand: DiagnosisDifficultyBand.BASIC,
-      rarityBand: DiagnosisRarityBand.COMMON,
-      clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
-      ageGroup: DiagnosisAgeGroup.PEDIATRIC,
-      urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
+      specialty: 'Neurology',
+      subspecialty: 'Neuromuscular Disease',
+      category: 'Neurological',
+      bodySystem: 'Nervous System',
+      organSystem: 'Peripheral Nervous System',
+      difficultyBand: DiagnosisDifficultyBand.INTERMEDIATE,
+      rarityBand: DiagnosisRarityBand.UNCOMMON,
+      clinicalSetting: DiagnosisClinicalSetting.INPATIENT,
+      ageGroup: DiagnosisAgeGroup.ADULT,
+      urgencyLevel: DiagnosisUrgencyLevel.URGENT,
       onboardingStatus: 'READY_FOR_REVIEW',
       isPlayable: true,
       isGeneratable: true,
-      preferredClueTypes: ['history', 'risk', 'exam', 'investigation', 'imaging'],
+      preferredClueTypes: ['history', 'symptom', 'exam', 'investigation'],
       excludedClueTypes: [],
-      searchPriority: 12,
+      searchPriority: 15,
       notes:
-        'Classic pediatric nutritional rickets caused by vitamin D deficiency with skeletal deformities and metaphyseal changes.',
+        'Acute immune-mediated polyneuropathy presenting with ascending flaccid weakness and areflexia, classically following a gastrointestinal or respiratory infection.',
     },
     create: {
       canonicalName,
@@ -453,25 +528,25 @@ async function main() {
       displayLabel,
       status: DiagnosisRegistryStatus.ACTIVE,
       active: true,
-      specialty: 'Paediatrics',
-      subspecialty: 'Metabolic Bone Disease',
-      category: 'Metabolic',
-      bodySystem: 'Musculoskeletal',
-      organSystem: 'Bone',
-      difficultyBand: DiagnosisDifficultyBand.BASIC,
-      rarityBand: DiagnosisRarityBand.COMMON,
-      clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
-      ageGroup: DiagnosisAgeGroup.PEDIATRIC,
-      urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
+      specialty: 'Neurology',
+      subspecialty: 'Neuromuscular Disease',
+      category: 'Neurological',
+      bodySystem: 'Nervous System',
+      organSystem: 'Peripheral Nervous System',
+      difficultyBand: DiagnosisDifficultyBand.INTERMEDIATE,
+      rarityBand: DiagnosisRarityBand.UNCOMMON,
+      clinicalSetting: DiagnosisClinicalSetting.INPATIENT,
+      ageGroup: DiagnosisAgeGroup.ADULT,
+      urgencyLevel: DiagnosisUrgencyLevel.URGENT,
       onboardingStatus: 'READY_FOR_REVIEW',
       onboardingStartedAt: now,
       isPlayable: true,
       isGeneratable: true,
-      preferredClueTypes: ['history', 'risk', 'exam', 'investigation', 'imaging'],
+      preferredClueTypes: ['history', 'symptom', 'exam', 'investigation'],
       excludedClueTypes: [],
-      searchPriority: 12,
+      searchPriority: 15,
       notes:
-        'Classic pediatric nutritional rickets caused by vitamin D deficiency with skeletal deformities and metaphyseal changes.',
+        'Acute immune-mediated polyneuropathy presenting with ascending flaccid weakness and areflexia, classically following a gastrointestinal or respiratory infection.',
     },
   });
 
@@ -483,25 +558,25 @@ async function main() {
       rank: 100,
     },
     {
-      term: 'rickets',
+      term: 'gbs',
       kind: DiagnosisAliasKind.ACCEPTED,
       acceptedForMatch: true,
       rank: 95,
     },
     {
-      term: 'vitamin d deficiency rickets',
+      term: 'acute inflammatory demyelinating polyradiculoneuropathy',
       kind: DiagnosisAliasKind.ACCEPTED,
       acceptedForMatch: true,
-      rank: 90,
+      rank: 80,
     },
     {
-      term: 'nutritional rickets',
+      term: 'aidp',
       kind: DiagnosisAliasKind.ACCEPTED,
       acceptedForMatch: true,
-      rank: 85,
+      rank: 75,
     },
     {
-      term: 'childhood rickets',
+      term: 'guillain barre',
       kind: DiagnosisAliasKind.SEARCH_ONLY,
       acceptedForMatch: false,
       rank: 40,
@@ -628,8 +703,9 @@ async function main() {
   const history =
     clues.find((clue) => clue.type === 'history')?.value ?? displayLabel;
   const symptoms = [
-    'Delayed motor milestones',
-    'Difficulty standing without support',
+    'Progressive ascending weakness',
+    'Distal tingling and paresthesias',
+    'Areflexia',
   ];
 
   const reusableCase = await prisma.case.findFirst({
@@ -655,7 +731,7 @@ async function main() {
   const caseData = {
     title: displayLabel,
     date: assignedInventoryPlaceholderDate,
-    difficulty: 'easy',
+    difficulty: 'medium',
     history,
     symptoms,
     clues: clues as unknown as object,
@@ -670,7 +746,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Seeded frontend-aligned flagship nutritional vitamin D deficiency rickets inventory case. DailyCase scheduler should assign the actual daily slot.',
+      'Seeded frontend-aligned flagship Guillain-Barré Syndrome inventory case. DailyCase scheduler should assign the actual daily slot.',
   };
 
   const seededCase = reusableCase
@@ -686,7 +762,7 @@ async function main() {
     publishTrack: 'DAILY' as const,
     title: displayLabel,
     date: assignedInventoryPlaceholderDate,
-    difficulty: 'easy',
+    difficulty: 'medium',
     history,
     symptoms,
     clues: clues as unknown as object,
@@ -698,7 +774,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Frontend-aligned flagship nutritional vitamin D deficiency rickets inventory revision for DailyCase scheduler assignment.',
+      'Frontend-aligned flagship Guillain-Barré Syndrome inventory revision for DailyCase scheduler assignment.',
   };
 
   const revision = reusableCase?.currentRevisionId
@@ -736,20 +812,19 @@ async function main() {
       source: 'MANUAL',
       publishTrack: 'DAILY',
       outcome: 'PASSED',
-      validatorVersion:
-        'flagship-human-review:nutritional-vitamin-d-deficiency-rickets-v1',
+      validatorVersion: 'flagship-human-review:guillain-barre-syndrome-v1',
       summary: {
         contentTier: 'FLAGSHIP',
         seedVersion,
         humanReviewed: true,
-        note: 'Manual frontend-aligned nutritional vitamin D deficiency rickets inventory case seeded for DailyCase scheduler assignment.',
+        note: 'Manual frontend-aligned Guillain-Barré Syndrome inventory case seeded for DailyCase scheduler assignment.',
       },
       findings: [],
       completedAt: now,
     },
   });
 
-  console.log('Seeded frontend-aligned Nutritional Vitamin D Deficiency Rickets:', {
+  console.log('Seeded frontend-aligned Guillain-Barré Syndrome:', {
     registryId: registry.id,
     caseId: seededCase.id,
     educationId: education.id,

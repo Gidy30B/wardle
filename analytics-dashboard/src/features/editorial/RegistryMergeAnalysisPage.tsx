@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   analyzeDiagnosisRegistryMerge,
   executeDiagnosisRegistryMerge,
+  getDiagnosisRegistryOnboarding,
   searchDiagnosisRegistry,
   type DiagnosisRegistrySearchItem,
   type RegistryMergeAnalysis,
@@ -23,6 +24,8 @@ export default function RegistryMergeAnalysisPage() {
   const client = useMemo(() => createApiClient(getToken), [getToken]);
   const access = useConsoleAccess();
   const [searchParams] = useSearchParams();
+  const sourceIdParam = searchParams.get('source');
+  const targetIdParam = searchParams.get('target');
   const [source, setSource] = useState<DiagnosisRegistrySearchItem | null>(null);
   const [target, setTarget] = useState<DiagnosisRegistrySearchItem | null>(null);
   const [sourceQuery, setSourceQuery] = useState('');
@@ -40,12 +43,10 @@ export default function RegistryMergeAnalysisPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const sourceId = searchParams.get('source');
-    const targetId = searchParams.get('target');
-    if (sourceId) {
+    if (sourceIdParam) {
       setSource({
-        id: sourceId,
-        canonicalName: sourceId,
+        id: sourceIdParam,
+        canonicalName: sourceIdParam,
         status: 'ACTIVE',
         category: null,
         specialty: null,
@@ -66,10 +67,10 @@ export default function RegistryMergeAnalysisPage() {
         matchSource: 'canonical',
       });
     }
-    if (targetId) {
+    if (targetIdParam) {
       setTarget({
-        id: targetId,
-        canonicalName: targetId,
+        id: targetIdParam,
+        canonicalName: targetIdParam,
         status: 'ACTIVE',
         category: null,
         specialty: null,
@@ -91,6 +92,32 @@ export default function RegistryMergeAnalysisPage() {
       });
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!sourceIdParam) return;
+    getDiagnosisRegistryOnboarding(client, sourceIdParam)
+      .then((entry) => {
+        setSource((prev) =>
+          prev?.id === sourceIdParam
+            ? { ...prev, canonicalName: entry.diagnosis.canonicalName }
+            : prev,
+        );
+      })
+      .catch(() => {});
+  }, [client, sourceIdParam]);
+
+  useEffect(() => {
+    if (!targetIdParam) return;
+    getDiagnosisRegistryOnboarding(client, targetIdParam)
+      .then((entry) => {
+        setTarget((prev) =>
+          prev?.id === targetIdParam
+            ? { ...prev, canonicalName: entry.diagnosis.canonicalName }
+            : prev,
+        );
+      })
+      .catch(() => {});
+  }, [client, targetIdParam]);
 
   async function runSearch(side: PickerSide, query: string) {
     if (query.trim().length < 2) {

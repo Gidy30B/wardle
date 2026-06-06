@@ -1,37 +1,56 @@
 import { useSignIn, useSignUp } from '@clerk/clerk-react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import Button from '../../components/ui/Button'
 import { getClerkOAuthRedirects, isNativeRuntime } from './authRedirects'
 
 type AuthMode = 'signin' | 'signup'
-// Only signup email verification produces a pending code step now.
-// Sign-in is completed in one step with email + password.
+// Signup email verification is the only step that produces a pending verification state.
+// Sign-in is one step (email + password).
+// Password reset has its own separate step state below.
 type PendingVerification = { email: string } | null
+// null = not in reset mode; 'email' = collecting email; 'code' = entering code + new password
+type ResetStep = 'email' | 'code' | null
 
 export default function WardleAuthForm() {
   const signInState = useSignIn()
   const signUpState = useSignUp()
+
+  // Auth mode state
   const [mode, setMode] = useState<AuthMode>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
   const [pendingVerification, setPendingVerification] = useState<PendingVerification>(null)
+
+  // Password reset state (independent from sign-in fields)
+  const [resetStep, setResetStep] = useState<ResetStep>(null)
+  const [resetEmail, setResetEmail] = useState('')
+  const [resetCode, setResetCode] = useState('')
+  const [resetNewPassword, setResetNewPassword] = useState('')
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('')
+
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const clerkReady = signInState.isLoaded && signUpState.isLoaded
   const showGoogleOAuth = !isNativeRuntime()
 
+  // Changes when the visible view changes — triggers wardle-learn-slide-up animation via key
+  const formContentKey =
+    resetStep === 'email' ? 'reset-email' :
+    resetStep === 'code' ? 'reset-code' :
+    pendingVerification ? 'verify' :
+    mode
+
   const submitLabel = useMemo(() => {
-    if (pendingVerification) {
-      return loading ? 'Verifying...' : 'Verify Email'
-    }
-    if (loading) {
-      return mode === 'signin' ? 'Signing in...' : 'Creating account...'
-    }
+    if (resetStep === 'email') return loading ? 'Sending...' : 'Send reset code'
+    if (resetStep === 'code') return loading ? 'Setting password...' : 'Set new password'
+    if (pendingVerification) return loading ? 'Verifying...' : 'Verify Email'
+    if (loading) return mode === 'signin' ? 'Signing in...' : 'Creating account...'
     return mode === 'signin' ? 'Sign In' : 'Create Account'
-  }, [loading, mode, pendingVerification])
+  }, [loading, mode, pendingVerification, resetStep])
 
   const handleGoogleOAuth = async () => {
     setError('')
@@ -69,6 +88,26 @@ export default function WardleAuthForm() {
     setVerificationCode('')
     setPassword('')
     setConfirmPassword('')
+    setResetStep(null)
+    setResetEmail('')
+    setResetCode('')
+    setResetNewPassword('')
+    setResetConfirmPassword('')
+  }
+
+  const enterResetMode = () => {
+    setResetStep('email')
+    setResetEmail(email.trim())
+    setError('')
+  }
+
+  const exitResetMode = () => {
+    setResetStep(null)
+    setResetEmail('')
+    setResetCode('')
+    setResetNewPassword('')
+    setResetConfirmPassword('')
+    setError('')
   }
 
   const handleSubmit = async () => {
@@ -79,6 +118,60 @@ export default function WardleAuthForm() {
       return
     }
 
+    // ── Reset step 1: collect email and send code ───────────────────────────
+    if (resetStep === 'email') {
+      const normalizedResetEmail = resetEmail.trim()
+      if (!normalizedResetEmail.includes('@')) {
+        setError("That email doesn't look right.")
+        return
+      }
+      setLoading(true)
+      try {
+        await startPasswordReset({
+          signIn: signInState.signIn,
+          email: normalizedResetEmail,
+        })
+        setResetStep('code')
+        setError('')
+      } catch (exception) {
+        setError(getClerkErrorMessage(exception))
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
+    // ── Reset step 2: submit code + new password ────────────────────────────
+    if (resetStep === 'code') {
+      if (!resetCode.trim()) {
+        setError('Enter the reset code sent to your email.')
+        return
+      }
+      if (!resetNewPassword) {
+        setError('Enter your new password.')
+        return
+      }
+      if (resetNewPassword !== resetConfirmPassword) {
+        setError("Passwords don't match. Please try again.")
+        return
+      }
+      setLoading(true)
+      try {
+        await completePasswordReset({
+          signIn: signInState.signIn,
+          setActive: signInState.setActive,
+          code: resetCode,
+          newPassword: resetNewPassword,
+        })
+      } catch (exception) {
+        setError(getClerkErrorMessage(exception))
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
+    // ── Signup email verification ──────────────────────────────────────────
     if (pendingVerification) {
       if (!verificationCode.trim()) {
         setError('Enter the verification code sent to your email.')
@@ -100,6 +193,7 @@ export default function WardleAuthForm() {
       return
     }
 
+    // ── Normal sign-in / signup ────────────────────────────────────────────
     const normalizedEmail = email.trim()
 
     if (!normalizedEmail.includes('@')) {
@@ -148,22 +242,24 @@ export default function WardleAuthForm() {
 
   return (
     <div>
-      <div className="wardle-nav-pill w-full">
-        <button
-          type="button"
-          className={`flex-1 ${mode === 'signin' ? 'border-[var(--wardle-color-teal)] bg-[rgba(0,180,166,0.18)] text-white' : 'border-transparent text-white/48'}`}
-          onClick={() => switchMode('signin')}
-        >
-          Sign In
-        </button>
-        <button
-          type="button"
-          className={`flex-1 ${mode === 'signup' ? 'border-[var(--wardle-color-teal)] bg-[rgba(0,180,166,0.18)] text-white' : 'border-transparent text-white/48'}`}
-          onClick={() => switchMode('signup')}
-        >
-          Create Account
-        </button>
-      </div>
+      {!resetStep ? (
+        <div className="wardle-nav-pill w-full">
+          <button
+            type="button"
+            className={`flex-1 ${mode === 'signin' ? 'border-[var(--wardle-color-teal)] bg-[rgba(0,180,166,0.18)] text-white' : 'border-transparent text-white/48'}`}
+            onClick={() => switchMode('signin')}
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            className={`flex-1 ${mode === 'signup' ? 'border-[var(--wardle-color-teal)] bg-[rgba(0,180,166,0.18)] text-white' : 'border-transparent text-white/48'}`}
+            onClick={() => switchMode('signup')}
+          >
+            Create Account
+          </button>
+        </div>
+      ) : null}
 
       <form
         className="mt-5 space-y-4"
@@ -172,73 +268,139 @@ export default function WardleAuthForm() {
           void handleSubmit()
         }}
       >
-        {pendingVerification ? (
-          <div className="rounded-[14px] border border-[rgba(0,180,166,0.24)] bg-[rgba(0,180,166,0.08)] px-4 py-3 text-sm leading-6 text-white/64">
-            Enter the verification code sent to{' '}
-            <span className="font-bold text-[var(--wardle-color-mint)]">
-              {pendingVerification.email}
-            </span>
-            .
-          </div>
-        ) : null}
-
-        {pendingVerification ? (
-          <Field label="Verification code">
-            <input
-              value={verificationCode}
-              onChange={(event) => setVerificationCode(event.target.value)}
-              inputMode="numeric"
-              placeholder="123456"
-              className={inputClassName}
-              autoComplete="one-time-code"
-            />
-          </Field>
-        ) : (
-          <>
-            <Field label="Email">
-              <input
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                type="email"
-                placeholder="you@medschool.ac.ke"
-                className={inputClassName}
-                autoComplete="email"
-              />
-            </Field>
-            <Field label="Password">
-              <input
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                type="password"
-                className={inputClassName}
-                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-              />
-            </Field>
-            {mode === 'signup' ? (
-              <Field label="Confirm password">
+        {/* View-specific content — animated on state change via key remount */}
+        <div key={formContentKey} className="wardle-learn-slide-up space-y-4">
+          {resetStep === 'email' ? (
+            <>
+              <InfoBanner icon="🔑">
+                Enter your email and we'll send a one-time password reset code.
+              </InfoBanner>
+              <Field label="Email">
                 <input
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  type="password"
+                  value={resetEmail}
+                  onChange={(event) => setResetEmail(event.target.value)}
+                  type="email"
+                  placeholder="you@medschool.ac.ke"
                   className={inputClassName}
+                  autoComplete="email"
+                />
+              </Field>
+            </>
+          ) : resetStep === 'code' ? (
+            <>
+              <InfoBanner icon="📧">
+                Reset code sent to{' '}
+                <span className="font-bold text-[var(--wardle-color-mint)]">{resetEmail}</span>.
+                {' '}Check your spam folder if needed.
+              </InfoBanner>
+              <Field label="Reset code">
+                <input
+                  value={resetCode}
+                  onChange={(event) => setResetCode(event.target.value)}
+                  inputMode="numeric"
+                  placeholder="123456"
+                  className={inputClassName}
+                  autoComplete="one-time-code"
+                />
+              </Field>
+              <Field label="New password">
+                <PasswordInput
+                  value={resetNewPassword}
+                  onChange={setResetNewPassword}
                   autoComplete="new-password"
                 />
               </Field>
-            ) : null}
-          </>
-        )}
+              <Field label="Confirm new password">
+                <PasswordInput
+                  value={resetConfirmPassword}
+                  onChange={setResetConfirmPassword}
+                  autoComplete="new-password"
+                />
+              </Field>
+            </>
+          ) : pendingVerification ? (
+            <>
+              <InfoBanner icon="📧">
+                Verification code sent to{' '}
+                <span className="font-bold text-[var(--wardle-color-mint)]">
+                  {pendingVerification.email}
+                </span>
+                . Check your spam folder too.
+              </InfoBanner>
+              <Field label="Verification code">
+                <input
+                  value={verificationCode}
+                  onChange={(event) => setVerificationCode(event.target.value)}
+                  inputMode="numeric"
+                  placeholder="123456"
+                  className={inputClassName}
+                  autoComplete="one-time-code"
+                />
+              </Field>
+            </>
+          ) : (
+            <>
+              <Field label="Email">
+                <input
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  type="email"
+                  placeholder="you@medschool.ac.ke"
+                  className={inputClassName}
+                  autoComplete="email"
+                />
+              </Field>
+              <Field
+                label="Password"
+                right={
+                  mode === 'signin' ? (
+                    <button
+                      type="button"
+                      className="text-xs font-bold text-white/40 transition hover:text-[var(--wardle-color-teal)]"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        enterResetMode()
+                      }}
+                    >
+                      Forgot password?
+                    </button>
+                  ) : undefined
+                }
+              >
+                <PasswordInput
+                  value={password}
+                  onChange={setPassword}
+                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                />
+              </Field>
+              {mode === 'signup' ? (
+                <Field label="Confirm password">
+                  <PasswordInput
+                    value={confirmPassword}
+                    onChange={setConfirmPassword}
+                    autoComplete="new-password"
+                  />
+                </Field>
+              ) : null}
+            </>
+          )}
+        </div>
 
         {error ? (
-          <div className="rounded-[14px] border border-[rgba(224,92,92,0.32)] bg-[rgba(224,92,92,0.12)] px-4 py-3 text-sm text-[#ff9a9a]">
-            {error}
+          <div className="flex items-start gap-2.5 rounded-[14px] border border-[rgba(224,92,92,0.32)] bg-[rgba(224,92,92,0.12)] px-4 py-3 text-sm text-[#ff9a9a]">
+            <span className="mt-0.5 shrink-0 text-[15px] leading-none">⚠</span>
+            <span>{error}</span>
           </div>
         ) : null}
 
         <Button type="submit" disabled={loading || !clerkReady}>
-          {submitLabel}
+          <span className="flex items-center justify-center gap-2">
+            {loading ? <Loader2 className="size-4 animate-spin" /> : null}
+            {submitLabel}
+          </span>
         </Button>
 
-        {showGoogleOAuth && !pendingVerification ? (
+        {showGoogleOAuth && !pendingVerification && !resetStep ? (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-white/10" />
@@ -260,21 +422,31 @@ export default function WardleAuthForm() {
           </div>
         ) : null}
 
-        {pendingVerification ? (
+        {resetStep ? (
           <button
             type="button"
-            className="w-full text-center text-xs font-bold text-white/45 transition hover:text-white/70"
+            className="flex w-full items-center justify-center gap-1.5 text-xs font-bold text-white/45 transition hover:text-white/70"
+            onClick={exitResetMode}
+          >
+            <span>‹</span>
+            <span>Back to sign in</span>
+          </button>
+        ) : pendingVerification ? (
+          <button
+            type="button"
+            className="flex w-full items-center justify-center gap-1.5 text-xs font-bold text-white/45 transition hover:text-white/70"
             onClick={() => {
               setPendingVerification(null)
               setVerificationCode('')
               setError('')
             }}
           >
-            Edit email details
+            <span>‹</span>
+            <span>Edit email details</span>
           </button>
         ) : null}
 
-        {mode === 'signup' && !pendingVerification ? (
+        {mode === 'signup' && !pendingVerification && !resetStep ? (
           <div className="rounded-[14px] border border-[rgba(244,162,97,0.24)] bg-[rgba(244,162,97,0.08)] px-4 py-3">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--wardle-color-amber)]">
               Founder members perk
@@ -292,21 +464,108 @@ export default function WardleAuthForm() {
 const inputClassName =
   'w-full rounded-[14px] border border-[rgba(0,180,166,0.24)] bg-[rgba(26,60,94,0.36)] px-4 py-3.5 text-sm font-semibold text-[var(--wardle-color-mint)] outline-none transition placeholder:text-white/30 focus:border-[rgba(0,180,166,0.62)]'
 
+// ─── Shared UI primitives ─────────────────────────────────────────────────────
+
 function Field({
   label,
+  right,
   children,
 }: {
   label: string
+  right?: ReactNode
   children: ReactNode
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-white/48">
-        {label}
-      </span>
+      <div className="mb-2 flex items-baseline justify-between">
+        <span className="text-xs font-bold uppercase tracking-[0.14em] text-white/48">
+          {label}
+        </span>
+        {right ?? null}
+      </div>
       {children}
     </label>
   )
+}
+
+function InfoBanner({ icon, children }: { icon: string; children: ReactNode }) {
+  return (
+    <div className="flex items-start gap-3 rounded-[14px] border border-[rgba(0,180,166,0.24)] bg-[rgba(0,180,166,0.08)] px-4 py-3.5">
+      <span className="mt-0.5 shrink-0 text-base leading-none">{icon}</span>
+      <div className="text-sm leading-[1.6] text-white/64">{children}</div>
+    </div>
+  )
+}
+
+function PasswordInput({
+  value,
+  onChange,
+  autoComplete,
+}: {
+  value: string
+  onChange: (value: string) => void
+  autoComplete: string
+}) {
+  const [visible, setVisible] = useState(false)
+  return (
+    <div className="relative">
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        type={visible ? 'text' : 'password'}
+        className={`${inputClassName} pr-11`}
+        autoComplete={autoComplete}
+      />
+      <button
+        type="button"
+        className="absolute right-3.5 top-1/2 -translate-y-1/2 p-0.5 text-white/36 transition hover:text-white/70 focus:outline-none"
+        onClick={() => setVisible((v) => !v)}
+        tabIndex={-1}
+        aria-label={visible ? 'Hide password' : 'Show password'}
+      >
+        {visible
+          ? <EyeOff className="size-[15px]" strokeWidth={2.5} />
+          : <Eye className="size-[15px]" strokeWidth={2.5} />
+        }
+      </button>
+    </div>
+  )
+}
+
+// ─── Clerk async helpers ──────────────────────────────────────────────────────
+
+async function startPasswordReset({
+  signIn,
+  email,
+}: {
+  signIn: NonNullable<ReturnType<typeof useSignIn>['signIn']>
+  email: string
+}) {
+  const result = await signIn.create({
+    strategy: 'reset_password_email_code',
+    identifier: email.trim(),
+  })
+  throwIfClerkResultError(result)
+}
+
+async function completePasswordReset({
+  signIn,
+  setActive,
+  code,
+  newPassword,
+}: {
+  signIn: NonNullable<ReturnType<typeof useSignIn>['signIn']>
+  setActive: NonNullable<ReturnType<typeof useSignIn>['setActive']>
+  code: string
+  newPassword: string
+}) {
+  const result = await signIn.attemptFirstFactor({
+    strategy: 'reset_password_email_code',
+    code: code.trim(),
+    password: newPassword,
+  })
+  throwIfClerkResultError(result)
+  await activateCompletedAttempt(signIn, setActive, result)
 }
 
 async function signInWithPassword({
@@ -526,21 +785,36 @@ function getClerkErrorMessage(exception: unknown) {
   const message = getStringProperty(firstError, 'message') ?? getStringProperty(exception, 'message')
 
   switch (code) {
+    // Sign-in
     case 'form_password_incorrect':
       return 'Incorrect password. Please try again.'
     case 'form_identifier_not_found':
       return 'No account found with that email address.'
     case 'form_identifier_exists':
       return 'An account with this email already exists. Try signing in instead.'
+    case 'strategy_for_user_invalid':
+      return 'This account uses a different sign-in method. Try signing in with Google or contact support.'
+    case 'not_allowed_access':
+      return longMessage ?? 'Access denied. Please contact support.'
+
+    // Password strength (sign-up and reset)
     case 'form_password_pwned':
     case 'form_password_length_too_short':
     case 'form_password_validation_failed':
     case 'form_password_strength_insufficient':
       return longMessage ?? 'Password is too weak. Use at least 8 characters with a mix of letters and numbers.'
-    case 'strategy_for_user_invalid':
-      return 'This account uses a different sign-in method. Try signing in with Google or contact support.'
-    case 'not_allowed_access':
-      return longMessage ?? 'Access denied. Please contact support.'
+
+    // Password reset codes
+    case 'form_code_incorrect':
+      return 'Incorrect reset code. Please check your email and try again.'
+    case 'form_code_expired':
+    case 'verification_expired':
+      return 'That reset code has expired. Go back and request a new one.'
+    case 'verification_failed':
+      return 'Invalid reset code. Please check your email and try again.'
+    case 'too_many_requests':
+    case 'too_many_attempts':
+      return 'Too many attempts. Please wait a moment before trying again.'
   }
 
   return longMessage ?? message ?? 'Authentication failed. Please try again.'
@@ -588,5 +862,3 @@ function getFunctionProperty(value: unknown, key: string) {
   const property = (value as Record<string, unknown>)[key]
   return typeof property === 'function' ? property : null
 }
-
-// TODO(auth-next): implement forgot password / password reset flow in the next auth pass.

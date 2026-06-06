@@ -1,4 +1,5 @@
 import { useUser } from '@clerk/clerk-react'
+import { Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
 import Button from '../../../../../components/ui/Button'
 import { SettingsBackHeader } from '../components/SettingsBackHeader'
@@ -23,6 +24,10 @@ export function PasswordSettingsPanel({ onBack }: { onBack: () => void }) {
   const [loading, setLoading] = useState(false)
 
   const panelTitle = hasPassword ? 'Change password' : 'Add password'
+  const panelIcon = hasPassword ? '🔑' : '🔓'
+  const panelSubtitle = hasPassword
+    ? 'Update your Wardle sign-in password'
+    : 'Enable email + password sign-in on all your devices'
 
   const handleSubmit = async () => {
     setError('')
@@ -83,21 +88,21 @@ export function PasswordSettingsPanel({ onBack }: { onBack: () => void }) {
     return (
       <SettingsShell>
         <SettingsBackHeader onBack={onBack} title="Account & Privacy" />
-        <div style={{ padding: '28px 20px' }}>
+        <div className="wardle-learn-slide-up" style={{ padding: '28px 20px' }}>
           <div
             style={{
-              background: 'rgba(0,180,166,0.10)',
-              border: '1px solid rgba(0,180,166,0.28)',
-              borderRadius: 16,
-              padding: '24px 20px',
+              background: 'rgba(0,180,166,0.08)',
+              border: '1px solid rgba(0,180,166,0.22)',
+              borderRadius: 20,
+              padding: '32px 24px',
               textAlign: 'center',
             }}
           >
-            <div style={{ fontSize: 36, marginBottom: 12 }}>✓</div>
+            <div style={{ fontSize: 44, marginBottom: 14, lineHeight: 1 }}>🔐</div>
             <div
               style={{
-                fontSize: 15,
-                fontWeight: 700,
+                fontSize: 16,
+                fontWeight: 800,
                 color: 'var(--wardle-color-mint)',
                 marginBottom: 8,
                 lineHeight: 1.4,
@@ -105,8 +110,9 @@ export function PasswordSettingsPanel({ onBack }: { onBack: () => void }) {
             >
               {successMessage}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--wardle-color-gray)', lineHeight: 1.55 }}>
-              Your other sessions have been signed out for security.
+            <div style={{ fontSize: 12, color: 'var(--wardle-color-gray)', lineHeight: 1.65 }}>
+              Your other sessions were signed out for security.
+              You'll stay signed in here.
             </div>
           </div>
           <div style={{ marginTop: 20 }}>
@@ -120,44 +126,114 @@ export function PasswordSettingsPanel({ onBack }: { onBack: () => void }) {
   return (
     <SettingsShell>
       <SettingsBackHeader onBack={onBack} title="Account & Privacy" />
-      <div style={{ padding: '20px' }}>
+
+      {/* Panel sub-header */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          padding: '20px 20px 0',
+        }}
+      >
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 13,
+            background: 'rgba(26,60,94,0.55)',
+            border: '1px solid rgba(0,180,166,0.14)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 20,
+            flexShrink: 0,
+          }}
+        >
+          {panelIcon}
+        </div>
+        <div>
+          <div
+            style={{
+              fontSize: 15,
+              fontWeight: 800,
+              color: 'var(--wardle-color-mint)',
+              lineHeight: 1.3,
+            }}
+          >
+            {panelTitle}
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--wardle-color-gray)',
+              marginTop: 3,
+              lineHeight: 1.4,
+            }}
+          >
+            {panelSubtitle}
+          </div>
+        </div>
+      </div>
+
+      <div className="wardle-learn-slide-up" style={{ padding: '20px' }}>
+        {/* Legacy account notice */}
         {!hasPassword && (
           <div
             style={{
-              background: 'rgba(244,162,97,0.08)',
-              border: '1px solid rgba(244,162,97,0.24)',
+              background: 'rgba(244,162,97,0.07)',
+              border: '1px solid rgba(244,162,97,0.22)',
               borderRadius: 14,
               padding: '14px 16px',
               marginBottom: 20,
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 12,
             }}
           >
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                color: 'var(--wardle-color-amber)',
-                textTransform: 'uppercase',
-                letterSpacing: 1.2,
-                marginBottom: 5,
-              }}
-            >
-              Legacy account
-            </div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.55 }}>
-              Your account was created with passwordless sign-in. Add a password to
-              enable email + password login on all devices, including the mobile app.
+            <span style={{ fontSize: 18, lineHeight: 1, marginTop: 1, flexShrink: 0 }}>🔓</span>
+            <div>
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  color: 'var(--wardle-color-amber)',
+                  textTransform: 'uppercase',
+                  letterSpacing: 1.3,
+                  marginBottom: 5,
+                }}
+              >
+                Passwordless account
+              </div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.6 }}>
+                Your account was created without a password. Add one to enable email + password login on all devices, including the mobile app.
+              </div>
             </div>
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* Field card */}
+        <div
+          style={{
+            background: 'rgba(26,60,94,0.18)',
+            border: '1px solid rgba(0,180,166,0.10)',
+            borderRadius: 16,
+            padding: 16,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 14,
+          }}
+        >
           {hasPassword && (
-            <PasswordField
-              label="Current password"
-              value={currentPassword}
-              onChange={setCurrentPassword}
-              autoComplete="current-password"
-            />
+            <>
+              <PasswordField
+                label="Current password"
+                value={currentPassword}
+                onChange={setCurrentPassword}
+                autoComplete="current-password"
+              />
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.05)' }} />
+            </>
           )}
           <PasswordField
             label="New password"
@@ -177,20 +253,24 @@ export function PasswordSettingsPanel({ onBack }: { onBack: () => void }) {
           <div
             style={{
               marginTop: 16,
-              background: 'rgba(224,92,92,0.12)',
-              border: '1px solid rgba(224,92,92,0.32)',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 10,
+              background: 'rgba(224,92,92,0.10)',
+              border: '1px solid rgba(224,92,92,0.28)',
               borderRadius: 14,
-              padding: '12px 16px',
+              padding: '12px 14px',
               fontSize: 13,
               color: '#ff9a9a',
               lineHeight: 1.5,
             }}
           >
-            {error}
+            <span style={{ flexShrink: 0, fontSize: 14, marginTop: 1, lineHeight: 1 }}>⚠</span>
+            <span>{error}</span>
           </div>
         ) : null}
 
-        <div style={{ marginTop: 20 }}>
+        <div style={{ marginTop: 16 }}>
           <Button
             type="button"
             disabled={loading || !user}
@@ -204,18 +284,25 @@ export function PasswordSettingsPanel({ onBack }: { onBack: () => void }) {
           </Button>
         </div>
 
-        <p
+        {/* Forgot access note */}
+        <div
           style={{
-            marginTop: 18,
-            textAlign: 'center',
+            marginTop: 16,
+            padding: '11px 14px',
+            background: 'rgba(26,60,94,0.18)',
+            border: '1px solid rgba(255,255,255,0.05)',
+            borderRadius: 12,
             fontSize: 11,
-            color: 'rgba(138,155,176,0.50)',
-            lineHeight: 1.55,
+            color: 'rgba(138,155,176,0.60)',
+            lineHeight: 1.6,
+            textAlign: 'center',
           }}
         >
           Signed out and forgot access?{' '}
-          Use password reset from the sign-in screen.
-        </p>
+          <span style={{ color: 'var(--wardle-color-teal)', fontWeight: 600 }}>
+            Use password reset from the sign-in screen.
+          </span>
+        </div>
       </div>
     </SettingsShell>
   )
@@ -232,6 +319,9 @@ function PasswordField({
   onChange: (value: string) => void
   autoComplete: string
 }) {
+  const [visible, setVisible] = useState(false)
+  const [focused, setFocused] = useState(false)
+
   return (
     <div>
       <div
@@ -246,32 +336,59 @@ function PasswordField({
       >
         {label}
       </div>
-      <input
-        type="password"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        autoComplete={autoComplete}
-        style={{
-          width: '100%',
-          boxSizing: 'border-box',
-          background: 'rgba(26,60,94,0.36)',
-          border: '1px solid rgba(0,180,166,0.24)',
-          borderRadius: 14,
-          padding: '13px 16px',
-          fontSize: 14,
-          fontWeight: 600,
-          color: 'var(--wardle-color-mint)',
-          outline: 'none',
-          fontFamily: 'inherit',
-          WebkitAppearance: 'none',
-        }}
-        onFocus={(event) => {
-          event.currentTarget.style.borderColor = 'rgba(0,180,166,0.62)'
-        }}
-        onBlur={(event) => {
-          event.currentTarget.style.borderColor = 'rgba(0,180,166,0.24)'
-        }}
-      />
+      <div style={{ position: 'relative' }}>
+        <input
+          type={visible ? 'text' : 'password'}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          autoComplete={autoComplete}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={{
+            width: '100%',
+            boxSizing: 'border-box',
+            background: 'rgba(26,60,94,0.36)',
+            border: `1px solid ${focused ? 'rgba(0,180,166,0.62)' : 'rgba(0,180,166,0.24)'}`,
+            borderRadius: 14,
+            padding: '13px 44px 13px 16px',
+            fontSize: 14,
+            fontWeight: 600,
+            color: 'var(--wardle-color-mint)',
+            outline: 'none',
+            fontFamily: 'inherit',
+            WebkitAppearance: 'none',
+            transition: 'border-color 0.15s ease',
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          tabIndex={-1}
+          aria-label={visible ? 'Hide password' : 'Show password'}
+          style={{
+            position: 'absolute',
+            right: 12,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 4,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'rgba(138,155,176,0.45)',
+            transition: 'color 0.15s ease',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(138,155,176,0.85)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(138,155,176,0.45)' }}
+        >
+          {visible
+            ? <EyeOff size={15} strokeWidth={2.5} />
+            : <Eye size={15} strokeWidth={2.5} />
+          }
+        </button>
+      </div>
     </div>
   )
 }

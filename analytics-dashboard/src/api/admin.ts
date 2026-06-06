@@ -39,6 +39,7 @@ import type {
   DiagnosisTeachingRelationshipReviewAction,
   ReasoningPath,
   ReasoningPathGenerateResult,
+  ReasoningPathGenerationContext,
   ReasoningPathReviewAction,
   ReasoningDraftValidationFilters,
   ReasoningDraftValidationRun,
@@ -359,6 +360,15 @@ export function reviewReasoningPath(
   return client.post<ReasoningPath>(`/admin/reasoning-paths/${id}/review`, {
     action,
   });
+}
+
+export function getReasoningPathGenerationContext(
+  client: ApiClient,
+  reasoningPathId: string,
+) {
+  return client.get<ReasoningPathGenerationContext>(
+    `/admin/reasoning-paths/${reasoningPathId}/generation-context`,
+  );
 }
 
 export function getReasoningDraftValidationRuns(

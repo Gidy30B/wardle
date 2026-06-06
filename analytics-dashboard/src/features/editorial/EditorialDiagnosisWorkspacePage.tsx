@@ -1,6 +1,6 @@
 import { useAuth } from '@clerk/clerk-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   compareDiagnosisEducationRevisions,
   createDiagnosisEditorialBrief,
@@ -96,12 +96,34 @@ const tabs: Array<{ id: WorkspaceTab; label: string }> = [
   { id: 'graph', label: 'Graph' },
 ];
 
+const VALID_TABS = new Set<WorkspaceTab>([
+  'overview',
+  'teaching-rules',
+  'editorial-brief',
+  'education',
+  'cases',
+  'graph',
+]);
+
 export default function EditorialDiagnosisWorkspacePage() {
   const { diagnosisRegistryId } = useParams<{ diagnosisRegistryId: string }>();
   const access = useConsoleAccess();
   const { getToken } = useAuth();
   const client = useMemo(() => createApiClient(getToken), [getToken]);
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTabParam = searchParams.get('tab') ?? '';
+  const activeTab: WorkspaceTab = VALID_TABS.has(activeTabParam as WorkspaceTab)
+    ? (activeTabParam as WorkspaceTab)
+    : 'overview';
+  const setActiveTab = (tab: WorkspaceTab) => {
+    const next = new URLSearchParams(searchParams);
+    if (tab === 'overview') {
+      next.delete('tab');
+    } else {
+      next.set('tab', tab);
+    }
+    setSearchParams(next, { replace: true });
+  };
   const [selectedCoverageKey, setSelectedCoverageKey] = useState<string | null>(
     null,
   );

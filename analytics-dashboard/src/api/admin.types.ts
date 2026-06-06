@@ -758,6 +758,49 @@ export type ReasoningPathGenerateResult = {
   paths: ReasoningPath[];
 };
 
+export type ReasoningPathGenerationContext = {
+  reasoningPath: ReasoningPath;
+  constraints: {
+    reasoningGoal: ReasoningGoal;
+    generationPurpose: GenerationPurpose;
+    requiredTeachingPoints: string[];
+    forbiddenEvidencePatterns: string[];
+    recommendedClueDistribution: Record<string, number>;
+    primaryDifferentialIds: string[];
+  };
+  dependencyWarnings: string[];
+  evidenceNodes: Array<{
+    id: string;
+    displayLabel: string;
+    evidenceType: EvidenceType;
+    clinicalCategory: ClinicalCategory;
+  }>;
+  evidenceRelationships: Array<{
+    id: string;
+    relationshipType: DiagnosisEvidenceRelationshipType;
+    strength: number;
+    discriminatorWeight: number;
+    reasoningSummary: string | null;
+    evidenceNode: {
+      id: string;
+      displayLabel: string;
+      evidenceType: EvidenceType;
+    };
+  }>;
+  teachingRelationships: Array<{
+    id: string;
+    relationshipType: DiagnosisTeachingRelationshipType;
+    teachingPurpose: DiagnosisTeachingRelationshipPurpose;
+    discriminatorSummary: string | null;
+    commonConfusionReason: string | null;
+    learnerPitfall: string | null;
+    targetDiagnosis: {
+      id: string;
+      displayLabel: string;
+    } | null;
+  }>;
+};
+
 export type EvidenceNode = {
   id: string;
   normalizedKey: string;
