@@ -2,6 +2,7 @@ import {
   PrismaClient,
   CaseEditorialStatus,
   DiagnosisAliasKind,
+  DiagnosisAgeGroup,
   DiagnosisClinicalSetting,
   DiagnosisDifficultyBand,
   DiagnosisEducationSource,
@@ -36,7 +37,7 @@ function normalizeClinicalText(value: string): string {
 
 const now = new Date();
 const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 4, 12, 0, 0));
-const seedVersion = 'flagship-peptic-ulcer-disease-v1';
+const seedVersion = 'flagship-nutritional-vitamin-d-deficiency-rickets-v1';
 
 function addUtcDays(date: Date, days: number): Date {
   const next = new Date(date);
@@ -99,131 +100,132 @@ const clues = [
     order: 0,
     type: 'history',
     value:
-      'A 38-year-old man presents with recurrent upper abdominal discomfort that has been worsening over several months.',
+      'An 18-month-old child is brought to clinic because of delayed motor milestones and difficulty standing without support.',
   },
   {
     order: 1,
-    type: 'symptom',
+    type: 'risk',
     value:
-      'The pain is localized to the epigastrium and is described as a burning sensation.',
+      'The child spends little time outdoors and is still primarily breastfed without vitamin supplementation.',
   },
   {
     order: 2,
-    type: 'history',
+    type: 'exam',
     value:
-      'He notices that the pain often improves temporarily after eating but returns a few hours later, frequently waking him at night.',
+      'Examination reveals frontal bossing and a persistently large anterior fontanelle.',
   },
   {
     order: 3,
-    type: 'history',
+    type: 'exam',
     value:
-      'He has been taking over-the-counter pain medications regularly for chronic knee pain.',
+      'There is widening of the wrists and palpable beading along the costochondral junctions.',
   },
   {
     order: 4,
-    type: 'exam',
+    type: 'investigation',
     value:
-      'Physical examination reveals mild epigastric tenderness without guarding, rebound tenderness, or abdominal distension.',
+      'Laboratory studies demonstrate markedly elevated alkaline phosphatase with abnormalities in calcium-phosphate metabolism.',
   },
   {
     order: 5,
     type: 'imaging',
     value:
-      'Upper gastrointestinal endoscopy demonstrates a well-defined ulcer in the first part of the duodenum. Testing is positive for Helicobacter pylori.',
+      'Radiographs of the wrists show metaphyseal cupping, fraying, and widening of the growth plates.',
   },
 ] as const;
 
 const differentials = [
-  'Gastroesophageal Reflux Disease',
-  'Gastritis',
-  'Chronic Pancreatitis',
-  'Functional Dyspepsia',
+  'Hypophosphatemic rickets',
+  'Osteogenesis imperfecta',
+  'Osteomalacia',
+  'Cerebral palsy',
 ];
 
 const explanation = {
-  diagnosis: 'Peptic Ulcer Disease',
+  diagnosis: 'Nutritional Vitamin D Deficiency Rickets',
   summary:
-    'Chronic burning epigastric pain, nocturnal recurrence, temporary relief with food, regular NSAID exposure, mild epigastric tenderness, endoscopic duodenal ulceration, and positive Helicobacter pylori testing support peptic ulcer disease.',
+    'Delayed motor milestones, limited sunlight exposure, prolonged breastfeeding without supplementation, frontal bossing, large anterior fontanelle, rachitic rosary, wrist widening, elevated alkaline phosphatase, and metaphyseal cupping and fraying support nutritional vitamin D deficiency rickets.',
   reasoning: [
-    'Recurrent upper abdominal discomfort over months suggests a chronic dyspeptic or ulcer-related process.',
-    'Burning epigastric pain is a classic symptom pattern for acid-mediated ulcer disease.',
-    'Temporary relief after meals with recurrence several hours later and nocturnal awakening is characteristic of duodenal ulcer pain.',
-    'Regular over-the-counter pain medication use raises concern for NSAID-associated mucosal injury.',
-    'Mild epigastric tenderness without peritonism supports uncomplicated disease rather than perforation or acute surgical abdomen.',
-    'Endoscopic visualization of a duodenal ulcer with positive Helicobacter pylori testing confirms the diagnosis.',
+    'Delayed motor milestones and difficulty standing in a toddler suggest a disorder affecting musculoskeletal development or strength.',
+    'Limited sunlight exposure and breastfeeding without vitamin D supplementation create a strong nutritional risk profile for vitamin D deficiency.',
+    'Frontal bossing and a persistently large anterior fontanelle are classic skeletal manifestations of rickets.',
+    'Wrist widening and costochondral beading reflect expansion of unmineralized osteoid at active growth plates.',
+    'Markedly elevated alkaline phosphatase with calcium-phosphate abnormalities supports active defective bone mineralization.',
+    'Metaphyseal cupping, fraying, and widened growth plates on wrist radiographs confirm rickets in a child with open physes.',
   ],
   keyFindings: [
-    'Recurrent upper abdominal discomfort',
-    'Burning epigastric pain',
-    'Pain improves after eating',
-    'Pain returns several hours after meals',
-    'Nocturnal pain',
-    'Regular NSAID use',
-    'Mild epigastric tenderness',
-    'Duodenal ulcer on endoscopy',
-    'Positive Helicobacter pylori testing',
+    'Delayed motor milestones',
+    'Difficulty standing without support',
+    'Limited sunlight exposure',
+    'Breastfeeding without vitamin supplementation',
+    'Frontal bossing',
+    'Persistently large anterior fontanelle',
+    'Wrist widening',
+    'Rachitic rosary',
+    'Elevated alkaline phosphatase',
+    'Metaphyseal cupping, fraying, and widened growth plates',
   ],
   differentials,
   differentialAnalysis: [
     {
-      diagnosis: 'Gastroesophageal Reflux Disease',
+      diagnosis: 'Hypophosphatemic rickets',
       whyPlausibleEarly:
-        'GERD can cause upper abdominal or retrosternal burning discomfort.',
+        'Hypophosphatemic rickets can also cause bowed legs, growth concerns, and rachitic radiographic changes.',
       ruledOutByClues: [
         {
-          clueOrder: 2,
-          evidence: 'pain improves after eating and returns hours later',
+          clueOrder: 1,
+          evidence: 'limited sunlight exposure and breastfeeding without vitamin supplementation',
           reason:
-            'This timing is more typical of duodenal ulcer disease than reflux, which often worsens when lying down or after trigger meals.',
+            'The nutritional risk profile strongly favors vitamin D deficiency over a renal phosphate-wasting disorder.',
         },
       ],
       finalReasonLessLikely:
-        'GERD does not explain a discrete duodenal ulcer on endoscopy with positive Helicobacter pylori testing.',
+        'Persistent hypophosphatemia despite vitamin D replacement or family history would raise concern for hypophosphatemic rickets.',
     },
     {
-      diagnosis: 'Gastritis',
+      diagnosis: 'Osteogenesis imperfecta',
       whyPlausibleEarly:
-        'Gastritis can produce epigastric burning, dyspepsia, and NSAID-associated symptoms.',
+        'Osteogenesis imperfecta is a pediatric bone disorder that may present with skeletal deformity or fragility.',
+      ruledOutByClues: [
+        {
+          clueOrder: 3,
+          evidence: 'wrist widening and rachitic rosary',
+          reason:
+            'These growth plate expansion findings are more typical of rickets than collagen fragility.',
+        },
+      ],
+      finalReasonLessLikely:
+        'Recurrent fractures, blue sclerae, dentinogenesis imperfecta, and connective tissue fragility are not present.',
+    },
+    {
+      diagnosis: 'Osteomalacia',
+      whyPlausibleEarly:
+        'Osteomalacia is also caused by defective bone mineralization, often from vitamin D deficiency.',
       ruledOutByClues: [
         {
           clueOrder: 5,
-          evidence: 'well-defined ulcer in the first part of the duodenum',
+          evidence: 'widening of the growth plates',
           reason:
-            'A discrete ulcer crater establishes peptic ulcer disease rather than diffuse mucosal inflammation alone.',
+            'Growth plate abnormalities occur in children with open physes and indicate rickets rather than adult osteomalacia.',
         },
       ],
       finalReasonLessLikely:
-        'Gastritis does not account for the confirmed duodenal ulcer seen on endoscopy.',
+        'Osteomalacia affects adults after epiphyseal closure rather than toddlers with active growth plates.',
     },
     {
-      diagnosis: 'Chronic Pancreatitis',
+      diagnosis: 'Cerebral palsy',
       whyPlausibleEarly:
-        'Chronic pancreatitis can cause chronic epigastric pain and dyspeptic symptoms.',
+        'Delayed motor milestones and difficulty standing can suggest a neurologic motor disorder.',
       ruledOutByClues: [
         {
-          clueOrder: 5,
-          evidence: 'duodenal ulcer and positive Helicobacter pylori testing',
+          clueOrder: 4,
+          evidence: 'elevated alkaline phosphatase with calcium-phosphate abnormalities',
           reason:
-            'Endoscopic ulceration and H. pylori positivity directly identify ulcer disease rather than pancreatic pathology.',
+            'Biochemical evidence of defective mineralization supports metabolic bone disease rather than isolated neurologic delay.',
         },
       ],
       finalReasonLessLikely:
-        'Chronic pancreatitis more often radiates to the back and may include malabsorption or pancreatic insufficiency.',
-    },
-    {
-      diagnosis: 'Functional Dyspepsia',
-      whyPlausibleEarly:
-        'Functional dyspepsia can mimic uncomplicated ulcer disease with chronic epigastric discomfort.',
-      ruledOutByClues: [
-        {
-          clueOrder: 5,
-          evidence: 'well-defined duodenal ulcer on endoscopy',
-          reason:
-            'Functional dyspepsia is diagnosed when no structural lesion explains the symptoms.',
-        },
-      ],
-      finalReasonLessLikely:
-        'A structural ulcer lesion excludes functional dyspepsia as the primary diagnosis.',
+        'The skeletal abnormalities and radiographic findings indicate a metabolic bone disorder.',
     },
   ],
   generationQuality: {
@@ -234,69 +236,86 @@ const explanation = {
 };
 
 const educationForFrontend = {
-  title: 'Peptic Ulcer Disease',
+  title: 'Nutritional Vitamin D Deficiency Rickets',
 
   summary: {
     definition:
-      'Peptic ulcer disease is a mucosal defect extending through the muscularis mucosa of the stomach or proximal duodenum, most commonly caused by Helicobacter pylori infection or nonsteroidal anti-inflammatory drug use.',
+      'Rickets is a pediatric metabolic bone disease characterized by defective mineralization of the growth plate, most commonly due to vitamin D deficiency.',
     highYieldTakeaway:
-      'Think peptic ulcer disease when burning epigastric pain follows a meal-related pattern, especially with H. pylori risk or NSAID exposure.',
+      'Think nutritional vitamin D deficiency rickets in toddlers with delayed walking, low sunlight exposure or unsupplemented breastfeeding, skeletal deformities, and metaphyseal cupping or fraying on radiographs.',
   },
 
   recognitionPattern: [
     {
-      pattern: 'Meal-related burning epigastric pain',
+      pattern: 'Typical presentation',
       whyItMatters:
-        'Duodenal ulcer pain often improves with eating and returns several hours later, whereas gastric ulcer pain may worsen after meals.',
+        'Toddlers may present with delayed walking, skeletal deformities, bone pain, hypotonia, or growth impairment.',
     },
     {
-      pattern: 'Associated dyspeptic symptoms',
+      pattern: 'Nutritional risk factors',
       whyItMatters:
-        'Bloating, early satiety, nausea, dyspepsia, nocturnal pain, and occasional vomiting can accompany ulcer disease.',
+        'Exclusive breastfeeding without vitamin D supplementation and limited sunlight exposure are major preventable risk factors.',
     },
     {
-      pattern: 'Complicated disease',
+      pattern: 'Growth plate disease',
       whyItMatters:
-        'Upper gastrointestinal bleeding, perforation, gastric outlet obstruction, or iron deficiency anemia may be the presenting clue.',
+        'Clinical and radiographic abnormalities localize the disease to growing bones with open physes.',
+    },
+  ],
+
+  keySymptoms: [
+    {
+      symptom: 'Delayed motor milestones',
+      significance:
+        'Delayed walking or difficulty standing may be the first clue to hypotonia or painful defective mineralization.',
+    },
+    {
+      symptom: 'Bone pain or irritability',
+      significance:
+        'Children with active rickets may be uncomfortable, reluctant to walk, or less active.',
     },
   ],
 
   keySigns: [
     {
-      finding: 'Mild epigastric tenderness',
+      finding: 'Rachitic rosary',
       significance:
-        'Many uncomplicated ulcers have only subtle localized tenderness or a normal examination.',
+        'Beading at the costochondral junctions occurs because of expansion of unmineralized osteoid.',
     },
     {
-      finding: 'Peritonism',
+      finding: 'Wrist widening',
       significance:
-        'Guarding, rebound tenderness, or rigid abdomen suggests perforation and requires urgent assessment.',
+        'Enlargement of the distal radius and ulna reflects growth plate expansion and active skeletal disease.',
     },
     {
-      finding: 'Melena or hematemesis',
+      finding: 'Frontal bossing and large anterior fontanelle',
       significance:
-        'Gastrointestinal bleeding is the most common serious complication of peptic ulcer disease.',
+        'Skull findings support a chronic mineralization disorder in a young child.',
     },
   ],
 
   examPearls: [
     {
-      type: 'exam',
-      title: 'Pain timing matters',
+      type: 'physical',
+      title: 'Rachitic rosary',
       content:
-        'Relief of epigastric pain after meals followed by recurrence several hours later strongly suggests a duodenal ulcer.',
+        'Prominent beading at the costochondral junctions occurs due to expansion of unmineralized osteoid.',
+      whyItMatters:
+        'This is a classic examination clue for rickets in children.',
+      discriminator:
+        'Helps distinguish metabolic bone disease from isolated developmental delay.',
+      trapAvoided:
+        'Avoid attributing delayed milestones purely to neurologic causes.',
     },
     {
-      type: 'exam',
-      title: 'Normal examination does not exclude disease',
+      type: 'physical',
+      title: 'Wrist widening',
       content:
-        'Many patients have only mild epigastric tenderness or an entirely normal abdominal examination.',
-    },
-    {
-      type: 'exam',
-      title: 'Look for alarm features',
-      content:
-        'Weight loss, anemia, persistent vomiting, dysphagia, or gastrointestinal bleeding require prompt investigation.',
+        'Enlargement of the distal radius and ulna reflects growth plate expansion.',
+      whyItMatters:
+        'Wrist changes are among the earliest and most reliable skeletal findings.',
+      managementImplication:
+        'Presence of active skeletal disease supports urgent nutritional correction.',
     },
   ],
 
@@ -304,101 +323,102 @@ const educationForFrontend = {
 
   investigations: [
     {
-      test: 'Upper gastrointestinal endoscopy',
+      test: 'Biochemical profile',
       interpretation:
-        'Confirms the presence, location, and complications of an ulcer, and allows biopsy when indicated.',
+        'Alkaline phosphatase is markedly elevated, while calcium and phosphate levels may be reduced.',
+      whyItMatters:
+        'The biochemical pattern supports active defective bone mineralization.',
     },
     {
-      test: 'Helicobacter pylori testing',
+      test: 'Radiographic findings',
       interpretation:
-        'Urea breath test, stool antigen testing, rapid urease testing, or biopsy-based methods identify treatable infection.',
-    },
-    {
-      test: 'Complete blood count',
-      interpretation:
-        'May show iron deficiency anemia or acute blood loss in bleeding ulcers.',
-    },
-    {
-      test: 'Medication review',
-      interpretation:
-        'NSAID, aspirin, anticoagulant, and steroid exposure can increase ulcer risk or complication risk.',
+        'X-rays classically demonstrate metaphyseal cupping, fraying, and widening.',
+      whyItMatters:
+        'Characteristic radiographic changes help confirm the diagnosis.',
     },
   ],
 
   pitfalls: [
     {
-      pitfall: 'Assuming dyspepsia is benign',
+      pitfall: 'Missing the diagnosis in delayed milestones',
       consequence:
-        'Alarm symptoms such as weight loss, anemia, persistent vomiting, dysphagia, or gastrointestinal bleeding require prompt investigation.',
-    },
-    {
-      pitfall: 'Treating without H. pylori testing',
-      consequence:
-        'Failure to identify and eradicate H. pylori increases recurrence risk.',
-    },
-    {
-      pitfall: 'Missing perforation',
-      consequence:
-        'Sudden severe abdominal pain with peritonism should trigger urgent surgical evaluation.',
+        'Children with rickets may initially appear to have isolated developmental delay; careful musculoskeletal examination prevents delayed diagnosis.',
     },
   ],
 
   managementOverview: [
     {
-      step: 'Proton pump inhibitor therapy',
+      step: 'Vitamin D replacement',
       rationale:
-        'Acid suppression promotes ulcer healing and symptom control.',
+        'Therapeutic vitamin D with concurrent calcium supplementation allows remineralization and recovery of bone growth.',
     },
     {
-      step: 'Eradicate H. pylori',
+      step: 'Nutritional counseling',
       rationale:
-        'Guideline-recommended eradication regimens reduce recurrence when infection is confirmed.',
+        'Caregivers should receive counseling regarding supplementation, adequate calcium intake, and safe sunlight exposure.',
     },
     {
-      step: 'Stop NSAIDs',
+      step: 'Correct underlying risk factors',
       rationale:
-        'Removing the mucosal injury driver reduces ongoing ulcer risk whenever possible.',
-    },
-    {
-      step: 'Manage complications',
-      rationale:
-        'Bleeding, perforation, or obstruction may require urgent endoscopic, radiologic, or surgical intervention.',
+        'Addressing diet, malabsorption risk, and adherence reduces recurrence and progression.',
     },
   ],
 
   differentialDistinguishers: [
     {
-      diagnosis: 'Gastroesophageal Reflux Disease',
+      diagnosis: 'Hypophosphatemic rickets',
       keySeparator:
-        'Heartburn and acid regurgitation predominate, often worsening when lying down.',
+        'Often presents with persistent hypophosphatemia despite adequate vitamin D replacement and may have a family history.',
     },
     {
-      diagnosis: 'Gastritis',
+      diagnosis: 'Osteogenesis imperfecta',
       keySeparator:
-        'Diffuse mucosal inflammation occurs without a discrete ulcer crater.',
+        'Associated with recurrent fractures, blue sclerae, dentinogenesis imperfecta, and connective tissue fragility.',
     },
     {
-      diagnosis: 'Chronic Pancreatitis',
+      diagnosis: 'Osteomalacia',
       keySeparator:
-        'Pain often radiates to the back and may be associated with pancreatic insufficiency.',
+        'Affects defective mineralization in adults after epiphyseal closure rather than children with open growth plates.',
     },
     {
-      diagnosis: 'Functional Dyspepsia',
+      diagnosis: 'Cerebral palsy',
       keySeparator:
-        'No structural lesion is identified on endoscopy.',
+        'Motor delay alone may suggest neurologic disease, but skeletal, biochemical, and radiographic findings indicate metabolic bone disease.',
+    },
+  ],
+
+  complications: [
+    {
+      complication: 'Permanent skeletal deformity',
+      whyItMatters:
+        'Delayed recognition can lead to persistent bowed legs, growth impairment, and orthopedic complications.',
+    },
+  ],
+
+  recallPrompts: [
+    {
+      prompt:
+        'What radiographic findings are classically associated with rickets?',
+      answer:
+        'Metaphyseal cupping, fraying, and widening of the growth plates.',
+    },
+    {
+      prompt:
+        'Which examination finding describes beading along the costochondral junctions?',
+      answer: 'Rachitic rosary.',
     },
   ],
 
   references: [
-    'Oxford Handbook of Clinical Medicine',
-    'BMJ Best Practice: Peptic ulcer disease',
-    'NICE Clinical Knowledge Summary: Dyspepsia',
+    'WHO guidance on nutritional rickets',
+    'Nelson Textbook of Pediatrics',
+    'Oxford Handbook of Paediatrics',
   ],
 };
 
 async function main() {
-  const canonicalName = 'peptic ulcer disease';
-  const displayLabel = 'Peptic Ulcer Disease';
+  const canonicalName = 'nutritional vitamin d deficiency rickets';
+  const displayLabel = 'Nutritional Vitamin D Deficiency Rickets';
   const canonicalNormalized = normalizeClinicalText(canonicalName);
 
   const registry = await prisma.diagnosisRegistry.upsert({
@@ -408,15 +428,24 @@ async function main() {
       displayLabel,
       status: DiagnosisRegistryStatus.ACTIVE,
       active: true,
+      specialty: 'Paediatrics',
+      subspecialty: 'Metabolic Bone Disease',
+      category: 'Metabolic',
+      bodySystem: 'Musculoskeletal',
+      organSystem: 'Bone',
+      difficultyBand: DiagnosisDifficultyBand.BASIC,
+      rarityBand: DiagnosisRarityBand.COMMON,
+      clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
+      ageGroup: DiagnosisAgeGroup.PEDIATRIC,
+      urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
+      onboardingStatus: 'READY_FOR_REVIEW',
       isPlayable: true,
       isGeneratable: true,
-      specialty: 'Gastroenterology',
-      bodySystem: 'Gastrointestinal',
-      category: 'Upper GI Disorders',
-      difficultyBand: DiagnosisDifficultyBand.BASIC,
-      clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
-      rarityBand: DiagnosisRarityBand.COMMON,
-      urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
+      preferredClueTypes: ['history', 'risk', 'exam', 'investigation', 'imaging'],
+      excludedClueTypes: [],
+      searchPriority: 12,
+      notes:
+        'Classic pediatric nutritional rickets caused by vitamin D deficiency with skeletal deformities and metaphyseal changes.',
     },
     create: {
       canonicalName,
@@ -424,29 +453,64 @@ async function main() {
       displayLabel,
       status: DiagnosisRegistryStatus.ACTIVE,
       active: true,
+      specialty: 'Paediatrics',
+      subspecialty: 'Metabolic Bone Disease',
+      category: 'Metabolic',
+      bodySystem: 'Musculoskeletal',
+      organSystem: 'Bone',
+      difficultyBand: DiagnosisDifficultyBand.BASIC,
+      rarityBand: DiagnosisRarityBand.COMMON,
+      clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
+      ageGroup: DiagnosisAgeGroup.PEDIATRIC,
+      urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
+      onboardingStatus: 'READY_FOR_REVIEW',
+      onboardingStartedAt: now,
       isPlayable: true,
       isGeneratable: true,
-      specialty: 'Gastroenterology',
-      bodySystem: 'Gastrointestinal',
-      category: 'Upper GI Disorders',
-      difficultyBand: DiagnosisDifficultyBand.BASIC,
-      clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
-      rarityBand: DiagnosisRarityBand.COMMON,
-      urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
+      preferredClueTypes: ['history', 'risk', 'exam', 'investigation', 'imaging'],
+      excludedClueTypes: [],
+      searchPriority: 12,
+      notes:
+        'Classic pediatric nutritional rickets caused by vitamin D deficiency with skeletal deformities and metaphyseal changes.',
     },
   });
 
-  const aliasTerms = [
-    canonicalName,
-    displayLabel,
-    'PUD',
-    'gastric ulcer',
-    'duodenal ulcer',
+  const aliasSeeds = [
+    {
+      term: canonicalName,
+      kind: DiagnosisAliasKind.CANONICAL,
+      acceptedForMatch: true,
+      rank: 100,
+    },
+    {
+      term: 'rickets',
+      kind: DiagnosisAliasKind.ACCEPTED,
+      acceptedForMatch: true,
+      rank: 95,
+    },
+    {
+      term: 'vitamin d deficiency rickets',
+      kind: DiagnosisAliasKind.ACCEPTED,
+      acceptedForMatch: true,
+      rank: 90,
+    },
+    {
+      term: 'nutritional rickets',
+      kind: DiagnosisAliasKind.ACCEPTED,
+      acceptedForMatch: true,
+      rank: 85,
+    },
+    {
+      term: 'childhood rickets',
+      kind: DiagnosisAliasKind.SEARCH_ONLY,
+      acceptedForMatch: false,
+      rank: 40,
+    },
   ];
   const seenAliasNormalizations = new Set<string>();
-  let aliasRank = 0;
 
-  for (const term of aliasTerms) {
+  for (const aliasSeed of aliasSeeds) {
+    const term = aliasSeed.term;
     const normalizedTerm = normalizeClinicalText(term);
     if (seenAliasNormalizations.has(normalizedTerm)) {
       continue;
@@ -465,7 +529,7 @@ async function main() {
     await assertAliasValidWithClient(prisma, {
       aliasText: term,
       targetDiagnosisRegistryId: registry.id,
-      acceptedForMatch: true,
+      acceptedForMatch: aliasSeed.acceptedForMatch,
       ignoreAliasId: existingAlias?.id,
       allowTargetCanonicalAlias: normalizedTerm === canonicalNormalized,
     });
@@ -479,28 +543,22 @@ async function main() {
       update: {
         term,
         active: true,
-        acceptedForMatch: true,
-        rank: aliasRank,
-        kind:
-          aliasRank === 0
-            ? DiagnosisAliasKind.CANONICAL
-            : DiagnosisAliasKind.ACCEPTED,
+        acceptedForMatch: aliasSeed.acceptedForMatch,
+        rank: aliasSeed.rank,
+        kind: aliasSeed.kind,
+        source: seedVersion,
       },
       create: {
         diagnosisRegistryId: registry.id,
         term,
         normalizedTerm,
         active: true,
-        acceptedForMatch: true,
-        rank: aliasRank,
-        kind:
-          aliasRank === 0
-            ? DiagnosisAliasKind.CANONICAL
-            : DiagnosisAliasKind.ACCEPTED,
+        acceptedForMatch: aliasSeed.acceptedForMatch,
+        rank: aliasSeed.rank,
+        kind: aliasSeed.kind,
         source: seedVersion,
       },
     });
-    aliasRank += 1;
   }
 
   const education = await prisma.diagnosisEducation.upsert({
@@ -509,13 +567,16 @@ async function main() {
       title: educationForFrontend.title,
       summary: educationForFrontend.summary,
       clinicalPattern: educationForFrontend.recognitionPattern,
+      keySymptoms: educationForFrontend.keySymptoms,
       keySigns: educationForFrontend.keySigns,
       examPearls: educationForFrontend.examPearls,
       scoringSystems: educationForFrontend.scoringSystems,
       investigations: educationForFrontend.investigations,
       differentials: educationForFrontend.differentialDistinguishers,
       management: educationForFrontend.managementOverview,
+      complications: educationForFrontend.complications,
       pitfalls: educationForFrontend.pitfalls,
+      recallPrompts: educationForFrontend.recallPrompts,
       references: educationForFrontend.references,
       editorialStatus: DiagnosisEducationStatus.PUBLISHED,
       source: DiagnosisEducationSource.MANUAL,
@@ -528,13 +589,16 @@ async function main() {
       title: educationForFrontend.title,
       summary: educationForFrontend.summary,
       clinicalPattern: educationForFrontend.recognitionPattern,
+      keySymptoms: educationForFrontend.keySymptoms,
       keySigns: educationForFrontend.keySigns,
       examPearls: educationForFrontend.examPearls,
       scoringSystems: educationForFrontend.scoringSystems,
       investigations: educationForFrontend.investigations,
       differentials: educationForFrontend.differentialDistinguishers,
       management: educationForFrontend.managementOverview,
+      complications: educationForFrontend.complications,
       pitfalls: educationForFrontend.pitfalls,
+      recallPrompts: educationForFrontend.recallPrompts,
       references: educationForFrontend.references,
       editorialStatus: DiagnosisEducationStatus.PUBLISHED,
       source: DiagnosisEducationSource.MANUAL,
@@ -563,9 +627,10 @@ async function main() {
 
   const history =
     clues.find((clue) => clue.type === 'history')?.value ?? displayLabel;
-  const symptoms = clues
-    .filter((clue) => clue.type === 'symptom')
-    .map((clue) => clue.value);
+  const symptoms = [
+    'Delayed motor milestones',
+    'Difficulty standing without support',
+  ];
 
   const reusableCase = await prisma.case.findFirst({
     where: {
@@ -605,7 +670,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Seeded frontend-aligned flagship peptic ulcer disease inventory case. DailyCase scheduler should assign the actual daily slot.',
+      'Seeded frontend-aligned flagship nutritional vitamin D deficiency rickets inventory case. DailyCase scheduler should assign the actual daily slot.',
   };
 
   const seededCase = reusableCase
@@ -633,7 +698,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Frontend-aligned flagship peptic ulcer disease inventory revision for DailyCase scheduler assignment.',
+      'Frontend-aligned flagship nutritional vitamin D deficiency rickets inventory revision for DailyCase scheduler assignment.',
   };
 
   const revision = reusableCase?.currentRevisionId
@@ -671,19 +736,20 @@ async function main() {
       source: 'MANUAL',
       publishTrack: 'DAILY',
       outcome: 'PASSED',
-      validatorVersion: 'flagship-human-review:peptic-ulcer-disease-v1',
+      validatorVersion:
+        'flagship-human-review:nutritional-vitamin-d-deficiency-rickets-v1',
       summary: {
         contentTier: 'FLAGSHIP',
         seedVersion,
         humanReviewed: true,
-        note: 'Manual frontend-aligned peptic ulcer disease inventory case seeded for DailyCase scheduler assignment.',
+        note: 'Manual frontend-aligned nutritional vitamin D deficiency rickets inventory case seeded for DailyCase scheduler assignment.',
       },
       findings: [],
       completedAt: now,
     },
   });
 
-  console.log('Seeded frontend-aligned Peptic Ulcer Disease:', {
+  console.log('Seeded frontend-aligned Nutritional Vitamin D Deficiency Rickets:', {
     registryId: registry.id,
     caseId: seededCase.id,
     educationId: education.id,
