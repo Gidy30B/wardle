@@ -4,38 +4,34 @@ import Button from '../../components/ui/Button'
 import { getClerkOAuthRedirects, isNativeRuntime } from './authRedirects'
 
 type AuthMode = 'signin' | 'signup'
-type PendingEmailCode =
-  | { kind: 'signin'; email: string }
-  | { kind: 'signup'; email: string }
-  | null
+// Only signup email verification produces a pending code step now.
+// Sign-in is completed in one step with email + password.
+type PendingVerification = { email: string } | null
 
 export default function WardleAuthForm() {
   const signInState = useSignIn()
   const signUpState = useSignUp()
   const [mode, setMode] = useState<AuthMode>('signin')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
-  const [pendingEmailCode, setPendingEmailCode] = useState<PendingEmailCode>(null)
+  const [pendingVerification, setPendingVerification] = useState<PendingVerification>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const clerkReady = signInState.isLoaded && signUpState.isLoaded
   const showGoogleOAuth = !isNativeRuntime()
+
   const submitLabel = useMemo(() => {
+    if (pendingVerification) {
+      return loading ? 'Verifying...' : 'Verify Email'
+    }
     if (loading) {
-      if (pendingEmailCode) {
-        return 'Verify and Continue'
-      }
-
-      return mode === 'signin' ? 'Sending code...' : 'Sending verification...'
+      return mode === 'signin' ? 'Signing in...' : 'Creating account...'
     }
-
-    if (pendingEmailCode) {
-      return 'Verify and Continue'
-    }
-
-    return mode === 'signin' ? 'Send Sign-In Code' : 'Create Account'
-  }, [loading, mode, pendingEmailCode])
+    return mode === 'signin' ? 'Sign In' : 'Create Account'
+  }, [loading, mode, pendingVerification])
 
   const handleGoogleOAuth = async () => {
     setError('')
@@ -69,8 +65,10 @@ export default function WardleAuthForm() {
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode)
     setError('')
-    setPendingEmailCode(null)
+    setPendingVerification(null)
     setVerificationCode('')
+    setPassword('')
+    setConfirmPassword('')
   }
 
   const handleSubmit = async () => {
@@ -81,27 +79,19 @@ export default function WardleAuthForm() {
       return
     }
 
-    if (pendingEmailCode) {
+    if (pendingVerification) {
       if (!verificationCode.trim()) {
-        setError('Enter the verification code Clerk sent to your email.')
+        setError('Enter the verification code sent to your email.')
         return
       }
 
       setLoading(true)
       try {
-        if (pendingEmailCode.kind === 'signin') {
-          await completeSignInVerification({
-            signIn: signInState.signIn,
-            setActive: signInState.setActive,
-            verificationCode,
-          })
-        } else {
-          await completeSignUpVerification({
-            signUp: signUpState.signUp,
-            setActive: signUpState.setActive,
-            verificationCode,
-          })
-        }
+        await completeSignUpVerification({
+          signUp: signUpState.signUp,
+          setActive: signUpState.setActive,
+          verificationCode,
+        })
       } catch (exception) {
         setError(getClerkErrorMessage(exception))
       } finally {
@@ -117,30 +107,36 @@ export default function WardleAuthForm() {
       return
     }
 
+    if (!password) {
+      setError('Enter your password.')
+      return
+    }
+
+    if (mode === 'signup' && password !== confirmPassword) {
+      setError("Passwords don't match. Please try again.")
+      return
+    }
+
     setLoading(true)
 
     try {
       if (mode === 'signin') {
-        const signInResult = await startSignInEmailCode({
+        await signInWithPassword({
           signIn: signInState.signIn,
           setActive: signInState.setActive,
           email: normalizedEmail,
+          password,
         })
-        if (signInResult === 'needs_email_verification') {
-          setPendingEmailCode({ kind: 'signin', email: normalizedEmail })
-          setVerificationCode('')
-          setError('Check your email for the Wardle sign-in code.')
-        }
       } else {
-        const signUpResult = await startSignUpEmailCode({
+        const signUpResult = await signUpWithPassword({
           signUp: signUpState.signUp,
           setActive: signUpState.setActive,
           email: normalizedEmail,
+          password,
         })
         if (signUpResult === 'needs_email_verification') {
-          setPendingEmailCode({ kind: 'signup', email: normalizedEmail })
+          setPendingVerification({ email: normalizedEmail })
           setVerificationCode('')
-          setError('Check your email for the Wardle verification code.')
         }
       }
     } catch (exception) {
@@ -176,17 +172,17 @@ export default function WardleAuthForm() {
           void handleSubmit()
         }}
       >
-        {pendingEmailCode ? (
+        {pendingVerification ? (
           <div className="rounded-[14px] border border-[rgba(0,180,166,0.24)] bg-[rgba(0,180,166,0.08)] px-4 py-3 text-sm leading-6 text-white/64">
-            Enter the {pendingEmailCode.kind === 'signin' ? 'sign-in' : 'verification'} code sent to{' '}
+            Enter the verification code sent to{' '}
             <span className="font-bold text-[var(--wardle-color-mint)]">
-              {pendingEmailCode.email}
+              {pendingVerification.email}
             </span>
             .
           </div>
         ) : null}
 
-        {pendingEmailCode ? (
+        {pendingVerification ? (
           <Field label="Verification code">
             <input
               value={verificationCode}
@@ -198,16 +194,38 @@ export default function WardleAuthForm() {
             />
           </Field>
         ) : (
-          <Field label="Email">
-            <input
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              type="email"
-              placeholder="you@medschool.ac.ke"
-              className={inputClassName}
-              autoComplete="email"
-            />
-          </Field>
+          <>
+            <Field label="Email">
+              <input
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                type="email"
+                placeholder="you@medschool.ac.ke"
+                className={inputClassName}
+                autoComplete="email"
+              />
+            </Field>
+            <Field label="Password">
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type="password"
+                className={inputClassName}
+                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+              />
+            </Field>
+            {mode === 'signup' ? (
+              <Field label="Confirm password">
+                <input
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  type="password"
+                  className={inputClassName}
+                  autoComplete="new-password"
+                />
+              </Field>
+            ) : null}
+          </>
         )}
 
         {error ? (
@@ -220,7 +238,7 @@ export default function WardleAuthForm() {
           {submitLabel}
         </Button>
 
-        {showGoogleOAuth && !pendingEmailCode ? (
+        {showGoogleOAuth && !pendingVerification ? (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-white/10" />
@@ -242,12 +260,12 @@ export default function WardleAuthForm() {
           </div>
         ) : null}
 
-        {pendingEmailCode ? (
+        {pendingVerification ? (
           <button
             type="button"
             className="w-full text-center text-xs font-bold text-white/45 transition hover:text-white/70"
             onClick={() => {
-              setPendingEmailCode(null)
+              setPendingVerification(null)
               setVerificationCode('')
               setError('')
             }}
@@ -256,7 +274,7 @@ export default function WardleAuthForm() {
           </button>
         ) : null}
 
-        {mode === 'signup' && !pendingEmailCode ? (
+        {mode === 'signup' && !pendingVerification ? (
           <div className="rounded-[14px] border border-[rgba(244,162,97,0.24)] bg-[rgba(244,162,97,0.08)] px-4 py-3">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--wardle-color-amber)]">
               Founder members perk
@@ -291,78 +309,42 @@ function Field({
   )
 }
 
-async function startSignInEmailCode({
+async function signInWithPassword({
   signIn,
   setActive,
   email,
+  password,
 }: {
   signIn: NonNullable<ReturnType<typeof useSignIn>['signIn']>
   setActive: NonNullable<ReturnType<typeof useSignIn>['setActive']>
   email: string
+  password: string
 }) {
-  const createResult = await signIn.create({
-    identifier: email.trim(),
-  })
-  throwIfClerkResultError(createResult)
-
-  if (await tryActivateCompletedAttempt(signIn, setActive, createResult)) {
-    return 'complete'
-  }
-
-  const emailCodeFactor = getEmailCodeFirstFactor(createResult) ?? getEmailCodeFirstFactor(signIn)
-  if (!emailCodeFactor?.emailAddressId) {
-    throw new Error(
-      'This account does not have email code sign-in enabled. Please contact support.',
-    )
-  }
-
-  const prepareResult = await signIn.prepareFirstFactor({
-    strategy: 'email_code',
-    emailAddressId: emailCodeFactor.emailAddressId,
-  })
-  throwIfClerkResultError(prepareResult)
-
-  return 'needs_email_verification'
+  const result = await signIn.create({ identifier: email.trim(), password })
+  throwIfClerkResultError(result)
+  await activateCompletedAttempt(signIn, setActive, result)
 }
 
-async function completeSignInVerification({
-  signIn,
-  setActive,
-  verificationCode,
-}: {
-  signIn: NonNullable<ReturnType<typeof useSignIn>['signIn']>
-  setActive: NonNullable<ReturnType<typeof useSignIn>['setActive']>
-  verificationCode: string
-}) {
-  const verificationResult = await signIn.attemptFirstFactor({
-    strategy: 'email_code',
-    code: verificationCode.trim(),
-  })
-  throwIfClerkResultError(verificationResult)
-
-  await activateCompletedAttempt(signIn, setActive, verificationResult)
-}
-
-async function startSignUpEmailCode({
+async function signUpWithPassword({
   signUp,
   setActive,
   email,
+  password,
 }: {
   signUp: NonNullable<ReturnType<typeof useSignUp>['signUp']>
   setActive: NonNullable<ReturnType<typeof useSignUp>['setActive']>
   email: string
+  password: string
 }) {
-  const signUpResult = await signUp.create({
-    emailAddress: email.trim(),
-  })
+  const signUpResult = await signUp.create({ emailAddress: email.trim(), password })
   throwIfClerkResultError(signUpResult)
 
   if (await tryActivateCompletedAttempt(signUp, setActive, signUpResult)) {
-    return 'complete'
+    return 'complete' as const
   }
 
   await signUp.prepareEmailAddressVerification({ strategy: 'email_code' })
-  return 'needs_email_verification'
+  return 'needs_email_verification' as const
 }
 
 async function completeSignUpVerification({
@@ -539,8 +521,27 @@ function throwIfClerkResultError(result: unknown) {
 function getClerkErrorMessage(exception: unknown) {
   const errors = getArrayProperty(exception, 'errors')
   const firstError = errors[0]
+  const code = getStringProperty(firstError, 'code')
   const longMessage = getStringProperty(firstError, 'longMessage')
   const message = getStringProperty(firstError, 'message') ?? getStringProperty(exception, 'message')
+
+  switch (code) {
+    case 'form_password_incorrect':
+      return 'Incorrect password. Please try again.'
+    case 'form_identifier_not_found':
+      return 'No account found with that email address.'
+    case 'form_identifier_exists':
+      return 'An account with this email already exists. Try signing in instead.'
+    case 'form_password_pwned':
+    case 'form_password_length_too_short':
+    case 'form_password_validation_failed':
+    case 'form_password_strength_insufficient':
+      return longMessage ?? 'Password is too weak. Use at least 8 characters with a mix of letters and numbers.'
+    case 'strategy_for_user_invalid':
+      return 'This account uses a different sign-in method. Try signing in with Google or contact support.'
+    case 'not_allowed_access':
+      return longMessage ?? 'Access denied. Please contact support.'
+  }
 
   return longMessage ?? message ?? 'Authentication failed. Please try again.'
 }
@@ -570,18 +571,6 @@ function getStringArrayProperty(value: unknown, key: string): string[] | null {
   return strings.length > 0 ? strings : null
 }
 
-function getEmailCodeFirstFactor(value: unknown): { emailAddressId: string } | null {
-  const factors = getArrayProperty(value, 'supportedFirstFactors')
-  for (const factor of factors) {
-    const emailAddressId = getStringProperty(factor, 'emailAddressId')
-    if (getStringProperty(factor, 'strategy') === 'email_code' && emailAddressId) {
-      return { emailAddressId }
-    }
-  }
-
-  return null
-}
-
 function getStringProperty(value: unknown, key: string): string | null {
   if (!value || typeof value !== 'object') {
     return null
@@ -599,3 +588,5 @@ function getFunctionProperty(value: unknown, key: string) {
   const property = (value as Record<string, unknown>)[key]
   return typeof property === 'function' ? property : null
 }
+
+// TODO(auth-next): implement forgot password / password reset flow in the next auth pass.
