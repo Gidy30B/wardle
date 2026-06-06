@@ -2,11 +2,13 @@ import { Module } from '@nestjs/common';
 import { EditorialGuard, SeniorEditorialGuard } from '../../auth/editorial.guard';
 import { DatabaseModule } from '../../core/db/database.module';
 import { AdminGuard } from '../admin/admin.guard';
+import { ReasoningDraftValidationService } from '../admin/reasoning-draft-validation.service';
 import { DiagnosisGraphModule } from '../diagnosis-graph/diagnosis-graph.module';
 import { EditorialIntentProjectionService } from '../editorial/editorial-intent-projection.service';
 import { GenerationContextBuilder } from '../editorial/generation-context-builder.service';
 import { WorkspaceProjectionService } from '../editorial/workspace-projection.service';
 import { AdminEducationController } from './admin-education.controller';
+import { ReasoningPathService } from '../admin/reasoning-path.service';
 import { DiagnosisEducationService } from './diagnosis-education.service';
 import { EducationDraftQualityValidator } from './education-draft-quality-validator.service';
 import { EducationEditorialPatternsService } from './education-editorial-patterns.service';
@@ -42,6 +44,8 @@ import { DiagnosisEditorialBriefService } from './diagnosis-editorial-brief.serv
     EditorialLearningEngineService,
     EducationSectionQualityClassifier,
     EducationSectionRegenerationService,
+    ReasoningDraftValidationService,
+    ReasoningPathService,
     AdminGuard,
     EditorialGuard,
     SeniorEditorialGuard,

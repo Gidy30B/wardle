@@ -37,6 +37,11 @@ import type {
   DiagnosisTeachingRelationship,
   DiagnosisTeachingRelationshipGenerateResult,
   DiagnosisTeachingRelationshipReviewAction,
+  ReasoningPath,
+  ReasoningPathGenerateResult,
+  ReasoningPathReviewAction,
+  ReasoningDraftValidationFilters,
+  ReasoningDraftValidationRun,
   DiagnosisEvidenceRelationship,
   EvidenceGraphGenerateResult,
   EvidenceGraphReviewAction,
@@ -333,6 +338,51 @@ export function reviewDiagnosisTeachingRelationship(
   return client.post<DiagnosisTeachingRelationship>(
     `/admin/diagnosis-teaching-relationships/${id}/review`,
     { action },
+  );
+}
+
+export function generateReasoningPathCandidates(
+  client: ApiClient,
+  diagnosisRegistryId?: string,
+) {
+  return client.post<ReasoningPathGenerateResult>(
+    '/admin/reasoning-paths/candidates/generate',
+    { diagnosisRegistryId },
+  );
+}
+
+export function reviewReasoningPath(
+  client: ApiClient,
+  id: string,
+  action: ReasoningPathReviewAction,
+) {
+  return client.post<ReasoningPath>(`/admin/reasoning-paths/${id}/review`, {
+    action,
+  });
+}
+
+export function getReasoningDraftValidationRuns(
+  client: ApiClient,
+  filters: ReasoningDraftValidationFilters = {},
+) {
+  return client.get<ReasoningDraftValidationRun[]>(
+    withQuery('/admin/reasoning-draft-validation', {
+      artifactType: filters.artifactType || undefined,
+      diagnosisRegistryId: filters.diagnosisRegistryId,
+      trustTier: filters.trustTier || undefined,
+      validationStatus: filters.validationStatus || undefined,
+      limit: filters.limit,
+    }),
+  );
+}
+
+export function runReasoningDraftValidation(
+  client: ApiClient,
+  payload: { artifactType: string; artifactId: string },
+) {
+  return client.post<ReasoningDraftValidationRun>(
+    '/admin/reasoning-draft-validation/run',
+    payload,
   );
 }
 

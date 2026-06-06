@@ -61,6 +61,12 @@ describe('AdminController generateCases', () => {
       getDiagnoses: jest.fn().mockResolvedValue([]),
       getDiagnosis: jest.fn().mockResolvedValue({ diagnosisRegistryId: 'registry-1' }),
     };
+    const reasoningPathService = {
+      listPaths: jest.fn().mockResolvedValue([]),
+      generateCandidates: jest.fn().mockResolvedValue({ createdCount: 0 }),
+      buildGenerationContext: jest.fn().mockResolvedValue({ reasoningPath: { id: 'path-1' } }),
+      reviewPath: jest.fn().mockResolvedValue({ id: 'path-1' }),
+    };
     const diagnosisEditorialBriefService = {
       getBrief: jest.fn().mockResolvedValue({ brief: null }),
       generateBrief: jest.fn().mockResolvedValue({ id: 'brief-1' }),
@@ -104,6 +110,7 @@ describe('AdminController generateCases', () => {
         diagnosisTeachingRelationshipService as never,
         evidenceGraphService as never,
         evidenceCoverageService as never,
+        reasoningPathService as never,
         diagnosisEditorialBriefService as never,
         differentialMappingService as never,
         diagnosisRegistryCandidateService as never,
@@ -121,6 +128,7 @@ describe('AdminController generateCases', () => {
       diagnosisTeachingRelationshipService,
       evidenceGraphService,
       evidenceCoverageService,
+      reasoningPathService,
       diagnosisEditorialBriefService,
       diagnosisEditorialWorkspaceService,
       diagnosisEditorialOnboardingService,

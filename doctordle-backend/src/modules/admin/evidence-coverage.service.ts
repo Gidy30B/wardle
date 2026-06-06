@@ -12,6 +12,8 @@ import {
   EvidenceNodeStatus,
   EvidenceType,
   Prisma,
+  ReasoningPathStatus,
+  ReasoningDraftTrustTier,
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 
@@ -38,7 +40,15 @@ export type EvidenceCoverageWeakness =
   | 'missing_lab_discriminator'
   | 'weak_escalation_evidence'
   | 'weak_complication_evidence'
-  | 'missing_management_contrast';
+  | 'missing_management_contrast'
+  | 'missing_reasoning_path_coverage'
+  | 'weak_reasoning_diversity'
+  | 'missing_constrained_teaching_rule_generation'
+  | 'missing_constrained_education_generation'
+  | 'unconstrained_educational_draft'
+  | 'low_trust_generated_draft'
+  | 'blocked_generated_draft'
+  | 'hallucination_risk_generated_draft';
 
 type CoverageRow = Awaited<
   ReturnType<EvidenceCoverageService['loadRows']>
@@ -54,6 +64,14 @@ type CoverageSignals = {
   educationCoveredIds: Set<string>;
   ruleCoveredIds: Set<string>;
   teachingRelationshipCoveredIds: Set<string>;
+  activeReasoningPathCount: number;
+  reasoningPathGoalDiversity: number;
+  constrainedTeachingRuleCount: number;
+  constrainedEducationGenerationCount: number;
+  unconstrainedEducationGenerationCount: number;
+  lowTrustDraftCount: number;
+  blockedDraftCount: number;
+  hallucinationRiskDraftCount: number;
   overusedPatterns: Array<{ evidenceKey: string; count: number; reason: string }>;
   weaknesses: EvidenceCoverageWeakness[];
 };
@@ -201,6 +219,7 @@ export class EvidenceCoverageService {
             complications: true,
             pitfalls: true,
             recallPrompts: true,
+            references: true,
           },
         },
         teachingRules: {
@@ -211,6 +230,7 @@ export class EvidenceCoverageService {
             rationale: true,
             acceptableManifestations: true,
             expectedEvidence: true,
+            difficultyHints: true,
             requiredDifferentials: true,
             appliesToCaseGeneration: true,
             appliesToGraph: true,
@@ -280,6 +300,25 @@ export class EvidenceCoverageService {
             },
           },
         },
+        reasoningPaths: {
+          where: { status: ReasoningPathStatus.ACTIVE },
+          select: {
+            id: true,
+            reasoningGoal: true,
+            generationPurpose: true,
+            readinessScore: true,
+          },
+        },
+        reasoningDraftValidationRuns: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: {
+            id: true,
+            trustTier: true,
+            hallucinationRiskSignals: true,
+            unsupportedClaimSignals: true,
+          },
+        },
       },
       take: 500,
     });
@@ -287,6 +326,10 @@ export class EvidenceCoverageService {
 
   private toCoverage(row: CoverageRow) {
     const signals = this.coverageSignals(row);
+    const activeReasoningPaths = this.activeReasoningPaths(row);
+    const reasoningPathGoalDiversity = new Set(
+      activeReasoningPaths.map((path) => path.reasoningGoal),
+    ).size;
     const coverageScore = this.coverageScore(row, signals);
     const generationReadiness = this.generationReadiness(row, signals);
     const readinessScores = Object.values(generationReadiness).map(
@@ -314,6 +357,16 @@ export class EvidenceCoverageService {
       coverageScore,
       coverageBreakdown: {
         evidenceNodeCount: signals.activeRelationships.length,
+        activeReasoningPathCount: activeReasoningPaths.length,
+        reasoningPathGoalDiversity,
+        constrainedTeachingRuleCount: signals.constrainedTeachingRuleCount,
+        constrainedEducationGenerationCount:
+          signals.constrainedEducationGenerationCount,
+        unconstrainedEducationGenerationCount:
+          signals.unconstrainedEducationGenerationCount,
+        lowTrustDraftCount: signals.lowTrustDraftCount,
+        blockedDraftCount: signals.blockedDraftCount,
+        hallucinationRiskDraftCount: signals.hallucinationRiskDraftCount,
         discriminatorEvidenceCount: signals.discriminatorRelationships.length,
         evidenceDiversityCount: signals.evidenceTypes.size,
         teachingRelationshipEvidenceCoverage: percent(
@@ -374,8 +427,15 @@ export class EvidenceCoverageService {
         ),
         suggestedDiscriminatorCoverage: signals.discriminatorRelationships.length < 2,
         suggestedReasoningPathCoverage:
-          signals.teachingRelationshipCoveredIds.size === 0 ||
-          row.graphFacts.length === 0,
+          activeReasoningPaths.length === 0 || reasoningPathGoalDiversity < 2,
+        suggestedEducationalConstraintCoverage:
+          signals.constrainedTeachingRuleCount === 0 ||
+          signals.constrainedEducationGenerationCount === 0 ||
+          signals.unconstrainedEducationGenerationCount > 0,
+        suggestedDraftValidationReview:
+          signals.lowTrustDraftCount > 0 ||
+          signals.blockedDraftCount > 0 ||
+          signals.hallucinationRiskDraftCount > 0,
         suggestedGenerationPrerequisites: this.generationPrerequisites(
           row,
           signals,
@@ -386,7 +446,33 @@ export class EvidenceCoverageService {
   }
 
   private coverageSignals(row: CoverageRow): CoverageSignals {
+    const activeReasoningPaths = this.activeReasoningPaths(row);
+    const reasoningPathGoalDiversity = new Set(
+      activeReasoningPaths.map((path) => path.reasoningGoal),
+    ).size;
     const activeRelationships = row.evidenceRelationships;
+    const constrainedTeachingRuleCount = row.teachingRules.filter((rule) =>
+      this.generatedBecause(rule.difficultyHints)?.constrained === true,
+    ).length;
+    const educationGenerationMetadata = this.educationGeneratedBecause(
+      row.education?.references,
+    );
+    const constrainedEducationGenerationCount =
+      educationGenerationMetadata.filter((item) => item.constrained === true).length;
+    const unconstrainedEducationGenerationCount =
+      educationGenerationMetadata.filter((item) => item.constrained === false).length;
+    const validationRuns = row.reasoningDraftValidationRuns ?? [];
+    const lowTrustDraftCount = validationRuns.filter(
+      (run) => run.trustTier === ReasoningDraftTrustTier.LOW_TRUST,
+    ).length;
+    const blockedDraftCount = validationRuns.filter(
+      (run) => run.trustTier === ReasoningDraftTrustTier.BLOCKED,
+    ).length;
+    const hallucinationRiskDraftCount = validationRuns.filter(
+      (run) =>
+        this.asArray(run.hallucinationRiskSignals).length > 0 ||
+        this.asArray(run.unsupportedClaimSignals).length > 0,
+    ).length;
     const discriminatorRelationships = activeRelationships.filter(
       (relationship) =>
         relationship.relationshipType ===
@@ -476,6 +562,14 @@ export class EvidenceCoverageService {
       educationCoveredIds,
       ruleCoveredIds,
       teachingRelationshipCoveredIds,
+      activeReasoningPathCount: activeReasoningPaths.length,
+      reasoningPathGoalDiversity,
+      constrainedTeachingRuleCount,
+      constrainedEducationGenerationCount,
+      unconstrainedEducationGenerationCount,
+      lowTrustDraftCount,
+      blockedDraftCount,
+      hallucinationRiskDraftCount,
       overusedPatterns,
     });
 
@@ -487,9 +581,21 @@ export class EvidenceCoverageService {
       educationCoveredIds,
       ruleCoveredIds,
       teachingRelationshipCoveredIds,
+      activeReasoningPathCount: activeReasoningPaths.length,
+      reasoningPathGoalDiversity,
+      constrainedTeachingRuleCount,
+      constrainedEducationGenerationCount,
+      unconstrainedEducationGenerationCount,
+      lowTrustDraftCount,
+      blockedDraftCount,
+      hallucinationRiskDraftCount,
       overusedPatterns,
       weaknesses,
     };
+  }
+
+  private activeReasoningPaths(row: CoverageRow) {
+    return row.reasoningPaths ?? [];
   }
 
   private coverageWeaknesses(input: {
@@ -500,6 +606,14 @@ export class EvidenceCoverageService {
     educationCoveredIds: Set<string>;
     ruleCoveredIds: Set<string>;
     teachingRelationshipCoveredIds: Set<string>;
+    activeReasoningPathCount: number;
+    reasoningPathGoalDiversity: number;
+    constrainedTeachingRuleCount: number;
+    constrainedEducationGenerationCount: number;
+    unconstrainedEducationGenerationCount: number;
+    lowTrustDraftCount: number;
+    blockedDraftCount: number;
+    hallucinationRiskDraftCount: number;
     overusedPatterns: Array<{ evidenceKey: string; count: number; reason: string }>;
   }): EvidenceCoverageWeakness[] {
     return [
@@ -553,6 +667,26 @@ export class EvidenceCoverageService {
       )
         ? null
         : 'missing_management_contrast',
+      input.activeReasoningPathCount === 0
+        ? 'missing_reasoning_path_coverage'
+        : null,
+      input.activeReasoningPathCount > 0 && input.reasoningPathGoalDiversity < 2
+        ? 'weak_reasoning_diversity'
+        : null,
+      input.constrainedTeachingRuleCount === 0
+        ? 'missing_constrained_teaching_rule_generation'
+        : null,
+      input.constrainedEducationGenerationCount === 0
+        ? 'missing_constrained_education_generation'
+        : null,
+      input.unconstrainedEducationGenerationCount > 0
+        ? 'unconstrained_educational_draft'
+        : null,
+      input.lowTrustDraftCount > 0 ? 'low_trust_generated_draft' : null,
+      input.blockedDraftCount > 0 ? 'blocked_generated_draft' : null,
+      input.hallucinationRiskDraftCount > 0
+        ? 'hallucination_risk_generated_draft'
+        : null,
     ].filter((item): item is EvidenceCoverageWeakness => Boolean(item));
   }
 
@@ -666,6 +800,20 @@ export class EvidenceCoverageService {
       weak_escalation_evidence: 'Add escalation evidence',
       weak_complication_evidence: 'Add complication evidence',
       missing_management_contrast: 'Add management contrast evidence',
+      missing_reasoning_path_coverage: 'Activate at least one reasoning path',
+      weak_reasoning_diversity: 'Add reasoning paths with more varied goals',
+      missing_constrained_teaching_rule_generation:
+        'Generate teaching rules from active reasoning paths',
+      missing_constrained_education_generation:
+        'Generate education from active reasoning paths',
+      unconstrained_educational_draft:
+        'Review unconstrained education generation metadata',
+      low_trust_generated_draft:
+        'Senior review low-trust generated drafts',
+      blocked_generated_draft:
+        'Regenerate or manually override blocked generated drafts',
+      hallucination_risk_generated_draft:
+        'Review unsupported claim and hallucination-risk signals',
     };
     return signals.weaknesses
       .filter((weakness) => {
@@ -804,6 +952,28 @@ export class EvidenceCoverageService {
   private jsonStringArray(value: Prisma.JsonValue | null): string[] {
     if (!Array.isArray(value)) return [];
     return value.filter((item): item is string => typeof item === 'string');
+  }
+
+  private asArray(value: unknown): unknown[] {
+    return Array.isArray(value) ? value : [];
+  }
+
+  private generatedBecause(value: Prisma.JsonValue | null) {
+    const record = this.jsonObject(value);
+    return this.jsonObject(record?.generatedBecause);
+  }
+
+  private educationGeneratedBecause(value: Prisma.JsonValue | null | undefined) {
+    if (!value || !Array.isArray(value)) return [];
+    return value
+      .map((item) => this.jsonObject(this.jsonObject(item)?.generatedBecause))
+      .filter((item): item is Record<string, Prisma.JsonValue> => Boolean(item));
+  }
+
+  private jsonObject(value: unknown): Record<string, Prisma.JsonValue> | null {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, Prisma.JsonValue>)
+      : null;
   }
 
   private unique(values: string[]) {

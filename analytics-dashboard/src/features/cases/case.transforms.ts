@@ -35,6 +35,29 @@ type GenerationQualityMetadata = {
   differentialCount?: number;
   qualityScore?: number;
   teachingAlignment?: TeachingAlignmentMetadata;
+  reasoningPathTrace?: {
+    reasoningPathId: string | null;
+    title: string | null;
+    reasoningGoal: string | null;
+    generationPurpose: string | null;
+    supportingTeachingRelationshipIds: string[];
+    supportingEvidenceRelationshipIds: string[];
+    discriminatorEvidenceNodeIds: string[];
+    contradictoryDiagnosisIds: string[];
+    requiredTeachingPoints: string[];
+    coverageGapsAddressed: string[];
+    readinessSnapshot: {
+      readinessScore: number | null;
+      readinessTier: string;
+    };
+  };
+  generationGovernance?: {
+    constrained: boolean;
+    confidence: 'standard' | 'lower' | string;
+    warnings: string[];
+    hallucinationRisk: 'low' | 'medium' | 'high' | string;
+  };
+  reasoningQualityWarnings: string[];
 };
 
 type TeachingAlignmentMetadata = {
@@ -234,6 +257,71 @@ export function parseGenerationQuality(
     qualityScore:
       typeof quality.qualityScore === 'number' ? quality.qualityScore : undefined,
     teachingAlignment: parseTeachingAlignment(quality.teachingAlignment),
+    reasoningPathTrace: parseReasoningPathTrace(quality.reasoningPathTrace),
+    generationGovernance: parseGenerationGovernance(
+      quality.generationGovernance,
+    ),
+    reasoningQualityWarnings: parseStringArray(
+      quality.reasoningQualityWarnings,
+    ),
+  };
+}
+
+function parseReasoningPathTrace(
+  value: unknown,
+): GenerationQualityMetadata['reasoningPathTrace'] {
+  const object = asRecord(value);
+  if (!object) return undefined;
+  const readinessSnapshot = asRecord(object.readinessSnapshot);
+  return {
+    reasoningPathId:
+      typeof object.reasoningPathId === 'string' ? object.reasoningPathId : null,
+    title: typeof object.title === 'string' ? object.title : null,
+    reasoningGoal:
+      typeof object.reasoningGoal === 'string' ? object.reasoningGoal : null,
+    generationPurpose:
+      typeof object.generationPurpose === 'string'
+        ? object.generationPurpose
+        : null,
+    supportingTeachingRelationshipIds: parseStringArray(
+      object.supportingTeachingRelationshipIds,
+    ),
+    supportingEvidenceRelationshipIds: parseStringArray(
+      object.supportingEvidenceRelationshipIds,
+    ),
+    discriminatorEvidenceNodeIds: parseStringArray(
+      object.discriminatorEvidenceNodeIds,
+    ),
+    contradictoryDiagnosisIds: parseStringArray(object.contradictoryDiagnosisIds),
+    requiredTeachingPoints: parseStringArray(object.requiredTeachingPoints),
+    coverageGapsAddressed: parseStringArray(object.coverageGapsAddressed),
+    readinessSnapshot: {
+      readinessScore:
+        typeof readinessSnapshot?.readinessScore === 'number'
+          ? readinessSnapshot.readinessScore
+          : null,
+      readinessTier:
+        typeof readinessSnapshot?.readinessTier === 'string'
+          ? readinessSnapshot.readinessTier
+          : 'unknown',
+    },
+  };
+}
+
+function parseGenerationGovernance(
+  value: unknown,
+): GenerationQualityMetadata['generationGovernance'] {
+  const object = asRecord(value);
+  if (!object) return undefined;
+  return {
+    constrained: object.constrained === true,
+    confidence:
+      typeof object.confidence === 'string' ? object.confidence : 'standard',
+    warnings: parseStringArray(object.warnings),
+    hallucinationRisk:
+      typeof object.hallucinationRisk === 'string'
+        ? object.hallucinationRisk
+        : 'medium',
   };
 }
 

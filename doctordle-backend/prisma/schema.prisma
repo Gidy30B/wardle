@@ -292,6 +292,49 @@ enum DiagnosisEvidenceRelationshipStatus {
   DEPRECATED
 }
 
+enum ReasoningGoal {
+  DIFFERENTIAL_DISCRIMINATION
+  ESCALATION_RECOGNITION
+  MANAGEMENT_CONTRAST
+  COMPLICATION_RECOGNITION
+  EARLY_PRESENTATION_RECOGNITION
+  RESOURCE_LIMITED_REASONING
+}
+
+enum GenerationPurpose {
+  CASE_GENERATION
+  TEACHING_RULE_GENERATION
+  EDUCATION_GENERATION
+  RECALL_GENERATION
+}
+
+enum ReasoningPathStatus {
+  CANDIDATE
+  ACTIVE
+  REJECTED
+  DEPRECATED
+}
+
+enum ReasoningDraftArtifactType {
+  CASE
+  TEACHING_RULE
+  EDUCATION
+  EDUCATION_SECTION
+}
+
+enum ReasoningDraftTrustTier {
+  HIGH_TRUST
+  REVIEW_REQUIRED
+  LOW_TRUST
+  BLOCKED
+}
+
+enum ReasoningDraftValidationStatus {
+  PASSED
+  NEEDS_REVIEW
+  FAILED
+}
+
 model Diagnosis {
   id            String               @id @default(uuid())
   name          String               @unique
@@ -411,6 +454,8 @@ model DiagnosisRegistry {
   editorialBrief                        DiagnosisEditorialBrief?
   selectedAttempts                      Attempt[]                           @relation("AttemptSelectedDiagnosisRegistry")
   strictMatchedAttempts                 Attempt[]                           @relation("AttemptStrictMatchedDiagnosisRegistry")
+  reasoningPaths                        ReasoningPath[]
+  reasoningDraftValidationRuns          ReasoningDraftValidationRun[]
 
   @@index([status])
   @@index([onboardingStatus])
@@ -424,6 +469,68 @@ model DiagnosisRegistry {
   @@index([difficultyBand])
   @@index([rarityBand])
   @@index([clinicalSetting])
+}
+
+model ReasoningPath {
+  id                                String              @id @default(uuid())
+  diagnosisRegistryId               String
+  normalizedKey                     String              @unique
+  title                             String
+  reasoningGoal                     ReasoningGoal
+  primaryDifferentialIds            Json?
+  supportingTeachingRelationshipIds Json?
+  supportingEvidenceRelationshipIds Json?
+  discriminatorEvidenceNodeIds      Json?
+  escalationEvidenceNodeIds         Json?
+  contradictoryEvidenceNodeIds      Json?
+  requiredTeachingPoints            Json?
+  forbiddenEvidencePatterns         Json?
+  recommendedClueDistribution       Json?
+  generationPurpose                 GenerationPurpose
+  readinessScore                    Int                 @default(0)
+  status                            ReasoningPathStatus @default(CANDIDATE)
+  reviewedByUserId                  String?
+  reviewedAt                        DateTime?
+  createdAt                         DateTime            @default(now())
+  updatedAt                         DateTime            @updatedAt
+  diagnosisRegistry                 DiagnosisRegistry   @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  reviewedByUser                    User?               @relation("ReasoningPathReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([diagnosisRegistryId])
+  @@index([status])
+  @@index([generationPurpose])
+  @@index([reasoningGoal])
+  @@index([diagnosisRegistryId, status, generationPurpose])
+  @@index([reviewedByUserId])
+}
+
+model ReasoningDraftValidationRun {
+  id                       String                         @id @default(uuid())
+  artifactType             ReasoningDraftArtifactType
+  artifactId               String
+  diagnosisRegistryId      String
+  reasoningPathId          String?
+  trustScore               Int
+  trustTier                ReasoningDraftTrustTier
+  validationStatus         ReasoningDraftValidationStatus
+  blockers                 Json
+  warnings                 Json
+  strengths                Json
+  hallucinationRiskSignals Json
+  reasoningCoverage        Json
+  evidenceCoverage         Json
+  discriminatorCoverage    Json
+  unsupportedClaimSignals  Json
+  recommendations          Json
+  validatorVersion         String
+  createdAt                DateTime                       @default(now())
+  diagnosisRegistry        DiagnosisRegistry              @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+
+  @@index([artifactType, artifactId, createdAt])
+  @@index([diagnosisRegistryId, createdAt])
+  @@index([reasoningPathId])
+  @@index([trustTier])
+  @@index([validationStatus])
 }
 
 model DiagnosisTeachingRule {
@@ -1163,6 +1270,7 @@ model User {
   reviewedDiagnosisRegistryCandidates    DiagnosisRegistryCandidate[]    @relation("DiagnosisRegistryCandidateReviewer")
   approvedDiagnosisRegistryCandidates    DiagnosisRegistryCandidate[]    @relation("DiagnosisRegistryCandidateApprovedByUser")
   activationReviewedDiagnoses            DiagnosisRegistry[]             @relation("DiagnosisRegistryActivationReviewedByUser")
+  reviewedReasoningPaths                 ReasoningPath[]                 @relation("ReasoningPathReviewedByUser")
   primaryOrganization                    Organization?                   @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
   organizations                          UserOrganization[]
 

@@ -30,6 +30,7 @@ import { DiagnosisEditorialBriefService } from '../education/diagnosis-editorial
 import { DiagnosisEditorialOnboardingService } from './diagnosis-editorial-onboarding.service';
 import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
 import { EvidenceCoverageService } from './evidence-coverage.service';
+import { ReasoningPathService } from './reasoning-path.service';
 
 type LifecycleState = 'complete' | 'warning' | 'blocked' | 'not_started';
 type ReadinessSeverity = 'info' | 'warning' | 'blocker';
@@ -124,6 +125,8 @@ export class DiagnosisEditorialWorkspaceService {
     private readonly diagnosisRegistryLifecyclePolicyService?: DiagnosisRegistryLifecyclePolicyService,
     @Optional()
     private readonly evidenceCoverageService?: EvidenceCoverageService,
+    @Optional()
+    private readonly reasoningPathService?: ReasoningPathService,
   ) {}
 
   async getFullWorkspace(diagnosisRegistryId: string) {
@@ -148,6 +151,7 @@ export class DiagnosisEditorialWorkspaceService {
       onboardingResult,
       lifecycleGovernanceResult,
       evidenceCoverageResult,
+      reasoningPathsResult,
     ] = await Promise.allSettled([
       this.diagnosisWorkspaceQualityService.getSummary(diagnosisRegistryId),
       this.teachingUnitCoverageService.getCoverage(diagnosisRegistryId),
@@ -174,6 +178,7 @@ export class DiagnosisEditorialWorkspaceService {
         diagnosisRegistryId,
       ),
       this.evidenceCoverageService?.getDiagnosis(diagnosisRegistryId),
+      this.reasoningPathService?.listPaths({ diagnosisRegistryId }),
     ]);
 
     const compositionWarnings = this.compositionWarnings({
@@ -213,6 +218,7 @@ export class DiagnosisEditorialWorkspaceService {
     const lifecycleGovernance =
       this.valueOrNull(lifecycleGovernanceResult) ?? null;
     const evidenceCoverage = this.valueOrNull(evidenceCoverageResult) ?? null;
+    const reasoningPaths = this.valueOrNull(reasoningPathsResult) ?? [];
     const cases = this.buildCases(registry.cases);
     const coverageMatrix = this.buildCoverageMatrix({
       coverage,
@@ -323,6 +329,7 @@ export class DiagnosisEditorialWorkspaceService {
       },
       evidenceGraph,
       evidenceCoverage,
+      reasoningPaths,
       linkedDifferentials,
       editorialLearning: {
         available: revisions.length >= 2,

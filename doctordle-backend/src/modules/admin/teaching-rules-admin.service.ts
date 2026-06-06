@@ -1,12 +1,18 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, type DiagnosisTeachingRule } from '@prisma/client';
+import { GenerationPurpose, Prisma, type DiagnosisTeachingRule } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { DiagnosisCurriculumProviderService } from '../education/diagnosis-curriculum-provider.service';
 import { DiagnosisTeachingRuleSeedService } from '../education/diagnosis-teaching-rule-seed.service';
+import {
+  ReasoningPathService,
+  type EducationalReasoningGenerationContext,
+} from './reasoning-path.service';
+import { ReasoningDraftValidationService } from './reasoning-draft-validation.service';
 
 const VALID_CATEGORIES = [
   'differential_concept',
@@ -62,10 +68,14 @@ type TeachingRuleWritePayload = {
 
 @Injectable()
 export class TeachingRulesAdminService {
+  private readonly logger = new Logger(TeachingRulesAdminService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly curriculumProvider: DiagnosisCurriculumProviderService,
     private readonly teachingRuleSeedService: DiagnosisTeachingRuleSeedService,
+    private readonly reasoningPathService?: ReasoningPathService,
+    private readonly reasoningDraftValidationService?: ReasoningDraftValidationService,
   ) {}
 
   async listRules(diagnosisRegistryId: string) {
@@ -153,7 +163,12 @@ export class TeachingRulesAdminService {
       throw new NotFoundException('Diagnosis registry entry not found');
     }
 
-    const candidates = this.buildCandidates(registry);
+    const reasoningContext =
+      await this.reasoningPathService?.buildEducationalGenerationContext({
+        diagnosisRegistryId,
+        purpose: GenerationPurpose.TEACHING_RULE_GENERATION,
+      });
+    const candidates = this.buildCandidates(registry, reasoningContext);
     const created: DiagnosisTeachingRule[] = [];
 
     for (const candidate of candidates) {
@@ -175,19 +190,23 @@ export class TeachingRulesAdminService {
         continue;
       }
 
-      created.push(
-        await this.prisma.diagnosisTeachingRule.create({
+      const rule = await this.prisma.diagnosisTeachingRule.create({
           data: {
             diagnosisRegistry: { connect: { id: diagnosisRegistryId } },
             ...candidate,
           },
-        }),
-      );
+        });
+      created.push(rule);
+      await this.reasoningDraftValidationService?.runAfterGeneration({
+        artifactType: 'TEACHING_RULE',
+        artifactId: rule.id,
+      });
     }
 
     return {
       diagnosisRegistryId,
       generatedCount: created.length,
+      generationMetadata: this.generationMetadata(reasoningContext),
       rules: created.map((rule) => this.toDto(rule)),
     };
   }
@@ -354,8 +373,12 @@ export class TeachingRulesAdminService {
     });
   }
 
-  private buildCandidates(registry: NonNullable<Awaited<ReturnType<TeachingRulesAdminService['loadGenerationContext']>>>) {
+  private buildCandidates(
+    registry: NonNullable<Awaited<ReturnType<TeachingRulesAdminService['loadGenerationContext']>>>,
+    reasoningContext?: EducationalReasoningGenerationContext,
+  ) {
     const textItems = [
+      ...this.reasoningTeachingItems(reasoningContext),
       ...this.sectionItems(registry.education?.differentials, 'differential_concept'),
       ...this.sectionItems(registry.education?.investigations, 'investigation_concept'),
       ...this.sectionItems(registry.education?.examPearls, 'exam_mechanism'),
@@ -388,11 +411,14 @@ export class TeachingRulesAdminService {
         title,
         category: this.enumValue(item.category, VALID_CATEGORIES, 'category'),
         importance: 'supporting',
-        rationale: `Candidate inferred from existing editorial material for ${registry.displayLabel || registry.canonicalName}.`,
+        rationale: reasoningContext?.constrained
+          ? `Candidate constrained by reasoning path ${reasoningContext.reasoningPathId} for ${registry.displayLabel || registry.canonicalName}.`
+          : `Candidate inferred from existing editorial material for ${registry.displayLabel || registry.canonicalName}.`,
         acceptableManifestations: [item.manifestation || title],
-        requiredDifferentials: [],
-        expectedEvidence: {},
-        difficultyHints: {},
+        requiredDifferentials:
+          reasoningContext?.contradictoryDiagnosisIds?.slice(0, 6) ?? [],
+        expectedEvidence: this.expectedEvidenceMetadata(reasoningContext, item),
+        difficultyHints: this.generationMetadata(reasoningContext),
         avoidTooEarly: false,
         appliesToEducation: true,
         appliesToCaseGeneration: true,
@@ -402,6 +428,18 @@ export class TeachingRulesAdminService {
       } satisfies Omit<Prisma.DiagnosisTeachingRuleCreateInput, 'diagnosisRegistry'>);
       if (candidates.length >= 8) break;
     }
+
+    this.logger.log(
+      JSON.stringify({
+        event: reasoningContext?.constrained
+          ? 'teaching_rule.generate.constrained'
+          : 'teaching_rule.generate.unconstrained_fallback',
+        diagnosisRegistryId: registry.id,
+        reasoningPathId: reasoningContext?.reasoningPathId ?? null,
+        generatedCandidateCount: candidates.length,
+        warnings: reasoningContext?.warnings ?? [],
+      }),
+    );
 
     return candidates;
   }
@@ -420,6 +458,80 @@ export class TeachingRulesAdminService {
           '',
         category,
       }));
+  }
+
+  private reasoningTeachingItems(
+    reasoningContext?: EducationalReasoningGenerationContext,
+  ) {
+    if (!reasoningContext) return [];
+    return [
+      ...reasoningContext.requiredTeachingPoints.map((point) => ({
+        title: point,
+        category: 'differential_concept',
+        manifestation: point,
+      })),
+      ...reasoningContext.discriminatorEvidenceUsed.map((evidence) => ({
+        title: evidence,
+        category: 'finding_concept',
+        manifestation: evidence,
+      })),
+      ...reasoningContext.plannerRecommendations.map((recommendation) => ({
+        title: recommendation,
+        category: 'recall_concept',
+        manifestation: recommendation,
+      })),
+    ];
+  }
+
+  private expectedEvidenceMetadata(
+    reasoningContext: EducationalReasoningGenerationContext | undefined,
+    item: { title: string; category: string; manifestation?: string },
+  ): Prisma.InputJsonValue {
+    return {
+      generation: 'teaching_rule',
+      item,
+      sourceEvidenceRelationshipIds:
+        reasoningContext?.sourceEvidenceRelationshipIds ?? [],
+      discriminatorEvidenceUsed:
+        reasoningContext?.discriminatorEvidenceUsed ?? [],
+      reasoningQualityWarnings:
+        reasoningContext?.reasoningQualityWarnings ?? [],
+    };
+  }
+
+  private generationMetadata(
+    reasoningContext?: EducationalReasoningGenerationContext,
+  ): Prisma.InputJsonValue {
+    if (!reasoningContext) {
+      return {
+        generatedBecause: {
+          constrained: false,
+          confidence: 'lower',
+          hallucinationRisk: 'high',
+          warnings: ['No reasoning path service was available.'],
+        },
+      };
+    }
+    return {
+      generatedBecause: {
+        constrained: reasoningContext.constrained,
+        confidence: reasoningContext.confidence,
+        hallucinationRisk: reasoningContext.hallucinationRisk,
+        reasoningPathId: reasoningContext.reasoningPathId,
+        reasoningGoal: reasoningContext.reasoningGoal,
+        sourceTeachingRelationshipIds:
+          reasoningContext.sourceTeachingRelationshipIds,
+        sourceEvidenceRelationshipIds:
+          reasoningContext.sourceEvidenceRelationshipIds,
+        coverageGapsAddressed: reasoningContext.coverageGapsAddressed,
+        discriminatorEvidenceUsed: reasoningContext.discriminatorEvidenceUsed,
+        generationCoverageSnapshot:
+          reasoningContext.generationCoverageSnapshot,
+        warnings: reasoningContext.warnings,
+        reasoningQualityWarnings:
+          reasoningContext.reasoningQualityWarnings,
+      },
+    };
   }
 
   private caseTeachingUnits(cases: Array<{ explanation: unknown }>) {
@@ -453,6 +565,13 @@ export class TeachingRulesAdminService {
       requiredDifferentials: rule.requiredDifferentials,
       expectedEvidence: rule.expectedEvidence,
       difficultyHints: rule.difficultyHints,
+      generationMetadata:
+        this.asObject(rule.difficultyHints)?.generatedBecause ?? null,
+      reasoningQualityWarnings: this.stringArray(
+        this.asObject(
+          this.asObject(rule.difficultyHints)?.generatedBecause,
+        )?.reasoningQualityWarnings,
+      ),
       avoidTooEarly: rule.avoidTooEarly,
       appliesToEducation: rule.appliesToEducation,
       appliesToCaseGeneration: rule.appliesToCaseGeneration,
@@ -530,6 +649,12 @@ export class TeachingRulesAdminService {
       (item): item is string => typeof item === 'string' && item.trim().length > 0,
     );
     return value?.trim() ?? null;
+  }
+
+  private stringArray(value: unknown): string[] {
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === 'string')
+      : [];
   }
 
   private compactTitle(value: string): string {

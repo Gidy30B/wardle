@@ -89,6 +89,49 @@ export type GenerateCaseInput = {
   batchId?: string;
   sequence?: number;
   generationContext?: GenerationContext;
+  reasoningPathContext?: {
+    reasoningPath: {
+      id: string;
+      title: string;
+      reasoningGoal: string;
+      generationPurpose: string;
+      readinessScore: number;
+    };
+    constraints: {
+      requiredTeachingPoints: string[];
+      forbiddenEvidencePatterns: string[];
+      primaryDifferentialIds: string[];
+      recommendedClueDistribution: Record<string, number>;
+    };
+    evidenceNodes: Array<{
+      id: string;
+      displayLabel: string;
+      evidenceType: string;
+      clinicalCategory?: string;
+    }>;
+    evidenceRelationships: Array<{
+      id: string;
+      relationshipType: string;
+      reasoningSummary: string | null;
+      evidenceNode: {
+        id: string;
+        displayLabel: string;
+        evidenceType: string;
+      };
+    }>;
+    teachingRelationships: Array<{
+      id: string;
+      relationshipType: string;
+      teachingPurpose: string;
+      discriminatorSummary: string | null;
+      commonConfusionReason: string | null;
+      learnerPitfall: string | null;
+      targetDiagnosis: {
+        id: string;
+        displayLabel: string;
+      } | null;
+    }>;
+  };
   targetedTeachingUnitIds?: string[];
   targetedMimics?: Array<{
     diagnosisRegistryId?: string;
@@ -122,6 +165,7 @@ export type GenerateBatchOptions = {
       diagnosisRegistryId?: string;
       diagnosis: string;
     }>;
+    reasoningPathContext?: GenerateCaseInput['reasoningPathContext'];
     clueRevealStrategy?: GenerateCaseInput['clueRevealStrategy'];
   };
 };

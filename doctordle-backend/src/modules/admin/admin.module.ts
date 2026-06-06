@@ -28,6 +28,8 @@ import { CurriculumPlanningService } from './curriculum-planning.service';
 import { DiagnosisTeachingRelationshipService } from './diagnosis-teaching-relationship.service';
 import { EvidenceGraphService } from './evidence-graph.service';
 import { EvidenceCoverageService } from './evidence-coverage.service';
+import { ReasoningDraftValidationService } from './reasoning-draft-validation.service';
+import { ReasoningPathService } from './reasoning-path.service';
 import { EducationRevisionQualityAnalyzer } from '../education/education-revision-quality-analyzer.service';
 import { EducationDraftQualityValidator } from '../education/education-draft-quality-validator.service';
 import { EducationKnowledgeRulesService } from '../education/education-knowledge-rules.service';
@@ -72,6 +74,8 @@ import { DiagnosisRegistryMergeExecutionService } from '../diagnosis-registry/di
     DiagnosisTeachingRelationshipService,
     EvidenceGraphService,
     EvidenceCoverageService,
+    ReasoningDraftValidationService,
+    ReasoningPathService,
     TargetedCaseGenerationService,
     EducationRevisionQualityAnalyzer,
     EducationDraftQualityValidator,

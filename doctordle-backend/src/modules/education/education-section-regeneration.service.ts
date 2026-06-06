@@ -7,6 +7,7 @@ import {
 import {
   DiagnosisEducationSource,
   DiagnosisEducationStatus,
+  GenerationPurpose,
   Prisma,
   type DiagnosisEducation,
 } from '@prisma/client';
@@ -16,6 +17,11 @@ import { getEnv } from '../../core/config/env.validation';
 import { PrismaService } from '../../core/db/prisma.service';
 import { DifferentialMappingService } from '../diagnosis-graph/differential-mapping.service';
 import { GenerationContextBuilder } from '../editorial/generation-context-builder.service';
+import {
+  ReasoningPathService,
+  type EducationalReasoningGenerationContext,
+} from '../admin/reasoning-path.service';
+import { ReasoningDraftValidationService } from '../admin/reasoning-draft-validation.service';
 import {
   EducationDraftQualityValidator,
 } from './education-draft-quality-validator.service';
@@ -82,6 +88,8 @@ export class EducationSectionRegenerationService {
     private readonly educationEditorialPatternsService: EducationEditorialPatternsService = new EducationEditorialPatternsService(),
     private readonly educationSchemaContractService: EducationSchemaContractService = new EducationSchemaContractService(),
     private readonly differentialMappingService?: DifferentialMappingService,
+    private readonly reasoningPathService?: ReasoningPathService,
+    private readonly reasoningDraftValidationService?: ReasoningDraftValidationService,
   ) {
     const env = getEnv();
     if (env.OPENAI_API_KEY) {
@@ -133,6 +141,11 @@ export class EducationSectionRegenerationService {
       this.educationSchemaContractService.compactGenerationContext(
         generationContext as unknown as Record<string, unknown>,
       );
+    const reasoningContext =
+      await this.reasoningPathService?.buildEducationSectionGenerationContext({
+        diagnosisRegistryId: input.diagnosisRegistryId,
+        section: input.section,
+      });
     const request = this.buildRequest({
       section: input.section,
       diagnosis: {
@@ -145,6 +158,8 @@ export class EducationSectionRegenerationService {
         aliases: registry.aliases.map((alias) => alias.term),
       },
       compactGenerationContext,
+      constrainedReasoningContext:
+        this.promptReasoningContext(reasoningContext),
       currentEducation: registry.education,
     });
 
@@ -188,6 +203,26 @@ export class EducationSectionRegenerationService {
       teachingRules,
     });
     const now = new Date();
+    const referencesWithMetadata = this.attachSectionGenerationMetadata(
+      registry.education.references,
+      reasoningContext,
+      input.section,
+    );
+    this.logger.log(
+      JSON.stringify({
+        event: reasoningContext?.constrained
+          ? 'diagnosis_education.section_regeneration.constrained'
+          : 'diagnosis_education.section_regeneration.unconstrained_fallback',
+        diagnosisRegistryId: input.diagnosisRegistryId,
+        section: input.section,
+        reasoningPathId: reasoningContext?.reasoningPathId ?? null,
+        hallucinationRisk: reasoningContext?.hallucinationRisk ?? 'high',
+        warnings:
+          reasoningContext?.warnings ?? [
+            'No reasoning path service was available.',
+          ],
+      }),
+    );
 
     const education = await this.prisma.$transaction(async (tx) => {
       await this.createRevisionIfMissing(
@@ -200,6 +235,7 @@ export class EducationSectionRegenerationService {
         where: { id: registry.education!.id },
         data: {
           [input.section]: replacement as Prisma.InputJsonValue,
+          references: referencesWithMetadata,
           editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
           source: DiagnosisEducationSource.AI_ASSISTED,
           version: { increment: 1 },
@@ -219,6 +255,10 @@ export class EducationSectionRegenerationService {
     });
 
     await this.refreshDifferentialMappings(education.id);
+    await this.reasoningDraftValidationService?.runAfterGeneration({
+      artifactType: 'EDUCATION_SECTION',
+      artifactId: education.id,
+    });
     return { ...education, qualityReport };
   }
 
@@ -226,6 +266,7 @@ export class EducationSectionRegenerationService {
     section: EducationRegenerableSection;
     diagnosis: Record<string, unknown>;
     compactGenerationContext: unknown;
+    constrainedReasoningContext: unknown;
     currentEducation: DiagnosisEducation;
   }): ChatCompletionCreateParamsNonStreaming {
     const preserve = [
@@ -275,6 +316,7 @@ export class EducationSectionRegenerationService {
             preserve,
             diagnosis: input.diagnosis,
             compactGenerationContext: input.compactGenerationContext,
+            constrainedReasoningContext: input.constrainedReasoningContext,
             schemaContract:
               this.educationSchemaContractService.getPromptContract(),
             editorialPatterns:
@@ -289,6 +331,7 @@ export class EducationSectionRegenerationService {
               'Use null for unused optional canonical fields.',
               'Content must be 18-45 words and no more than 2 sentences.',
               'Prefer specific named signs, tests, mimics, mechanisms, and management anchors from compactGenerationContext.',
+              'Use constrainedReasoningContext to anchor discriminators, escalation signals, evidence contrasts, and forbidden overlap. If unconstrained, mark unsupported reasoning for editor review instead of inventing it.',
               'Keep scoring systems and clinically established mnemonics in scoringSystems, not examPearls.',
               'Differentials must include diagnosis/title, whyConfused/content, keySeparator/discriminator, and classicTrap/trapAvoided.',
               'Investigations must include interpretation or trap, not generic test usefulness prose.',
@@ -298,6 +341,77 @@ export class EducationSectionRegenerationService {
         },
       ],
     };
+  }
+
+  private promptReasoningContext(
+    reasoningContext?: EducationalReasoningGenerationContext,
+  ) {
+    if (!reasoningContext) {
+      return {
+        constrained: false,
+        confidence: 'lower',
+        hallucinationRisk: 'high',
+        warnings: ['No reasoning path service was available.'],
+      };
+    }
+    return {
+      constrained: reasoningContext.constrained,
+      confidence: reasoningContext.confidence,
+      hallucinationRisk: reasoningContext.hallucinationRisk,
+      reasoningPathId: reasoningContext.reasoningPathId,
+      reasoningGoal: reasoningContext.reasoningGoal,
+      section: reasoningContext.section,
+      requiredTeachingPoints: reasoningContext.requiredTeachingPoints,
+      discriminatorEvidenceUsed: reasoningContext.discriminatorEvidenceUsed,
+      coverageGapsAddressed: reasoningContext.coverageGapsAddressed,
+      plannerRecommendations: reasoningContext.plannerRecommendations,
+      warnings: reasoningContext.warnings,
+      promptConstraints: reasoningContext.promptConstraints,
+    };
+  }
+
+  private attachSectionGenerationMetadata(
+    references: unknown,
+    reasoningContext: EducationalReasoningGenerationContext | undefined,
+    section: EducationRegenerableSection,
+  ): Prisma.InputJsonValue {
+    const existing = Array.isArray(references) ? references : [];
+    return [
+      ...existing,
+      {
+        generatedBecause: {
+          section,
+          constrained: reasoningContext?.constrained ?? false,
+          confidence: reasoningContext?.confidence ?? 'lower',
+          hallucinationRisk: reasoningContext?.hallucinationRisk ?? 'high',
+          reasoningPathId: reasoningContext?.reasoningPathId ?? null,
+          reasoningGoal: reasoningContext?.reasoningGoal ?? null,
+          sourceTeachingRelationshipIds:
+            reasoningContext?.sourceTeachingRelationshipIds ?? [],
+          sourceEvidenceRelationshipIds:
+            reasoningContext?.sourceEvidenceRelationshipIds ?? [],
+          coverageGapsAddressed:
+            reasoningContext?.coverageGapsAddressed ?? [
+              'missing_active_reasoning_path',
+            ],
+          discriminatorEvidenceUsed:
+            reasoningContext?.discriminatorEvidenceUsed ?? [],
+          generationCoverageSnapshot:
+            reasoningContext?.generationCoverageSnapshot ?? {
+              readinessScore: null,
+              readinessTier: 'unconstrained',
+            },
+          warnings:
+            reasoningContext?.warnings ?? [
+              'No active reasoning path constrained this educational section.',
+            ],
+          reasoningQualityWarnings:
+            reasoningContext?.reasoningQualityWarnings ?? [
+              'unconstrained_educational_generation',
+            ],
+        },
+      },
+    ] as Prisma.InputJsonValue;
   }
 
   private sectionResponseSchema(section: EducationRegenerableSection) {

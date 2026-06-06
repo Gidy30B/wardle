@@ -266,6 +266,29 @@ type PersistedGeneratedExplanation = GeneratedCase['explanation'] & {
       mimics: string[];
       clueRevealStrategy: NonNullable<GenerateCaseInput['clueRevealStrategy']> | null;
     };
+    reasoningPathTrace?: {
+      reasoningPathId: string | null;
+      title: string | null;
+      reasoningGoal: string | null;
+      generationPurpose: string | null;
+      supportingTeachingRelationshipIds: string[];
+      supportingEvidenceRelationshipIds: string[];
+      discriminatorEvidenceNodeIds: string[];
+      contradictoryDiagnosisIds: string[];
+      requiredTeachingPoints: string[];
+      coverageGapsAddressed: string[];
+      readinessSnapshot: {
+        readinessScore: number | null;
+        readinessTier: 'ready' | 'partial' | 'weak' | 'unconstrained';
+      };
+    };
+    generationGovernance?: {
+      constrained: boolean;
+      confidence: 'standard' | 'lower';
+      warnings: string[];
+      hallucinationRisk: 'low' | 'medium' | 'high';
+    };
+    reasoningQualityWarnings?: string[];
   };
 };
 
@@ -1423,6 +1446,7 @@ export class CaseGeneratorService {
           targetedTeachingUnitIds:
             input.options.targetedCase?.teachingUnitIds,
           targetedMimics: input.options.targetedCase?.mimics,
+          reasoningPathContext: input.options.targetedCase?.reasoningPathContext,
           clueRevealStrategy: input.options.targetedCase?.clueRevealStrategy,
         };
         const generatedCase =
@@ -1968,6 +1992,7 @@ export class CaseGeneratorService {
         ? `Case ${input.sequence}.`
         : undefined;
     const teachingSection = this.buildConceptGuidedCaseSection(input);
+    const reasoningPathSection = this.buildReasoningPathCaseSection(input);
 
     return [
       sequenceLabel,
@@ -1990,6 +2015,7 @@ export class CaseGeneratorService {
       '4 = near-diagnostic clue',
       '5 = confirmatory clue',
       teachingSection,
+      reasoningPathSection,
       '',
       'Return JSON ONLY with this exact shape:',
       '{',
@@ -2074,6 +2100,7 @@ export class CaseGeneratorService {
         ? target.acceptedAliases.join(', ')
         : 'none';
     const teachingSection = this.buildConceptGuidedCaseSection(input);
+    const reasoningPathSection = this.buildReasoningPathCaseSection(input);
 
     return [
       sequenceLabel,
@@ -2115,6 +2142,7 @@ export class CaseGeneratorService {
       '4 = near-diagnostic clue',
       '5 = confirmatory clue',
       teachingSection,
+      reasoningPathSection,
       '',
       'Return JSON ONLY with this exact shape. The answer field may be null for compatibility; if set, it must match the fixed diagnosis or an accepted alias:',
       '{',
@@ -2231,6 +2259,55 @@ export class CaseGeneratorService {
         : undefined,
       'Selected teaching units for this case:',
       ...unitLines,
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join('\n');
+  }
+
+  private buildReasoningPathCaseSection(input: GenerateCaseInput): string | undefined {
+    const context = input.reasoningPathContext;
+    if (!context) {
+      return undefined;
+    }
+
+    const evidenceLines = context.evidenceRelationships.slice(0, 8).map(
+      (relationship) =>
+        `* ${relationship.evidenceNode.displayLabel} (${relationship.relationshipType}): ${relationship.reasoningSummary ?? 'Use as supported evidence only.'}`,
+    );
+    const teachingLines = context.teachingRelationships.slice(0, 6).map(
+      (relationship) =>
+        `* ${relationship.relationshipType}/${relationship.teachingPurpose}: ${relationship.discriminatorSummary ?? relationship.commonConfusionReason ?? relationship.learnerPitfall ?? 'Use to preserve the intended contrast.'}`,
+    );
+
+    return [
+      '',
+      'Reasoning-path constraints:',
+      `* Path: ${context.reasoningPath.title}.`,
+      `* Goal: ${context.reasoningPath.reasoningGoal}.`,
+      '* Build the draft around this specific reasoning contrast, not a generic diagnosis overview.',
+      context.constraints.primaryDifferentialIds.length
+        ? `* Primary differential registry IDs: ${context.constraints.primaryDifferentialIds
+            .slice(0, 6)
+            .join(', ')}.`
+        : undefined,
+      context.constraints.requiredTeachingPoints.length
+        ? '* Required teaching points:'
+        : undefined,
+      ...context.constraints.requiredTeachingPoints
+        .slice(0, 8)
+        .map((item) => `  - ${item}`),
+      evidenceLines.length ? '* Active evidence you may use:' : undefined,
+      ...evidenceLines,
+      teachingLines.length ? '* Supporting teaching relationships:' : undefined,
+      ...teachingLines,
+      context.constraints.forbiddenEvidencePatterns.length
+        ? '* Forbidden reasoning shortcuts:'
+        : undefined,
+      ...context.constraints.forbiddenEvidencePatterns
+        .slice(0, 6)
+        .map((item) => `  - ${item}`),
+      '* Do not introduce new discriminator logic that is not supported by the active evidence above.',
+      '* The generated case is a draft for human editorial review.',
     ]
       .filter((value): value is string => Boolean(value))
       .join('\n');
@@ -2641,6 +2718,26 @@ export class CaseGeneratorService {
       critique,
       input,
     );
+    const reasoningPathTrace = this.buildReasoningPathTrace(input);
+    const generationGovernance = this.buildGenerationGovernance(input);
+    const reasoningQualityWarnings = this.buildReasoningQualityWarnings(input);
+    this.logger.log(
+      JSON.stringify({
+        event: input.reasoningPathContext
+          ? 'case.generate.constrained_draft_metadata'
+          : 'case.generate.unconstrained_fallback_metadata',
+        reasoningPathId:
+          reasoningPathTrace.reasoningPathId ?? null,
+        reasoningGoal: reasoningPathTrace.reasoningGoal ?? null,
+        constrained: generationGovernance.constrained,
+        hallucinationRisk: generationGovernance.hallucinationRisk,
+        warnings: [
+          ...generationGovernance.warnings,
+          ...reasoningQualityWarnings,
+        ],
+        readinessSnapshot: reasoningPathTrace.readinessSnapshot,
+      }),
+    );
 
     return {
       ...generatedCase,
@@ -2719,7 +2816,8 @@ export class CaseGeneratorService {
       ...(teachingAlignment ? { teachingAlignment } : {}),
       ...(input.targetedTeachingUnitIds?.length ||
       input.targetedMimics?.length ||
-      input.clueRevealStrategy
+      input.clueRevealStrategy ||
+      input.reasoningPathContext
         ? {
             targetedGeneration: {
               teachingUnitIds: input.targetedTeachingUnitIds ?? [],
@@ -2739,7 +2837,129 @@ export class CaseGeneratorService {
             },
           }
         : {}),
+      reasoningPathTrace: this.buildReasoningPathTrace(input),
+      generationGovernance: this.buildGenerationGovernance(input),
+      reasoningQualityWarnings: this.buildReasoningQualityWarnings(input),
     };
+  }
+
+  private buildReasoningPathTrace(
+    input: GenerateCaseInput,
+  ): NonNullable<
+    NonNullable<PersistedGeneratedExplanation['generationQuality']>['reasoningPathTrace']
+  > {
+    const context = input.reasoningPathContext;
+    if (!context) {
+      return {
+        reasoningPathId: null,
+        title: null,
+        reasoningGoal: null,
+        generationPurpose: null,
+        supportingTeachingRelationshipIds: [],
+        supportingEvidenceRelationshipIds: [],
+        discriminatorEvidenceNodeIds: [],
+        contradictoryDiagnosisIds: [],
+        requiredTeachingPoints: [],
+        coverageGapsAddressed: [],
+        readinessSnapshot: {
+          readinessScore: null,
+          readinessTier: 'unconstrained',
+        },
+      };
+    }
+
+    return {
+      reasoningPathId: context.reasoningPath.id,
+      title: context.reasoningPath.title,
+      reasoningGoal: context.reasoningPath.reasoningGoal,
+      generationPurpose: context.reasoningPath.generationPurpose,
+      supportingTeachingRelationshipIds: context.teachingRelationships.map(
+        (relationship) => relationship.id,
+      ),
+      supportingEvidenceRelationshipIds: context.evidenceRelationships.map(
+        (relationship) => relationship.id,
+      ),
+      discriminatorEvidenceNodeIds: context.evidenceRelationships
+        .filter(
+          (relationship) =>
+            relationship.relationshipType === 'DISCRIMINATES' ||
+            relationship.evidenceNode.evidenceType === 'LAB' ||
+            relationship.evidenceNode.evidenceType === 'IMAGING',
+        )
+        .map((relationship) => relationship.evidenceNode.id),
+      contradictoryDiagnosisIds: context.constraints.primaryDifferentialIds,
+      requiredTeachingPoints: context.constraints.requiredTeachingPoints,
+      coverageGapsAddressed: [
+        ...context.evidenceNodes.map((node) => node.displayLabel),
+        ...context.constraints.requiredTeachingPoints.slice(0, 4),
+      ].slice(0, 10),
+      readinessSnapshot: {
+        readinessScore: context.reasoningPath.readinessScore,
+        readinessTier:
+          context.reasoningPath.readinessScore >= 75
+            ? 'ready'
+            : context.reasoningPath.readinessScore >= 45
+              ? 'partial'
+              : 'weak',
+      },
+    };
+  }
+
+  private buildGenerationGovernance(
+    input: GenerateCaseInput,
+  ): NonNullable<
+    NonNullable<PersistedGeneratedExplanation['generationQuality']>['generationGovernance']
+  > {
+    const warnings = input.reasoningPathContext
+      ? []
+      : [
+          'No active reasoning path constrained this draft.',
+          'Editor should review discriminator logic for unsupported reasoning.',
+        ];
+
+    return {
+      constrained: Boolean(input.reasoningPathContext),
+      confidence: input.reasoningPathContext ? 'standard' : 'lower',
+      warnings,
+      hallucinationRisk: input.reasoningPathContext ? 'low' : 'high',
+    };
+  }
+
+  private buildReasoningQualityWarnings(input: GenerateCaseInput): string[] {
+    const context = input.reasoningPathContext;
+    if (!context) {
+      return ['unconstrained_generation'];
+    }
+
+    const warnings: string[] = [];
+    const discriminatorCount = context.evidenceRelationships.filter(
+      (relationship) => relationship.relationshipType === 'DISCRIMINATES',
+    ).length;
+    const uniqueEvidenceLabels = new Set(
+      context.evidenceRelationships.map(
+        (relationship) => relationship.evidenceNode.displayLabel,
+      ),
+    );
+
+    if (discriminatorCount < 2) warnings.push('weak_discriminator_density');
+    if (context.constraints.requiredTeachingPoints.length < 2) {
+      warnings.push('shallow_reasoning_path');
+    }
+    if (uniqueEvidenceLabels.size < context.evidenceRelationships.length) {
+      warnings.push('duplicated_discriminator_evidence');
+    }
+    if (
+      !context.evidenceRelationships.some(
+        (relationship) => relationship.relationshipType === 'ESCALATES',
+      )
+    ) {
+      warnings.push('no_escalation_evidence');
+    }
+    if (!context.constraints.primaryDifferentialIds.length) {
+      warnings.push('no_contradictory_differential_coverage');
+    }
+
+    return warnings;
   }
 
   private selectedTeachingUnitsForMetadata(input: GenerateCaseInput) {

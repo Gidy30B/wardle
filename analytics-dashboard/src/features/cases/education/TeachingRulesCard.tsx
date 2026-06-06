@@ -10,6 +10,7 @@ import type {
   DiagnosisTeachingRuleStatus,
   DiagnosisTeachingRuleWritePayload,
   JsonValue,
+  ReasoningDraftValidationRun,
 } from '../../../api/admin';
 
 type Props = {
@@ -30,6 +31,7 @@ type Props = {
   ) => void;
   canReviewRules?: boolean;
   reviewDisabledReason?: string;
+  validationRuns?: ReasoningDraftValidationRun[];
 };
 
 type RuleFormState = {
@@ -109,6 +111,7 @@ export default function TeachingRulesCard({
   onReviewRule,
   canReviewRules = true,
   reviewDisabledReason = 'Requires senior editor',
+  validationRuns = [],
 }: Props) {
   const [statusFilter, setStatusFilter] = useState<'all' | DiagnosisTeachingRuleStatus>(
     'all',
@@ -292,6 +295,7 @@ export default function TeachingRulesCard({
               disabled={isPending}
               canReview={canReviewRules}
               reviewDisabledReason={reviewDisabledReason}
+              validationRun={latestValidationRun(validationRuns, rule.id)}
               onEdit={() => beginEdit(rule)}
               onReview={(action) => onReviewRule(rule.id, action)}
             />
@@ -307,6 +311,7 @@ function RuleRow({
   disabled,
   canReview,
   reviewDisabledReason,
+  validationRun,
   onEdit,
   onReview,
 }: {
@@ -314,6 +319,7 @@ function RuleRow({
   disabled: boolean;
   canReview: boolean;
   reviewDisabledReason: string;
+  validationRun: ReasoningDraftValidationRun | null;
   onEdit: () => void;
   onReview: (action: DiagnosisTeachingRuleReviewAction) => void;
 }) {
@@ -335,6 +341,8 @@ function RuleRow({
           {rule.rationale ? (
             <p className="mt-2 text-sm text-slate-700">{rule.rationale}</p>
           ) : null}
+          <GeneratedBecauseBlock metadata={rule.generationMetadata} />
+          <ValidationTrustBlock validationRun={validationRun} />
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -588,6 +596,93 @@ function RuleForm({
   );
 }
 
+function GeneratedBecauseBlock({ metadata }: { metadata?: JsonValue | null }) {
+  const record = asRecord(metadata);
+  if (!record) return null;
+  const constrained = record.constrained === true;
+  const warnings = jsonList(record.warnings);
+  const evidence = jsonList(record.discriminatorEvidenceUsed);
+  const gaps = jsonList(record.coverageGapsAddressed);
+  return (
+    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-slate-900">Generated because</span>
+        <Pill tone={constrained ? 'green' : 'amber'}>
+          {constrained ? 'Constrained' : 'Unconstrained'}
+        </Pill>
+        {typeof record.hallucinationRisk === 'string' ? (
+          <Pill tone={record.hallucinationRisk === 'high' ? 'amber' : 'muted'}>
+            Risk {record.hallucinationRisk}
+          </Pill>
+        ) : null}
+      </div>
+      <div className="mt-2 grid gap-2 md:grid-cols-2">
+        <CompactMeta label="Goal" value={stringValue(record.reasoningGoal)} />
+        <CompactMeta
+          label="Path"
+          value={stringValue(record.reasoningPathId) ?? 'No active path'}
+        />
+      </div>
+      {evidence.length ? (
+        <p className="mt-2">Discriminator evidence: {evidence.slice(0, 4).join(', ')}</p>
+      ) : null}
+      {gaps.length ? <p className="mt-1">Coverage gaps: {gaps.join(', ')}</p> : null}
+      {warnings.length ? (
+        <ul className="mt-2 list-disc space-y-1 pl-4 text-amber-800">
+          {warnings.slice(0, 4).map((warning) => (
+            <li key={warning}>{formatLabel(warning)}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function ValidationTrustBlock({
+  validationRun,
+}: {
+  validationRun: ReasoningDraftValidationRun | null;
+}) {
+  if (!validationRun) return null;
+  const warnings = signalMessages(validationRun.warnings);
+  const blockers = signalMessages(validationRun.blockers);
+  const risks = [
+    ...signalMessages(validationRun.hallucinationRiskSignals),
+    ...signalMessages(validationRun.unsupportedClaimSignals),
+  ];
+  return (
+    <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-slate-900">Validated against</span>
+        <Pill tone={validationTone(validationRun.trustTier)}>
+          {formatLabel(validationRun.trustTier)}
+        </Pill>
+        <Pill tone="muted">Trust {validationRun.trustScore}</Pill>
+        <Pill tone="muted">{formatLabel(validationRun.validationStatus)}</Pill>
+      </div>
+      <div className="mt-2 grid gap-2 md:grid-cols-2">
+        <CompactMeta
+          label="Path"
+          value={validationRun.reasoningPathId ?? 'No active path'}
+        />
+        <CompactMeta label="Checked" value={new Date(validationRun.createdAt).toLocaleDateString()} />
+      </div>
+      {blockers.length ? <p className="mt-2 text-rose-700">Blockers: {blockers.slice(0, 3).join(', ')}</p> : null}
+      {warnings.length ? <p className="mt-1 text-amber-800">Warnings: {warnings.slice(0, 3).join(', ')}</p> : null}
+      {risks.length ? <p className="mt-1 text-amber-800">Risk signals: {risks.slice(0, 3).join(', ')}</p> : null}
+    </div>
+  );
+}
+
+function CompactMeta({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <span className="font-semibold text-slate-500">{label}: </span>
+      <span>{value || 'None'}</span>
+    </div>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -814,6 +909,41 @@ function jsonList(value: JsonValue | null): string[] {
       return null;
     })
     .filter((item): item is string => Boolean(item?.trim()));
+}
+
+function asRecord(value: JsonValue | null | undefined): Record<string, JsonValue> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, JsonValue>)
+    : null;
+}
+
+function stringValue(value: JsonValue | undefined) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function signalMessages(value: JsonValue): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === 'string') return item;
+      const record = asRecord(item);
+      return stringValue(record?.message) ?? stringValue(record?.code);
+    })
+    .filter((item): item is string => Boolean(item));
+}
+
+function latestValidationRun(
+  runs: ReasoningDraftValidationRun[],
+  artifactId: string,
+) {
+  return runs.find((run) => run.artifactId === artifactId) ?? null;
+}
+
+function validationTone(tier: string): 'green' | 'amber' | 'rose' | 'muted' {
+  if (tier === 'HIGH_TRUST') return 'green';
+  if (tier === 'BLOCKED') return 'rose';
+  if (tier === 'LOW_TRUST') return 'amber';
+  return 'muted';
 }
 
 function firstString(...values: Array<JsonValue | undefined>) {

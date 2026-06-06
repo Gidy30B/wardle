@@ -8,6 +8,7 @@ import {
   generateDiagnosisEducationDraft,
   generateDiagnosisTeachingRuleCandidates,
   generateTargetedDiagnosisCase,
+  getReasoningDraftValidationRuns,
   getDiagnosisEditorialBrief,
   getDiagnosisEducationForAdmin,
   getDiagnosisEducationRevisions,
@@ -45,6 +46,7 @@ import {
   type GenerateTargetedCasePayload,
   type TeachingUnitCoverageMap,
   type JsonValue,
+  type ReasoningDraftValidationRun,
   type UpsertDiagnosisEducationPayload,
 } from '../../api/admin';
 import { ApiError, type ApiClient } from '../../api/client';
@@ -53,7 +55,7 @@ import LoadingState from '../../components/ui/LoadingState';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { useActionFeedback } from '../../hooks/useActionFeedback';
 import CaseDetailSection from './CaseDetailSection';
-import { formatDateLabel } from './cases.helpers';
+import { formatDateLabel, formatLabel } from './cases.helpers';
 import DiagnosisWorkspaceSummaryCard from './education/DiagnosisWorkspaceSummaryCard';
 import EditorialBriefCard from './education/EditorialBriefCard';
 import RevisionCompareCard from './education/RevisionCompareCard';
@@ -146,6 +148,9 @@ export default function DiagnosisEducationPanel({
   const [teachingRulesError, setTeachingRulesError] = useState<string | null>(
     null,
   );
+  const [draftValidationRuns, setDraftValidationRuns] = useState<
+    ReasoningDraftValidationRun[]
+  >([]);
   const [editorialBrief, setEditorialBrief] =
     useState<DiagnosisEditorialBriefResponse | null>(null);
   const [editorialBriefLoading, setEditorialBriefLoading] = useState(false);
@@ -226,6 +231,7 @@ export default function DiagnosisEducationPanel({
       setTeachingRules(null);
       setTeachingRulesLoading(false);
       setTeachingRulesError(null);
+      setDraftValidationRuns([]);
       setEditorialBrief(null);
       setEditorialBriefLoading(false);
       setEditorialBriefError(null);
@@ -258,6 +264,7 @@ export default function DiagnosisEducationPanel({
         setTeachingRulesError(null);
         setEditorialBriefError(null);
         setRevisionHistoryError(null);
+        setDraftValidationRuns([]);
         const response = await getDiagnosisEducationForAdmin(client, registryId);
         if (!active) {
           return;
@@ -349,6 +356,22 @@ export default function DiagnosisEducationPanel({
               ? error.message
               : 'Failed to load teaching rules.',
           );
+        }
+
+        try {
+          const validationRuns = await getReasoningDraftValidationRuns(client, {
+            diagnosisRegistryId: registryId,
+            limit: 50,
+          });
+          if (!active) {
+            return;
+          }
+          setDraftValidationRuns(validationRuns);
+        } catch {
+          if (!active) {
+            return;
+          }
+          setDraftValidationRuns([]);
         }
 
         try {
@@ -1080,6 +1103,11 @@ export default function DiagnosisEducationPanel({
               generateDisabled={!canGenerate || pendingAction !== null}
               generateLabel={generateLabel}
               pendingAction={pendingAction}
+              validationRun={latestValidationRun(
+                draftValidationRuns,
+                education?.id,
+                ['EDUCATION', 'EDUCATION_SECTION'],
+              )}
             />
 
             {isPublished ? (
@@ -1127,6 +1155,9 @@ export default function DiagnosisEducationPanel({
               onReviewRule={(ruleId, action) =>
                 void handleReviewTeachingRule(ruleId, action)
               }
+              validationRuns={draftValidationRuns.filter(
+                (run) => run.artifactType === 'TEACHING_RULE',
+              )}
             />
 
             <TeachingUnitCoverageCard
@@ -1325,6 +1356,7 @@ function HeaderState({
   generateDisabled,
   generateLabel,
   pendingAction,
+  validationRun,
   onCreateManually,
   onGenerate,
 }: {
@@ -1333,6 +1365,7 @@ function HeaderState({
   generateDisabled: boolean;
   generateLabel: string;
   pendingAction: string | null;
+  validationRun: ReasoningDraftValidationRun | null;
   onCreateManually: () => void;
   onGenerate: () => void;
 }) {
@@ -1375,6 +1408,8 @@ function HeaderState({
         <MetaTile label="Published" value={formatDateLabel(education.publishedAt)} />
         <MetaTile label="Updated" value={formatDateLabel(education.updatedAt)} />
       </div>
+      <EducationGeneratedBecause references={education.references} />
+      <DraftTrustBlock validationRun={validationRun} />
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -1385,6 +1420,50 @@ function HeaderState({
           {pendingAction === 'generate' ? 'Generating...' : generateLabel}
         </button>
       </div>
+    </div>
+  );
+}
+
+function DraftTrustBlock({
+  validationRun,
+}: {
+  validationRun: ReasoningDraftValidationRun | null;
+}) {
+  if (!validationRun) return null;
+  const warnings = signalMessages(validationRun.warnings);
+  const blockers = signalMessages(validationRun.blockers);
+  const risks = [
+    ...signalMessages(validationRun.hallucinationRiskSignals),
+    ...signalMessages(validationRun.unsupportedClaimSignals),
+  ];
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-slate-900">Validated against</span>
+        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${trustTone(validationRun.trustTier)}`}>
+          {formatLabel(validationRun.trustTier)}
+        </span>
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+          Trust {validationRun.trustScore}
+        </span>
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+          {formatLabel(validationRun.validationStatus)}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        <InlineMeta label="Path" value={validationRun.reasoningPathId ?? 'No active path'} />
+        <InlineMeta label="Artifact" value={formatLabel(validationRun.artifactType)} />
+        <InlineMeta label="Checked" value={formatDateLabel(validationRun.createdAt)} />
+      </div>
+      {blockers.length ? (
+        <p className="mt-2 text-rose-700">Blockers: {blockers.slice(0, 3).join(', ')}</p>
+      ) : null}
+      {warnings.length ? (
+        <p className="mt-1 text-amber-800">Warnings: {warnings.slice(0, 3).join(', ')}</p>
+      ) : null}
+      {risks.length ? (
+        <p className="mt-1 text-amber-800">Risk signals: {risks.slice(0, 3).join(', ')}</p>
+      ) : null}
     </div>
   );
 }
@@ -1448,6 +1527,67 @@ function MetaTile({ label, value }: { label: string; value: string }) {
         {label}
       </p>
       <p className="mt-2 text-sm font-semibold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function EducationGeneratedBecause({ references }: { references: JsonValue | null }) {
+  const metadata = latestGeneratedBecause(references);
+  if (!metadata) return null;
+  const constrained = metadata.constrained === true;
+  const warnings = jsonStringList(metadata.warnings);
+  const evidence = jsonStringList(metadata.discriminatorEvidenceUsed);
+  const gaps = jsonStringList(metadata.coverageGapsAddressed);
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-slate-900">Generated because</span>
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+            constrained
+              ? 'bg-emerald-100 text-emerald-800'
+              : 'bg-amber-100 text-amber-800'
+          }`}
+        >
+          {constrained ? 'Constrained' : 'Unconstrained'}
+        </span>
+        {typeof metadata.hallucinationRisk === 'string' ? (
+          <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-600">
+            Risk {metadata.hallucinationRisk}
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        <InlineMeta label="Goal" value={stringFromJson(metadata.reasoningGoal)} />
+        <InlineMeta
+          label="Path"
+          value={stringFromJson(metadata.reasoningPathId) ?? 'No active path'}
+        />
+        <InlineMeta
+          label="Section"
+          value={stringFromJson(metadata.section) ?? 'Full draft'}
+        />
+      </div>
+      {evidence.length ? (
+        <p className="mt-2">Discriminator evidence: {evidence.slice(0, 5).join(', ')}</p>
+      ) : null}
+      {gaps.length ? <p className="mt-1">Coverage gaps: {gaps.join(', ')}</p> : null}
+      {warnings.length ? (
+        <ul className="mt-2 list-disc space-y-1 pl-4 text-amber-800">
+          {warnings.slice(0, 5).map((warning) => (
+            <li key={warning}>{warning.replace(/_/g, ' ')}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function InlineMeta({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <span className="font-semibold text-slate-500">{label}: </span>
+      <span>{value || 'None'}</span>
     </div>
   );
 }
@@ -2144,6 +2284,62 @@ function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function latestGeneratedBecause(value: JsonValue | null) {
+  if (!Array.isArray(value)) return null;
+  for (const item of [...value].reverse()) {
+    const record = asRecord(item);
+    const generatedBecause = asRecord(record.generatedBecause);
+    if (Object.keys(generatedBecause).length) {
+      return generatedBecause as Record<string, JsonValue>;
+    }
+  }
+  return null;
+}
+
+function latestValidationRun(
+  runs: ReasoningDraftValidationRun[],
+  artifactId: string | undefined,
+  artifactTypes: ReasoningDraftValidationRun['artifactType'][],
+) {
+  if (!artifactId) return null;
+  return (
+    runs.find(
+      (run) =>
+        run.artifactId === artifactId && artifactTypes.includes(run.artifactType),
+    ) ?? null
+  );
+}
+
+function signalMessages(value: JsonValue): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === 'string') return item;
+      const record = asRecord(item);
+      return stringFromJson(record.message) ?? stringFromJson(record.code);
+    })
+    .filter((item): item is string => Boolean(item));
+}
+
+function trustTone(tier: string) {
+  if (tier === 'HIGH_TRUST') return 'bg-emerald-100 text-emerald-800';
+  if (tier === 'BLOCKED') return 'bg-rose-100 text-rose-800';
+  if (tier === 'LOW_TRUST') return 'bg-orange-100 text-orange-800';
+  return 'bg-amber-100 text-amber-800';
+}
+
+function jsonStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+}
+
+function stringFromJson(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : null;
 }
 
 function stringField(record: Record<string, unknown>, key: string): string | null {

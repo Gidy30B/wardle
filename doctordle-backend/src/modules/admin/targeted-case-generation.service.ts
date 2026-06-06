@@ -4,6 +4,8 @@ import { PrismaService } from '../../core/db/prisma.service';
 import { CaseGeneratorService } from '../case-generator/case-generator.service';
 import type { GenerateCaseInput } from '../case-generator/case-generator.types';
 import { CaseReviewService } from './case-review.service';
+import { ReasoningDraftValidationService } from './reasoning-draft-validation.service';
+import { ReasoningPathService } from './reasoning-path.service';
 import { TeachingRulesAdminService } from './teaching-rules-admin.service';
 
 export type TargetedCaseDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
@@ -12,6 +14,7 @@ export type TargetedCaseGenerationPayload = {
   difficulty: TargetedCaseDifficulty;
   teachingUnitIds: string[];
   mimicDiagnosisIds?: string[];
+  reasoningPathId?: string;
   clueRevealStrategy?: GenerateCaseInput['clueRevealStrategy'];
 };
 
@@ -22,6 +25,8 @@ export class TargetedCaseGenerationService {
     private readonly caseGenerator: CaseGeneratorService,
     private readonly caseReviewService: CaseReviewService,
     private readonly teachingRulesAdminService?: TeachingRulesAdminService,
+    private readonly reasoningPathService?: ReasoningPathService,
+    private readonly reasoningDraftValidationService?: ReasoningDraftValidationService,
   ) {}
 
   async generate(input: {
@@ -39,6 +44,11 @@ export class TargetedCaseGenerationService {
       teachingUnitIds,
     );
     const mimics = await this.resolveMimics(mimicDiagnosisIds);
+    const reasoningPathContext = input.payload.reasoningPathId
+      ? await this.reasoningPathService?.buildCaseGenerationContext(
+          this.uuid(input.payload.reasoningPathId, 'reasoningPathId'),
+        )
+      : undefined;
     const result = await this.caseGenerator.generateBatch({
       count: 1,
       difficulty: input.payload.difficulty.toLowerCase(),
@@ -47,6 +57,7 @@ export class TargetedCaseGenerationService {
       targetedCase: {
         teachingUnitIds,
         mimics,
+        reasoningPathContext,
         clueRevealStrategy: input.payload.clueRevealStrategy,
       },
     });
@@ -64,11 +75,17 @@ export class TargetedCaseGenerationService {
     const generatedCase = await this.caseReviewService.getCaseDetail(
       created.caseId,
     );
+    const draftValidation =
+      await this.reasoningDraftValidationService?.runAfterGeneration({
+        artifactType: 'CASE',
+        artifactId: created.caseId,
+      });
 
     return {
       result,
       generatedCase,
       validation: generatedCase.validationRuns?.[0] ?? null,
+      draftValidation,
       qualityProjection: generatedCase.qualityProjection ?? null,
     };
   }

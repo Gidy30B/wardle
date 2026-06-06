@@ -9,6 +9,7 @@ import {
 import {
   DiagnosisEducationSource,
   DiagnosisEducationStatus,
+  GenerationPurpose,
   Prisma,
   type DiagnosisEducation,
   type DiagnosisRegistry,
@@ -24,6 +25,11 @@ import { GenerationContextBuilder } from '../editorial/generation-context-builde
 import { EditorialIntentProjectionService } from '../editorial/editorial-intent-projection.service';
 import { DiagnosisGraphExtractionService } from '../diagnosis-graph/diagnosis-graph-extraction.service';
 import { DifferentialMappingService } from '../diagnosis-graph/differential-mapping.service';
+import {
+  ReasoningPathService,
+  type EducationalReasoningGenerationContext,
+} from '../admin/reasoning-path.service';
+import { ReasoningDraftValidationService } from '../admin/reasoning-draft-validation.service';
 import type { ReviewDiagnosisEducationDto } from './dto/review-diagnosis-education.dto';
 import type { UpsertDiagnosisEducationDto } from './dto/upsert-diagnosis-education.dto';
 import {
@@ -434,6 +440,8 @@ export class DiagnosisEducationService {
     private readonly educationEditorialPatternsService: EducationEditorialPatternsService = new EducationEditorialPatternsService(),
     private readonly educationSchemaContractService: EducationSchemaContractService = new EducationSchemaContractService(),
     private readonly differentialMappingService?: DifferentialMappingService,
+    private readonly reasoningPathService?: ReasoningPathService,
+    private readonly reasoningDraftValidationService?: ReasoningDraftValidationService,
   ) {
     const env = getEnv();
     if (env.OPENAI_API_KEY) {
@@ -918,6 +926,11 @@ export class DiagnosisEducationService {
         diagnosisRegistryId,
         purpose: 'education',
       });
+      const reasoningContext =
+        await this.reasoningPathService?.buildEducationalGenerationContext({
+          diagnosisRegistryId,
+          purpose: GenerationPurpose.EDUCATION_GENERATION,
+        });
       const compactGenerationContext =
         this.educationSchemaContractService.compactGenerationContext(
           generationContext as unknown as Record<string, unknown>,
@@ -933,6 +946,12 @@ export class DiagnosisEducationService {
           mimicCount: generationContext.mimics.length,
           discriminatorCount: generationContext.discriminators.length,
           sourceSummary: generationContext.sourceSummary,
+          constrained: reasoningContext?.constrained ?? false,
+          reasoningPathId: reasoningContext?.reasoningPathId ?? null,
+          reasoningWarnings:
+            reasoningContext?.warnings ?? [
+              'No reasoning path service was available.',
+            ],
         }),
       );
       const request: ChatCompletionCreateParamsNonStreaming = {
@@ -1002,6 +1021,8 @@ export class DiagnosisEducationService {
               appendicitisAllocationExample:
                 'summary=appendix inflammation/takeaway; clinicalPattern=Periumbilical pain -> RLQ pain -> movement sensitivity -> focal peritonism; keySigns=McBurney/Rovsing/psoas/obturator; examPearls=mechanisms; investigations=WBC/CRP/USS/CT interpretation traps; scoringSystems=Alvarado/MANTRELS; management=action principles; pitfalls=normal early WBC/retrocecal anatomy/perforation reassurance.',
               compactGenerationContext,
+              constrainedReasoningContext:
+                this.promptReasoningContext(reasoningContext),
               exampleCases: this.toEducationExampleCaseSummaries(
                 this.asArray((registry as Record<string, unknown>).cases),
                 registry.displayLabel,
@@ -1036,6 +1057,7 @@ export class DiagnosisEducationService {
                 'recallPrompts must be objects with id, type, prompt, answer, sourceSection, and difficulty.',
                 'Recall prompts must include at least one WHY_IT_MATTERS prompt.',
                 'Recall prompts should include at least one DISTINGUISH prompt when meaningful differentials exist.',
+                'Use constrainedReasoningContext to teach discriminators, escalation signals, reasoning pivots, and evidence contrasts. If constrainedReasoningContext is unconstrained, avoid adding unsupported discriminator claims.',
                 'Clinical pattern must include illness script, context, tempo, and relevant atypical presentations without detailed signs, labs, or management.',
                 'Key signs must be named/high-value bedside signs only.',
                 'Exam pearls must prioritize why exam findings matter, not validated scores or repeated signs.',
@@ -1070,6 +1092,10 @@ export class DiagnosisEducationService {
         normalized,
         diagnosisRegistryId,
       );
+      const validatedDraftWithMetadata = this.attachEducationGenerationMetadata(
+        validatedDraft,
+        reasoningContext,
+      );
       this.logger.log(
         JSON.stringify({
           event: 'diagnosis_education.generate.validation_completed',
@@ -1080,7 +1106,7 @@ export class DiagnosisEducationService {
 
       const qualityStartedAt = Date.now();
       const draftQuality = this.educationDraftQualityValidator.validate({
-        draft: validatedDraft,
+        draft: validatedDraftWithMetadata,
         guidance: knowledgeGuidance,
         teachingRules,
       });
@@ -1096,6 +1122,9 @@ export class DiagnosisEducationService {
         ...new Set([
           ...this.collectEducationQualityWarnings(validatedDraft),
           ...draftQuality.warnings,
+          ...(reasoningContext?.reasoningQualityWarnings ?? [
+            'unconstrained_educational_generation',
+          ]),
         ]),
       ].sort();
       if (qualityWarnings.length) {
@@ -1106,9 +1135,25 @@ export class DiagnosisEducationService {
             warnings: qualityWarnings,
             blockers: draftQuality.blockers,
             scores: draftQuality.scores,
+            constrained: reasoningContext?.constrained ?? false,
+            reasoningPathId: reasoningContext?.reasoningPathId ?? null,
           }),
         );
       }
+      this.logger.log(
+        JSON.stringify({
+          event: reasoningContext?.constrained
+            ? 'diagnosis_education.generate.constrained'
+            : 'diagnosis_education.generate.unconstrained_fallback',
+          diagnosisRegistryId,
+          reasoningPathId: reasoningContext?.reasoningPathId ?? null,
+          hallucinationRisk: reasoningContext?.hallucinationRisk ?? 'high',
+          warnings:
+            reasoningContext?.warnings ?? [
+              'No reasoning path service was available.',
+            ],
+        }),
+      );
 
       const education = await this.prisma.$transaction(async (tx) => {
         if (existing?.editorialStatus === DiagnosisEducationStatus.PUBLISHED) {
@@ -1119,7 +1164,7 @@ export class DiagnosisEducationService {
           ? await tx.diagnosisEducation.update({
               where: { id: existing.id },
               data: {
-                ...this.buildWriteData(validatedDraft, {
+                ...this.buildWriteData(validatedDraftWithMetadata, {
                   title: registry.displayLabel,
                   status: DiagnosisEducationStatus.NEEDS_REVIEW,
                   source: DiagnosisEducationSource.AI_ASSISTED,
@@ -1133,14 +1178,14 @@ export class DiagnosisEducationService {
             })
           : await tx.diagnosisEducation.create({
               data: {
-                ...this.buildWriteData(validatedDraft, {
+                ...this.buildWriteData(validatedDraftWithMetadata, {
                   title: registry.displayLabel,
                   status: DiagnosisEducationStatus.NEEDS_REVIEW,
                   source: DiagnosisEducationSource.AI_ASSISTED,
                   version: 1,
                 }),
                 diagnosisRegistryId,
-                summary: validatedDraft.summary,
+                summary: validatedDraftWithMetadata.summary,
                 generatedAt: new Date(),
                 reviewedAt: null,
                 reviewedByUserId: null,
@@ -1153,10 +1198,96 @@ export class DiagnosisEducationService {
       });
 
       await this.refreshDifferentialMappings(education.id);
+      await this.reasoningDraftValidationService?.runAfterGeneration({
+        artifactType: 'EDUCATION',
+        artifactId: education.id,
+      });
       return education;
     } finally {
       this.educationGenerationLocks.delete(diagnosisRegistryId);
     }
+  }
+
+  private promptReasoningContext(
+    reasoningContext?: EducationalReasoningGenerationContext,
+  ) {
+    if (!reasoningContext) {
+      return {
+        constrained: false,
+        confidence: 'lower',
+        hallucinationRisk: 'high',
+        warnings: ['No reasoning path service was available.'],
+        promptConstraints: [
+          'Do not invent discriminator or escalation claims without evidence support.',
+        ],
+      };
+    }
+    return {
+      constrained: reasoningContext.constrained,
+      confidence: reasoningContext.confidence,
+      hallucinationRisk: reasoningContext.hallucinationRisk,
+      reasoningPathId: reasoningContext.reasoningPathId,
+      reasoningGoal: reasoningContext.reasoningGoal,
+      requiredTeachingPoints: reasoningContext.requiredTeachingPoints,
+      discriminatorEvidenceUsed: reasoningContext.discriminatorEvidenceUsed,
+      contradictoryDiagnosisIds: reasoningContext.contradictoryDiagnosisIds,
+      coverageGapsAddressed: reasoningContext.coverageGapsAddressed,
+      plannerRecommendations: reasoningContext.plannerRecommendations,
+      warnings: reasoningContext.warnings,
+      promptConstraints: reasoningContext.promptConstraints,
+    };
+  }
+
+  private attachEducationGenerationMetadata(
+    draft: ValidatedEducationDraft,
+    reasoningContext?: EducationalReasoningGenerationContext,
+  ): ValidatedEducationDraft {
+    const metadata = this.educationGenerationMetadata(reasoningContext);
+    return {
+      ...draft,
+      references: [
+        ...this.asArray(draft.references).filter(
+          (item): item is string => typeof item === 'string',
+        ),
+        metadata,
+      ] as Prisma.InputJsonValue,
+    };
+  }
+
+  private educationGenerationMetadata(
+    reasoningContext?: EducationalReasoningGenerationContext,
+  ): Prisma.InputJsonValue {
+    if (!reasoningContext) {
+      return {
+        generatedBecause: {
+          constrained: false,
+          confidence: 'lower',
+          hallucinationRisk: 'high',
+          warnings: ['No reasoning path service was available.'],
+        },
+      };
+    }
+    return {
+      generatedBecause: {
+        constrained: reasoningContext.constrained,
+        confidence: reasoningContext.confidence,
+        hallucinationRisk: reasoningContext.hallucinationRisk,
+        reasoningPathId: reasoningContext.reasoningPathId,
+        reasoningGoal: reasoningContext.reasoningGoal,
+        sourceTeachingRelationshipIds:
+          reasoningContext.sourceTeachingRelationshipIds,
+        sourceEvidenceRelationshipIds:
+          reasoningContext.sourceEvidenceRelationshipIds,
+        coverageGapsAddressed: reasoningContext.coverageGapsAddressed,
+        discriminatorEvidenceUsed: reasoningContext.discriminatorEvidenceUsed,
+        generationCoverageSnapshot:
+          reasoningContext.generationCoverageSnapshot,
+        plannerRecommendations: reasoningContext.plannerRecommendations,
+        warnings: reasoningContext.warnings,
+        reasoningQualityWarnings:
+          reasoningContext.reasoningQualityWarnings,
+      },
+    };
   }
 
   private parseGeneratedDraft(

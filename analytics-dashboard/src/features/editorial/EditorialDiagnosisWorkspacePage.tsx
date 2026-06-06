@@ -9,6 +9,7 @@ import {
   generateDiagnosisTeachingRuleCandidates,
   generateDiagnosisTeachingRelationshipCandidates,
   generateEvidenceGraphCandidates,
+  generateReasoningPathCandidates,
   generateTargetedDiagnosisCase,
   getDiagnosisEditorialBrief,
   getDiagnosisEditorialWorkspace,
@@ -17,6 +18,7 @@ import {
   reviewDiagnosisTeachingRule,
   reviewDiagnosisTeachingRelationship,
   reviewEvidenceGraphRelationship,
+  reviewReasoningPath,
   seedLegacyDiagnosisTeachingRules,
   updateDiagnosisRegistryLifecycle,
   updateDiagnosisEditorialBrief,
@@ -35,6 +37,8 @@ import {
   type EvidenceGraphReviewAction,
   type DiagnosisTeachingRelationship,
   type DiagnosisTeachingRelationshipReviewAction,
+  type ReasoningPath,
+  type ReasoningPathReviewAction,
   type DiagnosisTeachingRuleReviewAction,
   type DiagnosisTeachingRulesResponse,
   type DiagnosisTeachingRuleWritePayload,
@@ -680,6 +684,7 @@ export default function EditorialDiagnosisWorkspacePage() {
               access={access}
               client={client}
               onRefresh={refreshWorkspace}
+              onGenerateTargetedCase={handleGenerateTargetedCase}
               showError={showError}
               showPending={showPending}
               showSuccess={showSuccess}
@@ -1931,6 +1936,7 @@ function GraphTab({
   access,
   client,
   onRefresh,
+  onGenerateTargetedCase,
   showError,
   showPending,
   showSuccess,
@@ -1941,6 +1947,7 @@ function GraphTab({
   access: ConsoleAccessState;
   client: ApiClient;
   onRefresh: () => Promise<void>;
+  onGenerateTargetedCase: (payload: GenerateTargetedCasePayload) => void;
   showError: (message: string) => void;
   showPending: (message: string) => void;
   showSuccess: (message: string) => void;
@@ -1969,6 +1976,17 @@ function GraphTab({
         access={access}
         client={client}
         onRefresh={onRefresh}
+        showError={showError}
+        showPending={showPending}
+        showSuccess={showSuccess}
+      />
+      <ReasoningPathsPanel
+        diagnosisRegistryId={workspace.diagnosis.id}
+        paths={workspace.reasoningPaths ?? []}
+        access={access}
+        client={client}
+        onRefresh={onRefresh}
+        onGenerateTargetedCase={onGenerateTargetedCase}
         showError={showError}
         showPending={showPending}
         showSuccess={showSuccess}
@@ -2040,6 +2058,18 @@ function EvidenceCoveragePanel({
             label: 'Education coverage',
             value: `${coverage.coverageBreakdown.educationEvidenceCoverage}%`,
           },
+          {
+            label: 'Low-trust drafts',
+            value: coverage.coverageBreakdown.lowTrustDraftCount,
+          },
+          {
+            label: 'Blocked drafts',
+            value: coverage.coverageBreakdown.blockedDraftCount,
+          },
+          {
+            label: 'Risk signals',
+            value: coverage.coverageBreakdown.hallucinationRiskDraftCount,
+          },
         ]}
       />
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
@@ -2077,6 +2107,17 @@ function EvidenceCoveragePanel({
           </p>
           <p className="mt-2 text-sm text-amber-900">
             {coverage.generationHooks.suggestedGenerationPrerequisites.join(', ')}
+          </p>
+        </div>
+      ) : null}
+      {coverage.generationHooks.suggestedDraftValidationReview ? (
+        <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-orange-800">
+            Draft trust review
+          </p>
+          <p className="mt-2 text-sm text-orange-900">
+            Low-trust, blocked, or hallucination-risk generated drafts need
+            senior review or regeneration before publication decisions.
           </p>
         </div>
       ) : null}
@@ -2495,6 +2536,273 @@ function TeachingRelationshipPanel({
         </div>
       )}
     </section>
+  );
+}
+
+function ReasoningPathsPanel({
+  diagnosisRegistryId,
+  paths,
+  access,
+  client,
+  onRefresh,
+  onGenerateTargetedCase,
+  showError,
+  showPending,
+  showSuccess,
+}: {
+  diagnosisRegistryId: string;
+  paths: ReasoningPath[];
+  access: ConsoleAccessState;
+  client: ApiClient;
+  onRefresh: () => Promise<void>;
+  onGenerateTargetedCase: (payload: GenerateTargetedCasePayload) => void;
+  showError: (message: string) => void;
+  showPending: (message: string) => void;
+  showSuccess: (message: string) => void;
+}) {
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const canReview = access.canPublishEditorial;
+  const activePathGroups = groupReasoningPaths(
+    paths.filter(
+      (path) => path.status !== 'DEPRECATED' && path.status !== 'REJECTED',
+    ),
+  );
+  const inactivePaths = paths.filter(
+    (path) => path.status === 'DEPRECATED' || path.status === 'REJECTED',
+  );
+
+  async function generateCandidates() {
+    try {
+      setBusyAction('generate');
+      showPending('Generating reasoning path candidates...');
+      const result = await generateReasoningPathCandidates(
+        client,
+        diagnosisRegistryId,
+      );
+      await onRefresh();
+      showSuccess(`Generated ${result.createdCount} reasoning path candidates.`);
+    } catch (error) {
+      showError(errorMessage(error, 'Failed to generate reasoning paths.'));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function reviewPath(id: string, action: ReasoningPathReviewAction) {
+    try {
+      setBusyAction(`${action}:${id}`);
+      showPending('Updating reasoning path...');
+      await reviewReasoningPath(client, id, action);
+      await onRefresh();
+      showSuccess('Reasoning path updated.');
+    } catch (error) {
+      showError(errorMessage(error, 'Failed to update reasoning path.'));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">Reasoning paths</p>
+          <p className="text-xs text-slate-500">
+            Constrained draft contexts grounded in reviewed relationships and evidence.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={generateCandidates}
+          disabled={busyAction !== null}
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Generate paths
+        </button>
+      </div>
+      {paths.length ? (
+        <div className="space-y-4 p-4">
+          {activePathGroups.map(([purpose, groupedPaths]) => (
+            <div key={purpose}>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  {formatLabel(purpose)}
+                </p>
+                <span className="text-xs text-slate-500">
+                  {groupedPaths.length} paths
+                </span>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                {groupedPaths.slice(0, 12).map((path) => (
+                  <ReasoningPathCard
+                    key={path.id}
+                    path={path}
+                    busyAction={busyAction}
+                    canReview={canReview}
+                    onReview={reviewPath}
+                    onGenerateTargetedCase={onGenerateTargetedCase}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+          {inactivePaths.length ? (
+            <details className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                Deprecated and rejected paths ({inactivePaths.length})
+              </summary>
+              <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                {inactivePaths.slice(0, 12).map((path) => (
+                  <ReasoningPathCard
+                    key={path.id}
+                    path={path}
+                    busyAction={busyAction}
+                    canReview={canReview}
+                    onReview={reviewPath}
+                    onGenerateTargetedCase={onGenerateTargetedCase}
+                  />
+                ))}
+              </div>
+            </details>
+          ) : null}
+        </div>
+      ) : (
+        <div className="px-4 py-6 text-sm text-slate-500">
+          No reasoning paths have been generated for this diagnosis yet.
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ReasoningPathCard({
+  path,
+  busyAction,
+  canReview,
+  onReview,
+  onGenerateTargetedCase,
+}: {
+  path: ReasoningPath;
+  busyAction: string | null;
+  canReview: boolean;
+  onReview: (id: string, action: ReasoningPathReviewAction) => void;
+  onGenerateTargetedCase: (payload: GenerateTargetedCasePayload) => void;
+}) {
+  return (
+    <div
+      className={[
+        'rounded-lg border p-3',
+        path.status === 'ACTIVE'
+          ? 'border-emerald-200 bg-emerald-50'
+          : path.status === 'CANDIDATE'
+            ? 'border-slate-200 bg-slate-50'
+            : 'border-slate-200 bg-white opacity-75',
+      ].join(' ')}
+    >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-slate-900">{path.title}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {formatLabel(path.reasoningGoal)} ·{' '}
+                    {formatLabel(path.generationPurpose)}
+                  </p>
+                </div>
+                <StatusBadge
+                  status={`${path.readinessScore}% ${path.readinessTier}`}
+                  tone={path.readinessTier === 'weak' ? 'warning' : 'info'}
+                />
+              </div>
+              <MetricGrid
+                items={[
+                  {
+                    label: 'Differentials',
+                    value: path.primaryDifferentialIds.length,
+                  },
+                  {
+                    label: 'Teaching links',
+                    value: path.supportingTeachingRelationshipIds.length,
+                  },
+                  {
+                    label: 'Evidence links',
+                    value: path.supportingEvidenceRelationshipIds.length,
+                  },
+                  {
+                    label: 'Discriminators',
+                    value: path.discriminatorEvidenceNodeIds.length,
+                  },
+                ]}
+              />
+              {path.readinessReasons?.length ? (
+                <p className="mt-2 text-xs text-slate-600">
+                  {path.readinessReasons.slice(0, 3).join(' · ')}
+                </p>
+              ) : null}
+              <EvidenceList
+                title="Required teaching points"
+                items={path.requiredTeachingPoints}
+                empty="No required teaching points attached."
+              />
+              <EvidenceList
+                title="Forbidden shortcuts"
+                items={[
+                  ...path.forbiddenEvidencePatterns,
+                  ...(path.reasoningQualityWarnings ?? []),
+                ]}
+                empty="No forbidden reasoning patterns attached."
+              />
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <StatusBadge
+                  status={formatLabel(path.status)}
+                  tone={path.status === 'ACTIVE' ? 'success' : 'neutral'}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <RelationshipActionButton
+                    label="Activate"
+                    disabled={!canReview || busyAction !== null}
+                    onClick={() => onReview(path.id, 'activate')}
+                  />
+                  <RelationshipActionButton
+                    label="Reject"
+                    disabled={!canReview || busyAction !== null}
+                    onClick={() => onReview(path.id, 'reject')}
+                  />
+                  <RelationshipActionButton
+                    label="Deprecate"
+                    disabled={!canReview || busyAction !== null}
+                    onClick={() => onReview(path.id, 'deprecate')}
+                  />
+                  <RelationshipActionButton
+                    label="Draft case"
+                    disabled={
+                      busyAction !== null ||
+                      path.generationPurpose !== 'CASE_GENERATION' ||
+                      path.status !== 'ACTIVE'
+                    }
+                    onClick={() =>
+                      onGenerateTargetedCase({
+                        difficulty: 'MEDIUM',
+                        teachingUnitIds: [],
+                        reasoningPathId: path.id,
+                        clueRevealStrategy: 'late_discriminator',
+                      })
+                    }
+                  />
+                </div>
+              </div>
+    </div>
+  );
+}
+
+function groupReasoningPaths(paths: ReasoningPath[]) {
+  const grouped = new Map<string, ReasoningPath[]>();
+  for (const path of paths) {
+    grouped.set(path.generationPurpose, [
+      ...(grouped.get(path.generationPurpose) ?? []),
+      path,
+    ]);
+  }
+  return [...grouped.entries()].sort(([left], [right]) =>
+    left.localeCompare(right),
   );
 }
 

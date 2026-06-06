@@ -161,6 +161,7 @@ export type GenerateTargetedCasePayload = {
   difficulty: TargetedCaseDifficulty;
   teachingUnitIds: string[];
   mimicDiagnosisIds?: string[];
+  reasoningPathId?: string;
   clueRevealStrategy?: ClueRevealStrategy;
 };
 
@@ -689,6 +690,72 @@ export type DiagnosisTeachingRelationshipGenerateResult = {
   existingCount: number;
   skippedCount: number;
   relationships: DiagnosisTeachingRelationship[];
+};
+
+export type ReasoningGoal =
+  | 'DIFFERENTIAL_DISCRIMINATION'
+  | 'ESCALATION_RECOGNITION'
+  | 'MANAGEMENT_CONTRAST'
+  | 'COMPLICATION_RECOGNITION'
+  | 'EARLY_PRESENTATION_RECOGNITION'
+  | 'RESOURCE_LIMITED_REASONING';
+
+export type GenerationPurpose =
+  | 'CASE_GENERATION'
+  | 'TEACHING_RULE_GENERATION'
+  | 'EDUCATION_GENERATION'
+  | 'RECALL_GENERATION';
+
+export type ReasoningPathStatus =
+  | 'CANDIDATE'
+  | 'ACTIVE'
+  | 'REJECTED'
+  | 'DEPRECATED';
+
+export type ReasoningPath = {
+  id: string;
+  diagnosisRegistryId: string;
+  diagnosisName: string;
+  normalizedKey: string;
+  title: string;
+  reasoningGoal: ReasoningGoal;
+  primaryDifferentialIds: string[];
+  supportingTeachingRelationshipIds: string[];
+  supportingEvidenceRelationshipIds: string[];
+  discriminatorEvidenceNodeIds: string[];
+  escalationEvidenceNodeIds: string[];
+  contradictoryEvidenceNodeIds: string[];
+  requiredTeachingPoints: string[];
+  forbiddenEvidencePatterns: string[];
+  recommendedClueDistribution: Record<string, number>;
+  generationPurpose: GenerationPurpose;
+  readinessScore: number;
+  readinessTier: 'ready' | 'partial' | 'weak' | string;
+  readinessReasons: string[];
+  reasoningQualityWarnings: string[];
+  status: ReasoningPathStatus;
+  reviewedByUser: {
+    id: string;
+    email: string | null;
+    username: string | null;
+  } | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ReasoningPathReviewAction =
+  | 'activate'
+  | 'reject'
+  | 'deprecate'
+  | 'needs_review';
+
+export type ReasoningPathGenerateResult = {
+  createdCount: number;
+  updatedCount: number;
+  existingCount: number;
+  skippedCount: number;
+  paths: ReasoningPath[];
 };
 
 export type EvidenceNode = {
@@ -1441,6 +1508,7 @@ export type DiagnosisEditorialWorkspace = {
     relationships: DiagnosisEvidenceRelationship[];
   };
   evidenceCoverage: EvidenceCoverageDiagnosis | null;
+  reasoningPaths: ReasoningPath[];
   linkedDifferentials?: StructuredDifferentialLink[];
   editorialLearning: {
     available: boolean;
@@ -1683,7 +1751,62 @@ export type EvidenceCoverageWeakness =
   | 'missing_lab_discriminator'
   | 'weak_escalation_evidence'
   | 'weak_complication_evidence'
-  | 'missing_management_contrast';
+  | 'missing_management_contrast'
+  | 'missing_reasoning_path_coverage'
+  | 'weak_reasoning_diversity'
+  | 'missing_constrained_teaching_rule_generation'
+  | 'missing_constrained_education_generation'
+  | 'unconstrained_educational_draft'
+  | 'low_trust_generated_draft'
+  | 'blocked_generated_draft'
+  | 'hallucination_risk_generated_draft';
+
+export type ReasoningDraftArtifactType =
+  | 'CASE'
+  | 'TEACHING_RULE'
+  | 'EDUCATION'
+  | 'EDUCATION_SECTION';
+
+export type ReasoningDraftTrustTier =
+  | 'HIGH_TRUST'
+  | 'REVIEW_REQUIRED'
+  | 'LOW_TRUST'
+  | 'BLOCKED';
+
+export type ReasoningDraftValidationStatus =
+  | 'PASSED'
+  | 'NEEDS_REVIEW'
+  | 'FAILED';
+
+export type ReasoningDraftValidationRun = {
+  id: string;
+  artifactType: ReasoningDraftArtifactType;
+  artifactId: string;
+  diagnosisRegistryId: string;
+  reasoningPathId: string | null;
+  trustScore: number;
+  trustTier: ReasoningDraftTrustTier;
+  validationStatus: ReasoningDraftValidationStatus;
+  blockers: JsonValue;
+  warnings: JsonValue;
+  strengths: JsonValue;
+  hallucinationRiskSignals: JsonValue;
+  reasoningCoverage: JsonValue;
+  evidenceCoverage: JsonValue;
+  discriminatorCoverage: JsonValue;
+  unsupportedClaimSignals: JsonValue;
+  recommendations: JsonValue;
+  validatorVersion: string;
+  createdAt: string;
+};
+
+export type ReasoningDraftValidationFilters = {
+  artifactType?: ReasoningDraftArtifactType | '';
+  diagnosisRegistryId?: string;
+  trustTier?: ReasoningDraftTrustTier | '';
+  validationStatus?: ReasoningDraftValidationStatus | '';
+  limit?: number;
+};
 
 export type EvidenceCoverageFilters = {
   specialty?: string;
@@ -1716,6 +1839,14 @@ export type EvidenceCoverageDiagnosis = {
   coverageScore: number;
   coverageBreakdown: {
     evidenceNodeCount: number;
+    activeReasoningPathCount: number;
+    reasoningPathGoalDiversity: number;
+    constrainedTeachingRuleCount: number;
+    constrainedEducationGenerationCount: number;
+    unconstrainedEducationGenerationCount: number;
+    lowTrustDraftCount: number;
+    blockedDraftCount: number;
+    hallucinationRiskDraftCount: number;
     discriminatorEvidenceCount: number;
     evidenceDiversityCount: number;
     teachingRelationshipEvidenceCoverage: number;
@@ -1745,6 +1876,8 @@ export type EvidenceCoverageDiagnosis = {
     suggestedEvidenceExpansion: boolean;
     suggestedDiscriminatorCoverage: boolean;
     suggestedReasoningPathCoverage: boolean;
+    suggestedEducationalConstraintCoverage: boolean;
+    suggestedDraftValidationReview: boolean;
     suggestedGenerationPrerequisites: string[];
   };
   targetUrl: string;
@@ -2170,6 +2303,8 @@ export type DiagnosisTeachingRule = {
   requiredDifferentials: JsonValue | null;
   expectedEvidence: JsonValue | null;
   difficultyHints: JsonValue | null;
+  generationMetadata?: JsonValue | null;
+  reasoningQualityWarnings?: string[];
   avoidTooEarly: boolean;
   appliesToEducation: boolean;
   appliesToCaseGeneration: boolean;
@@ -2206,6 +2341,7 @@ export type DiagnosisTeachingRuleWritePayload = {
 export type DiagnosisTeachingRuleGenerateResult = {
   diagnosisRegistryId: string;
   generatedCount: number;
+  generationMetadata?: JsonValue | null;
   rules: DiagnosisTeachingRule[];
 };
 

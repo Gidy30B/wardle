@@ -53,6 +53,11 @@ import {
   type EvidenceCoverageQuery,
 } from './evidence-coverage.service';
 import {
+  ReasoningPathService,
+  type ReasoningPathReviewAction,
+} from './reasoning-path.service';
+import { ReasoningDraftValidationService } from './reasoning-draft-validation.service';
+import {
   TargetedCaseGenerationService,
   type TargetedCaseGenerationPayload,
 } from './targeted-case-generation.service';
@@ -108,6 +113,7 @@ export class AdminController {
     private readonly diagnosisTeachingRelationshipService: DiagnosisTeachingRelationshipService,
     private readonly evidenceGraphService: EvidenceGraphService,
     private readonly evidenceCoverageService: EvidenceCoverageService,
+    private readonly reasoningPathService: ReasoningPathService,
     private readonly diagnosisEditorialBriefService: DiagnosisEditorialBriefService,
     private readonly differentialMappingService: DifferentialMappingService,
     private readonly diagnosisRegistryCandidateService: DiagnosisRegistryCandidateService,
@@ -115,6 +121,7 @@ export class AdminController {
     private readonly diagnosisRegistryLifecyclePolicyService: DiagnosisRegistryLifecyclePolicyService,
     private readonly diagnosisRegistryMergeAnalysisService: DiagnosisRegistryMergeAnalysisService,
     private readonly diagnosisRegistryMergeExecutionService: DiagnosisRegistryMergeExecutionService,
+    private readonly reasoningDraftValidationService?: ReasoningDraftValidationService,
   ) {}
 
   @Get('cases')
@@ -442,6 +449,88 @@ export class AdminController {
     diagnosisRegistryId: string,
   ) {
     return this.evidenceCoverageService.getDiagnosis(diagnosisRegistryId);
+  }
+
+  @Get('reasoning-paths')
+  @EditorialAccess()
+  async listReasoningPaths(
+    @Query('diagnosisRegistryId') diagnosisRegistryId?: string,
+    @Query('generationPurpose') generationPurpose?: string,
+    @Query('reasoningGoal') reasoningGoal?: string,
+    @Query('status') status?: string,
+    @Query('readinessTier') readinessTier?: string,
+  ) {
+    return this.reasoningPathService.listPaths({
+      diagnosisRegistryId,
+      generationPurpose,
+      reasoningGoal,
+      status,
+      readinessTier,
+    });
+  }
+
+  @Post('reasoning-paths/candidates/generate')
+  @EditorialAccess()
+  async generateReasoningPathCandidates(
+    @Body() body: { diagnosisRegistryId?: string } = {},
+  ) {
+    return this.reasoningPathService.generateCandidates({
+      diagnosisRegistryId: body.diagnosisRegistryId,
+    });
+  }
+
+  @Get('reasoning-paths/:id/generation-context')
+  @EditorialAccess()
+  async getReasoningPathGenerationContext(
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.reasoningPathService.buildGenerationContext(id);
+  }
+
+  @Post('reasoning-paths/:id/review')
+  @SeniorEditorialAccess()
+  async reviewReasoningPath(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: { action?: ReasoningPathReviewAction },
+  ) {
+    return this.reasoningPathService.reviewPath(id, request.user.id, body);
+  }
+
+  @Post('reasoning-draft-validation/run')
+  @EditorialAccess()
+  async runReasoningDraftValidation(
+    @Body()
+    body: {
+      artifactType?: string;
+      artifactId?: string;
+    },
+  ) {
+    if (!body.artifactType || !body.artifactId) {
+      throw new BadRequestException('artifactType and artifactId are required');
+    }
+    return this.reasoningDraftValidationService!.runForArtifact({
+      artifactType: body.artifactType,
+      artifactId: body.artifactId,
+    });
+  }
+
+  @Get('reasoning-draft-validation')
+  @EditorialAccess()
+  async listReasoningDraftValidationRuns(
+    @Query('artifactType') artifactType?: string,
+    @Query('diagnosisRegistryId') diagnosisRegistryId?: string,
+    @Query('trustTier') trustTier?: string,
+    @Query('validationStatus') validationStatus?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.reasoningDraftValidationService!.listRuns({
+      artifactType,
+      diagnosisRegistryId,
+      trustTier,
+      validationStatus,
+      limit: limit ? Number(limit) : undefined,
+    });
   }
 
   @Post('diagnosis-teaching-relationships/candidates/generate')
