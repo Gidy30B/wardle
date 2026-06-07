@@ -16,7 +16,6 @@ type RankTabPageProps = {
   currentUserId: string | null
   currentUserPosition: UserLeaderboardPosition | null
   currentStreak: number | null
-  xpTotal: number | null
   organizationName: string | null
   accuracy: number | null
   onPlay: () => void
@@ -32,7 +31,6 @@ export default function RankTabPage({
   currentUserId,
   currentUserPosition,
   currentStreak,
-  xpTotal,
   organizationName,
   accuracy,
   onPlay,
@@ -49,7 +47,6 @@ export default function RankTabPage({
         currentUserId={currentUserId}
         currentUserPosition={currentUserPosition}
         currentStreak={currentStreak}
-        xpTotal={xpTotal}
         organizationName={organizationName}
         accuracy={accuracy}
         onPlay={onPlay}

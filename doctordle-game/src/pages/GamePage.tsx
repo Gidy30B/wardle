@@ -209,7 +209,6 @@ export default function GamePage() {
           currentUserId={leaderboard.currentUserId}
           currentUserPosition={leaderboard.currentUserPosition}
           currentStreak={currentStreak}
-          xpTotal={shellXpTotal}
           organizationName={organizationName}
           accuracy={userStats.report?.totals.accuracyPct ?? null}
           onPlay={() => setActiveTab('play')}

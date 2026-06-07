@@ -19,7 +19,6 @@ type LeaderboardSectionProps = {
   currentUserId: string | null
   currentUserPosition: UserLeaderboardPosition | null
   currentStreak: number | null
-  xpTotal: number | null
   organizationName: string | null
   accuracy: number | null
   onPlay: () => void
@@ -78,7 +77,6 @@ function LeaderboardSection({
   currentUserId,
   currentUserPosition,
   currentStreak,
-  xpTotal,
   organizationName,
   accuracy,
   onPlay,
@@ -251,24 +249,22 @@ function LeaderboardSection({
       <div className="px-5 pb-5">
         <div className="rounded-[16px] border border-[rgba(0,180,166,0.25)] bg-[linear-gradient(135deg,rgba(0,180,166,0.15),rgba(26,60,94,0.4))] p-4">
           <div className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[var(--wardle-color-teal)]">
-            Your Stats This {mode === 'daily' ? 'Day' : 'Week'}
+            Your Leaderboard Snapshot
           </div>
           <div className="grid grid-cols-4 gap-2 text-center">
-            <RankStat label={`${iconSet.rank} Rank`} value={currentUserPosition ? `#${currentUserPosition.rank}` : '--'} />
+            <RankStat label={`${iconSet.rank} ${mode === 'daily' ? 'Daily' : 'Weekly'} Rank`} value={currentUserPosition ? `#${currentUserPosition.rank}` : '--'} />
             {visibleCurrentStreak != null ? (
-              <RankStat label={`${iconSet.streak} Streak`} value={String(visibleCurrentStreak)} />
+              <RankStat label={`${iconSet.streak} Current Streak`} value={String(visibleCurrentStreak)} />
             ) : null}
             <RankStat
-              label={`${iconSet.time} Points`}
+              label={`${iconSet.time} ${mode === 'daily' ? 'Daily' : 'Weekly'} Points`}
               value={
-                xpTotal != null
-                  ? formatScore(xpTotal)
-                  : currentUserPosition
-                    ? formatScore(currentUserPosition.score)
-                    : '--'
+                currentUserPosition
+                  ? formatScore(currentUserPosition.score)
+                : '--'
               }
             />
-            <RankStat label={`${iconSet.accuracy} Accuracy`} value={accuracy != null ? `${Math.round(accuracy)}%` : '--'} />
+            <RankStat label={`${iconSet.accuracy} Lifetime Accuracy`} value={accuracy != null ? `${Math.round(accuracy)}%` : '--'} />
           </div>
           <div className="mt-3">
             {currentUserPosition?.completedAt ? (
