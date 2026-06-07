@@ -37,7 +37,7 @@ function normalizeClinicalText(value: string): string {
 
 const now = new Date();
 const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 4, 12, 0, 0));
-const seedVersion = 'flagship-guillain-barre-syndrome-v1';
+const seedVersion = 'flagship-testicular-torsion-v1';
 
 function addUtcDays(date: Date, days: number): Date {
   const next = new Date(date);
@@ -67,12 +67,15 @@ async function findAvailableInventoryPlaceholderDate(params: {
 
     if (!owner) {
       if (offset > 0) {
-        console.warn('Preferred inventory placeholder date was occupied; using next free date.', {
-          displayLabel: params.displayLabel,
-          preferredDate: params.preferredDate.toISOString(),
-          assignedDate: candidateDate.toISOString(),
-          offsetDays: offset,
-        });
+        console.warn(
+          'Preferred inventory placeholder date was occupied; using next free date.',
+          {
+            displayLabel: params.displayLabel,
+            preferredDate: params.preferredDate.toISOString(),
+            assignedDate: candidateDate.toISOString(),
+            offsetDays: offset,
+          },
+        );
       }
       return candidateDate;
     }
@@ -100,156 +103,138 @@ const clues = [
     order: 0,
     type: 'history',
     value:
-      'A 29-year-old man presents with progressive difficulty walking over the past 3 days.',
+      'A 16-year-old boy presents with sudden severe pain in the left testicle that began 2 hours ago while resting.',
   },
   {
     order: 1,
-    type: 'history',
-    value:
-      'He reports tingling in both feet that began one week after recovering from a severe diarrheal illness.',
+    type: 'symptom',
+    value: 'He feels nauseated and has vomited once since the pain started.',
   },
   {
     order: 2,
-    type: 'symptom',
-    value:
-      'Weakness started in the legs and is now involving the thighs and hands bilaterally.',
+    type: 'history',
+    value: 'He denies dysuria, urethral discharge, or recent sexual exposure.',
   },
   {
     order: 3,
     type: 'exam',
     value:
-      'Neurological examination demonstrates symmetric flaccid weakness with markedly reduced deep tendon reflexes in both lower limbs.',
+      'Examination shows a tender, high-riding left testis with a horizontal lie.',
   },
   {
     order: 4,
     type: 'exam',
-    value:
-      'There is mild bilateral facial weakness and difficulty coughing effectively, though sensation is largely preserved.',
+    value: 'The cremasteric reflex is absent on the affected side.',
   },
   {
     order: 5,
     type: 'investigation',
     value:
-      'Lumbar puncture reveals elevated CSF protein with a normal white blood cell count. Nerve conduction studies show demyelinating polyneuropathy.',
+      'Urgent Doppler ultrasound shows reduced blood flow to the left testis, but surgical exploration is not delayed.',
   },
 ] as const;
 
 const differentials = [
-  'Transverse Myelitis',
-  'Myasthenia Gravis',
-  'Botulism',
-  'Acute Hypokalemic Paralysis',
+  'Epididymo-orchitis',
+  'Torsion of appendix testis',
+  'Incarcerated inguinal hernia',
 ];
 
 const explanation = {
-  diagnosis: 'Guillain-Barré Syndrome',
+  diagnosis: 'Testicular Torsion',
   summary:
-    'Progressive ascending weakness and areflexia in a young adult one week after a diarrheal illness, with symmetric flaccid paralysis, bilateral facial weakness, albuminocytologic dissociation on CSF, and demyelinating polyneuropathy on nerve conduction studies confirm Guillain-Barré syndrome.',
+    'This is testicular torsion: acute scrotal pain from twisting of the spermatic cord, causing reduced blood supply to the testis.',
+  keyEvidence: [
+    'Sudden severe unilateral testicular pain',
+    'Nausea and vomiting',
+    'High-riding testis with horizontal lie',
+    'Absent cremasteric reflex',
+    'Reduced Doppler flow',
+  ],
   reasoning: [
-    'Progressive difficulty walking over 3 days in a young adult raises concern for an acute neurological process affecting motor function.',
-    'Tingling in both feet beginning one week after a diarrheal illness suggests a post-infectious peripheral nerve disorder.',
-    'Ascending symmetric leg-to-hand weakness localizes the disease to the peripheral nervous system and follows the classic GBS distribution.',
-    'Symmetric flaccid weakness with markedly reduced deep tendon reflexes confirms lower motor neuron disease at multiple levels.',
-    'Bilateral facial weakness and impaired cough indicate proximal spread to cranial nerves and raise immediate concern for respiratory failure.',
-    'Elevated CSF protein with normal cell count and demyelinating nerve conduction studies establish the diagnosis of Guillain-Barré syndrome.',
+    'Sudden severe unilateral testicular pain is the hallmark presentation.',
+    'Nausea and vomiting commonly accompany acute torsion.',
+    'A high-riding testis with horizontal lie and absent cremasteric reflex are classic bedside findings.',
+    'Doppler ultrasound may show reduced flow but should not delay surgery if clinical suspicion is high.',
   ],
   keyFindings: [
-    'Progressive difficulty walking over 3 days',
-    'Post-diarrheal onset with distal tingling',
-    'Ascending symmetric weakness involving legs and hands',
-    'Symmetric flaccid weakness',
-    'Markedly reduced deep tendon reflexes',
-    'Bilateral facial weakness',
-    'Difficulty coughing effectively',
-    'Largely preserved sensation',
-    'Albuminocytologic dissociation on CSF',
-    'Demyelinating polyneuropathy on nerve conduction studies',
+    'Sudden severe unilateral testicular pain',
+    'Nausea and vomiting',
+    'High-riding testis with horizontal lie',
+    'Absent cremasteric reflex',
+    'Reduced Doppler flow',
   ],
   differentials,
+  whyNotOthers: [
+    {
+      diagnosis: 'Epididymo-orchitis',
+      reason:
+        'Usually has gradual pain, urinary symptoms, fever, or STI risk features.',
+    },
+    {
+      diagnosis: 'Torsion of appendix testis',
+      reason:
+        'Often less severe and may show a localized upper-pole tenderness or blue-dot sign.',
+    },
+    {
+      diagnosis: 'Incarcerated inguinal hernia',
+      reason:
+        'Would usually have groin swelling or bowel obstruction features.',
+    },
+  ],
+  managementPearl:
+    'Treat as a surgical emergency. Urgent urology review and scrotal exploration are needed; do not delay surgery for imaging if clinical suspicion is high.',
   differentialAnalysis: [
     {
-      diagnosis: 'Transverse Myelitis',
+      diagnosis: 'Epididymo-orchitis',
       whyPlausibleEarly:
-        'Transverse myelitis can also cause acute leg weakness and may follow a respiratory or gastrointestinal infection.',
-      ruledOutByClues: [
-        {
-          clueOrder: 3,
-          evidence: 'symmetric flaccid weakness with markedly reduced deep tendon reflexes',
-          reason:
-            'Transverse myelitis produces upper motor neuron signs with hyperreflexia over time, not flaccid areflexic paralysis.',
-        },
-        {
-          clueOrder: 5,
-          evidence: 'demyelinating polyneuropathy on nerve conduction studies',
-          reason:
-            'Demyelinating polyneuropathy on NCS indicates peripheral nerve disease rather than a spinal cord lesion.',
-        },
-      ],
-      finalReasonLessLikely:
-        'Transverse myelitis would present with a sensory level, early bladder dysfunction, and eventual upper motor neuron signs — none of which are present here.',
-    },
-    {
-      diagnosis: 'Myasthenia Gravis',
-      whyPlausibleEarly:
-        'Myasthenia gravis can cause generalized weakness and may involve facial muscles in young adults.',
-      ruledOutByClues: [
-        {
-          clueOrder: 3,
-          evidence: 'markedly reduced deep tendon reflexes',
-          reason:
-            'Myasthenia gravis is a neuromuscular junction disorder that does not cause areflexia.',
-        },
-        {
-          clueOrder: 5,
-          evidence: 'elevated CSF protein with albuminocytologic dissociation',
-          reason:
-            'CSF and nerve conduction findings are inconsistent with a neuromuscular junction disorder.',
-        },
-      ],
-      finalReasonLessLikely:
-        'Myasthenia gravis produces fatigable weakness, preserved reflexes, no ascending pattern, and normal CSF findings.',
-    },
-    {
-      diagnosis: 'Botulism',
-      whyPlausibleEarly:
-        'Botulism causes acute flaccid paralysis and may follow a gastrointestinal illness with toxin ingestion.',
+        'Infection causes scrotal pain and swelling and may be associated with urinary symptoms or fever.',
       ruledOutByClues: [
         {
           clueOrder: 2,
-          evidence: 'weakness ascending from legs to hands bilaterally',
+          evidence: 'no dysuria or STI risk',
           reason:
-            'Botulism produces descending paralysis beginning with cranial nerve involvement, not ascending peripheral weakness.',
+            'Absence of urinary features reduces likelihood of epididymo-orchitis.',
         },
         {
-          clueOrder: 5,
-          evidence: 'albuminocytologic dissociation and demyelinating polyneuropathy on NCS',
+          clueOrder: 3,
+          evidence: 'high-riding testis',
           reason:
-            'These findings indicate an immune-mediated peripheral neuropathy rather than a presynaptic toxin-mediated disorder.',
+            'Anatomical high-riding testis is more consistent with torsion.',
         },
       ],
       finalReasonLessLikely:
-        'Botulism presents with descending paralysis, prominent early pupillary abnormalities, and autonomic features without CSF protein elevation.',
+        'Epididymo-orchitis tends to have more gradual onset and infectious features.',
     },
     {
-      diagnosis: 'Acute Hypokalemic Paralysis',
+      diagnosis: 'Torsion of appendix testis',
       whyPlausibleEarly:
-        'Acute hypokalemic paralysis can cause rapid-onset symmetric flaccid weakness, sometimes following a gastrointestinal illness with fluid and electrolyte loss.',
+        'Can cause focal scrotal pain in adolescents and may produce a tender upper-pole focus.',
       ruledOutByClues: [
         {
-          clueOrder: 1,
-          evidence: 'tingling in both feet following the diarrheal illness',
+          clueOrder: 3,
+          evidence: 'high-riding testis with horizontal lie',
           reason:
-            'Sensory symptoms are not a feature of hypokalemic paralysis, which is a pure motor disorder.',
-        },
-        {
-          clueOrder: 5,
-          evidence: 'elevated CSF protein and demyelinating polyneuropathy on nerve conduction studies',
-          reason:
-            'CSF protein elevation and NCS abnormalities indicate peripheral nerve disease rather than an electrolyte disorder.',
+            'Global testicular abnormalities point to cord torsion rather than isolated appendage torsion.',
         },
       ],
       finalReasonLessLikely:
-        'Hypokalemic paralysis does not produce sensory symptoms, CSF protein elevation, or NCS changes, and weakness rapidly resolves with potassium replacement.',
+        'Appendage torsion is usually less severe and often self-limited.',
+    },
+    {
+      diagnosis: 'Incarcerated inguinal hernia',
+      whyPlausibleEarly:
+        'May present with acute groin or scrotal pain and signs of bowel obstruction.',
+      ruledOutByClues: [
+        {
+          clueOrder: 0,
+          evidence: 'no history of groin swelling',
+          reason:
+            'Absence of groin swelling or obstruction signs reduces likelihood.',
+        },
+      ],
+      finalReasonLessLikely:
+        'Inguinal hernia typically presents with a palpable groin mass or obstructive symptoms.',
     },
   ],
   generationQuality: {
@@ -260,86 +245,85 @@ const explanation = {
 };
 
 const educationForFrontend = {
-  title: 'Guillain-Barré Syndrome',
+  title: 'Testicular Torsion',
 
   summary: {
     definition:
-      'Guillain-Barré syndrome (GBS) is an acute immune-mediated polyneuropathy characterized by rapidly progressive ascending flaccid weakness and areflexia, typically triggered by a preceding respiratory or gastrointestinal infection.',
+      'Testicular torsion is twisting of the spermatic cord, obstructing testicular blood flow and causing acute ischemic scrotal pain.',
     highYieldTakeaway:
-      'Think GBS in any patient with rapidly ascending symmetric weakness and areflexia following a recent infection — albuminocytologic dissociation on CSF and demyelinating findings on nerve conduction studies confirm the diagnosis.',
+      'Think testicular torsion in an adolescent or young adult male with sudden severe unilateral testicular pain, nausea or vomiting, a high-riding testis, and absent cremasteric reflex.',
   },
 
   recognitionPattern: [
     {
-      pattern: 'Ascending paralysis pattern',
+      pattern: 'Sudden severe unilateral testicular pain',
       whyItMatters:
-        'Weakness begins distally in the legs and ascends proximally over days to weeks, reflecting a length-dependent peripheral neuropathy.',
+        'Abrupt onset over minutes to hours is the classic presentation and separates torsion from many infectious causes of scrotal pain.',
     },
     {
-      pattern: 'Post-infectious trigger',
+      pattern: 'Adolescent or young adult male',
       whyItMatters:
-        'GBS typically follows a respiratory or gastrointestinal infection by 1–3 weeks; Campylobacter jejuni is the most common preceding pathogen.',
+        'Torsion is most common around puberty and in young adults, although it can occur at any age.',
     },
     {
-      pattern: 'Peripheral nerve localization',
+      pattern: 'No urinary or STI features',
       whyItMatters:
-        'Flaccid weakness with absent or markedly reduced reflexes in an alert patient strongly localizes disease to the peripheral nervous system.',
+        'Absence of dysuria, urethral discharge, fever, or sexual exposure makes epididymo-orchitis less likely.',
     },
   ],
 
   keySymptoms: [
     {
-      symptom: 'Progressive ascending weakness',
+      symptom: 'Sudden severe testicular pain',
       significance:
-        'Ascending symmetric weakness starting in the distal legs is the hallmark presentation and may progress to involve the arms and respiratory muscles.',
+        'Acute unilateral pain is the hallmark symptom and should trigger emergency evaluation.',
     },
     {
-      symptom: 'Distal tingling and paresthesias',
+      symptom: 'Nausea and vomiting',
       significance:
-        'Sensory symptoms in the feet often precede or accompany motor weakness and direct attention to peripheral nerve involvement.',
+        'Visceral autonomic symptoms commonly accompany torsion and support the diagnosis in acute scrotum.',
     },
   ],
 
   keySigns: [
     {
-      finding: 'Areflexia or hyporeflexia',
+      finding: 'High-riding testis with horizontal lie',
       significance:
-        'Absent or markedly reduced deep tendon reflexes in an awake patient strongly suggest GBS and distinguish it from upper motor neuron lesions.',
+        'Abnormal testicular position reflects spermatic cord twisting and is a classic bedside clue.',
     },
     {
-      finding: 'Symmetric flaccid weakness',
+      finding: 'Absent cremasteric reflex',
       significance:
-        'Diffuse flaccidity without increased tone distinguishes a peripheral nerve disorder from a central or neuromuscular junction lesion.',
+        'Loss of the ipsilateral cremasteric reflex strongly supports torsion in the right clinical setting.',
     },
     {
-      finding: 'Bilateral facial weakness',
+      finding: 'Tender affected testis',
       significance:
-        'Cranial nerve involvement indicates spread beyond limb muscles and signals increasing risk of respiratory compromise.',
+        'Marked testicular tenderness is expected with acute ischemia.',
     },
   ],
 
   examPearls: [
     {
       type: 'physical',
-      title: 'Areflexia with ascending weakness',
+      title: 'Cremasteric reflex',
       content:
-        'Absent or markedly reduced deep tendon reflexes in a patient with progressive ascending weakness is the cardinal clinical finding for GBS.',
+        'Stroke the inner thigh and look for elevation of the ipsilateral testis; absence on the painful side supports torsion.',
       whyItMatters:
-        'This combination localizes disease to the peripheral nervous system rather than the spinal cord or neuromuscular junction.',
+        'This is a fast bedside discriminator when acute torsion is suspected.',
       discriminator:
-        'Hyperreflexia or preserved reflexes argue against GBS and suggest a central or neuromuscular junction disorder.',
+        'A preserved reflex does not fully exclude torsion, but an absent reflex is highly concerning.',
       trapAvoided:
-        'Avoid attributing progressive leg weakness to stroke or spinal cord disease without examining reflexes.',
+        'Do not falsely reassure yourself with a nonspecific scrotal pain exam when the reflex is absent.',
     },
     {
       type: 'physical',
-      title: 'Respiratory assessment',
+      title: 'Testicular lie',
       content:
-        'Forced vital capacity should be measured serially; a value below 20 mL/kg, rapidly declining trajectory, or inability to count to 20 in a single breath are thresholds for considering intubation.',
-      whyItMatters:
-        'Respiratory failure develops in up to 30% of patients and can occur rapidly even when limb weakness appears mild.',
+        'Look for a high-riding testis or horizontal lie on the painful side.',
+      whyItMatters: 'Abnormal lie is a classic sign of spermatic cord torsion.',
       managementImplication:
-        'Early recognition of impending respiratory compromise prevents unplanned emergency intubation.',
+        'Urgent urology review and operative exploration are needed when clinical suspicion is high.',
     },
   ],
 
@@ -347,153 +331,116 @@ const educationForFrontend = {
 
   investigations: [
     {
-      test: 'Lumbar puncture and CSF analysis',
+      test: 'Doppler scrotal ultrasound',
       interpretation:
-        'Albuminocytologic dissociation — elevated protein with normal or near-normal cell count — is the classic finding, though it may be absent in the first week of illness.',
+        'Reduced or absent blood flow to the affected testis supports torsion.',
       whyItMatters:
-        'CSF findings support the diagnosis and help exclude infectious or inflammatory causes of polyneuropathy.',
+        'Ultrasound can support the diagnosis when immediately available, but should not delay surgical exploration if suspicion is high.',
     },
     {
-      test: 'Nerve conduction studies and electromyography',
+      test: 'Urinalysis',
       interpretation:
-        'Demyelinating features (slowed conduction velocity, prolonged distal latencies, conduction block) characterize AIDP; axonal variants show reduced compound action potential amplitudes.',
+        'May be normal in torsion; pyuria or bacteriuria would support infectious epididymo-orchitis.',
       whyItMatters:
-        'NCS confirms peripheral nerve disease, establishes the subtype, and can inform prognosis.',
-    },
-    {
-      test: 'Serial forced vital capacity',
-      interpretation:
-        'Values below 20 mL/kg, rapid decline, or inability to count to 20 in one breath indicate high risk for respiratory failure.',
-      whyItMatters:
-        'Respiratory monitoring guides the timing of ICU admission and intubation.',
-    },
-    {
-      test: 'ECG and continuous cardiac monitoring',
-      interpretation:
-        'Dysautonomia may manifest as arrhythmias, tachycardia, or blood pressure fluctuations.',
-      whyItMatters:
-        'Cardiac dysautonomia is a major cause of mortality and requires continuous monitoring throughout the acute phase.',
+        'A normal urinalysis helps move infection lower on the differential, but management remains driven by torsion risk.',
     },
   ],
 
   pitfalls: [
     {
-      pitfall: 'Normal CSF protein in early disease',
-      consequence:
-        'Protein elevation often develops only after the first week; a normal result early does not exclude GBS and should not delay treatment when clinical suspicion is high.',
+      pitfall: 'Waiting for imaging despite classic torsion features',
+      consequence: 'Delay can reduce the chance of testicular salvage.',
     },
     {
-      pitfall: 'Delayed respiratory monitoring',
+      pitfall: 'Mislabeling acute torsion as epididymo-orchitis',
       consequence:
-        'Failure to measure vital capacity may delay recognition of impending respiratory failure and result in emergent rather than planned intubation.',
+        'Antibiotic treatment without surgical assessment risks missed ischemia.',
     },
     {
-      pitfall: 'Treating with steroids alone',
+      pitfall: 'Being reassured by lack of sexual exposure',
       consequence:
-        'Corticosteroids are not effective for classic GBS and may worsen outcomes; first-line treatment is IVIg or plasmapheresis.',
+        'The absence of STI risk makes infection less likely and should increase concern for torsion in acute scrotum.',
     },
   ],
 
   managementOverview: [
     {
-      step: 'Admit for monitoring',
+      step: 'Urgent urology review',
       rationale:
-        'All patients require admission for close neurological assessment and serial vital capacity measurements given the risk of rapid deterioration.',
+        'Testicular torsion is a surgical emergency requiring immediate specialist involvement.',
     },
     {
-      step: 'IV immunoglobulin or plasmapheresis',
+      step: 'Immediate scrotal exploration when suspicion is high',
       rationale:
-        'Both are equally effective first-line immunotherapies; choice depends on availability, patient factors, and contraindications.',
+        'Definitive treatment is detorsion and orchiopexy; imaging must not delay operative management.',
     },
     {
-      step: 'Respiratory support',
+      step: 'Bilateral orchiopexy',
       rationale:
-        'Mechanical ventilation is required if vital capacity falls below 20 mL/kg or respiratory failure develops; early elective intubation is safer than emergent.',
-    },
-    {
-      step: 'DVT prophylaxis and physiotherapy',
-      rationale:
-        'Immobile patients are at high risk for deep vein thrombosis; early physiotherapy supports rehabilitation and prevents complications of immobility.',
-    },
-    {
-      step: 'Dysautonomia management',
-      rationale:
-        'Cardiac monitoring and cautious management of blood pressure instability and arrhythmias are essential throughout the acute phase.',
+        'The contralateral testis is typically fixed as well because the anatomic predisposition is often bilateral.',
     },
   ],
 
   differentialDistinguishers: [
     {
-      diagnosis: 'Transverse Myelitis',
+      diagnosis: 'Epididymo-orchitis',
       keySeparator:
-        'Often presents with a sensory level, early bladder dysfunction, and eventual upper motor neuron signs with hyperreflexia; spinal cord lesion visible on MRI.',
+        'Usually has gradual pain, urinary symptoms, fever, or STI risk features rather than abrupt severe pain with abnormal lie.',
     },
     {
-      diagnosis: 'Myasthenia Gravis',
+      diagnosis: 'Torsion of appendix testis',
       keySeparator:
-        'Produces fatigable rather than fixed weakness with preserved deep tendon reflexes, no ascending pattern, and normal CSF findings.',
+        'Often less severe and may show localized upper-pole tenderness or a blue-dot sign.',
     },
     {
-      diagnosis: 'Botulism',
+      diagnosis: 'Incarcerated inguinal hernia',
       keySeparator:
-        'Causes descending paralysis with prominent early pupillary abnormalities and autonomic features; no CSF protein elevation or demyelinating NCS pattern.',
-    },
-    {
-      diagnosis: 'Acute Hypokalemic Paralysis',
-      keySeparator:
-        'No sensory symptoms; reflexes recover rapidly with potassium correction; associated electrolyte abnormalities without CSF or NCS changes.',
+        'Usually has groin swelling, a palpable mass, or bowel obstruction features.',
     },
   ],
 
   complications: [
     {
-      complication: 'Respiratory failure',
+      complication: 'Testicular infarction',
       whyItMatters:
-        'Up to 30% of patients require mechanical ventilation; rapid deterioration can occur even when limb weakness appears mild.',
+        'Prolonged ischemia can cause irreversible testicular damage.',
     },
     {
-      complication: 'Dysautonomia',
+      complication: 'Orchiectomy',
       whyItMatters:
-        'Cardiac arrhythmias and hemodynamic instability require continuous monitoring and are a significant cause of mortality.',
+        'Delayed diagnosis may require removal of a nonviable testis.',
     },
     {
-      complication: 'Persistent weakness and disability',
+      complication: 'Subfertility',
       whyItMatters:
-        'Some patients have incomplete recovery with residual neurological deficits; early physiotherapy and rehabilitation improve long-term outcomes.',
+        'Loss of testicular tissue or ischemic injury can affect future fertility.',
     },
   ],
 
   recallPrompts: [
     {
       prompt:
-        'What CSF finding is classically associated with Guillain-Barré syndrome?',
-      answer:
-        'Albuminocytologic dissociation: elevated protein with a normal or near-normal white blood cell count.',
+        'What bedside reflex is classically absent in testicular torsion?',
+      answer: 'The ipsilateral cremasteric reflex.',
+    },
+    {
+      prompt: 'What is the classic testicular position in torsion?',
+      answer: 'A high-riding testis with a horizontal lie.',
     },
     {
       prompt:
-        'Which organism most commonly precedes Guillain-Barré syndrome?',
+        'Should surgery be delayed for ultrasound when clinical suspicion for torsion is high?',
       answer:
-        'Campylobacter jejuni, following a diarrheal illness.',
-    },
-    {
-      prompt:
-        'What respiratory threshold should prompt consideration of mechanical ventilation in GBS?',
-      answer:
-        'Forced vital capacity below 20 mL/kg or a rapidly declining trajectory.',
+        'No. Urgent urology review and surgical exploration should not be delayed for imaging.',
     },
   ],
 
-  references: [
-    'Willison HJ, Jacobs BC, van Doorn PA. Guillain-Barré syndrome. Lancet. 2016;388(10045):717-727.',
-    'Wijdicks EFM, Klein CJ. Guillain-Barré Syndrome. Mayo Clin Proc. 2017;92(3):467-479.',
-    'van den Berg B et al. Guillain-Barré syndrome: pathogenesis, diagnosis, treatment and prognosis. Nat Rev Neurol. 2014;10(8):469-482.',
-  ],
+  references: [],
 };
 
 async function main() {
-  const canonicalName = 'guillain barre syndrome';
-  const displayLabel = 'Guillain-Barré Syndrome';
+  const canonicalName = 'testicular torsion';
+  const displayLabel = 'Testicular Torsion';
   const canonicalNormalized = normalizeClinicalText(canonicalName);
 
   const registry = await prisma.diagnosisRegistry.upsert({
@@ -503,16 +450,16 @@ async function main() {
       displayLabel,
       status: DiagnosisRegistryStatus.ACTIVE,
       active: true,
-      specialty: 'Neurology',
-      subspecialty: 'Neuromuscular Disease',
-      category: 'Neurological',
-      bodySystem: 'Nervous System',
-      organSystem: 'Peripheral Nervous System',
-      difficultyBand: DiagnosisDifficultyBand.INTERMEDIATE,
+      specialty: 'Urology',
+      subspecialty: 'Andrology',
+      category: 'Surgical Emergency',
+      bodySystem: 'Genitourinary',
+      organSystem: 'Male Reproductive System',
+      difficultyBand: DiagnosisDifficultyBand.BASIC,
       rarityBand: DiagnosisRarityBand.UNCOMMON,
-      clinicalSetting: DiagnosisClinicalSetting.INPATIENT,
-      ageGroup: DiagnosisAgeGroup.ADULT,
-      urgencyLevel: DiagnosisUrgencyLevel.URGENT,
+      clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
+      ageGroup: DiagnosisAgeGroup.PEDIATRIC,
+      urgencyLevel: DiagnosisUrgencyLevel.EMERGENT,
       onboardingStatus: 'READY_FOR_REVIEW',
       isPlayable: true,
       isGeneratable: true,
@@ -520,7 +467,7 @@ async function main() {
       excludedClueTypes: [],
       searchPriority: 15,
       notes:
-        'Acute immune-mediated polyneuropathy presenting with ascending flaccid weakness and areflexia, classically following a gastrointestinal or respiratory infection.',
+        'Urologic emergency in adolescent and young adult males causing sudden severe unilateral testicular pain from spermatic cord torsion.',
     },
     create: {
       canonicalName,
@@ -528,16 +475,16 @@ async function main() {
       displayLabel,
       status: DiagnosisRegistryStatus.ACTIVE,
       active: true,
-      specialty: 'Neurology',
-      subspecialty: 'Neuromuscular Disease',
-      category: 'Neurological',
-      bodySystem: 'Nervous System',
-      organSystem: 'Peripheral Nervous System',
-      difficultyBand: DiagnosisDifficultyBand.INTERMEDIATE,
+      specialty: 'Urology',
+      subspecialty: 'Andrology',
+      category: 'Surgical Emergency',
+      bodySystem: 'Genitourinary',
+      organSystem: 'Male Reproductive System',
+      difficultyBand: DiagnosisDifficultyBand.BASIC,
       rarityBand: DiagnosisRarityBand.UNCOMMON,
-      clinicalSetting: DiagnosisClinicalSetting.INPATIENT,
-      ageGroup: DiagnosisAgeGroup.ADULT,
-      urgencyLevel: DiagnosisUrgencyLevel.URGENT,
+      clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
+      ageGroup: DiagnosisAgeGroup.PEDIATRIC,
+      urgencyLevel: DiagnosisUrgencyLevel.EMERGENT,
       onboardingStatus: 'READY_FOR_REVIEW',
       onboardingStartedAt: now,
       isPlayable: true,
@@ -546,7 +493,7 @@ async function main() {
       excludedClueTypes: [],
       searchPriority: 15,
       notes:
-        'Acute immune-mediated polyneuropathy presenting with ascending flaccid weakness and areflexia, classically following a gastrointestinal or respiratory infection.',
+        'Urologic emergency in adolescent and young adult males causing sudden severe unilateral testicular pain from spermatic cord torsion.',
     },
   });
 
@@ -558,25 +505,19 @@ async function main() {
       rank: 100,
     },
     {
-      term: 'gbs',
+      term: 'torsion of testis',
       kind: DiagnosisAliasKind.ACCEPTED,
       acceptedForMatch: true,
-      rank: 95,
+      rank: 90,
     },
     {
-      term: 'acute inflammatory demyelinating polyradiculoneuropathy',
+      term: 'spermatic cord torsion',
       kind: DiagnosisAliasKind.ACCEPTED,
       acceptedForMatch: true,
-      rank: 80,
+      rank: 85,
     },
     {
-      term: 'aidp',
-      kind: DiagnosisAliasKind.ACCEPTED,
-      acceptedForMatch: true,
-      rank: 75,
-    },
-    {
-      term: 'guillain barre',
+      term: 'acute scrotum',
       kind: DiagnosisAliasKind.SEARCH_ONLY,
       acceptedForMatch: false,
       rank: 40,
@@ -702,11 +643,9 @@ async function main() {
 
   const history =
     clues.find((clue) => clue.type === 'history')?.value ?? displayLabel;
-  const symptoms = [
-    'Progressive ascending weakness',
-    'Distal tingling and paresthesias',
-    'Areflexia',
-  ];
+  const symptoms = clues
+    .filter((clue) => clue.type === 'symptom')
+    .map((clue) => clue.value);
 
   const reusableCase = await prisma.case.findFirst({
     where: {
@@ -731,7 +670,7 @@ async function main() {
   const caseData = {
     title: displayLabel,
     date: assignedInventoryPlaceholderDate,
-    difficulty: 'medium',
+    difficulty: 'easy',
     history,
     symptoms,
     clues: clues as unknown as object,
@@ -746,7 +685,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Seeded frontend-aligned flagship Guillain-Barré Syndrome inventory case. DailyCase scheduler should assign the actual daily slot.',
+      'Seeded frontend-aligned flagship Testicular Torsion inventory case. DailyCase scheduler should assign the actual daily slot.',
   };
 
   const seededCase = reusableCase
@@ -762,7 +701,7 @@ async function main() {
     publishTrack: 'DAILY' as const,
     title: displayLabel,
     date: assignedInventoryPlaceholderDate,
-    difficulty: 'medium',
+    difficulty: 'easy',
     history,
     symptoms,
     clues: clues as unknown as object,
@@ -774,7 +713,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Frontend-aligned flagship Guillain-Barré Syndrome inventory revision for DailyCase scheduler assignment.',
+      'Frontend-aligned flagship Testicular Torsion inventory revision for DailyCase scheduler assignment.',
   };
 
   const revision = reusableCase?.currentRevisionId
@@ -812,19 +751,19 @@ async function main() {
       source: 'MANUAL',
       publishTrack: 'DAILY',
       outcome: 'PASSED',
-      validatorVersion: 'flagship-human-review:guillain-barre-syndrome-v1',
+      validatorVersion: 'flagship-human-review:testicular-torsion-v1',
       summary: {
         contentTier: 'FLAGSHIP',
         seedVersion,
         humanReviewed: true,
-        note: 'Manual frontend-aligned Guillain-Barré Syndrome inventory case seeded for DailyCase scheduler assignment.',
+        note: 'Manual frontend-aligned Testicular Torsion inventory case seeded for DailyCase scheduler assignment.',
       },
       findings: [],
       completedAt: now,
     },
   });
 
-  console.log('Seeded frontend-aligned Guillain-Barré Syndrome:', {
+  console.log('Seeded frontend-aligned Testicular Torsion:', {
     registryId: registry.id,
     caseId: seededCase.id,
     educationId: education.id,

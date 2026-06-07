@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 
 const editorialNavigationItems = [
   { to: '/editorial', label: 'Editorial', icon: 'E' },
+  { to: '/editorial/workspace', label: 'Workspace Queue', icon: 'W' },
   { to: '/editorial/inbox', label: 'Review Inbox', icon: 'I' },
   { to: '/editorial/coverage', label: 'Coverage Dashboard', icon: 'V' },
   { to: '/editorial/planner', label: 'Curriculum Planner', icon: 'L' },

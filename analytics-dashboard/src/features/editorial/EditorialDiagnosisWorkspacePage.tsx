@@ -51,7 +51,6 @@ import {
   type WorkspaceCoverageGap,
   type WorkspaceCoverageMatrixRow,
   type WorkspaceLifecycle,
-  type WorkspaceLifecycleState,
   type WorkspaceReadinessItem,
   type WorkspaceRecommendedAction,
 } from '../../api/admin';
@@ -89,11 +88,11 @@ type RuleDrawerAction =
 
 const tabs: Array<{ id: WorkspaceTab; label: string }> = [
   { id: 'overview', label: 'Overview' },
-  { id: 'teaching-rules', label: 'Teaching Rules' },
-  { id: 'editorial-brief', label: 'Editorial Brief' },
-  { id: 'education', label: 'Education' },
+  { id: 'teaching-rules', label: 'Teaching & Learning' },
+  { id: 'editorial-brief', label: 'Objectives' },
+  { id: 'education', label: 'Clinical Picture' },
   { id: 'cases', label: 'Cases' },
-  { id: 'graph', label: 'Graph' },
+  { id: 'graph', label: 'Differential Map' },
 ];
 
 const VALID_TABS = new Set<WorkspaceTab>([
@@ -608,17 +607,18 @@ export default function EditorialDiagnosisWorkspacePage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-0">
       <WorkspaceHeader workspace={workspace} />
+      <TabBar activeTab={activeTab} onChange={setActiveTab} />
 
-      <ActionFeedback
-        feedback={feedback}
-        onDismiss={pendingAction ? undefined : clear}
-      />
+      <div className="space-y-5 pt-5">
+        <ActionFeedback
+          feedback={feedback}
+          onDismiss={pendingAction ? undefined : clear}
+        />
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <main className="min-w-0 space-y-4">
-          <TabBar activeTab={activeTab} onChange={setActiveTab} />
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <main className="min-w-0 space-y-4">
           {activeTab === 'overview' ? (
             <OverviewTab
               workspace={workspace}
@@ -712,13 +712,14 @@ export default function EditorialDiagnosisWorkspacePage() {
               showSuccess={showSuccess}
             />
           ) : null}
-        </main>
+          </main>
 
-        <WorkspaceRail
-          workspace={workspace}
-          onGapSelect={openCoverageGap}
-          onTabChange={setActiveTab}
-        />
+          <WorkspaceRail
+            workspace={workspace}
+            onGapSelect={openCoverageGap}
+            onTabChange={setActiveTab}
+          />
+        </div>
       </div>
       {selectedCoverageRow ? (
         <>
@@ -760,10 +761,16 @@ function WorkspaceHeader({
       <div className="p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300">
+            <Link
+              to="/editorial/workspace"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 transition hover:text-slate-200"
+            >
+              ‹ Queue
+            </Link>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300">
               Editorial Diagnosis Workspace
             </p>
-            <h2 className="mt-2 text-2xl font-semibold">
+            <h2 className="mt-2 text-[26px] font-semibold leading-tight">
               {workspace.diagnosis.displayLabel}
             </h2>
             {canonicalDifferent ? (
@@ -814,9 +821,57 @@ function WorkspaceHeader({
           <HeaderMetric label="Graph" value={workspace.graph.readiness} />
         </div>
       </div>
+
+      {/* Lifecycle stage track — prototype-style maturity bar */}
+      <div className="flex overflow-x-auto border-t border-white/10">
+        {lifecycleSteps.map((step, i) => {
+          const state = workspace.lifecycle[step.key];
+          const isDone = state === 'complete';
+          const isBlocked = state === 'blocked';
+          return (
+            <div
+              key={step.key}
+              className={[
+                'flex min-w-fit items-center gap-2 border-r border-white/10 px-4 py-2.5 text-xs font-medium',
+                isDone
+                  ? 'text-emerald-400'
+                  : isBlocked
+                    ? 'text-rose-400'
+                    : i === 0
+                      ? 'font-semibold text-white'
+                      : 'text-slate-500',
+              ].join(' ')}
+            >
+              <span
+                className={[
+                  'inline-block h-1.5 w-1.5 rounded-full',
+                  isDone
+                    ? 'bg-emerald-400'
+                    : isBlocked
+                      ? 'bg-rose-400'
+                      : 'bg-current',
+                ].join(' ')}
+              />
+              {step.label}
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }
+
+const lifecycleSteps: Array<{
+  key: keyof WorkspaceLifecycle;
+  label: string;
+}> = [
+  { key: 'curriculum', label: 'Curriculum' },
+  { key: 'brief', label: 'Brief' },
+  { key: 'education', label: 'Education' },
+  { key: 'cases', label: 'Cases' },
+  { key: 'graph', label: 'Graph' },
+  { key: 'ready', label: 'Ready' },
+];
 
 function HeaderPill({ label }: { label: string }) {
   return (
@@ -853,24 +908,44 @@ function TabBar({
   onChange: (tab: WorkspaceTab) => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
-      <div className="flex min-w-max gap-1">
+    <div className="overflow-x-auto border-b border-white/10 bg-slate-950">
+      <div className="flex min-w-max">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => onChange(tab.id)}
             className={[
-              'rounded-lg px-3 py-2 text-sm font-semibold transition',
+              'border-b-2 px-5 py-3 text-sm font-medium whitespace-nowrap transition-colors',
               activeTab === tab.id
-                ? 'bg-slate-900 text-white'
-                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                ? 'border-cyan-400 text-cyan-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:border-slate-500 hover:text-slate-200',
             ].join(' ')}
           >
             {tab.label}
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function SummaryStatCard({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
+      <p className="mt-1 text-sm text-slate-500">{sub}</p>
     </div>
   );
 }
@@ -896,9 +971,77 @@ function OverviewTab({
   pendingAction: string | null;
   onLifecycleAction: (action: DiagnosisRegistryLifecycleAction) => void;
 }) {
+  const blockers = workspace.workspaceSummary.blockers;
+  const warnings = workspace.workspaceSummary.warnings;
+  const hasIssues = blockers.length > 0 || warnings.length > 0;
+
   return (
     <div className="space-y-4">
-      <LifecycleBar lifecycle={workspace.lifecycle} />
+      {/* ① Action queue — prototype's first card */}
+      {hasIssues ? (
+        <CompactPanel title="Action queue">
+          {blockers.map((msg, i) => (
+            <div
+              key={i}
+              className="mb-2 flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5"
+            >
+              <span className="mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-rose-500" />
+              <p className="text-sm text-rose-800">{msg}</p>
+            </div>
+          ))}
+          {warnings.map((msg, i) => (
+            <div
+              key={i}
+              className="mb-2 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5"
+            >
+              <span className="mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+              <p className="text-sm text-amber-800">{msg}</p>
+            </div>
+          ))}
+        </CompactPanel>
+      ) : null}
+
+      {/* ② Summary metrics strip */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <SummaryStatCard
+          label="Coverage"
+          value={formatScore(workspace.workspaceSummary.overallScore)}
+          sub={`${workspace.coverageMatrix.filter((r) => r.fullCoverageStatus === 'covered').length}/${workspace.coverageMatrix.length} teaching rules`}
+        />
+        <SummaryStatCard
+          label="Usable cases"
+          value={`${workspace.cases.summary.usable}/${workspace.cases.summary.total}`}
+          sub="case inventory"
+        />
+        <SummaryStatCard
+          label="Education"
+          value={formatLabel(workspace.education.status)}
+          sub={`score ${formatScore(workspace.workspaceSummary.educationScore)}`}
+        />
+      </div>
+
+      {/* ③ Recommended actions + coverage gaps side by side */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RecommendedActionsCard
+          actions={workspace.recommendedActions}
+          onTabChange={onTabChange}
+        />
+        <CoverageGapsCard gaps={workspace.coverageGaps} onGapSelect={onGapSelect} />
+      </div>
+
+      {/* ④ Coverage matrix */}
+      <CoverageMatrixCard
+        rows={workspace.coverageMatrix}
+        selectedRow={selectedRow}
+        onRowSelect={onRowSelect}
+      />
+
+      {/* ⑤ Detail cards (governance, onboarding, readiness) */}
+      <OnboardingCard workspace={workspace} onTabChange={onTabChange} />
+      <ReadinessBreakdownCard
+        items={workspace.readinessBreakdown}
+        onTabChange={onTabChange}
+      />
       <LifecycleGovernanceCard
         lifecycle={workspace.lifecycleGovernance}
         canRunSeniorActions={canRunSeniorActions}
@@ -906,28 +1049,10 @@ function OverviewTab({
         pendingAction={pendingAction}
         onAction={onLifecycleAction}
       />
-      <OnboardingCard workspace={workspace} onTabChange={onTabChange} />
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <WorkspaceSummaryCard workspace={workspace} />
         <CoverageScoreCard workspace={workspace} />
       </div>
-      <ReadinessBreakdownCard
-        items={workspace.readinessBreakdown}
-        onTabChange={onTabChange}
-      />
-      <CoverageMatrixCard
-        rows={workspace.coverageMatrix}
-        selectedRow={selectedRow}
-        onRowSelect={onRowSelect}
-      />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <RecommendedActionsCard
-          actions={workspace.recommendedActions}
-          onTabChange={onTabChange}
-        />
-        <EditorialLearningCard workspace={workspace} />
-      </div>
-      <CoverageGapsCard gaps={workspace.coverageGaps} onGapSelect={onGapSelect} />
     </div>
   );
 }
@@ -1262,40 +1387,6 @@ function LifecycleList({
   );
 }
 
-function LifecycleBar({ lifecycle }: { lifecycle: WorkspaceLifecycle }) {
-  const steps: Array<{ key: keyof WorkspaceLifecycle; label: string }> = [
-    { key: 'curriculum', label: 'Curriculum' },
-    { key: 'brief', label: 'Brief' },
-    { key: 'education', label: 'Education' },
-    { key: 'cases', label: 'Cases' },
-    { key: 'graph', label: 'Graph' },
-    { key: 'ready', label: 'Ready' },
-  ];
-
-  return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="grid gap-2 md:grid-cols-6">
-        {steps.map((step) => (
-          <div
-            key={step.key}
-            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3"
-          >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-              {step.label}
-            </p>
-            <div className="mt-2">
-              <StatusBadge
-                status={formatLabel(lifecycle[step.key])}
-                tone={lifecycleTone(lifecycle[step.key])}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function WorkspaceSummaryCard({
   workspace,
 }: {
@@ -1609,48 +1700,6 @@ function RecommendedActionsCard({
         </div>
       ) : (
         <p className="text-sm text-slate-500">No recommended actions yet.</p>
-      )}
-    </CompactPanel>
-  );
-}
-
-function EditorialLearningCard({
-  workspace,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-}) {
-  const counts = workspace.editorialLearning.candidateCounts;
-  return (
-    <CompactPanel title="Editorial learning">
-      <MetricGrid
-        items={[
-          {
-            label: 'Teaching candidates',
-            value: counts.teachingRuleCandidates,
-          },
-          { label: 'Graph candidates', value: counts.graphFactCandidates },
-          {
-            label: 'Pattern candidates',
-            value: counts.patternImprovementCandidates,
-          },
-          {
-            label: 'Pearl candidates',
-            value: counts.diagnosisSpecificPearlCandidates,
-          },
-        ]}
-      />
-      {workspace.editorialLearning.recentThemes.length ? (
-        <ul className="mt-3 space-y-2">
-          {workspace.editorialLearning.recentThemes.map((theme) => (
-            <li key={theme} className="text-sm text-slate-700">
-              {theme}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-3 text-sm text-slate-500">
-          Learning signals will appear after enough revision history exists.
-        </p>
       )}
     </CompactPanel>
   );
@@ -3191,9 +3240,13 @@ function CompactPanel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-sm font-semibold text-slate-900">{title}</p>
-      <div className="mt-3">{children}</div>
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-100 px-4 py-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+          {title}
+        </p>
+      </div>
+      <div className="p-4">{children}</div>
     </section>
   );
 }
@@ -3346,12 +3399,6 @@ function sortRevisionsNewestFirst(revisionList: DiagnosisEducationRevisionAnalys
   });
 }
 
-function lifecycleTone(state: WorkspaceLifecycleState) {
-  if (state === 'complete') return 'success';
-  if (state === 'blocked') return 'danger';
-  if (state === 'warning') return 'warning';
-  return 'neutral';
-}
 
 function severityRank(severity: WorkspaceReadinessItem['severity']) {
   if (severity === 'blocker') return 0;

@@ -5,6 +5,7 @@ import CasesPage from '../features/cases/CasesPage';
 import DashboardPage from '../features/dashboard/DashboardPage';
 import DiagnosisGraphCandidatesPage from '../features/diagnosis-graph/DiagnosisGraphCandidatesPage';
 import EditorialDiagnosisWorkspacePage from '../features/editorial/EditorialDiagnosisWorkspacePage';
+import EditorialWorkspaceQueuePage from '../features/editorial/EditorialWorkspaceQueuePage';
 import EditorialCoverageDashboardPage from '../features/editorial/EditorialCoverageDashboardPage';
 import CurriculumPlannerPage from '../features/editorial/CurriculumPlannerPage';
 import EditorialHomePage from '../features/editorial/EditorialHomePage';
@@ -231,6 +232,10 @@ export default function AppRoutes() {
         <Route
           path="/editorial/registry-merge"
           element={<RegistryMergeAnalysisPage />}
+        />
+        <Route
+          path="/editorial/workspace"
+          element={<EditorialWorkspaceQueuePage />}
         />
         <Route
           path="/editorial/diagnoses/:diagnosisRegistryId"
