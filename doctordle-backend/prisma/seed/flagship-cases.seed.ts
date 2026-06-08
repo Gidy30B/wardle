@@ -20,7 +20,7 @@ import { assertAliasValidWithClient } from '../../src/modules/diagnosis-registry
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error('DATABASE_URL is required to run the flagship seed.');
+  throw new Error('DATABASE_URL is required to run the celiac disease seed.');
 }
 
 const pool = new Pool({ connectionString: databaseUrl });
@@ -36,8 +36,8 @@ function normalizeClinicalText(value: string): string {
 }
 
 const now = new Date();
-const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 4, 12, 0, 0));
-const seedVersion = 'flagship-testicular-torsion-v1';
+const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 5, 12, 0, 0));
+const seedVersion = 'flagship-celiac-disease-v1';
 
 function addUtcDays(date: Date, days: number): Date {
   const next = new Date(date);
@@ -98,143 +98,189 @@ async function findAvailableInventoryPlaceholderDate(params: {
   );
 }
 
+async function getNextCasePublicNumber(): Promise<number> {
+  const latest = await prisma.case.findFirst({
+    where: {
+      publicNumber: {
+        not: null,
+      },
+    },
+    orderBy: {
+      publicNumber: 'desc',
+    },
+    select: {
+      publicNumber: true,
+    },
+  });
+
+  return (latest?.publicNumber ?? 0) + 1;
+}
+
 const clues = [
   {
     order: 0,
     type: 'history',
     value:
-      'A 16-year-old boy presents with sudden severe pain in the left testicle that began 2 hours ago while resting.',
+      'A 28-year-old woman presents with a 9-month history of intermittent bloating, loose stools, and fatigue that has worsened despite dietary changes.',
   },
   {
     order: 1,
     type: 'symptom',
-    value: 'He feels nauseated and has vomited once since the pain started.',
+    value:
+      'She reports that her stools are pale, bulky, and difficult to flush, and she has lost 6 kg unintentionally over the past year.',
   },
   {
     order: 2,
     type: 'history',
-    value: 'He denies dysuria, urethral discharge, or recent sexual exposure.',
+    value:
+      'She has a family history of thyroid disease in her mother and was recently treated for iron-deficiency anaemia that did not respond to oral iron supplementation.',
   },
   {
     order: 3,
     type: 'exam',
     value:
-      'Examination shows a tender, high-riding left testis with a horizontal lie.',
+      'Examination reveals mild pallor and angular cheilitis; the abdomen is soft with mild central bloating but no organomegaly.',
   },
   {
     order: 4,
-    type: 'exam',
-    value: 'The cremasteric reflex is absent on the affected side.',
+    type: 'lab',
+    value:
+      'Bloods show haemoglobin 98 g/L (MCV 74 fL), ferritin 6 µg/L, folate 2.1 nmol/L, and mildly elevated ALT at 52 U/L.',
   },
   {
     order: 5,
     type: 'investigation',
     value:
-      'Urgent Doppler ultrasound shows reduced blood flow to the left testis, but surgical exploration is not delayed.',
+      'Tissue transglutaminase IgA (tTG-IgA) is markedly elevated at 142 U/mL (reference <7 U/mL); total IgA is normal. Duodenal biopsy shows villous atrophy with crypt hyperplasia (Marsh grade 3b).',
   },
 ] as const;
 
 const differentials = [
-  'Epididymo-orchitis',
-  'Torsion of appendix testis',
-  'Incarcerated inguinal hernia',
+  'Irritable bowel syndrome',
+  'Inflammatory bowel disease',
+  'Small intestinal bacterial overgrowth',
+  'Microscopic colitis',
 ];
 
 const explanation = {
-  diagnosis: 'Testicular Torsion',
+  diagnosis: 'Celiac Disease',
   summary:
-    'This is testicular torsion: acute scrotal pain from twisting of the spermatic cord, causing reduced blood supply to the testis.',
+    'Chronic malabsorptive symptoms, refractory iron-deficiency anaemia, folate deficiency, elevated transaminases, markedly positive tTG-IgA, and villous atrophy on biopsy confirm celiac disease in a young woman with a family history of autoimmune disease.',
   keyEvidence: [
-    'Sudden severe unilateral testicular pain',
-    'Nausea and vomiting',
-    'High-riding testis with horizontal lie',
-    'Absent cremasteric reflex',
-    'Reduced Doppler flow',
+    'Chronic steatorrhoea and bloating',
+    'Refractory iron-deficiency anaemia',
+    'Folate deficiency',
+    'Elevated ALT',
+    'Markedly elevated tTG-IgA',
+    'Villous atrophy on duodenal biopsy (Marsh 3b)',
   ],
   reasoning: [
-    'Sudden severe unilateral testicular pain is the hallmark presentation.',
-    'Nausea and vomiting commonly accompany acute torsion.',
-    'A high-riding testis with horizontal lie and absent cremasteric reflex are classic bedside findings.',
-    'Doppler ultrasound may show reduced flow but should not delay surgery if clinical suspicion is high.',
+    'Pale, bulky, difficult-to-flush stools point to steatorrhoea from fat malabsorption in the small bowel.',
+    'Iron-deficiency anaemia unresponsive to oral supplementation is a classic presentation of proximal small bowel malabsorption.',
+    'Folate deficiency adds to the malabsorption picture; both iron and folate are absorbed in the duodenum and proximal jejunum.',
+    'Mildly elevated ALT is a recognised extra-intestinal manifestation of celiac disease.',
+    'A tTG-IgA level more than ten times the upper limit of normal has high specificity for celiac disease.',
+    'Marsh 3b villous atrophy on biopsy is the histological gold standard confirming the diagnosis.',
   ],
   keyFindings: [
-    'Sudden severe unilateral testicular pain',
-    'Nausea and vomiting',
-    'High-riding testis with horizontal lie',
-    'Absent cremasteric reflex',
-    'Reduced Doppler flow',
+    'Chronic steatorrhoea and bloating',
+    'Refractory iron-deficiency anaemia',
+    'Folate deficiency',
+    'Elevated ALT',
+    'Markedly elevated tTG-IgA (>10× ULN)',
+    'Villous atrophy on duodenal biopsy (Marsh 3b)',
   ],
   differentials,
   whyNotOthers: [
     {
-      diagnosis: 'Epididymo-orchitis',
+      diagnosis: 'Irritable bowel syndrome',
       reason:
-        'Usually has gradual pain, urinary symptoms, fever, or STI risk features.',
+        'IBS does not cause malabsorption, villous atrophy, positive serology, or nutritional deficiencies.',
     },
     {
-      diagnosis: 'Torsion of appendix testis',
+      diagnosis: 'Inflammatory bowel disease',
       reason:
-        'Often less severe and may show a localized upper-pole tenderness or blue-dot sign.',
+        'IBD can cause malabsorption and elevated inflammatory markers but does not produce positive tTG-IgA serology or villous atrophy.',
     },
     {
-      diagnosis: 'Incarcerated inguinal hernia',
+      diagnosis: 'Small intestinal bacterial overgrowth',
       reason:
-        'Would usually have groin swelling or bowel obstruction features.',
+        'SIBO can mimic bloating and diarrhoea but does not cause villous atrophy or positive celiac serology.',
+    },
+    {
+      diagnosis: 'Microscopic colitis',
+      reason:
+        'Microscopic colitis causes watery diarrhoea in older patients and does not produce steatorrhoea, villous atrophy, or celiac serology.',
     },
   ],
   managementPearl:
-    'Treat as a surgical emergency. Urgent urology review and scrotal exploration are needed; do not delay surgery for imaging if clinical suspicion is high.',
+    'Strict lifelong gluten-free diet is the cornerstone of treatment. Correct nutritional deficiencies, monitor adherence with repeat tTG-IgA, and screen for associated autoimmune conditions and bone disease.',
   differentialAnalysis: [
     {
-      diagnosis: 'Epididymo-orchitis',
+      diagnosis: 'Irritable bowel syndrome',
       whyPlausibleEarly:
-        'Infection causes scrotal pain and swelling and may be associated with urinary symptoms or fever.',
+        'Bloating and altered bowel habit are shared features with IBS, which is common in young women.',
       ruledOutByClues: [
         {
-          clueOrder: 2,
-          evidence: 'no dysuria or STI risk',
+          clueOrder: 1,
+          evidence: 'pale bulky stools and weight loss',
           reason:
-            'Absence of urinary features reduces likelihood of epididymo-orchitis.',
+            'Steatorrhoea and unintentional weight loss are inconsistent with functional IBS.',
         },
         {
-          clueOrder: 3,
-          evidence: 'high-riding testis',
+          clueOrder: 5,
+          evidence: 'positive tTG-IgA and villous atrophy',
           reason:
-            'Anatomical high-riding testis is more consistent with torsion.',
+            'Positive serology and histological damage exclude a purely functional diagnosis.',
         },
       ],
       finalReasonLessLikely:
-        'Epididymo-orchitis tends to have more gradual onset and infectious features.',
+        'IBS does not cause malabsorption, nutritional deficiencies, or histological changes.',
     },
     {
-      diagnosis: 'Torsion of appendix testis',
+      diagnosis: 'Inflammatory bowel disease',
       whyPlausibleEarly:
-        'Can cause focal scrotal pain in adolescents and may produce a tender upper-pole focus.',
+        'Chronic diarrhoea, weight loss, and anaemia overlap with Crohn disease, which can affect the small bowel.',
       ruledOutByClues: [
         {
-          clueOrder: 3,
-          evidence: 'high-riding testis with horizontal lie',
+          clueOrder: 5,
+          evidence: 'markedly elevated tTG-IgA and Marsh 3b villous atrophy',
           reason:
-            'Global testicular abnormalities point to cord torsion rather than isolated appendage torsion.',
+            'Specific celiac serology and characteristic villous atrophy distinguish celiac disease from IBD.',
         },
       ],
       finalReasonLessLikely:
-        'Appendage torsion is usually less severe and often self-limited.',
+        'IBD does not produce positive tTG-IgA serology or the pattern of villous atrophy with crypt hyperplasia.',
     },
     {
-      diagnosis: 'Incarcerated inguinal hernia',
+      diagnosis: 'Small intestinal bacterial overgrowth',
       whyPlausibleEarly:
-        'May present with acute groin or scrotal pain and signs of bowel obstruction.',
+        'Bloating, loose stools, and fat malabsorption can occur in SIBO and may coexist with celiac disease.',
       ruledOutByClues: [
         {
-          clueOrder: 0,
-          evidence: 'no history of groin swelling',
+          clueOrder: 5,
+          evidence: 'positive tTG-IgA serology and villous atrophy',
           reason:
-            'Absence of groin swelling or obstruction signs reduces likelihood.',
+            'SIBO does not cause villous atrophy or positive celiac-specific serology.',
         },
       ],
       finalReasonLessLikely:
-        'Inguinal hernia typically presents with a palpable groin mass or obstructive symptoms.',
+        'SIBO may complicate celiac disease but cannot explain the serological and histological findings.',
+    },
+    {
+      diagnosis: 'Microscopic colitis',
+      whyPlausibleEarly:
+        'Can cause chronic watery diarrhoea, particularly in women.',
+      ruledOutByClues: [
+        {
+          clueOrder: 1,
+          evidence: 'pale bulky stools suggesting steatorrhoea',
+          reason:
+            'Microscopic colitis causes watery rather than steatorrhoeic stools and does not cause small bowel malabsorption.',
+        },
+      ],
+      finalReasonLessLikely:
+        'Microscopic colitis does not produce steatorrhoea, celiac serology, or villous atrophy.',
     },
   ],
   generationQuality: {
@@ -245,85 +291,161 @@ const explanation = {
 };
 
 const educationForFrontend = {
-  title: 'Testicular Torsion',
+  title: 'Celiac Disease',
 
   summary: {
     definition:
-      'Testicular torsion is twisting of the spermatic cord, obstructing testicular blood flow and causing acute ischemic scrotal pain.',
+      'Celiac disease is a chronic immune-mediated enteropathy triggered by gluten ingestion in genetically susceptible individuals, causing villous atrophy and malabsorption.',
     highYieldTakeaway:
-      'Think testicular torsion in an adolescent or young adult male with sudden severe unilateral testicular pain, nausea or vomiting, a high-riding testis, and absent cremasteric reflex.',
+      'Think celiac disease in any patient with chronic GI symptoms, unexplained iron or folate deficiency, refractory anaemia, elevated transaminases, or a personal or family history of autoimmune disease.',
+  },
+
+  mnemonic: {
+    title: 'COELIAC',
+    letters: [
+      {
+        letter: 'C',
+        stands_for: 'Chronic diarrhoea / steatorrhoea',
+        explanation:
+          'Pale, bulky, floating stools from fat malabsorption are a hallmark of small bowel villous damage.',
+      },
+      {
+        letter: 'O',
+        stands_for: 'Oral and skin signs',
+        explanation:
+          'Angular cheilitis, aphthous ulcers, and dermatitis herpetiformis are classic extra-intestinal manifestations.',
+      },
+      {
+        letter: 'E',
+        stands_for: 'Extra-intestinal features',
+        explanation:
+          'Anaemia, osteoporosis, elevated transaminases, infertility, and neurological symptoms reflect systemic malabsorption.',
+      },
+      {
+        letter: 'L',
+        stands_for: 'Low iron, folate, B12',
+        explanation:
+          'Proximal small bowel damage impairs absorption of iron and folate; B12 may fall if disease is extensive.',
+      },
+      {
+        letter: 'I',
+        stands_for: 'IgA tTG — the key serological test',
+        explanation:
+          'Tissue transglutaminase IgA is the first-line serological test; check total IgA to exclude selective IgA deficiency.',
+      },
+      {
+        letter: 'A',
+        stands_for: 'Autoimmune associations',
+        explanation:
+          'Type 1 diabetes, autoimmune thyroid disease, and primary biliary cholangitis are more common in celiac disease.',
+      },
+      {
+        letter: 'C',
+        stands_for: 'Celiac crisis and complications',
+        explanation:
+          'Refractory celiac disease, enteropathy-associated T-cell lymphoma (EATL), and small bowel adenocarcinoma are rare but serious complications.',
+      },
+    ],
   },
 
   recognitionPattern: [
     {
-      pattern: 'Sudden severe unilateral testicular pain',
+      pattern: 'Chronic GI symptoms with malabsorption features',
       whyItMatters:
-        'Abrupt onset over minutes to hours is the classic presentation and separates torsion from many infectious causes of scrotal pain.',
+        'Steatorrhoea, bloating, and weight loss lasting months point toward a small bowel absorptive defect rather than a functional disorder.',
     },
     {
-      pattern: 'Adolescent or young adult male',
+      pattern: 'Refractory or unexplained iron-deficiency anaemia',
       whyItMatters:
-        'Torsion is most common around puberty and in young adults, although it can occur at any age.',
+        'Failure to respond to oral iron in a young woman without obvious blood loss should always prompt celiac testing.',
     },
     {
-      pattern: 'No urinary or STI features',
+      pattern: 'Autoimmune background or family history',
       whyItMatters:
-        'Absence of dysuria, urethral discharge, fever, or sexual exposure makes epididymo-orchitis less likely.',
+        'Celiac disease shares genetic risk (HLA-DQ2/DQ8) with other autoimmune conditions; a positive family history raises pre-test probability.',
     },
   ],
 
   keySymptoms: [
     {
-      symptom: 'Sudden severe testicular pain',
+      symptom: 'Steatorrhoea',
       significance:
-        'Acute unilateral pain is the hallmark symptom and should trigger emergency evaluation.',
+        'Pale, bulky, difficult-to-flush stools indicate fat malabsorption from villous atrophy of the proximal small bowel.',
     },
     {
-      symptom: 'Nausea and vomiting',
+      symptom: 'Bloating and flatulence',
       significance:
-        'Visceral autonomic symptoms commonly accompany torsion and support the diagnosis in acute scrotum.',
+        'Carbohydrate malabsorption leads to fermentation and gas production in the colon.',
+    },
+    {
+      symptom: 'Unintentional weight loss',
+      significance:
+        'Reflects global caloric malabsorption and should prompt investigation for an organic cause.',
+    },
+    {
+      symptom: 'Fatigue',
+      significance:
+        'Driven by iron and folate deficiency, poor nutritional status, and the burden of chronic inflammation.',
     },
   ],
 
   keySigns: [
     {
-      finding: 'High-riding testis with horizontal lie',
+      finding: 'Pallor',
       significance:
-        'Abnormal testicular position reflects spermatic cord twisting and is a classic bedside clue.',
+        'Reflects iron-deficiency or mixed deficiency anaemia from malabsorption.',
     },
     {
-      finding: 'Absent cremasteric reflex',
+      finding: 'Angular cheilitis',
       significance:
-        'Loss of the ipsilateral cremasteric reflex strongly supports torsion in the right clinical setting.',
+        'A classic sign of iron and B-vitamin deficiency associated with celiac disease.',
     },
     {
-      finding: 'Tender affected testis',
+      finding: 'Dermatitis herpetiformis',
       significance:
-        'Marked testicular tenderness is expected with acute ischemia.',
+        'Intensely pruritic vesicular rash on extensor surfaces; pathognomonic for celiac disease.',
+    },
+    {
+      finding: 'Peripheral oedema or muscle wasting',
+      significance:
+        'Reflects severe protein malabsorption in longstanding or refractory disease.',
     },
   ],
 
   examPearls: [
     {
       type: 'physical',
-      title: 'Cremasteric reflex',
+      title: 'Angular cheilitis and mouth ulcers',
       content:
-        'Stroke the inner thigh and look for elevation of the ipsilateral testis; absence on the painful side supports torsion.',
+        'Inspect the oral cavity for angular cheilitis and aphthous ulcers, both linked to iron, folate, and B12 deficiency.',
       whyItMatters:
-        'This is a fast bedside discriminator when acute torsion is suspected.',
+        'Oral signs can precede GI symptoms and offer an accessible clinical clue.',
       discriminator:
-        'A preserved reflex does not fully exclude torsion, but an absent reflex is highly concerning.',
+        'Recurrent aphthous ulcers in the context of GI symptoms should always prompt celiac testing.',
       trapAvoided:
-        'Do not falsely reassure yourself with a nonspecific scrotal pain exam when the reflex is absent.',
+        'Do not attribute recurrent oral ulcers solely to stress or local trauma in a symptomatic patient.',
     },
     {
       type: 'physical',
-      title: 'Testicular lie',
+      title: 'Dermatitis herpetiformis',
       content:
-        'Look for a high-riding testis or horizontal lie on the painful side.',
-      whyItMatters: 'Abnormal lie is a classic sign of spermatic cord torsion.',
+        'Look for a symmetrical pruritic blistering rash on elbows, knees, buttocks, and scalp.',
+      whyItMatters:
+        'Dermatitis herpetiformis is a cutaneous manifestation of celiac disease and may occur without GI symptoms.',
+      discriminator:
+        'IgA deposits in dermal papillae on skin biopsy are diagnostic.',
       managementImplication:
-        'Urgent urology review and operative exploration are needed when clinical suspicion is high.',
+        'Patients with dermatitis herpetiformis require gluten-free diet and may need dapsone for rash control.',
+    },
+    {
+      type: 'nutritional',
+      title: 'Signs of nutritional deficiency',
+      content:
+        'Assess for pallor (iron), glossitis (B12/folate), peripheral neuropathy (B12), and bone pain or low trauma fractures (vitamin D/calcium).',
+      whyItMatters:
+        'Multi-micronutrient deficiency is the rule in longstanding celiac disease and guides supplementation.',
+      managementImplication:
+        'Correct deficiencies before and after starting a gluten-free diet and monitor at follow-up.',
     },
   ],
 
@@ -331,107 +453,186 @@ const educationForFrontend = {
 
   investigations: [
     {
-      test: 'Doppler scrotal ultrasound',
+      test: 'Tissue transglutaminase IgA (tTG-IgA) with total IgA',
       interpretation:
-        'Reduced or absent blood flow to the affected testis supports torsion.',
+        'tTG-IgA >10× upper limit of normal has high specificity for celiac disease. Total IgA must be checked to exclude IgA deficiency; if deficient, use IgG-based tests (tTG-IgG or DGP-IgG).',
       whyItMatters:
-        'Ultrasound can support the diagnosis when immediately available, but should not delay surgical exploration if suspicion is high.',
+        'First-line serological test; markedly elevated levels can support diagnosis without biopsy in select patients per current guidelines.',
     },
     {
-      test: 'Urinalysis',
+      test: 'Duodenal biopsy (at least 4 biopsies from D2, 1–2 from duodenal bulb)',
       interpretation:
-        'May be normal in torsion; pyuria or bacteriuria would support infectious epididymo-orchitis.',
+        'Villous atrophy (Marsh 3) with crypt hyperplasia is the histological gold standard. Patient must be on a gluten-containing diet at the time of biopsy.',
       whyItMatters:
-        'A normal urinalysis helps move infection lower on the differential, but management remains driven by torsion risk.',
+        'Confirms the diagnosis and grades severity. Essential before lifelong dietary commitment in most adults.',
+    },
+    {
+      test: 'Full blood count and iron studies',
+      interpretation:
+        'Microcytic anaemia with low ferritin and low/normal MCV is typical. Mixed deficiency anaemia (iron + folate) may cause a normal MCV.',
+      whyItMatters:
+        'Quantifies deficiency burden and guides supplementation. Refractory iron deficiency in the absence of blood loss should always trigger celiac testing.',
+    },
+    {
+      test: 'Folate, B12, vitamin D, calcium, bone profile',
+      interpretation:
+        'Low folate and vitamin D are common. B12 is usually preserved unless disease is extensive. Elevated ALP may suggest bone disease.',
+      whyItMatters:
+        'Identifies nutritional deficiencies needing correction and screens for metabolic bone disease.',
+    },
+    {
+      test: 'Liver function tests',
+      interpretation:
+        'Mild isolated transaminase elevation (cryptogenic hypertransaminasaemia) may be the only presenting feature of celiac disease.',
+      whyItMatters:
+        'Normalisation of transaminases on a gluten-free diet is both diagnostic and therapeutic.',
+    },
+    {
+      test: 'HLA-DQ2 / HLA-DQ8 typing',
+      interpretation:
+        'Negative result essentially excludes celiac disease. A positive result is necessary but not sufficient for diagnosis.',
+      whyItMatters:
+        'Useful to exclude celiac disease in equivocal cases or when serology and biopsy are discordant.',
     },
   ],
 
   pitfalls: [
     {
-      pitfall: 'Waiting for imaging despite classic torsion features',
-      consequence: 'Delay can reduce the chance of testicular salvage.',
+      pitfall: 'Diagnosing IBS without excluding celiac disease',
+      consequence:
+        'Celiac disease is frequently misdiagnosed as IBS for years, delaying treatment and allowing nutritional damage to accumulate.',
     },
     {
-      pitfall: 'Mislabeling acute torsion as epididymo-orchitis',
+      pitfall: 'Testing serology on a gluten-free diet',
       consequence:
-        'Antibiotic treatment without surgical assessment risks missed ischemia.',
+        'tTG-IgA can normalise rapidly after gluten exclusion, producing false-negative results. Patients must consume gluten for at least 6 weeks before testing.',
     },
     {
-      pitfall: 'Being reassured by lack of sexual exposure',
+      pitfall: 'Missing IgA deficiency',
       consequence:
-        'The absence of STI risk makes infection less likely and should increase concern for torsion in acute scrotum.',
+        'Selective IgA deficiency occurs in ~1:500 people and will give a false-negative tTG-IgA. Always measure total IgA.',
+    },
+    {
+      pitfall: 'Attributing elevated transaminases to other causes without testing for celiac disease',
+      consequence:
+        'Celiac disease is a reversible cause of cryptogenic hypertransaminasaemia; missing it delays a simple dietary intervention.',
+    },
+    {
+      pitfall: 'Failing to screen for associated conditions',
+      consequence:
+        'Untreated celiac disease is associated with osteoporosis, lymphoma, and other autoimmune conditions; screening and monitoring are essential.',
     },
   ],
 
   managementOverview: [
     {
-      step: 'Urgent urology review',
+      step: 'Strict lifelong gluten-free diet',
       rationale:
-        'Testicular torsion is a surgical emergency requiring immediate specialist involvement.',
+        'Complete elimination of wheat, barley, and rye leads to mucosal healing, resolution of symptoms, and correction of nutritional deficiencies in most patients.',
     },
     {
-      step: 'Immediate scrotal exploration when suspicion is high',
+      step: 'Correct nutritional deficiencies',
       rationale:
-        'Definitive treatment is detorsion and orchiopexy; imaging must not delay operative management.',
+        'Supplement iron, folate, vitamin D, and calcium as indicated; reassess once mucosal healing has occurred.',
     },
     {
-      step: 'Bilateral orchiopexy',
+      step: 'Dietitian referral',
       rationale:
-        'The contralateral testis is typically fixed as well because the anatomic predisposition is often bilateral.',
+        'A specialist dietitian provides education on hidden gluten sources, label reading, and cross-contamination avoidance.',
+    },
+    {
+      step: 'Serological follow-up',
+      rationale:
+        'Repeat tTG-IgA at 6–12 months; falling titres confirm dietary adherence and mucosal recovery.',
+    },
+    {
+      step: 'Bone density assessment',
+      rationale:
+        'DEXA scan at diagnosis in adults to assess baseline bone mineral density given the risk of metabolic bone disease.',
+    },
+    {
+      step: 'Screen for associated autoimmune conditions',
+      rationale:
+        'Check thyroid function (TSH), consider type 1 diabetes screening, and assess for other autoimmune conditions at diagnosis and follow-up.',
     },
   ],
 
   differentialDistinguishers: [
     {
-      diagnosis: 'Epididymo-orchitis',
+      diagnosis: 'Irritable bowel syndrome',
       keySeparator:
-        'Usually has gradual pain, urinary symptoms, fever, or STI risk features rather than abrupt severe pain with abnormal lie.',
+        'IBS does not cause steatorrhoea, nutritional deficiencies, elevated tTG-IgA, or villous atrophy.',
     },
     {
-      diagnosis: 'Torsion of appendix testis',
+      diagnosis: 'Inflammatory bowel disease',
       keySeparator:
-        'Often less severe and may show localized upper-pole tenderness or a blue-dot sign.',
+        'IBD can cause malabsorption and anaemia but does not produce positive celiac serology or the characteristic pattern of villous atrophy with crypt hyperplasia.',
     },
     {
-      diagnosis: 'Incarcerated inguinal hernia',
+      diagnosis: 'Small intestinal bacterial overgrowth',
       keySeparator:
-        'Usually has groin swelling, a palpable mass, or bowel obstruction features.',
+        'SIBO causes bloating and diarrhoea but does not produce villous atrophy or positive tTG-IgA; breath testing is used for diagnosis.',
+    },
+    {
+      diagnosis: 'Microscopic colitis',
+      keySeparator:
+        'Microscopic colitis causes watery diarrhoea without steatorrhoea, villous atrophy, or celiac-specific serology.',
     },
   ],
 
   complications: [
     {
-      complication: 'Testicular infarction',
+      complication: 'Refractory celiac disease',
       whyItMatters:
-        'Prolonged ischemia can cause irreversible testicular damage.',
+        'Persistent villous atrophy despite strict gluten-free diet; type II is pre-malignant and carries significant mortality risk.',
     },
     {
-      complication: 'Orchiectomy',
+      complication: 'Enteropathy-associated T-cell lymphoma (EATL)',
       whyItMatters:
-        'Delayed diagnosis may require removal of a nonviable testis.',
+        'A rare but serious complication; risk is reduced by adherence to a gluten-free diet.',
     },
     {
-      complication: 'Subfertility',
+      complication: 'Osteoporosis and fragility fractures',
       whyItMatters:
-        'Loss of testicular tissue or ischemic injury can affect future fertility.',
+        'Calcium and vitamin D malabsorption leads to reduced bone mineral density; DEXA screening and supplementation are important.',
+    },
+    {
+      complication: 'Reproductive complications',
+      whyItMatters:
+        'Untreated celiac disease is associated with infertility, recurrent miscarriage, and adverse pregnancy outcomes.',
+    },
+    {
+      complication: 'Small bowel adenocarcinoma',
+      whyItMatters:
+        'Rare but elevated risk compared to the general population; gluten-free diet may be protective.',
     },
   ],
 
   recallPrompts: [
     {
-      prompt:
-        'What bedside reflex is classically absent in testicular torsion?',
-      answer: 'The ipsilateral cremasteric reflex.',
-    },
-    {
-      prompt: 'What is the classic testicular position in torsion?',
-      answer: 'A high-riding testis with a horizontal lie.',
-    },
-    {
-      prompt:
-        'Should surgery be delayed for ultrasound when clinical suspicion for torsion is high?',
+      prompt: 'What is the first-line serological test for celiac disease?',
       answer:
-        'No. Urgent urology review and surgical exploration should not be delayed for imaging.',
+        'Tissue transglutaminase IgA (tTG-IgA), always paired with total IgA to exclude selective IgA deficiency.',
+    },
+    {
+      prompt: 'Why must patients be eating gluten before celiac testing?',
+      answer:
+        'Gluten-free diet causes tTG-IgA to normalise, producing false-negative serology and potentially normal biopsies.',
+    },
+    {
+      prompt: 'What is the histological gold standard for diagnosing celiac disease?',
+      answer:
+        'Villous atrophy with crypt hyperplasia (Marsh grade 3) on duodenal biopsy taken during active gluten ingestion.',
+    },
+    {
+      prompt: 'Name two classic extra-intestinal presentations of celiac disease.',
+      answer:
+        'Refractory iron-deficiency anaemia and dermatitis herpetiformis (also: elevated transaminases, osteoporosis, infertility, peripheral neuropathy).',
+    },
+    {
+      prompt: 'What mnemonic helps recall the key features of celiac disease?',
+      answer:
+        'COELIAC — Chronic diarrhoea, Oral/skin signs, Extra-intestinal features, Low iron/folate/B12, IgA tTG, Autoimmune associations, Complications.',
     },
   ],
 
@@ -439,8 +640,8 @@ const educationForFrontend = {
 };
 
 async function main() {
-  const canonicalName = 'testicular torsion';
-  const displayLabel = 'Testicular Torsion';
+  const canonicalName = 'celiac disease';
+  const displayLabel = 'Celiac Disease';
   const canonicalNormalized = normalizeClinicalText(canonicalName);
 
   const registry = await prisma.diagnosisRegistry.upsert({
@@ -450,24 +651,24 @@ async function main() {
       displayLabel,
       status: DiagnosisRegistryStatus.ACTIVE,
       active: true,
-      specialty: 'Urology',
-      subspecialty: 'Andrology',
-      category: 'Surgical Emergency',
-      bodySystem: 'Genitourinary',
-      organSystem: 'Male Reproductive System',
+      specialty: 'Gastroenterology',
+      subspecialty: 'Small Bowel',
+      category: 'Autoimmune / Malabsorption',
+      bodySystem: 'Gastrointestinal',
+      organSystem: 'Small Intestine',
       difficultyBand: DiagnosisDifficultyBand.BASIC,
-      rarityBand: DiagnosisRarityBand.UNCOMMON,
-      clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
-      ageGroup: DiagnosisAgeGroup.PEDIATRIC,
-      urgencyLevel: DiagnosisUrgencyLevel.EMERGENT,
+      rarityBand: DiagnosisRarityBand.COMMON,
+      clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
+      ageGroup: DiagnosisAgeGroup.ADULT,
+      urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
       onboardingStatus: 'READY_FOR_REVIEW',
       isPlayable: true,
       isGeneratable: true,
-      preferredClueTypes: ['history', 'symptom', 'exam', 'investigation'],
+      preferredClueTypes: ['history', 'symptom', 'exam', 'lab', 'investigation'],
       excludedClueTypes: [],
-      searchPriority: 15,
+      searchPriority: 20,
       notes:
-        'Urologic emergency in adolescent and young adult males causing sudden severe unilateral testicular pain from spermatic cord torsion.',
+        'Common autoimmune enteropathy presenting with malabsorption, nutritional deficiencies, and extra-intestinal manifestations. Frequently misdiagnosed as IBS.',
     },
     create: {
       canonicalName,
@@ -475,25 +676,25 @@ async function main() {
       displayLabel,
       status: DiagnosisRegistryStatus.ACTIVE,
       active: true,
-      specialty: 'Urology',
-      subspecialty: 'Andrology',
-      category: 'Surgical Emergency',
-      bodySystem: 'Genitourinary',
-      organSystem: 'Male Reproductive System',
+      specialty: 'Gastroenterology',
+      subspecialty: 'Small Bowel',
+      category: 'Autoimmune / Malabsorption',
+      bodySystem: 'Gastrointestinal',
+      organSystem: 'Small Intestine',
       difficultyBand: DiagnosisDifficultyBand.BASIC,
-      rarityBand: DiagnosisRarityBand.UNCOMMON,
-      clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
-      ageGroup: DiagnosisAgeGroup.PEDIATRIC,
-      urgencyLevel: DiagnosisUrgencyLevel.EMERGENT,
+      rarityBand: DiagnosisRarityBand.COMMON,
+      clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
+      ageGroup: DiagnosisAgeGroup.ADULT,
+      urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
       onboardingStatus: 'READY_FOR_REVIEW',
       onboardingStartedAt: now,
       isPlayable: true,
       isGeneratable: true,
-      preferredClueTypes: ['history', 'symptom', 'exam', 'investigation'],
+      preferredClueTypes: ['history', 'symptom', 'exam', 'lab', 'investigation'],
       excludedClueTypes: [],
-      searchPriority: 15,
+      searchPriority: 20,
       notes:
-        'Urologic emergency in adolescent and young adult males causing sudden severe unilateral testicular pain from spermatic cord torsion.',
+        'Common autoimmune enteropathy presenting with malabsorption, nutritional deficiencies, and extra-intestinal manifestations. Frequently misdiagnosed as IBS.',
     },
   });
 
@@ -505,22 +706,34 @@ async function main() {
       rank: 100,
     },
     {
-      term: 'torsion of testis',
+      term: 'celiac disease',
       kind: DiagnosisAliasKind.ACCEPTED,
       acceptedForMatch: true,
-      rank: 90,
+      rank: 95,
     },
     {
-      term: 'spermatic cord torsion',
+      term: 'celiac sprue',
       kind: DiagnosisAliasKind.ACCEPTED,
       acceptedForMatch: true,
       rank: 85,
     },
     {
-      term: 'acute scrotum',
+      term: 'gluten-sensitive enteropathy',
+      kind: DiagnosisAliasKind.ACCEPTED,
+      acceptedForMatch: true,
+      rank: 80,
+    },
+    {
+      term: 'gluten intolerance',
       kind: DiagnosisAliasKind.SEARCH_ONLY,
       acceptedForMatch: false,
       rank: 40,
+    },
+    {
+      term: 'villous atrophy',
+      kind: DiagnosisAliasKind.SEARCH_ONLY,
+      acceptedForMatch: false,
+      rank: 30,
     },
   ];
   const seenAliasNormalizations = new Set<string>();
@@ -582,6 +795,7 @@ async function main() {
     update: {
       title: educationForFrontend.title,
       summary: educationForFrontend.summary,
+      mnemonic: educationForFrontend.mnemonic,
       clinicalPattern: educationForFrontend.recognitionPattern,
       keySymptoms: educationForFrontend.keySymptoms,
       keySigns: educationForFrontend.keySigns,
@@ -604,6 +818,7 @@ async function main() {
       diagnosisRegistryId: registry.id,
       title: educationForFrontend.title,
       summary: educationForFrontend.summary,
+      mnemonic: educationForFrontend.mnemonic,
       clinicalPattern: educationForFrontend.recognitionPattern,
       keySymptoms: educationForFrontend.keySymptoms,
       keySigns: educationForFrontend.keySigns,
@@ -657,7 +872,17 @@ async function main() {
     select: {
       id: true,
       currentRevisionId: true,
+      publicNumber: true,
     },
+  });
+
+  const publicNumber =
+    reusableCase?.publicNumber ?? (await getNextCasePublicNumber());
+
+  console.log('Assigned public case number', {
+    displayLabel,
+    publicNumber,
+    reusedExistingCase: Boolean(reusableCase),
   });
 
   const assignedInventoryPlaceholderDate =
@@ -669,8 +894,9 @@ async function main() {
 
   const caseData = {
     title: displayLabel,
+    publicNumber,
     date: assignedInventoryPlaceholderDate,
-    difficulty: 'easy',
+    difficulty: 'medium',
     history,
     symptoms,
     clues: clues as unknown as object,
@@ -685,7 +911,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Seeded frontend-aligned flagship Testicular Torsion inventory case. DailyCase scheduler should assign the actual daily slot.',
+      'Seeded frontend-aligned flagship Celiac Disease inventory case. DailyCase scheduler should assign the actual daily slot.',
   };
 
   const seededCase = reusableCase
@@ -700,8 +926,9 @@ async function main() {
     source: 'MANUAL' as const,
     publishTrack: 'DAILY' as const,
     title: displayLabel,
+    publicNumber,
     date: assignedInventoryPlaceholderDate,
-    difficulty: 'easy',
+    difficulty: 'medium',
     history,
     symptoms,
     clues: clues as unknown as object,
@@ -713,7 +940,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Frontend-aligned flagship Testicular Torsion inventory revision for DailyCase scheduler assignment.',
+      'Frontend-aligned flagship Celiac Disease inventory revision for DailyCase scheduler assignment.',
   };
 
   const revision = reusableCase?.currentRevisionId
@@ -751,21 +978,22 @@ async function main() {
       source: 'MANUAL',
       publishTrack: 'DAILY',
       outcome: 'PASSED',
-      validatorVersion: 'flagship-human-review:testicular-torsion-v1',
+      validatorVersion: 'flagship-human-review:celiac-disease-v1',
       summary: {
         contentTier: 'FLAGSHIP',
         seedVersion,
         humanReviewed: true,
-        note: 'Manual frontend-aligned Testicular Torsion inventory case seeded for DailyCase scheduler assignment.',
+        note: 'Manual frontend-aligned Celiac Disease inventory case seeded for DailyCase scheduler assignment.',
       },
       findings: [],
       completedAt: now,
     },
   });
 
-  console.log('Seeded frontend-aligned Testicular Torsion:', {
+  console.log('Seeded frontend-aligned Celiac Disease:', {
     registryId: registry.id,
     caseId: seededCase.id,
+    publicNumber,
     educationId: education.id,
     inventoryPlaceholderDate: assignedInventoryPlaceholderDate.toISOString(),
   });
