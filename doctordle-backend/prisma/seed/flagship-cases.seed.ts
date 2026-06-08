@@ -300,54 +300,6 @@ const educationForFrontend = {
       'Think celiac disease in any patient with chronic GI symptoms, unexplained iron or folate deficiency, refractory anaemia, elevated transaminases, or a personal or family history of autoimmune disease.',
   },
 
-  mnemonic: {
-    title: 'COELIAC',
-    letters: [
-      {
-        letter: 'C',
-        stands_for: 'Chronic diarrhoea / steatorrhoea',
-        explanation:
-          'Pale, bulky, floating stools from fat malabsorption are a hallmark of small bowel villous damage.',
-      },
-      {
-        letter: 'O',
-        stands_for: 'Oral and skin signs',
-        explanation:
-          'Angular cheilitis, aphthous ulcers, and dermatitis herpetiformis are classic extra-intestinal manifestations.',
-      },
-      {
-        letter: 'E',
-        stands_for: 'Extra-intestinal features',
-        explanation:
-          'Anaemia, osteoporosis, elevated transaminases, infertility, and neurological symptoms reflect systemic malabsorption.',
-      },
-      {
-        letter: 'L',
-        stands_for: 'Low iron, folate, B12',
-        explanation:
-          'Proximal small bowel damage impairs absorption of iron and folate; B12 may fall if disease is extensive.',
-      },
-      {
-        letter: 'I',
-        stands_for: 'IgA tTG — the key serological test',
-        explanation:
-          'Tissue transglutaminase IgA is the first-line serological test; check total IgA to exclude selective IgA deficiency.',
-      },
-      {
-        letter: 'A',
-        stands_for: 'Autoimmune associations',
-        explanation:
-          'Type 1 diabetes, autoimmune thyroid disease, and primary biliary cholangitis are more common in celiac disease.',
-      },
-      {
-        letter: 'C',
-        stands_for: 'Celiac crisis and complications',
-        explanation:
-          'Refractory celiac disease, enteropathy-associated T-cell lymphoma (EATL), and small bowel adenocarcinoma are rare but serious complications.',
-      },
-    ],
-  },
-
   recognitionPattern: [
     {
       pattern: 'Chronic GI symptoms with malabsorption features',
@@ -449,7 +401,51 @@ const educationForFrontend = {
     },
   ],
 
-  scoringSystems: [],
+  scoringSystems: [
+    {
+      type: 'mnemonic',
+      name: 'CELIAC',
+      description: 'High-yield mnemonic for celiac disease features',
+      items: [
+        {
+          letter: 'C',
+          standsFor: 'Chronic diarrhoea / steatorrhoea',
+          explanation:
+            'Pale, bulky, floating stools from fat malabsorption are a hallmark of small bowel villous damage.',
+        },
+        {
+          letter: 'E',
+          standsFor: 'Extra-intestinal features',
+          explanation:
+            'Anaemia, osteoporosis, elevated transaminases, infertility, and neurological symptoms reflect systemic malabsorption.',
+        },
+        {
+          letter: 'L',
+          standsFor: 'Low iron, folate, B12',
+          explanation:
+            'Proximal small bowel damage impairs absorption of iron and folate; B12 may fall if disease is extensive.',
+        },
+        {
+          letter: 'I',
+          standsFor: 'IgA tTG — the key serological test',
+          explanation:
+            'Tissue transglutaminase IgA is the first-line serological test; check total IgA to exclude selective IgA deficiency.',
+        },
+        {
+          letter: 'A',
+          standsFor: 'Autoimmune associations',
+          explanation:
+            'Type 1 diabetes, autoimmune thyroid disease, and primary biliary cholangitis are more common in celiac disease.',
+        },
+        {
+          letter: 'C',
+          standsFor: 'Celiac crisis and complications',
+          explanation:
+            'Refractory celiac disease, enteropathy-associated T-cell lymphoma, and small bowel adenocarcinoma are rare but serious complications.',
+        },
+      ],
+    },
+  ],
 
   investigations: [
     {
@@ -795,7 +791,6 @@ async function main() {
     update: {
       title: educationForFrontend.title,
       summary: educationForFrontend.summary,
-      mnemonic: educationForFrontend.mnemonic,
       clinicalPattern: educationForFrontend.recognitionPattern,
       keySymptoms: educationForFrontend.keySymptoms,
       keySigns: educationForFrontend.keySigns,
@@ -818,7 +813,6 @@ async function main() {
       diagnosisRegistryId: registry.id,
       title: educationForFrontend.title,
       summary: educationForFrontend.summary,
-      mnemonic: educationForFrontend.mnemonic,
       clinicalPattern: educationForFrontend.recognitionPattern,
       keySymptoms: educationForFrontend.keySymptoms,
       keySigns: educationForFrontend.keySigns,
