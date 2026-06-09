@@ -1,7 +1,17 @@
 // prisma/seed/update-celiac-mnemonic-only.ts
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 
-const prisma = new PrismaClient();
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is required.');
+}
+
+const pool = new Pool({ connectionString: databaseUrl });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   const registry = await prisma.diagnosisRegistry.findUnique({
@@ -10,6 +20,15 @@ async function main() {
   });
 
   if (!registry) throw new Error('Celiac Disease registry not found');
+
+  const existing = await prisma.diagnosisEducation.findUnique({
+    where: { diagnosisRegistryId: registry.id },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    throw new Error(`DiagnosisEducation not found for ${registry.displayLabel}`);
+  }
 
   const education = await prisma.diagnosisEducation.update({
     where: { diagnosisRegistryId: registry.id },
@@ -44,4 +63,7 @@ main()
     console.error(error);
     process.exitCode = 1;
   })
-  .finally(async () => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+    await pool.end();
+  });
