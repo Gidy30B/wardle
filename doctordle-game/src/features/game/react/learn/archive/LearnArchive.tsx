@@ -49,21 +49,86 @@ export function MobileStatsBar({
   loading: boolean;
   error: string | null;
 }) {
+  const accuracyPct = summary.accuracyPct ?? 0;
+  const circumference = 2 * Math.PI * 42;
+  const offset = circumference - (accuracyPct / 100) * circumference;
+
+  const avgClues = summary.averageCluesUsed ?? 0;
+  const clueColorClass =
+    avgClues <= 2
+      ? "text-[var(--wardle-color-teal)]"
+      : avgClues <= 4
+        ? "text-[var(--wardle-color-amber)]"
+        : "text-rose-300";
+
   return (
-    <section className="px-5 pt-4 pb-1">
-      <div className="grid grid-cols-3 overflow-hidden rounded-[18px] border border-white/[0.08] bg-white/[0.035]">
-        <MobileKoiStat value={String(summary.casesDone)} label="cases done" />
-        <MobileKoiStat
-          value={formatPercent(summary.accuracyPct)}
-          label="accuracy"
-          tone="teal"
-        />
-        <MobileKoiStat
-          value={formatAverageClues(summary.averageCluesUsed)}
-          label="avg clues"
-          sub="/6"
-          tone="amber"
-        />
+    <section className="px-5 pt-5 pb-1">
+      <div className="flex items-stretch gap-0">
+
+        <div className="flex flex-1 items-center justify-center border-r border-white/[0.07] pr-4">
+          <svg
+            width="110"
+            height="110"
+            viewBox="0 0 100 100"
+            aria-label={`Accuracy ${accuracyPct}%`}
+          >
+            <circle
+              cx="50" cy="50" r="42"
+              fill="none"
+              stroke="rgba(255,255,255,0.07)"
+              strokeWidth="6"
+            />
+            <circle
+              cx="50" cy="50" r="42"
+              fill="none"
+              stroke="var(--wardle-color-teal)"
+              strokeWidth="6"
+              strokeDasharray={circumference}
+              strokeDashoffset={offset}
+              strokeLinecap="round"
+              transform="rotate(-90 50 50)"
+              style={{ transition: "stroke-dashoffset 0.6s ease" }}
+            />
+            <text
+              x="50" y="46"
+              textAnchor="middle"
+              fontFamily="var(--font-brand-mono, 'Space Mono', monospace)"
+              fontSize="18"
+              fontWeight="400"
+              fill="var(--wardle-color-teal)"
+            >
+              {formatPercent(summary.accuracyPct)}
+            </text>
+            <text
+              x="50" y="59"
+              textAnchor="middle"
+              fontSize="8"
+              fontWeight="500"
+              fill="rgba(255,255,255,0.45)"
+              letterSpacing="1"
+            >
+              accuracy
+            </text>
+          </svg>
+        </div>
+
+        <div className="flex flex-1 flex-col gap-[10px] pl-4 justify-center">
+          <div>
+            <p className="m-0 text-[11px] text-white/55">cases done</p>
+            <p className="m-0 mt-0.5 font-brand-mono text-[22px] font-normal leading-none text-[var(--wardle-color-mint)]">
+              {summary.casesDone}
+            </p>
+          </div>
+          <div className="h-px bg-white/[0.07]" />
+          <div>
+            <p className="m-0 text-[11px] text-white/55">avg clues</p>
+            <p className={`m-0 mt-0.5 font-brand-mono text-[22px] font-normal leading-none ${clueColorClass}`}>
+              {formatAverageClues(summary.averageCluesUsed)}
+              <span className="text-[12px] text-white/35">/6</span>
+            </p>
+          </div>
+        </div>
+
       </div>
 
       {loading && (
@@ -80,41 +145,6 @@ export function MobileStatsBar({
   );
 }
 
-export function MobileKoiStat({
-  value,
-  label,
-  sub,
-  tone = "neutral",
-}: {
-  value: string;
-  label: string;
-  sub?: string;
-  tone?: "teal" | "amber" | "neutral";
-}) {
-  const colorClass =
-    tone === "teal"
-      ? "text-[var(--wardle-color-teal)]"
-      : tone === "amber"
-        ? "text-[var(--wardle-color-amber)]"
-        : "text-[var(--wardle-color-mint)]";
-
-  return (
-    <div className="min-w-0 px-2.5 py-3 text-center [&+&]:border-l [&+&]:border-white/[0.08]">
-      <div className={`font-brand-mono text-[22px] font-black leading-none tracking-tight ${colorClass}`}>
-        {value}
-        {sub && (
-          <span className="ml-0.5 text-[12px] font-semibold text-white/36">
-            {sub}
-          </span>
-        )}
-      </div>
-      <div className="mt-1.5 text-[10px] font-semibold lowercase tracking-[0.02em] text-white/34">
-        {label}
-      </div>
-    </div>
-  );
-}
-
 // ─── Mobile case archive ──────────────────────────────────────────────────────
 
 export function MobileCaseArchive({
@@ -123,7 +153,6 @@ export function MobileCaseArchive({
   completedCount,
   missedCount,
   dueReviewCount,
-  dueReviewCases,
   onSelectSpecialty,
   onStartDueReviewQueue,
   loading,
@@ -161,7 +190,7 @@ export function MobileCaseArchive({
             Specialties
           </h2>
           <p className="font-brand-mono text-[11px] text-white/28 m-0">
-            {completedCount} completed
+            {archiveSpecialties.length} {archiveSpecialties.length === 1 ? "specialty" : "specialties"}
           </p>
         </div>
 
@@ -174,11 +203,6 @@ export function MobileCaseArchive({
                 cases={cases.filter(
                   (item) => getCaseSpecialty(item).key === specialty.key,
                 )}
-                dueCount={
-                  dueReviewCases.filter(
-                    (item) => getCaseSpecialty(item).key === specialty.key,
-                  ).length
-                }
                 showDivider={index < archiveSpecialties.length - 1}
                 onSelect={() => onSelectSpecialty(specialty.key)}
               />
@@ -202,13 +226,11 @@ export function MobileCaseArchive({
 export function MobileSpecialtyCard({
   specialty,
   cases,
-  dueCount,
   showDivider = false,
   onSelect,
 }: {
   specialty: LearnPerformanceSummary["specialties"][number];
   cases: LearnLibraryCase[];
-  dueCount: number;
   showDivider?: boolean;
   onSelect: () => void;
 }) {
@@ -216,7 +238,7 @@ export function MobileSpecialtyCard({
   const missedCount = cases.length - solvedCount;
   const accuracy = specialty.accuracyPct;
 
-  const accuracyClass =
+  const accuracyColorClass =
     accuracy === null
       ? "text-white/38"
       : accuracy >= 75
@@ -229,37 +251,35 @@ export function MobileSpecialtyCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`wardle-learn-fade flex w-full min-w-0 items-center gap-3 py-2.5 px-0.5 text-left transition active:scale-[0.99] hover:opacity-80 ${
+      className={`wardle-learn-fade flex w-full min-w-0 items-center gap-[10px] py-[9px] px-0.5 text-left transition active:scale-[0.99] hover:opacity-80 ${
         showDivider ? "border-b border-white/[0.07]" : ""
       }`}
     >
       <MobileSpecialtyIcon
         specialty={specialty.label || specialty.key}
-        className="h-9 w-9 shrink-0 rounded-[11px]"
-        iconClassName="h-[17px] w-[17px]"
+        className="h-[34px] w-[34px] shrink-0 rounded-[10px]"
+        iconClassName="h-[16px] w-[16px]"
       />
 
       <div className="min-w-0 flex-1">
-        <p className="m-0 block truncate text-[14px] font-bold text-[var(--wardle-color-mint)]">
+        <p className="m-0 truncate text-[13px] font-bold text-[var(--wardle-color-mint)]">
           {specialty.label}
         </p>
-        <p className="m-0 mt-0.5 block text-[12px] text-white/34">
+        <p className="m-0 mt-0.5 text-[11px] text-white/34">
           {specialty.casesDone} case{specialty.casesDone === 1 ? "" : "s"}
           {missedCount > 0 ? ` · ${missedCount} missed` : ""}
+          {accuracy !== null && (
+            <>
+              {" · "}
+              <span className={`font-normal ${accuracyColorClass}`}>
+                {accuracy}%
+              </span>
+            </>
+          )}
         </p>
       </div>
 
-      <p className={`m-0 shrink-0 font-brand-mono text-[13px] font-black ${accuracyClass}`}>
-        {accuracy !== null ? `${accuracy}%` : "—"}
-      </p>
-
-      {dueCount > 0 && (
-        <span className="shrink-0 rounded-full border border-rose-400/[0.2] bg-rose-400/[0.1] px-2 py-0.5 text-[10px] font-bold text-rose-300">
-          {dueCount} due
-        </span>
-      )}
-
-      <span className="shrink-0 text-[16px] text-white/18">›</span>
+      <span className="shrink-0 text-[15px] text-white/18">›</span>
     </button>
   );
 }

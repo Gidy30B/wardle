@@ -1,181 +1,51 @@
+/**
+ * Targeted patch: updates the explanation on the existing Acute Pancreatitis case
+ * and upserts the education record — without touching registry, aliases, or revisions.
+ *
+ * Usage:
+ *   railway run npx tsx prisma/seed/patch-pancreatitis-explanation.ts
+ */
+
 import {
   PrismaClient,
-  CaseEditorialStatus,
-  DiagnosisAliasKind,
-  DiagnosisAgeGroup,
-  DiagnosisClinicalSetting,
-  DiagnosisDifficultyBand,
   DiagnosisEducationSource,
   DiagnosisEducationStatus,
-  DiagnosisMappingMethod,
-  DiagnosisMappingStatus,
-  DiagnosisRegistryStatus,
-  DiagnosisRarityBand,
-  DiagnosisUrgencyLevel,
 } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
-import { assertAliasValidWithClient } from '../../src/modules/diagnosis-registry/alias-validation.service';
 
 const databaseUrl = process.env.DATABASE_URL;
-
-if (!databaseUrl) {
-  throw new Error('DATABASE_URL is required to run the pancreatitis seed.');
-}
+if (!databaseUrl) throw new Error('DATABASE_URL is required.');
 
 const pool = new Pool({ connectionString: databaseUrl });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-function normalizeClinicalText(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .replace(/\s+/g, ' ');
-}
-
 const now = new Date();
-const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 6, 12, 0, 0));
-const seedVersion = 'flagship-acute-pancreatitis-v1';
 
-function addUtcDays(date: Date, days: number): Date {
-  const next = new Date(date);
-  next.setUTCDate(next.getUTCDate() + days);
-  return next;
-}
+// The existing Pancreatitis registry id
+const REGISTRY_ID = '7fc95349-32a5-44a5-897c-d2524689f9ce';
 
-async function findAvailableInventoryPlaceholderDate(params: {
-  preferredDate: Date;
-  reusableCaseId?: string;
-  displayLabel: string;
-}): Promise<Date> {
-  const maxAttempts = 365;
-
-  for (let offset = 0; offset < maxAttempts; offset += 1) {
-    const candidateDate = addUtcDays(params.preferredDate, offset);
-    const owner = await prisma.case.findUnique({
-      where: { date: candidateDate },
-      select: {
-        id: true,
-        title: true,
-        diagnosisRegistryId: true,
-        currentRevisionId: true,
-        dailyCases: { select: { id: true }, take: 1 },
-      },
-    });
-
-    if (!owner) {
-      if (offset > 0) {
-        console.warn(
-          'Preferred inventory placeholder date was occupied; using next free date.',
-          {
-            displayLabel: params.displayLabel,
-            preferredDate: params.preferredDate.toISOString(),
-            assignedDate: candidateDate.toISOString(),
-            offsetDays: offset,
-          },
-        );
-      }
-      return candidateDate;
-    }
-
-    if (params.reusableCaseId && owner.id === params.reusableCaseId) {
-      return candidateDate;
-    }
-
-    console.warn('Inventory placeholder date occupied; trying next day.', {
-      displayLabel: params.displayLabel,
-      candidateDate: candidateDate.toISOString(),
-      occupiedByCaseId: owner.id,
-      occupiedByTitle: owner.title,
-      occupiedCaseIsScheduled: owner.dailyCases.length > 0,
-    });
-  }
-
-  throw new Error(
-    `Cannot seed ${params.displayLabel}: no free inventory placeholder date found within ${maxAttempts} days after ${params.preferredDate.toISOString()}.`,
-  );
-}
-
-async function getNextCasePublicNumber(): Promise<number> {
-  const latest = await prisma.case.findFirst({
-    where: { publicNumber: { not: null } },
-    orderBy: { publicNumber: 'desc' },
-    select: { publicNumber: true },
-  });
-  return (latest?.publicNumber ?? 0) + 1;
-}
-
-// ─── Clues ────────────────────────────────────────────────────────────────────
-
-const clues = [
-  {
-    order: 0,
-    type: 'history',
-    value:
-      'A 46-year-old man presents to the emergency department with severe epigastric pain that began 6 hours ago after a heavy meal and has been worsening since.',
-  },
-  {
-    order: 1,
-    type: 'symptom',
-    value:
-      'The pain radiates to his back, is partially relieved by leaning forward, and is accompanied by nausea and two episodes of vomiting.',
-  },
-  {
-    order: 2,
-    type: 'history',
-    value:
-      'He drinks approximately 30 units of alcohol per week and has had a similar but milder episode 8 months ago that resolved without investigation.',
-  },
-  {
-    order: 3,
-    type: 'exam',
-    value:
-      'Examination reveals epigastric tenderness with guarding; there is no jaundice, no palpable mass, and bowel sounds are reduced.',
-  },
-  {
-    order: 4,
-    type: 'lab',
-    value:
-      'Serum lipase is 1 840 U/L (reference <60 U/L); amylase is 920 U/L. CRP is 148 mg/L; WBC 14.2 × 10⁹/L; bilirubin and LFTs are normal.',
-  },
-  {
-    order: 5,
-    type: 'imaging',
-    value:
-      'Contrast-enhanced CT abdomen shows diffuse pancreatic oedema with peripancreatic fat stranding and a small amount of peripancreatic fluid, consistent with interstitial oedematous pancreatitis.',
-  },
-] as const;
-
-const differentials = [
-  'Peptic ulcer disease',
-  'Acute cholecystitis',
-  'Mesenteric ischaemia',
-  'Aortic dissection',
-];
-
-// ─── Explanation ─────────────────────────────────────────────────────────────
-
-const explanation = {
+// ─── Fixed reasoning — each step matches its paired clue by index ─────────────
+const updatedExplanation = {
   diagnosis: 'Acute Pancreatitis',
   summary:
     'Severe epigastric pain radiating to the back, markedly elevated lipase, peripancreatic inflammation on CT, and a background of significant alcohol use confirm acute pancreatitis.',
   keyEvidence: [
     'Epigastric pain radiating to the back',
-    'Pain relieved by leaning forward',
+    'Positional relief on leaning forward',
     'Serum lipase >3× upper limit of normal',
     'Elevated CRP and leucocytosis',
     'Peripancreatic fat stranding on CT',
     'Significant alcohol history',
   ],
   reasoning: [
-    'Severe epigastric pain radiating to the back with relief on leaning forward is the classic positional signature of retroperitoneal pancreatic inflammation.',
-    'Serum lipase more than 30 times the upper limit of normal has high specificity for acute pancreatitis and satisfies one of the Atlanta criteria.',
-    'Normal bilirubin and LFTs make biliary obstruction less likely, pointing toward alcohol as the aetiology in this case.',
-    'Elevated CRP and leucocytosis reflect systemic inflammation; CRP >150 mg/L at 48 hours is associated with severe disease.',
-    'CT findings of diffuse pancreatic oedema with peripancreatic fat stranding confirm interstitial oedematous pancreatitis and exclude necrosis at this stage.',
-    'A prior similar episode and chronic heavy alcohol use strongly support an alcoholic aetiology.',
+    'Acute severe epigastric pain after a heavy meal with no relief from eating points away from peptic pathology and raises immediate concern for a pancreatic or biliary cause.',
+    'Posterior radiation to the back with partial relief on leaning forward is the classic positional signature of retroperitoneal pancreatic inflammation — the pancreas lies behind the stomach and irritates structures posteriorly.',
+    'A background of heavy alcohol use and a prior similar episode strongly support an alcoholic aetiology; recurrent attacks are common in chronic heavy drinkers before overt chronic pancreatitis develops.',
+    'Epigastric guarding with reduced bowel sounds indicates localised peritoneal irritation and a paralytic ileus from peripancreatic inflammation — consistent with, and proportionate to, acute pancreatitis at this stage.',
+    'Lipase more than 30 times the upper limit of normal satisfies one of the Atlanta diagnostic criteria; normal bilirubin and LFTs argue against a biliary cause and support alcohol as the precipitant.',
+    'CT confirms interstitial oedematous pancreatitis with peripancreatic fat stranding and a small fluid collection, excluding necrosis at this stage and correlating with the clinical and biochemical picture.',
   ],
   keyFindings: [
     'Epigastric pain radiating to the back',
@@ -185,7 +55,12 @@ const explanation = {
     'Normal bilirubin and LFTs',
     'Peripancreatic oedema and fat stranding on CT',
   ],
-  differentials,
+  differentials: [
+    'Peptic ulcer disease',
+    'Acute cholecystitis',
+    'Mesenteric ischaemia',
+    'Aortic dissection',
+  ],
   differentialAnalysis: [
     {
       diagnosis: 'Peptic ulcer disease',
@@ -275,22 +150,18 @@ const explanation = {
   generationQuality: {
     contentTier: 'FLAGSHIP',
     humanReviewed: true,
-    seedVersion,
+    seedVersion: 'flagship-acute-pancreatitis-v1',
   },
 };
 
-// ─── Education ────────────────────────────────────────────────────────────────
-
-const educationForFrontend = {
-  title: 'Acute Pancreatitis',
-
+// ─── Updated education (no scoringSystems) ────────────────────────────────────
+const updatedEducation = {
   summary: {
     definition:
       'Acute pancreatitis is an acute inflammatory process of the pancreas caused by premature activation of digestive enzymes within the gland, leading to autodigestion and a systemic inflammatory response.',
     highYieldTakeaway:
       'Think acute pancreatitis in any patient with severe epigastric pain radiating to the back — especially after alcohol or a fatty meal. Confirm with lipase >3× ULN and CT when the diagnosis is uncertain.',
   },
-
   recognitionPattern: [
     {
       pattern: 'Epigastric pain radiating to the back',
@@ -322,7 +193,6 @@ const educationForFrontend = {
         'Physical findings can be deceptively mild early in the course; do not underestimate severity based on examination alone.',
     },
   ],
-
   keySymptoms: [
     {
       symptom: 'Severe epigastric pain',
@@ -345,7 +215,6 @@ const educationForFrontend = {
         'Universal in acute pancreatitis; enteral feeding decisions should be made early in severe disease.',
     },
   ],
-
   keySigns: [
     {
       finding: 'Epigastric tenderness and guarding',
@@ -372,7 +241,6 @@ const educationForFrontend = {
         'Paralytic ileus secondary to retroperitoneal inflammation; prolonged ileus may suggest developing complications.',
     },
   ],
-
   examPearls: [
     {
       type: 'physical',
@@ -381,8 +249,7 @@ const educationForFrontend = {
         'Ask the patient to sit forward or adopt the foetal position; partial relief of pain in this position supports a retroperitoneal source.',
       whyItMatters:
         'A simple bedside manoeuvre that increases pre-test probability of pancreatic pathology.',
-      discriminator:
-        'Ulcer and cholecystitis pain is not typically postural.',
+      discriminator: 'Ulcer and cholecystitis pain is not typically postural.',
       trapAvoided:
         'Absence of postural relief does not exclude pancreatitis, especially in severe disease with peritonism.',
     },
@@ -409,64 +276,6 @@ const educationForFrontend = {
         'Alcohol cessation support and thiamine supplementation should be initiated in alcohol-related pancreatitis.',
     },
   ],
-
-  // ─── PANCREAS mnemonic ───────────────────────────────────────────────────────
-  // toMnemonicCardsFromScoringSystems reads record.mnemonic via normalizeMnemonicValue,
-  // which calls normalizeMnemonicExpansion on mnemonic.expansion.
-  // Each entry must use { letter, meaning, note } — the exact fields MnemonicLearningCard renders.
-  scoringSystems: [
-    {
-      name: 'PANCREAS',
-      use: 'High-yield mnemonic for acute pancreatitis causes and severity assessment',
-      mnemonic: {
-        name: 'PANCREAS',
-        useCase: 'Recalls the key causes, diagnostic criteria, and management priorities in acute pancreatitis.',
-        expansion: [
-          {
-            letter: 'P',
-            meaning: 'Precipitant — gallstones or alcohol',
-            note: 'Gallstones (40–70%) and alcohol (25–35%) account for most cases; identify the cause to guide secondary prevention.',
-          },
-          {
-            letter: 'A',
-            meaning: 'Amylase / lipase — >3× ULN confirms diagnosis',
-            note: 'Lipase preferred: higher specificity and remains elevated longer. >3× ULN satisfies one Atlanta criterion.',
-          },
-          {
-            letter: 'N',
-            meaning: 'Necrosis — contrast CT to detect it',
-            note: 'Non-enhancing pancreatic tissue on CECT indicates necrosis; infected necrosis carries >20% mortality.',
-          },
-          {
-            letter: 'C',
-            meaning: 'CRP >150 mg/L at 48 h — severity marker',
-            note: 'Independent predictor of severe disease; use with clinical assessment to guide escalation to HDU/ICU.',
-          },
-          {
-            letter: 'R',
-            meaning: 'Ranson / BISAP / APACHE-II — severity scoring',
-            note: 'BISAP can be calculated at admission; Ranson criteria require 48-hour data.',
-          },
-          {
-            letter: 'E',
-            meaning: 'Early fluids and enteral feeding',
-            note: 'Lactated Ringer preferred. Early enteral feeding within 24–48 h reduces infectious complications.',
-          },
-          {
-            letter: 'A',
-            meaning: 'Antibiotics — only for confirmed infected necrosis',
-            note: 'Prophylactic antibiotics are not recommended; reserve for infected pancreatic necrosis.',
-          },
-          {
-            letter: 'S',
-            meaning: 'Systemic complications — SIRS, ARDS, AKI',
-            note: 'Persistent organ failure >48 hours defines severe disease; monitor oxygen saturation, urine output, and renal function.',
-          },
-        ],
-      },
-    },
-  ],
-
   investigations: [
     {
       test: 'Serum lipase (preferred) and amylase',
@@ -511,7 +320,6 @@ const educationForFrontend = {
         'Identifies uncommon aetiologies that require specific management beyond supportive care.',
     },
   ],
-
   pitfalls: [
     {
       pitfall: 'Diagnosing pancreatitis without measuring lipase',
@@ -539,7 +347,6 @@ const educationForFrontend = {
         'Prolonged fasting increases gut permeability, bacterial translocation, and infectious complications. Early enteral feeding (within 24–48 h) is preferred over TPN.',
     },
   ],
-
   managementOverview: [
     {
       step: 'IV fluid resuscitation',
@@ -577,7 +384,6 @@ const educationForFrontend = {
         'Necrotising pancreatitis, infected necrosis, walled-off necrosis, and pseudocysts may require step-up intervention: antibiotics, endoscopic drainage, or surgical necrosectomy.',
     },
   ],
-
   differentialDistinguishers: [
     {
       diagnosis: 'Peptic ulcer disease',
@@ -622,7 +428,6 @@ const educationForFrontend = {
         'In the haemodynamically unstable patient with back pain, exclude aortic dissection before attributing symptoms to pancreatitis.',
     },
   ],
-
   complications: [
     {
       complication: 'Necrotising pancreatitis',
@@ -650,7 +455,6 @@ const educationForFrontend = {
         'Peripancreatic inflammation can thrombose the splenic vein, causing segmental portal hypertension and gastric varices.',
     },
   ],
-
   recallPrompts: [
     {
       prompt: 'What enzyme is preferred over amylase for diagnosing acute pancreatitis, and why?',
@@ -675,189 +479,58 @@ const educationForFrontend = {
     {
       prompt: 'What is the preferred IV fluid in acute pancreatitis resuscitation?',
       answer:
-        'Lactated Ringer (Hartmann\'s solution) is preferred over normal saline; it reduces the risk of SIRS and metabolic acidosis.',
-    },
-    {
-      prompt: 'Name the PANCREAS mnemonic features for acute pancreatitis.',
-      answer:
-        'Precipitant (gallstones/alcohol), Amylase/lipase >3× ULN, Necrosis on CT, CRP >150 at 48 h, Ranson/BISAP scoring, Early fluids and enteral feeding, Antibiotics only for infected necrosis, Systemic complications (SIRS/ARDS/AKI).',
+        "Lactated Ringer (Hartmann's solution) is preferred over normal saline; it reduces the risk of SIRS and metabolic acidosis.",
     },
   ],
-
-  references: [],
+  references: [] as string[],
 };
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
-
 async function main() {
-  const canonicalName = 'acute pancreatitis';
-  const displayLabel = 'Acute Pancreatitis';
-  const canonicalNormalized = normalizeClinicalText(canonicalName);
-
-  const registry = await prisma.diagnosisRegistry.upsert({
-    where: { canonicalNormalized },
-    update: {
-      canonicalName,
-      displayLabel,
-      status: DiagnosisRegistryStatus.ACTIVE,
-      active: true,
-      specialty: 'Gastroenterology',
-      subspecialty: 'Pancreas',
-      category: 'Inflammatory',
-      bodySystem: 'Gastrointestinal',
-      organSystem: 'Pancreas',
-      difficultyBand: DiagnosisDifficultyBand.BASIC,
-      rarityBand: DiagnosisRarityBand.COMMON,
-      clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
-      ageGroup: DiagnosisAgeGroup.ADULT,
-      urgencyLevel: DiagnosisUrgencyLevel.URGENT,
-      onboardingStatus: 'READY_FOR_REVIEW',
-      isPlayable: true,
-      isGeneratable: true,
-      preferredClueTypes: ['history', 'symptom', 'exam', 'lab', 'imaging'],
-      excludedClueTypes: [],
-      searchPriority: 20,
-      notes:
-        'Common acute surgical abdomen presenting with epigastric pain radiating to the back, elevated lipase, and peripancreatic inflammation. Two most common causes are gallstones and alcohol.',
-    },
-    create: {
-      canonicalName,
-      canonicalNormalized,
-      displayLabel,
-      status: DiagnosisRegistryStatus.ACTIVE,
-      active: true,
-      specialty: 'Gastroenterology',
-      subspecialty: 'Pancreas',
-      category: 'Inflammatory',
-      bodySystem: 'Gastrointestinal',
-      organSystem: 'Pancreas',
-      difficultyBand: DiagnosisDifficultyBand.BASIC,
-      rarityBand: DiagnosisRarityBand.COMMON,
-      clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
-      ageGroup: DiagnosisAgeGroup.ADULT,
-      urgencyLevel: DiagnosisUrgencyLevel.URGENT,
-      onboardingStatus: 'READY_FOR_REVIEW',
-      onboardingStartedAt: now,
-      isPlayable: true,
-      isGeneratable: true,
-      preferredClueTypes: ['history', 'symptom', 'exam', 'lab', 'imaging'],
-      excludedClueTypes: [],
-      searchPriority: 20,
-      notes:
-        'Common acute surgical abdomen presenting with epigastric pain radiating to the back, elevated lipase, and peripancreatic inflammation. Two most common causes are gallstones and alcohol.',
-    },
+  // 1. Find the existing case for this registry
+  const existingCase = await prisma.case.findFirst({
+    where: { diagnosisRegistryId: REGISTRY_ID, proposedDiagnosisText: 'Acute Pancreatitis' },
+    orderBy: { approvedAt: 'asc' },
+    select: { id: true, currentRevisionId: true },
   });
 
-  const aliasSeeds = [
-    {
-      term: canonicalName,
-      kind: DiagnosisAliasKind.CANONICAL,
-      acceptedForMatch: true,
-      rank: 100,
-    },
-    {
-      term: 'acute pancreatitis',
-      kind: DiagnosisAliasKind.ACCEPTED,
-      acceptedForMatch: true,
-      rank: 95,
-    },
-    {
-      term: 'pancreatitis',
-      kind: DiagnosisAliasKind.ACCEPTED,
-      acceptedForMatch: true,
-      rank: 85,
-    },
-    {
-      term: 'alcoholic pancreatitis',
-      kind: DiagnosisAliasKind.ACCEPTED,
-      acceptedForMatch: true,
-      rank: 75,
-    },
-    {
-      term: 'gallstone pancreatitis',
-      kind: DiagnosisAliasKind.ACCEPTED,
-      acceptedForMatch: true,
-      rank: 75,
-    },
-    {
-      term: 'pancreatic inflammation',
-      kind: DiagnosisAliasKind.SEARCH_ONLY,
-      acceptedForMatch: false,
-      rank: 30,
-    },
-  ];
-
-  const seenAliasNormalizations = new Set<string>();
-
-  for (const aliasSeed of aliasSeeds) {
-    const term = aliasSeed.term;
-    const normalizedTerm = normalizeClinicalText(term);
-    if (seenAliasNormalizations.has(normalizedTerm)) continue;
-    seenAliasNormalizations.add(normalizedTerm);
-
-    const existingAlias = await prisma.diagnosisAlias.findUnique({
-      where: {
-        diagnosisRegistryId_normalizedTerm: {
-          diagnosisRegistryId: registry.id,
-          normalizedTerm,
-        },
-      },
-      select: { id: true },
-    });
-
-    await assertAliasValidWithClient(prisma, {
-      aliasText: term,
-      targetDiagnosisRegistryId: registry.id,
-      acceptedForMatch: aliasSeed.acceptedForMatch,
-      ignoreAliasId: existingAlias?.id,
-      allowTargetCanonicalAlias: normalizedTerm === canonicalNormalized,
-    });
-
-    await prisma.diagnosisAlias.upsert({
-      where: {
-        diagnosisRegistryId_normalizedTerm: {
-          diagnosisRegistryId: registry.id,
-          normalizedTerm,
-        },
-      },
-      update: {
-        term,
-        active: true,
-        acceptedForMatch: aliasSeed.acceptedForMatch,
-        rank: aliasSeed.rank,
-        kind: aliasSeed.kind,
-        source: seedVersion,
-      },
-      create: {
-        diagnosisRegistryId: registry.id,
-        term,
-        normalizedTerm,
-        active: true,
-        acceptedForMatch: aliasSeed.acceptedForMatch,
-        rank: aliasSeed.rank,
-        kind: aliasSeed.kind,
-        source: seedVersion,
-      },
-    });
+  if (!existingCase) {
+    throw new Error('Acute Pancreatitis case not found — run the full seed first.');
   }
 
+  // 2. Update explanation on the case
+  await prisma.case.update({
+    where: { id: existingCase.id },
+    data: { explanation: updatedExplanation as object },
+  });
+  console.log('Updated case explanation:', existingCase.id);
+
+  // 3. Update explanation on the current revision
+  if (existingCase.currentRevisionId) {
+    await prisma.caseRevision.update({
+      where: { id: existingCase.currentRevisionId },
+      data: { explanation: updatedExplanation as object },
+    });
+    console.log('Updated revision explanation:', existingCase.currentRevisionId);
+  }
+
+  // 4. Upsert education (no scoringSystems)
   const education = await prisma.diagnosisEducation.upsert({
-    where: { diagnosisRegistryId: registry.id },
+    where: { diagnosisRegistryId: REGISTRY_ID },
     update: {
-      title: educationForFrontend.title,
-      summary: educationForFrontend.summary,
-      clinicalPattern: educationForFrontend.recognitionPattern,
-      keySymptoms: educationForFrontend.keySymptoms,
-      keySigns: educationForFrontend.keySigns,
-      examPearls: educationForFrontend.examPearls,
-      scoringSystems: educationForFrontend.scoringSystems,
-      investigations: educationForFrontend.investigations,
-      differentials: educationForFrontend.differentialDistinguishers,
-      management: educationForFrontend.managementOverview,
-      complications: educationForFrontend.complications,
-      pitfalls: educationForFrontend.pitfalls,
-      recallPrompts: educationForFrontend.recallPrompts,
-      references: educationForFrontend.references,
+      title: 'Acute Pancreatitis',
+      summary: updatedEducation.summary,
+      clinicalPattern: updatedEducation.recognitionPattern,
+      keySymptoms: updatedEducation.keySymptoms,
+      keySigns: updatedEducation.keySigns,
+      examPearls: updatedEducation.examPearls,
+      scoringSystems: null,
+      investigations: updatedEducation.investigations,
+      differentials: updatedEducation.differentialDistinguishers,
+      management: updatedEducation.managementOverview,
+      complications: updatedEducation.complications,
+      pitfalls: updatedEducation.pitfalls,
+      recallPrompts: updatedEducation.recallPrompts,
+      references: updatedEducation.references,
       editorialStatus: DiagnosisEducationStatus.PUBLISHED,
       source: DiagnosisEducationSource.MANUAL,
       reviewedAt: now,
@@ -865,21 +538,20 @@ async function main() {
       version: { increment: 1 },
     },
     create: {
-      diagnosisRegistryId: registry.id,
-      title: educationForFrontend.title,
-      summary: educationForFrontend.summary,
-      clinicalPattern: educationForFrontend.recognitionPattern,
-      keySymptoms: educationForFrontend.keySymptoms,
-      keySigns: educationForFrontend.keySigns,
-      examPearls: educationForFrontend.examPearls,
-      scoringSystems: educationForFrontend.scoringSystems,
-      investigations: educationForFrontend.investigations,
-      differentials: educationForFrontend.differentialDistinguishers,
-      management: educationForFrontend.managementOverview,
-      complications: educationForFrontend.complications,
-      pitfalls: educationForFrontend.pitfalls,
-      recallPrompts: educationForFrontend.recallPrompts,
-      references: educationForFrontend.references,
+      diagnosisRegistryId: REGISTRY_ID,
+      title: 'Acute Pancreatitis',
+      summary: updatedEducation.summary,
+      clinicalPattern: updatedEducation.recognitionPattern,
+      keySymptoms: updatedEducation.keySymptoms,
+      keySigns: updatedEducation.keySigns,
+      examPearls: updatedEducation.examPearls,
+      investigations: updatedEducation.investigations,
+      differentials: updatedEducation.differentialDistinguishers,
+      management: updatedEducation.managementOverview,
+      complications: updatedEducation.complications,
+      pitfalls: updatedEducation.pitfalls,
+      recallPrompts: updatedEducation.recallPrompts,
+      references: updatedEducation.references,
       editorialStatus: DiagnosisEducationStatus.PUBLISHED,
       source: DiagnosisEducationSource.MANUAL,
       reviewedAt: now,
@@ -887,13 +559,14 @@ async function main() {
       version: 1,
     },
   });
+  console.log('Upserted education:', education.id);
 
   await prisma.diagnosisEducationRevision.create({
     data: {
       educationId: education.id,
       version: education.version,
       snapshot: {
-        ...educationForFrontend,
+        ...updatedEducation,
         storedColumnMap: {
           recognitionPattern: 'clinicalPattern',
           managementOverview: 'management',
@@ -904,148 +577,7 @@ async function main() {
       source: DiagnosisEducationSource.MANUAL,
     },
   });
-
-  const history =
-    clues.find((clue) => clue.type === 'history')?.value ?? displayLabel;
-  const symptoms = clues
-    .filter((clue) => clue.type === 'symptom')
-    .map((clue) => clue.value);
-
-  const reusableCase = await prisma.case.findFirst({
-    where: {
-      diagnosisRegistryId: registry.id,
-      proposedDiagnosisText: displayLabel,
-      dailyCases: { none: {} },
-    },
-    orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
-    select: {
-      id: true,
-      currentRevisionId: true,
-      publicNumber: true,
-    },
-  });
-
-  const publicNumber =
-    reusableCase?.publicNumber ?? (await getNextCasePublicNumber());
-
-  console.log('Assigned public case number', {
-    displayLabel,
-    publicNumber,
-    reusedExistingCase: Boolean(reusableCase),
-  });
-
-  const assignedInventoryPlaceholderDate =
-    await findAvailableInventoryPlaceholderDate({
-      preferredDate: inventoryPlaceholderDate,
-      reusableCaseId: reusableCase?.id,
-      displayLabel,
-    });
-
-  const caseData = {
-    title: displayLabel,
-    publicNumber,
-    date: assignedInventoryPlaceholderDate,
-    difficulty: 'medium',
-    history,
-    symptoms,
-    clues: clues as unknown as object,
-    explanation: explanation as object,
-    differentials,
-    editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
-    approvedAt: now,
-    publishedAt: null,
-    diagnosisRegistryId: registry.id,
-    proposedDiagnosisText: displayLabel,
-    diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
-    diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
-    diagnosisMappingConfidence: 1,
-    diagnosisEditorialNote:
-      'Seeded frontend-aligned flagship Acute Pancreatitis inventory case. DailyCase scheduler should assign the actual daily slot.',
-  };
-
-  const seededCase = reusableCase
-    ? await prisma.case.update({
-        where: { id: reusableCase.id },
-        data: caseData,
-        select: { id: true },
-      })
-    : await prisma.case.create({ data: caseData, select: { id: true } });
-
-  const revisionData = {
-    source: 'MANUAL' as const,
-    publishTrack: 'DAILY' as const,
-    title: displayLabel,
-    publicNumber,
-    date: assignedInventoryPlaceholderDate,
-    difficulty: 'medium',
-    history,
-    symptoms,
-    clues: clues as unknown as object,
-    explanation: explanation as object,
-    differentials,
-    diagnosisRegistryId: registry.id,
-    proposedDiagnosisText: displayLabel,
-    diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
-    diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
-    diagnosisMappingConfidence: 1,
-    diagnosisEditorialNote:
-      'Frontend-aligned flagship Acute Pancreatitis inventory revision for DailyCase scheduler assignment.',
-  };
-
-  const revision = reusableCase?.currentRevisionId
-    ? await prisma.caseRevision.update({
-        where: { id: reusableCase.currentRevisionId },
-        data: revisionData,
-        select: { id: true },
-      })
-    : await (async () => {
-        const latestRevision = await prisma.caseRevision.findFirst({
-          where: { caseId: seededCase.id },
-          orderBy: { revisionNumber: 'desc' },
-          select: { revisionNumber: true },
-        });
-
-        return prisma.caseRevision.create({
-          data: {
-            caseId: seededCase.id,
-            revisionNumber: (latestRevision?.revisionNumber ?? 0) + 1,
-            ...revisionData,
-          },
-          select: { id: true },
-        });
-      })();
-
-  await prisma.case.update({
-    where: { id: seededCase.id },
-    data: { currentRevisionId: revision.id },
-  });
-
-  await prisma.caseValidationRun.create({
-    data: {
-      caseId: seededCase.id,
-      revisionId: revision.id,
-      source: 'MANUAL',
-      publishTrack: 'DAILY',
-      outcome: 'PASSED',
-      validatorVersion: 'flagship-human-review:acute-pancreatitis-v1',
-      summary: {
-        contentTier: 'FLAGSHIP',
-        seedVersion,
-        humanReviewed: true,
-        note: 'Manual frontend-aligned Acute Pancreatitis inventory case seeded for DailyCase scheduler assignment.',
-      },
-      findings: [],
-      completedAt: now,
-    },
-  });
-
-  console.log('Seeded frontend-aligned Acute Pancreatitis:', {
-    registryId: registry.id,
-    caseId: seededCase.id,
-    publicNumber,
-    educationId: education.id,
-    inventoryPlaceholderDate: assignedInventoryPlaceholderDate.toISOString(),
-  });
+  console.log('Created education revision v', education.version);
 }
 
 main()
