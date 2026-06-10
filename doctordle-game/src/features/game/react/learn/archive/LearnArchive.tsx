@@ -18,6 +18,7 @@ import {
   formatArchiveCaseLabel,
   formatAverageClues,
   formatPercent,
+  formatStudyTime,
   getCaseDiagnosisLabel,
   getCaseSpecialty,
   getTotalActiveFilterCount,
@@ -48,46 +49,23 @@ export function MobileStatsBar({
   loading: boolean;
   error: string | null;
 }) {
-  const accuracy = summary.accuracyPct;
-  const accuracyLabel =
-    accuracy === null
-      ? "—"
-      : accuracy >= 80
-        ? "Excellent"
-        : accuracy >= 65
-          ? "Good"
-          : "Needs work";
-
   return (
     <section className="px-5 pt-4 pb-1">
-      <div className="flex border-b border-white/[0.08] pb-4">
-        <MobileKoiStat value={String(summary.casesDone)} label="Cases done" />
+      <div className="grid grid-cols-3 overflow-hidden rounded-[18px] border border-white/[0.08] bg-white/[0.035]">
+        <MobileKoiStat value={String(summary.casesDone)} label="cases done" />
         <MobileKoiStat
           value={formatPercent(summary.accuracyPct)}
-          label="Accuracy"
+          label="accuracy"
           tone="teal"
         />
         <MobileKoiStat
           value={formatAverageClues(summary.averageCluesUsed)}
-          label="Avg clues"
+          label="avg clues"
           sub="/6"
           tone="amber"
         />
       </div>
-      {accuracy !== null && (
-        <div className="mt-3 flex items-center gap-2.5">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.07]">
-            <div
-              className="h-full rounded-full bg-[var(--wardle-color-teal)] transition-all duration-500"
-              style={{ width: `${accuracy}%` }}
-            />
-          </div>
-          <span className="font-brand-mono text-[11px] font-bold text-[var(--wardle-color-teal)]">
-            {accuracy}%
-          </span>
-          <span className="text-[11px] text-white/30">{accuracyLabel}</span>
-        </div>
-      )}
+
       {loading && (
         <p className="mt-3 rounded-[12px] border border-white/[0.06] bg-white/[0.02] px-4 py-2.5 text-xs text-white/36">
           Loading case archive…
@@ -119,19 +97,18 @@ export function MobileKoiStat({
       : tone === "amber"
         ? "text-[var(--wardle-color-amber)]"
         : "text-[var(--wardle-color-mint)]";
+
   return (
-    <div className="flex-1 px-1 text-center [&+&]:border-l [&+&]:border-white/[0.08]">
-      <div
-        className={`font-brand-mono text-[22px] font-black leading-none ${colorClass}`}
-      >
+    <div className="min-w-0 px-2.5 py-3 text-center [&+&]:border-l [&+&]:border-white/[0.08]">
+      <div className={`font-brand-mono text-[22px] font-black leading-none tracking-tight ${colorClass}`}>
         {value}
         {sub && (
-          <span className="ml-0.5 text-[12px] font-semibold text-white/42">
+          <span className="ml-0.5 text-[12px] font-semibold text-white/36">
             {sub}
           </span>
         )}
       </div>
-      <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/28">
+      <div className="mt-1.5 text-[10px] font-semibold lowercase tracking-[0.02em] text-white/34">
         {label}
       </div>
     </div>
@@ -168,7 +145,7 @@ export function MobileCaseArchive({
   onClearFilters: () => void;
 }) {
   return (
-    <section className="space-y-5 px-4 pt-4">
+    <section className="px-5 pt-4 pb-6 space-y-5">
       {completedCount > 0 && (
         <MobileDueRecallCard
           dueReviewCount={dueReviewCount}
@@ -178,50 +155,46 @@ export function MobileCaseArchive({
         />
       )}
 
-      <div className="flex min-w-0 items-end justify-between gap-3 pt-1">
-        <div className="min-w-0">
+      <div>
+        <div className="flex min-w-0 items-baseline justify-between gap-3 mb-2">
           <h2 className="text-[15px] font-black tracking-tight text-[var(--wardle-color-mint)]">
             Specialties
           </h2>
-          <p className="mt-0.5 font-brand-mono text-[10px] uppercase tracking-[0.14em] text-white/24">
+          <p className="font-brand-mono text-[11px] text-white/28 m-0">
             {completedCount} completed
           </p>
         </div>
-        {missedCount > 0 && (
-          <span className="shrink-0 rounded-full border border-rose-400/[0.18] bg-rose-400/[0.07] px-2.5 py-1 font-brand-mono text-[10px] font-bold text-rose-300">
-            {missedCount} missed
-          </span>
+
+        {archiveSpecialties.length > 0 ? (
+          <div className="flex flex-col">
+            {archiveSpecialties.map((specialty, index) => (
+              <MobileSpecialtyCard
+                key={specialty.key}
+                specialty={specialty}
+                cases={cases.filter(
+                  (item) => getCaseSpecialty(item).key === specialty.key,
+                )}
+                dueCount={
+                  dueReviewCases.filter(
+                    (item) => getCaseSpecialty(item).key === specialty.key,
+                  ).length
+                }
+                showDivider={index < archiveSpecialties.length - 1}
+                onSelect={() => onSelectSpecialty(specialty.key)}
+              />
+            ))}
+          </div>
+        ) : (
+          <ArchiveEmptyState
+            completedCount={completedCount}
+            loading={loading}
+            error={error}
+            onRetry={onRetry}
+            onClearFilters={onClearFilters}
+            mobile
+          />
         )}
       </div>
-
-      {archiveSpecialties.length > 0 ? (
-        <div className="space-y-2.5">
-          {archiveSpecialties.map((specialty) => (
-            <MobileSpecialtyCard
-              key={specialty.key}
-              specialty={specialty}
-              cases={cases.filter(
-                (item) => getCaseSpecialty(item).key === specialty.key,
-              )}
-              dueCount={
-                dueReviewCases.filter(
-                  (item) => getCaseSpecialty(item).key === specialty.key,
-                ).length
-              }
-              onSelect={() => onSelectSpecialty(specialty.key)}
-            />
-          ))}
-        </div>
-      ) : (
-        <ArchiveEmptyState
-          completedCount={completedCount}
-          loading={loading}
-          error={error}
-          onRetry={onRetry}
-          onClearFilters={onClearFilters}
-          mobile
-        />
-      )}
     </section>
   );
 }
@@ -230,17 +203,20 @@ export function MobileSpecialtyCard({
   specialty,
   cases,
   dueCount,
+  showDivider = false,
   onSelect,
 }: {
   specialty: LearnPerformanceSummary["specialties"][number];
   cases: LearnLibraryCase[];
   dueCount: number;
+  showDivider?: boolean;
   onSelect: () => void;
 }) {
   const solvedCount = cases.filter((item) => item.playerResult.solved).length;
   const missedCount = cases.length - solvedCount;
   const accuracy = specialty.accuracyPct;
-  const accuracyTone =
+
+  const accuracyClass =
     accuracy === null
       ? "text-white/38"
       : accuracy >= 75
@@ -248,60 +224,42 @@ export function MobileSpecialtyCard({
         : accuracy >= 60
           ? "text-[var(--wardle-color-amber)]"
           : "text-rose-300";
-  const progressColor =
-    accuracy === null
-      ? "bg-white/20"
-      : accuracy >= 75
-        ? "bg-[var(--wardle-color-teal)]"
-        : accuracy >= 60
-          ? "bg-[var(--wardle-color-amber)]"
-          : "bg-rose-400";
-  const progressWidth = accuracy === null ? 0 : accuracy;
+
   return (
     <button
       type="button"
       onClick={onSelect}
-      className="wardle-learn-fade w-full overflow-hidden rounded-[16px] border border-white/[0.12] bg-white/[0.055] px-3.5 py-3 text-left transition active:scale-[0.99] hover:bg-white/[0.08]"
+      className={`wardle-learn-fade flex w-full min-w-0 items-center gap-3 py-2.5 px-0.5 text-left transition active:scale-[0.99] hover:opacity-80 ${
+        showDivider ? "border-b border-white/[0.07]" : ""
+      }`}
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <MobileSpecialtyIcon
-          specialty={specialty.label || specialty.key}
-          className="h-[38px] w-[38px] rounded-[11px]"
-          iconClassName="h-[17px] w-[17px]"
-        />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14px] font-bold text-[var(--wardle-color-mint)]">
-            {specialty.label}
-          </span>
-          <span className="mt-0.5 block text-[11px] text-white/32">
-            {specialty.casesDone} case{specialty.casesDone === 1 ? "" : "s"}
-            {dueCount > 0 ? ` · ${dueCount} due` : ""}
-            {missedCount > 0 ? ` · ${missedCount} missed` : ""}
-          </span>
-        </span>
-        <span className="flex shrink-0 flex-col items-end gap-1">
-          <span
-            className={`font-brand-mono text-[15px] font-black ${accuracyTone}`}
-          >
-            {accuracy !== null ? `${accuracy}%` : "—"}
-          </span>
-          {dueCount > 0 ? (
-            <span className="rounded-full border border-rose-400/[0.22] bg-rose-400/[0.12] px-2 py-0.5 text-[10px] font-bold text-rose-300">
-              {dueCount} due
-            </span>
-          ) : (
-            <span className="rounded-full border border-[rgba(0,180,166,0.18)] bg-[rgba(0,180,166,0.08)] px-2 py-0.5 text-[10px] font-bold text-[var(--wardle-color-teal)]">
-              All clear
-            </span>
-          )}
-        </span>
+      <MobileSpecialtyIcon
+        specialty={specialty.label || specialty.key}
+        className="h-9 w-9 shrink-0 rounded-[11px]"
+        iconClassName="h-[17px] w-[17px]"
+      />
+
+      <div className="min-w-0 flex-1">
+        <p className="m-0 block truncate text-[14px] font-bold text-[var(--wardle-color-mint)]">
+          {specialty.label}
+        </p>
+        <p className="m-0 mt-0.5 block text-[12px] text-white/34">
+          {specialty.casesDone} case{specialty.casesDone === 1 ? "" : "s"}
+          {missedCount > 0 ? ` · ${missedCount} missed` : ""}
+        </p>
       </div>
-      <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-[#202436]">
-        <div
-          className={`h-full rounded-full ${progressColor} transition-all duration-500`}
-          style={{ width: `${progressWidth}%` }}
-        />
-      </div>
+
+      <p className={`m-0 shrink-0 font-brand-mono text-[13px] font-black ${accuracyClass}`}>
+        {accuracy !== null ? `${accuracy}%` : "—"}
+      </p>
+
+      {dueCount > 0 && (
+        <span className="shrink-0 rounded-full border border-rose-400/[0.2] bg-rose-400/[0.1] px-2 py-0.5 text-[10px] font-bold text-rose-300">
+          {dueCount} due
+        </span>
+      )}
+
+      <span className="shrink-0 text-[16px] text-white/18">›</span>
     </button>
   );
 }
@@ -471,11 +429,13 @@ export function MobileDueRecallCard({
   onStartDueReviewQueue: () => void;
 }) {
   const hasDue = dueReviewCount > 0;
-  const statusCopy = hasDue
-    ? `${dueReviewCount} case${dueReviewCount === 1 ? "" : "s"} due for recall`
+  const title = hasDue
+    ? `${dueReviewCount} due for recall`
     : "Recall queue clear";
   const subcopy = hasDue
-    ? "Spaced repetition keeps memory sharp"
+    ? missedCount > 0
+      ? `${missedCount} missed prioritized`
+      : "Spaced repetition keeps memory sharp"
     : completedCount > 0
       ? "Reviewed cases will return when due"
       : "Complete cases to build this queue";
@@ -485,33 +445,30 @@ export function MobileDueRecallCard({
       type="button"
       onClick={hasDue ? onStartDueReviewQueue : undefined}
       disabled={!hasDue}
-      className={`wardle-learn-slide-up flex w-full items-center gap-3 rounded-[14px] border px-3.5 py-3 text-left transition ${
+      className={`wardle-learn-slide-up flex w-full items-center justify-between gap-3 rounded-[18px] border px-4 py-3.5 text-left transition ${
         hasDue
-          ? "border-[rgba(239,159,39,0.22)] bg-[rgba(239,159,39,0.08)] active:scale-[0.99]"
+          ? "border-[rgba(239,159,39,0.24)] bg-[rgba(239,159,39,0.1)] active:scale-[0.99]"
           : "border-white/[0.07] bg-white/[0.025]"
       }`}
     >
-      <span
-        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] text-[17px] ${hasDue ? "bg-[rgba(239,159,39,0.13)]" : "bg-white/[0.04] opacity-50"}`}
-      >
-        ⏰
-      </span>
       <span className="min-w-0 flex-1">
         <span
-          className={`block text-[13px] font-bold ${hasDue ? "text-[var(--wardle-color-amber)]" : "text-white/42"}`}
+          className={`block text-[15px] font-black ${
+            hasDue ? "text-[var(--wardle-color-amber)]" : "text-white/42"
+          }`}
         >
-          {statusCopy}
+          {title}
         </span>
-        <span className="mt-0.5 block text-[11px] text-white/32">
-          {missedCount > 0 && hasDue
-            ? `${missedCount} missed prioritized · `
-            : ""}
-          {subcopy}
-        </span>
+        {subcopy && (
+          <span className="mt-0.5 block text-[12px] text-white/34">
+            {subcopy}
+          </span>
+        )}
       </span>
+
       {hasDue && (
-        <span className="shrink-0 rounded-[8px] bg-[var(--wardle-color-amber)] px-3 py-2 text-[12px] font-bold text-white">
-          Start →
+        <span className="shrink-0 rounded-full bg-[var(--wardle-color-amber)] px-4 py-2 text-[13px] font-black text-white shadow-[0_8px_22px_rgba(239,159,39,0.18)]">
+          Start
         </span>
       )}
     </button>
@@ -531,12 +488,16 @@ export function MobileCaseCard({
   const diagnosis = getCaseDiagnosisLabel(item);
   const caseLabel = formatArchiveCaseLabel(item);
   const specialty = getCaseSpecialty(item);
+  const timeLabel =
+    item.playerResult.timeSecs !== null
+      ? formatStudyTime(item.playerResult.timeSecs)
+      : "—";
 
   return (
     <button
       type="button"
       onClick={onSelect}
-      className="wardle-learn-fade flex w-full min-w-0 items-center gap-3 rounded-[14px] border border-white/[0.12] bg-white/[0.055] px-3.5 py-3 text-left transition active:scale-[0.99] hover:bg-white/[0.08]"
+      className="wardle-learn-fade flex w-full min-w-0 items-center gap-3 rounded-[14px] border border-white/[0.1] bg-white/[0.04] px-3.5 py-3 text-left transition active:scale-[0.99] hover:bg-white/[0.07]"
     >
       <MobileSpecialtyIcon
         specialty={specialty.label || specialty.key}
@@ -548,10 +509,7 @@ export function MobileCaseCard({
           {diagnosis}
         </span>
         <span className="mt-0.5 block text-[11px] text-white/32">
-          {caseLabel} ·{" "}
-          {solved
-            ? `Accuracy: ${item.playerResult.attemptsUsed}/6 clues`
-            : "Not yet solved"}
+          {caseLabel} · {solved ? `Time: ${timeLabel}` : "Not yet solved"}
         </span>
       </span>
       <span className="flex shrink-0 flex-col items-end gap-1">
@@ -565,14 +523,14 @@ export function MobileCaseCard({
           </span>
         )}
         <span className="font-brand-mono text-[10px] text-white/28">
-          {item.playerResult.attemptsUsed}/6 clues
+          {timeLabel}
         </span>
       </span>
     </button>
   );
 }
 
-// ─── Mobile case detail ───────────────────────────────────────────────────────
+// ─── Desktop header ───────────────────────────────────────────────────────────
 
 export function DesktopLearnHeader({ summary }: { summary: LearnPerformanceSummary }) {
   return (
@@ -580,32 +538,19 @@ export function DesktopLearnHeader({ summary }: { summary: LearnPerformanceSumma
       <div className="flex flex-wrap items-start justify-between gap-4">
         <WardleLogo size="sm" subtitle="Explanation Library" />
         <span className="rounded-full border border-white/[0.07] bg-white/[0.04] px-3 py-1.5 font-brand-mono text-[11px] text-white/40">
-          {summary.casesDone} completed
+          LEARN
         </span>
       </div>
       <h1 className="mt-5 text-2xl font-black tracking-tight text-[var(--wardle-color-mint)] md:text-3xl">
         Learn
       </h1>
       <p className="mt-1.5 max-w-2xl text-sm leading-6 text-white/40">
-        Review completed cases, saved explanations, clue trails, and specialty
-        performance.
+        Review completed cases, saved explanations, clue trails, and specialty performance.
       </p>
-      <div className="mt-5 grid max-w-lg grid-cols-3 gap-2.5">
-        <StatCard
-          label="Accuracy"
-          value={formatPercent(summary.accuracyPct)}
-          tone="teal"
-        />
-        <StatCard
-          label="Cases done"
-          value={String(summary.casesDone)}
-          tone="neutral"
-        />
-        <StatCard
-          label="Avg clues"
-          value={formatAverageClues(summary.averageCluesUsed)}
-          tone="amber"
-        />
+      <div className="mt-5 grid max-w-xl grid-cols-3 overflow-hidden rounded-[18px] border border-white/[0.08] bg-white/[0.03]">
+        <StatCard label="cases done" value={String(summary.casesDone)} tone="neutral" />
+        <StatCard label="accuracy" value={formatPercent(summary.accuracyPct)} tone="teal" />
+        <StatCard label="avg clues" value={formatAverageClues(summary.averageCluesUsed)} sub="/6" tone="amber" />
       </div>
     </section>
   );
@@ -614,10 +559,12 @@ export function DesktopLearnHeader({ summary }: { summary: LearnPerformanceSumma
 export function StatCard({
   label,
   value,
+  sub,
   tone,
 }: {
   label: string;
   value: string;
+  sub?: string;
   tone: "teal" | "amber" | "neutral";
 }) {
   const valueClass =
@@ -625,24 +572,17 @@ export function StatCard({
       ? "text-[var(--wardle-color-teal)]"
       : tone === "amber"
         ? "text-[var(--wardle-color-amber)]"
-        : "text-white/70";
-  const borderClass =
-    tone === "teal"
-      ? "border-[rgba(0,180,166,0.2)]"
-      : tone === "amber"
-        ? "border-[rgba(244,162,97,0.2)]"
-        : "border-white/[0.07]";
+        : "text-[var(--wardle-color-mint)]";
 
   return (
-    <div
-      className={`min-w-0 rounded-[12px] border bg-white/[0.03] px-3 py-3 ${borderClass}`}
-    >
-      <p
-        className={`font-brand-mono text-xl font-black leading-none ${valueClass}`}
-      >
+    <div className="min-w-0 px-4 py-4 text-center [&+&]:border-l [&+&]:border-white/[0.08]">
+      <p className={`font-brand-mono text-[24px] font-black leading-none ${valueClass}`}>
         {value}
+        {sub && (
+          <span className="ml-0.5 text-[13px] font-semibold text-white/36">{sub}</span>
+        )}
       </p>
-      <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/30">
+      <p className="mt-1.5 text-[11px] font-semibold lowercase tracking-[0.02em] text-white/34">
         {label}
       </p>
     </div>
@@ -719,7 +659,6 @@ export function ArchiveControls({
         </div>
       </div>
 
-      {/* Specialty rail */}
       <SpecialtyRail
         filterOptions={filterOptions}
         activeSpecialty={filters.specialty}
@@ -836,9 +775,7 @@ export function SecondaryFilters({
         {(["all", "solved", "missed"] as const).map((value) => (
           <FilterToggle
             key={value}
-            label={
-              value === "all" ? "All" : value === "solved" ? "Solved" : "Missed"
-            }
+            label={value === "all" ? "All" : value === "solved" ? "Solved" : "Missed"}
             active={filters.result === value}
             onClick={() => set("result", value)}
           />
@@ -928,10 +865,7 @@ export function FilterToggle({
         diffStyle
           ? { background: diffStyle.bg, color: diffStyle.text }
           : active
-            ? {
-                background: "rgba(0,180,166,0.14)",
-                color: "var(--wardle-color-teal)",
-              }
+            ? { background: "rgba(0,180,166,0.14)", color: "var(--wardle-color-teal)" }
             : undefined
       }
       className={`rounded-full px-3 py-1 font-brand-mono text-[11px] font-bold transition-all duration-150 ${
@@ -957,16 +891,12 @@ export function CaseLibraryList({
   onSelectCase: (dailyCaseId: string) => void;
 }) {
   return (
-    <section
-      className={`min-w-0 max-w-full overflow-hidden ${className ?? ""}`}
-    >
+    <section className={`min-w-0 max-w-full overflow-hidden ${className ?? ""}`}>
       <div className="min-w-0 space-y-6">
         {groupLearnCasesBySpecialty(cases).map((group) => (
           <div key={group.specialty.key} className="space-y-2">
             <div className="flex items-baseline gap-2 px-0.5">
-              <h3 className="text-sm font-bold text-white/70">
-                {group.specialty.label}
-              </h3>
+              <h3 className="text-sm font-bold text-white/70">{group.specialty.label}</h3>
               <span className="font-brand-mono text-[11px] text-white/30">
                 {group.cases.length}
               </span>
@@ -1039,7 +969,7 @@ export function CaseLibraryCard({
   );
 }
 
-// ─── Desktop case detail ──────────────────────────────────────────────────────
+// ─── Empty state ──────────────────────────────────────────────────────────────
 
 export function ArchiveEmptyState({
   completedCount,
@@ -1058,8 +988,8 @@ export function ArchiveEmptyState({
 }) {
   const title = error
     ? "Unable to load cases"
-      : loading
-        ? "Loading your completed cases..."
+    : loading
+      ? "Loading your completed cases..."
       : completedCount > 0
         ? "No matching cases"
         : "No completed cases yet";
@@ -1080,6 +1010,7 @@ export function ArchiveEmptyState({
       Retry
     </button>
   ) : null;
+
   const clearFiltersButton = !error && !loading && completedCount > 0 && onClearFilters ? (
     <button
       type="button"
@@ -1093,9 +1024,7 @@ export function ArchiveEmptyState({
   if (mobile) {
     return (
       <div className="rounded-[14px] border border-white/[0.07] bg-white/[0.025] px-4 py-5">
-        <p className="text-sm font-bold text-[var(--wardle-color-mint)]">
-          {title}
-        </p>
+        <p className="text-sm font-bold text-[var(--wardle-color-mint)]">{title}</p>
         <p className="mt-2 text-sm leading-6 text-white/40">{copy}</p>
         {retryButton}
         {clearFiltersButton}
@@ -1115,4 +1044,3 @@ export function ArchiveEmptyState({
     </SurfaceCard>
   );
 }
-

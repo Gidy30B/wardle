@@ -20,7 +20,7 @@ import { assertAliasValidWithClient } from '../../src/modules/diagnosis-registry
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error('DATABASE_URL is required to run the celiac disease seed.');
+  throw new Error('DATABASE_URL is required to run the pancreatitis seed.');
 }
 
 const pool = new Pool({ connectionString: databaseUrl });
@@ -36,8 +36,8 @@ function normalizeClinicalText(value: string): string {
 }
 
 const now = new Date();
-const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 5, 12, 0, 0));
-const seedVersion = 'flagship-celiac-disease-v1';
+const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 6, 12, 0, 0));
+const seedVersion = 'flagship-acute-pancreatitis-v1';
 
 function addUtcDays(date: Date, days: number): Date {
   const next = new Date(date);
@@ -100,187 +100,176 @@ async function findAvailableInventoryPlaceholderDate(params: {
 
 async function getNextCasePublicNumber(): Promise<number> {
   const latest = await prisma.case.findFirst({
-    where: {
-      publicNumber: {
-        not: null,
-      },
-    },
-    orderBy: {
-      publicNumber: 'desc',
-    },
-    select: {
-      publicNumber: true,
-    },
+    where: { publicNumber: { not: null } },
+    orderBy: { publicNumber: 'desc' },
+    select: { publicNumber: true },
   });
-
   return (latest?.publicNumber ?? 0) + 1;
 }
+
+// ─── Clues ────────────────────────────────────────────────────────────────────
 
 const clues = [
   {
     order: 0,
     type: 'history',
     value:
-      'A 28-year-old woman presents with a 9-month history of intermittent bloating, loose stools, and fatigue that has worsened despite dietary changes.',
+      'A 46-year-old man presents to the emergency department with severe epigastric pain that began 6 hours ago after a heavy meal and has been worsening since.',
   },
   {
     order: 1,
     type: 'symptom',
     value:
-      'She reports that her stools are pale, bulky, and difficult to flush, and she has lost 6 kg unintentionally over the past year.',
+      'The pain radiates to his back, is partially relieved by leaning forward, and is accompanied by nausea and two episodes of vomiting.',
   },
   {
     order: 2,
     type: 'history',
     value:
-      'She has a family history of thyroid disease in her mother and was recently treated for iron-deficiency anaemia that did not respond to oral iron supplementation.',
+      'He drinks approximately 30 units of alcohol per week and has had a similar but milder episode 8 months ago that resolved without investigation.',
   },
   {
     order: 3,
     type: 'exam',
     value:
-      'Examination reveals mild pallor and angular cheilitis; the abdomen is soft with mild central bloating but no organomegaly.',
+      'Examination reveals epigastric tenderness with guarding; there is no jaundice, no palpable mass, and bowel sounds are reduced.',
   },
   {
     order: 4,
     type: 'lab',
     value:
-      'Bloods show haemoglobin 98 g/L (MCV 74 fL), ferritin 6 µg/L, folate 2.1 nmol/L, and mildly elevated ALT at 52 U/L.',
+      'Serum lipase is 1 840 U/L (reference <60 U/L); amylase is 920 U/L. CRP is 148 mg/L; WBC 14.2 × 10⁹/L; bilirubin and LFTs are normal.',
   },
   {
     order: 5,
-    type: 'investigation',
+    type: 'imaging',
     value:
-      'Tissue transglutaminase IgA (tTG-IgA) is markedly elevated at 142 U/mL (reference <7 U/mL); total IgA is normal. Duodenal biopsy shows villous atrophy with crypt hyperplasia (Marsh grade 3b).',
+      'Contrast-enhanced CT abdomen shows diffuse pancreatic oedema with peripancreatic fat stranding and a small amount of peripancreatic fluid, consistent with interstitial oedematous pancreatitis.',
   },
 ] as const;
 
 const differentials = [
-  'Irritable bowel syndrome',
-  'Inflammatory bowel disease',
-  'Small intestinal bacterial overgrowth',
-  'Microscopic colitis',
+  'Peptic ulcer disease',
+  'Acute cholecystitis',
+  'Mesenteric ischaemia',
+  'Aortic dissection',
 ];
 
+// ─── Explanation ─────────────────────────────────────────────────────────────
+
 const explanation = {
-  diagnosis: 'Celiac Disease',
+  diagnosis: 'Acute Pancreatitis',
   summary:
-    'Chronic malabsorptive symptoms, refractory iron-deficiency anaemia, folate deficiency, elevated transaminases, markedly positive tTG-IgA, and villous atrophy on biopsy confirm celiac disease in a young woman with a family history of autoimmune disease.',
+    'Severe epigastric pain radiating to the back, markedly elevated lipase, peripancreatic inflammation on CT, and a background of significant alcohol use confirm acute pancreatitis.',
   keyEvidence: [
-    'Chronic steatorrhoea and bloating',
-    'Refractory iron-deficiency anaemia',
-    'Folate deficiency',
-    'Elevated ALT',
-    'Markedly elevated tTG-IgA',
-    'Villous atrophy on duodenal biopsy (Marsh 3b)',
+    'Epigastric pain radiating to the back',
+    'Pain relieved by leaning forward',
+    'Serum lipase >3× upper limit of normal',
+    'Elevated CRP and leucocytosis',
+    'Peripancreatic fat stranding on CT',
+    'Significant alcohol history',
   ],
   reasoning: [
-    'Pale, bulky, difficult-to-flush stools point to steatorrhoea from fat malabsorption in the small bowel.',
-    'Iron-deficiency anaemia unresponsive to oral supplementation is a classic presentation of proximal small bowel malabsorption.',
-    'Folate deficiency adds to the malabsorption picture; both iron and folate are absorbed in the duodenum and proximal jejunum.',
-    'Mildly elevated ALT is a recognised extra-intestinal manifestation of celiac disease.',
-    'A tTG-IgA level more than ten times the upper limit of normal has high specificity for celiac disease.',
-    'Marsh 3b villous atrophy on biopsy is the histological gold standard confirming the diagnosis.',
+    'Severe epigastric pain radiating to the back with relief on leaning forward is the classic positional signature of retroperitoneal pancreatic inflammation.',
+    'Serum lipase more than 30 times the upper limit of normal has high specificity for acute pancreatitis and satisfies one of the Atlanta criteria.',
+    'Normal bilirubin and LFTs make biliary obstruction less likely, pointing toward alcohol as the aetiology in this case.',
+    'Elevated CRP and leucocytosis reflect systemic inflammation; CRP >150 mg/L at 48 hours is associated with severe disease.',
+    'CT findings of diffuse pancreatic oedema with peripancreatic fat stranding confirm interstitial oedematous pancreatitis and exclude necrosis at this stage.',
+    'A prior similar episode and chronic heavy alcohol use strongly support an alcoholic aetiology.',
   ],
   keyFindings: [
-    'Chronic steatorrhoea and bloating',
-    'Refractory iron-deficiency anaemia',
-    'Folate deficiency',
-    'Elevated ALT',
-    'Markedly elevated tTG-IgA (>10× ULN)',
-    'Villous atrophy on duodenal biopsy (Marsh 3b)',
+    'Epigastric pain radiating to the back',
+    'Positional relief on leaning forward',
+    'Lipase 1 840 U/L (>30× ULN)',
+    'CRP 148 mg/L; leucocytosis',
+    'Normal bilirubin and LFTs',
+    'Peripancreatic oedema and fat stranding on CT',
   ],
   differentials,
-  whyNotOthers: [
-    {
-      diagnosis: 'Irritable bowel syndrome',
-      reason:
-        'IBS does not cause malabsorption, villous atrophy, positive serology, or nutritional deficiencies.',
-    },
-    {
-      diagnosis: 'Inflammatory bowel disease',
-      reason:
-        'IBD can cause malabsorption and elevated inflammatory markers but does not produce positive tTG-IgA serology or villous atrophy.',
-    },
-    {
-      diagnosis: 'Small intestinal bacterial overgrowth',
-      reason:
-        'SIBO can mimic bloating and diarrhoea but does not cause villous atrophy or positive celiac serology.',
-    },
-    {
-      diagnosis: 'Microscopic colitis',
-      reason:
-        'Microscopic colitis causes watery diarrhoea in older patients and does not produce steatorrhoea, villous atrophy, or celiac serology.',
-    },
-  ],
-  managementPearl:
-    'Strict lifelong gluten-free diet is the cornerstone of treatment. Correct nutritional deficiencies, monitor adherence with repeat tTG-IgA, and screen for associated autoimmune conditions and bone disease.',
   differentialAnalysis: [
     {
-      diagnosis: 'Irritable bowel syndrome',
+      diagnosis: 'Peptic ulcer disease',
       whyPlausibleEarly:
-        'Bloating and altered bowel habit are shared features with IBS, which is common in young women.',
+        'Epigastric pain after eating can suggest peptic ulcer disease, and perforated ulcer may cause peritonism.',
       ruledOutByClues: [
         {
           clueOrder: 1,
-          evidence: 'pale bulky stools and weight loss',
+          evidence: 'back radiation and relief on leaning forward',
           reason:
-            'Steatorrhoea and unintentional weight loss are inconsistent with functional IBS.',
+            'Posterior radiation with postural relief is characteristic of retroperitoneal inflammation, not ulcer disease.',
         },
         {
-          clueOrder: 5,
-          evidence: 'positive tTG-IgA and villous atrophy',
+          clueOrder: 4,
+          evidence: 'lipase >30× ULN',
           reason:
-            'Positive serology and histological damage exclude a purely functional diagnosis.',
+            'Marked lipase elevation is specific to pancreatic pathology and is not seen in peptic ulcer disease.',
         },
       ],
       finalReasonLessLikely:
-        'IBS does not cause malabsorption, nutritional deficiencies, or histological changes.',
+        'The combination of back-radiating positional pain and markedly elevated pancreatic enzymes is inconsistent with peptic ulcer disease.',
     },
     {
-      diagnosis: 'Inflammatory bowel disease',
+      diagnosis: 'Acute cholecystitis',
       whyPlausibleEarly:
-        'Chronic diarrhoea, weight loss, and anaemia overlap with Crohn disease, which can affect the small bowel.',
+        'Right upper quadrant pain after a fatty meal, nausea, and vomiting overlap with acute cholecystitis.',
       ruledOutByClues: [
         {
-          clueOrder: 5,
-          evidence: 'markedly elevated tTG-IgA and Marsh 3b villous atrophy',
+          clueOrder: 3,
+          evidence: 'epigastric rather than right upper quadrant tenderness',
           reason:
-            'Specific celiac serology and characteristic villous atrophy distinguish celiac disease from IBD.',
+            'Acute cholecystitis typically produces RUQ tenderness and a positive Murphy sign rather than central epigastric guarding.',
+        },
+        {
+          clueOrder: 4,
+          evidence: 'normal bilirubin and LFTs with markedly elevated lipase',
+          reason:
+            'Isolated lipase elevation without bilirubin or hepatic enzyme rise argues against a biliary cause.',
         },
       ],
       finalReasonLessLikely:
-        'IBD does not produce positive tTG-IgA serology or the pattern of villous atrophy with crypt hyperplasia.',
+        'Normal liver enzymes and bilirubin with epigastric localisation and markedly elevated lipase point away from acute cholecystitis.',
     },
     {
-      diagnosis: 'Small intestinal bacterial overgrowth',
+      diagnosis: 'Mesenteric ischaemia',
       whyPlausibleEarly:
-        'Bloating, loose stools, and fat malabsorption can occur in SIBO and may coexist with celiac disease.',
+        'Severe abdominal pain out of proportion to early examination findings can represent mesenteric ischaemia.',
       ruledOutByClues: [
         {
-          clueOrder: 5,
-          evidence: 'positive tTG-IgA serology and villous atrophy',
+          clueOrder: 4,
+          evidence: 'markedly elevated lipase and amylase',
           reason:
-            'SIBO does not cause villous atrophy or positive celiac-specific serology.',
+            'Pancreatic enzyme elevation is not a feature of mesenteric ischaemia; pain-enzyme dissociation would be expected if ischaemia were the cause.',
+        },
+        {
+          clueOrder: 5,
+          evidence: 'CT showing pancreatic oedema and peripancreatic fat stranding',
+          reason:
+            'CT directly demonstrates the pancreas as the source of pathology.',
         },
       ],
       finalReasonLessLikely:
-        'SIBO may complicate celiac disease but cannot explain the serological and histological findings.',
+        'The enzyme profile and CT findings localise the pathology to the pancreas, making mesenteric ischaemia incompatible.',
     },
     {
-      diagnosis: 'Microscopic colitis',
+      diagnosis: 'Aortic dissection',
       whyPlausibleEarly:
-        'Can cause chronic watery diarrhoea, particularly in women.',
+        'Severe tearing abdominal or back pain with rapid onset can mimic aortic dissection.',
       ruledOutByClues: [
         {
           clueOrder: 1,
-          evidence: 'pale bulky stools suggesting steatorrhoea',
+          evidence: 'positional relief on leaning forward',
           reason:
-            'Microscopic colitis causes watery rather than steatorrhoeic stools and does not cause small bowel malabsorption.',
+            'Aortic dissection pain is typically constant, tearing, and not postural.',
+        },
+        {
+          clueOrder: 4,
+          evidence: 'markedly elevated lipase',
+          reason:
+            'Pancreatic enzyme elevation does not occur in aortic dissection.',
         },
       ],
       finalReasonLessLikely:
-        'Microscopic colitis does not produce steatorrhoea, celiac serology, or villous atrophy.',
+        'The postural component and specific enzyme pattern are inconsistent with aortic dissection.',
     },
   ],
   generationQuality: {
@@ -290,354 +279,419 @@ const explanation = {
   },
 };
 
+// ─── Education ────────────────────────────────────────────────────────────────
+
 const educationForFrontend = {
-  title: 'Celiac Disease',
+  title: 'Acute Pancreatitis',
 
   summary: {
     definition:
-      'Celiac disease is a chronic immune-mediated enteropathy triggered by gluten ingestion in genetically susceptible individuals, causing villous atrophy and malabsorption.',
+      'Acute pancreatitis is an acute inflammatory process of the pancreas caused by premature activation of digestive enzymes within the gland, leading to autodigestion and a systemic inflammatory response.',
     highYieldTakeaway:
-      'Think celiac disease in any patient with chronic GI symptoms, unexplained iron or folate deficiency, refractory anaemia, elevated transaminases, or a personal or family history of autoimmune disease.',
+      'Think acute pancreatitis in any patient with severe epigastric pain radiating to the back — especially after alcohol or a fatty meal. Confirm with lipase >3× ULN and CT when the diagnosis is uncertain.',
   },
 
   recognitionPattern: [
     {
-      pattern: 'Chronic GI symptoms with malabsorption features',
+      pattern: 'Epigastric pain radiating to the back',
       whyItMatters:
-        'Steatorrhoea, bloating, and weight loss lasting months point toward a small bowel absorptive defect rather than a functional disorder.',
+        'The retroperitoneal position of the pancreas means inflammation radiates posteriorly and is partially relieved by leaning forward.',
+      progression:
+        'Sudden-onset epigastric pain → back radiation → postural relief → nausea and vomiting → enzyme rise → systemic inflammatory response.',
+      discriminator:
+        'Posterior radiation with postural relief is strongly associated with retroperitoneal inflammation and is not a feature of peptic ulcer disease or cholecystitis.',
+      commonTrap:
+        'The pain may be severe from the outset without clear localisation; early peritonism can mask the classic distribution.',
     },
     {
-      pattern: 'Refractory or unexplained iron-deficiency anaemia',
+      pattern: 'Precipitant history — alcohol or gallstones',
       whyItMatters:
-        'Failure to respond to oral iron in a young woman without obvious blood loss should always prompt celiac testing.',
+        'Gallstones (40–70%) and alcohol (25–35%) account for most cases. Identifying the cause guides secondary prevention.',
+      discriminator:
+        'Normal bilirubin and LFTs in a heavy drinker strongly favour alcohol as the aetiology; elevated bilirubin with dilated ducts favours gallstones.',
+      commonTrap:
+        'Up to 20% of cases are idiopathic; do not dismiss the diagnosis if no precipitant is immediately apparent.',
     },
     {
-      pattern: 'Autoimmune background or family history',
+      pattern: 'Epigastric guarding and reduced bowel sounds',
       whyItMatters:
-        'Celiac disease shares genetic risk (HLA-DQ2/DQ8) with other autoimmune conditions; a positive family history raises pre-test probability.',
+        'Peripancreatic inflammation irritates the parietal peritoneum and causes a localised ileus.',
+      discriminator:
+        'Generalised peritonism or absent bowel sounds should raise concern for complications such as perforation or necrosis.',
+      commonTrap:
+        'Physical findings can be deceptively mild early in the course; do not underestimate severity based on examination alone.',
     },
   ],
 
   keySymptoms: [
     {
-      symptom: 'Steatorrhoea',
+      symptom: 'Severe epigastric pain',
       significance:
-        'Pale, bulky, difficult-to-flush stools indicate fat malabsorption from villous atrophy of the proximal small bowel.',
+        'The hallmark symptom; typically sudden in onset, constant, and severe — often described as the worst pain the patient has experienced.',
     },
     {
-      symptom: 'Bloating and flatulence',
+      symptom: 'Back radiation',
       significance:
-        'Carbohydrate malabsorption leads to fermentation and gas production in the colon.',
+        'Retroperitoneal extension of inflammation causes pain to radiate to the mid-back; relief on leaning forward is a useful positional clue.',
     },
     {
-      symptom: 'Unintentional weight loss',
+      symptom: 'Nausea and vomiting',
       significance:
-        'Reflects global caloric malabsorption and should prompt investigation for an organic cause.',
+        'Present in most patients; vomiting does not relieve the pain, distinguishing it from some other causes of epigastric pain.',
     },
     {
-      symptom: 'Fatigue',
+      symptom: 'Anorexia',
       significance:
-        'Driven by iron and folate deficiency, poor nutritional status, and the burden of chronic inflammation.',
+        'Universal in acute pancreatitis; enteral feeding decisions should be made early in severe disease.',
     },
   ],
 
   keySigns: [
     {
-      finding: 'Pallor',
+      finding: 'Epigastric tenderness and guarding',
       significance:
-        'Reflects iron-deficiency or mixed deficiency anaemia from malabsorption.',
+        'Localised peritonism reflecting peripancreatic inflammation; the degree of guarding may underestimate severity.',
+      discriminator:
+        'More central than right upper quadrant tenderness of cholecystitis.',
     },
     {
-      finding: 'Angular cheilitis',
+      finding: "Grey Turner's sign",
       significance:
-        'A classic sign of iron and B-vitamin deficiency associated with celiac disease.',
+        'Flank bruising from retroperitoneal haemorrhage tracking to the flanks; indicates haemorrhagic or necrotising pancreatitis.',
+      urgency:
+        "Rare but indicates severe disease; escalate immediately if Grey Turner's or Cullen's sign is present.",
     },
     {
-      finding: 'Dermatitis herpetiformis',
+      finding: "Cullen's sign",
       significance:
-        'Intensely pruritic vesicular rash on extensor surfaces; pathognomonic for celiac disease.',
+        'Periumbilical bruising from haemorrhage tracking along the falciform ligament; also suggests haemorrhagic pancreatitis.',
     },
     {
-      finding: 'Peripheral oedema or muscle wasting',
+      finding: 'Reduced or absent bowel sounds',
       significance:
-        'Reflects severe protein malabsorption in longstanding or refractory disease.',
+        'Paralytic ileus secondary to retroperitoneal inflammation; prolonged ileus may suggest developing complications.',
     },
   ],
 
   examPearls: [
     {
       type: 'physical',
-      title: 'Angular cheilitis and mouth ulcers',
+      title: 'Leaning-forward sign',
       content:
-        'Inspect the oral cavity for angular cheilitis and aphthous ulcers, both linked to iron, folate, and B12 deficiency.',
+        'Ask the patient to sit forward or adopt the foetal position; partial relief of pain in this position supports a retroperitoneal source.',
       whyItMatters:
-        'Oral signs can precede GI symptoms and offer an accessible clinical clue.',
+        'A simple bedside manoeuvre that increases pre-test probability of pancreatic pathology.',
       discriminator:
-        'Recurrent aphthous ulcers in the context of GI symptoms should always prompt celiac testing.',
+        'Ulcer and cholecystitis pain is not typically postural.',
       trapAvoided:
-        'Do not attribute recurrent oral ulcers solely to stress or local trauma in a symptomatic patient.',
+        'Absence of postural relief does not exclude pancreatitis, especially in severe disease with peritonism.',
     },
     {
       type: 'physical',
-      title: 'Dermatitis herpetiformis',
+      title: "Grey Turner's and Cullen's signs",
       content:
-        'Look for a symmetrical pruritic blistering rash on elbows, knees, buttocks, and scalp.',
+        "Inspect the flanks and periumbilical area for ecchymosis. Grey Turner's affects the flanks; Cullen's affects the periumbilical area.",
       whyItMatters:
-        'Dermatitis herpetiformis is a cutaneous manifestation of celiac disease and may occur without GI symptoms.',
+        'Both indicate retroperitoneal haemorrhage and correlate with severe necrotising disease.',
       discriminator:
-        'IgA deposits in dermal papillae on skin biopsy are diagnostic.',
+        'Their presence should immediately escalate the severity assessment and CT imaging.',
       managementImplication:
-        'Patients with dermatitis herpetiformis require gluten-free diet and may need dapsone for rash control.',
+        'Requires ICU-level monitoring, early CT, and consideration of interventional radiology or surgery.',
     },
     {
       type: 'nutritional',
-      title: 'Signs of nutritional deficiency',
+      title: 'Assess for signs of chronic alcohol use',
       content:
-        'Assess for pallor (iron), glossitis (B12/folate), peripheral neuropathy (B12), and bone pain or low trauma fractures (vitamin D/calcium).',
+        'Look for palmar erythema, Dupuytren contracture, parotid enlargement, spider naevi, and hepatomegaly.',
       whyItMatters:
-        'Multi-micronutrient deficiency is the rule in longstanding celiac disease and guides supplementation.',
+        'Chronic alcohol use is the second most common aetiology and guides secondary prevention counselling.',
       managementImplication:
-        'Correct deficiencies before and after starting a gluten-free diet and monitor at follow-up.',
+        'Alcohol cessation support and thiamine supplementation should be initiated in alcohol-related pancreatitis.',
     },
   ],
 
+  // ─── PANCREAS mnemonic ───────────────────────────────────────────────────────
+  // toMnemonicCardsFromScoringSystems reads record.mnemonic via normalizeMnemonicValue,
+  // which calls normalizeMnemonicExpansion on mnemonic.expansion.
+  // Each entry must use { letter, meaning, note } — the exact fields MnemonicLearningCard renders.
   scoringSystems: [
     {
-      type: 'mnemonic',
-      name: 'CELIAC',
-      description: 'High-yield mnemonic for celiac disease features',
-      items: [
-        {
-          letter: 'C',
-          standsFor: 'Chronic diarrhoea / steatorrhoea',
-          explanation:
-            'Pale, bulky, floating stools from fat malabsorption are a hallmark of small bowel villous damage.',
-        },
-        {
-          letter: 'E',
-          standsFor: 'Extra-intestinal features',
-          explanation:
-            'Anaemia, osteoporosis, elevated transaminases, infertility, and neurological symptoms reflect systemic malabsorption.',
-        },
-        {
-          letter: 'L',
-          standsFor: 'Low iron, folate, B12',
-          explanation:
-            'Proximal small bowel damage impairs absorption of iron and folate; B12 may fall if disease is extensive.',
-        },
-        {
-          letter: 'I',
-          standsFor: 'IgA tTG — the key serological test',
-          explanation:
-            'Tissue transglutaminase IgA is the first-line serological test; check total IgA to exclude selective IgA deficiency.',
-        },
-        {
-          letter: 'A',
-          standsFor: 'Autoimmune associations',
-          explanation:
-            'Type 1 diabetes, autoimmune thyroid disease, and primary biliary cholangitis are more common in celiac disease.',
-        },
-        {
-          letter: 'C',
-          standsFor: 'Celiac crisis and complications',
-          explanation:
-            'Refractory celiac disease, enteropathy-associated T-cell lymphoma, and small bowel adenocarcinoma are rare but serious complications.',
-        },
-      ],
+      name: 'PANCREAS',
+      use: 'High-yield mnemonic for acute pancreatitis causes and severity assessment',
+      mnemonic: {
+        name: 'PANCREAS',
+        useCase: 'Recalls the key causes, diagnostic criteria, and management priorities in acute pancreatitis.',
+        expansion: [
+          {
+            letter: 'P',
+            meaning: 'Precipitant — gallstones or alcohol',
+            note: 'Gallstones (40–70%) and alcohol (25–35%) account for most cases; identify the cause to guide secondary prevention.',
+          },
+          {
+            letter: 'A',
+            meaning: 'Amylase / lipase — >3× ULN confirms diagnosis',
+            note: 'Lipase preferred: higher specificity and remains elevated longer. >3× ULN satisfies one Atlanta criterion.',
+          },
+          {
+            letter: 'N',
+            meaning: 'Necrosis — contrast CT to detect it',
+            note: 'Non-enhancing pancreatic tissue on CECT indicates necrosis; infected necrosis carries >20% mortality.',
+          },
+          {
+            letter: 'C',
+            meaning: 'CRP >150 mg/L at 48 h — severity marker',
+            note: 'Independent predictor of severe disease; use with clinical assessment to guide escalation to HDU/ICU.',
+          },
+          {
+            letter: 'R',
+            meaning: 'Ranson / BISAP / APACHE-II — severity scoring',
+            note: 'BISAP can be calculated at admission; Ranson criteria require 48-hour data.',
+          },
+          {
+            letter: 'E',
+            meaning: 'Early fluids and enteral feeding',
+            note: 'Lactated Ringer preferred. Early enteral feeding within 24–48 h reduces infectious complications.',
+          },
+          {
+            letter: 'A',
+            meaning: 'Antibiotics — only for confirmed infected necrosis',
+            note: 'Prophylactic antibiotics are not recommended; reserve for infected pancreatic necrosis.',
+          },
+          {
+            letter: 'S',
+            meaning: 'Systemic complications — SIRS, ARDS, AKI',
+            note: 'Persistent organ failure >48 hours defines severe disease; monitor oxygen saturation, urine output, and renal function.',
+          },
+        ],
+      },
     },
   ],
 
   investigations: [
     {
-      test: 'Tissue transglutaminase IgA (tTG-IgA) with total IgA',
+      test: 'Serum lipase (preferred) and amylase',
       interpretation:
-        'tTG-IgA >10× upper limit of normal has high specificity for celiac disease. Total IgA must be checked to exclude IgA deficiency; if deficient, use IgG-based tests (tTG-IgG or DGP-IgG).',
+        'Lipase >3× ULN satisfies one of the Atlanta diagnostic criteria and has higher specificity than amylase. Amylase may normalise within 24–48 hours; lipase remains elevated longer.',
       whyItMatters:
-        'First-line serological test; markedly elevated levels can support diagnosis without biopsy in select patients per current guidelines.',
+        'First-line biochemical test; levels >3× ULN in the context of compatible pain are sufficient to diagnose acute pancreatitis without imaging in most cases.',
     },
     {
-      test: 'Duodenal biopsy (at least 4 biopsies from D2, 1–2 from duodenal bulb)',
+      test: 'LFTs, bilirubin, and GGT',
       interpretation:
-        'Villous atrophy (Marsh 3) with crypt hyperplasia is the histological gold standard. Patient must be on a gluten-containing diet at the time of biopsy.',
+        'Elevated bilirubin and transaminases with a dilated common bile duct suggest gallstone pancreatitis and may indicate cholangitis requiring urgent ERCP.',
       whyItMatters:
-        'Confirms the diagnosis and grades severity. Essential before lifelong dietary commitment in most adults.',
+        'Differentiates biliary from alcoholic aetiology and identifies patients needing early endoscopic intervention.',
     },
     {
-      test: 'Full blood count and iron studies',
+      test: 'Contrast-enhanced CT abdomen (CECT)',
       interpretation:
-        'Microcytic anaemia with low ferritin and low/normal MCV is typical. Mixed deficiency anaemia (iron + folate) may cause a normal MCV.',
+        'Identifies pancreatic necrosis (non-enhancing tissue), peripancreatic fluid collections, and local complications. CT Severity Index guides prognostication.',
       whyItMatters:
-        'Quantifies deficiency burden and guides supplementation. Refractory iron deficiency in the absence of blood loss should always trigger celiac testing.',
+        'Not required for diagnosis in straightforward cases but essential when diagnosis is uncertain, clinical deterioration occurs, or severe disease is suspected.',
     },
     {
-      test: 'Folate, B12, vitamin D, calcium, bone profile',
+      test: 'Abdominal ultrasound',
       interpretation:
-        'Low folate and vitamin D are common. B12 is usually preserved unless disease is extensive. Elevated ALP may suggest bone disease.',
+        'Identifies gallstones, biliary dilation, and choledocholithiasis. The pancreas is often poorly visualised due to overlying bowel gas.',
       whyItMatters:
-        'Identifies nutritional deficiencies needing correction and screens for metabolic bone disease.',
+        'First-line imaging to identify a biliary aetiology; should be performed in all patients with acute pancreatitis.',
     },
     {
-      test: 'Liver function tests',
+      test: 'CRP at 48 hours',
       interpretation:
-        'Mild isolated transaminase elevation (cryptogenic hypertransaminasaemia) may be the only presenting feature of celiac disease.',
+        'CRP >150 mg/L at 48 hours predicts severe pancreatitis with reasonable sensitivity and specificity.',
       whyItMatters:
-        'Normalisation of transaminases on a gluten-free diet is both diagnostic and therapeutic.',
+        'Guides escalation from ward to high-dependency or ICU-level care when combined with clinical assessment.',
     },
     {
-      test: 'HLA-DQ2 / HLA-DQ8 typing',
+      test: 'Calcium, triglycerides, IgG4',
       interpretation:
-        'Negative result essentially excludes celiac disease. A positive result is necessary but not sufficient for diagnosis.',
+        'Hypercalcaemia, hypertriglyceridaemia (>11 mmol/L), and elevated IgG4 (autoimmune pancreatitis) are rarer but important and treatable causes.',
       whyItMatters:
-        'Useful to exclude celiac disease in equivocal cases or when serology and biopsy are discordant.',
+        'Identifies uncommon aetiologies that require specific management beyond supportive care.',
     },
   ],
 
   pitfalls: [
     {
-      pitfall: 'Diagnosing IBS without excluding celiac disease',
+      pitfall: 'Diagnosing pancreatitis without measuring lipase',
       consequence:
-        'Celiac disease is frequently misdiagnosed as IBS for years, delaying treatment and allowing nutritional damage to accumulate.',
+        'Amylase alone lacks specificity; lipase should always be measured and interpreted against the local reference range.',
     },
     {
-      pitfall: 'Testing serology on a gluten-free diet',
+      pitfall: 'Underestimating severity based on enzyme levels alone',
       consequence:
-        'tTG-IgA can normalise rapidly after gluten exclusion, producing false-negative results. Patients must consume gluten for at least 6 weeks before testing.',
+        'Enzyme levels do not correlate with disease severity. A patient with a lipase of 500 U/L may develop severe necrotising pancreatitis while a lipase of 2 000 U/L may follow an uncomplicated course.',
     },
     {
-      pitfall: 'Missing IgA deficiency',
+      pitfall: 'Failing to perform early ultrasound',
       consequence:
-        'Selective IgA deficiency occurs in ~1:500 people and will give a false-negative tTG-IgA. Always measure total IgA.',
+        'Missing gallstone aetiology delays cholecystectomy planning and risks recurrent attacks or progression to ascending cholangitis.',
     },
     {
-      pitfall: 'Attributing elevated transaminases to other causes without testing for celiac disease',
+      pitfall: 'Prescribing prophylactic antibiotics',
       consequence:
-        'Celiac disease is a reversible cause of cryptogenic hypertransaminasaemia; missing it delays a simple dietary intervention.',
+        'No evidence supports prophylactic antibiotics in acute pancreatitis; indiscriminate use promotes resistance and fungal superinfection.',
     },
     {
-      pitfall: 'Failing to screen for associated conditions',
+      pitfall: 'Delaying enteral feeding in severe disease',
       consequence:
-        'Untreated celiac disease is associated with osteoporosis, lymphoma, and other autoimmune conditions; screening and monitoring are essential.',
+        'Prolonged fasting increases gut permeability, bacterial translocation, and infectious complications. Early enteral feeding (within 24–48 h) is preferred over TPN.',
     },
   ],
 
   managementOverview: [
     {
-      step: 'Strict lifelong gluten-free diet',
+      step: 'IV fluid resuscitation',
       rationale:
-        'Complete elimination of wheat, barley, and rye leads to mucosal healing, resolution of symptoms, and correction of nutritional deficiencies in most patients.',
+        'Aggressive early fluid replacement (250–500 mL/h initially) with Lactated Ringer is preferred over normal saline and reduces pancreatic necrosis by maintaining microcirculation.',
     },
     {
-      step: 'Correct nutritional deficiencies',
+      step: 'Analgesia and antiemetics',
       rationale:
-        'Supplement iron, folate, vitamin D, and calcium as indicated; reassess once mucosal healing has occurred.',
+        'Adequate analgesia with opioids is appropriate; withholding analgesia does not aid diagnosis and increases distress. Ondansetron or metoclopramide for nausea.',
     },
     {
-      step: 'Dietitian referral',
+      step: 'Nil by mouth then early enteral feeding',
       rationale:
-        'A specialist dietitian provides education on hidden gluten sources, label reading, and cross-contamination avoidance.',
+        'Keep nil by mouth initially for comfort; restart enteral feeding as soon as tolerated (or within 24–48 h via NGT in severe disease) to protect the gut barrier.',
     },
     {
-      step: 'Serological follow-up',
+      step: 'Severity assessment and monitoring',
       rationale:
-        'Repeat tTG-IgA at 6–12 months; falling titres confirm dietary adherence and mucosal recovery.',
+        'Calculate BISAP or Ranson score; measure CRP at 48 hours; monitor urine output, oxygen saturation, and renal function. Escalate to HDU/ICU if organ dysfunction develops.',
     },
     {
-      step: 'Bone density assessment',
+      step: 'Biliary workup and ERCP if indicated',
       rationale:
-        'DEXA scan at diagnosis in adults to assess baseline bone mineral density given the risk of metabolic bone disease.',
+        'Perform ultrasound in all patients. Urgent ERCP within 24–48 hours is indicated if concurrent cholangitis or persistent biliary obstruction is present.',
     },
     {
-      step: 'Screen for associated autoimmune conditions',
+      step: 'Cholecystectomy before discharge',
       rationale:
-        'Check thyroid function (TSH), consider type 1 diabetes screening, and assess for other autoimmune conditions at diagnosis and follow-up.',
+        'Patients with gallstone pancreatitis should undergo same-admission or early interval cholecystectomy to prevent recurrence (recurrence risk ~30% without surgery).',
+    },
+    {
+      step: 'Manage complications',
+      rationale:
+        'Necrotising pancreatitis, infected necrosis, walled-off necrosis, and pseudocysts may require step-up intervention: antibiotics, endoscopic drainage, or surgical necrosectomy.',
     },
   ],
 
   differentialDistinguishers: [
     {
-      diagnosis: 'Irritable bowel syndrome',
+      diagnosis: 'Peptic ulcer disease',
+      whyConfused:
+        'Epigastric pain after meals and nausea overlap significantly with pancreatitis, especially before enzyme results are available.',
+      distinguishingPoint:
+        'PUD pain is often burning, relieved by antacids, and associated with Helicobacter pylori risk factors; it does not cause back radiation or enzyme elevation.',
       keySeparator:
-        'IBS does not cause steatorrhoea, nutritional deficiencies, elevated tTG-IgA, or villous atrophy.',
+        'Back radiation with postural relief and lipase >3× ULN are specific to pancreatic pathology.',
+      classicTrap:
+        'Do not treat empirically for PUD and discharge before checking lipase in a patient with epigastric pain and vomiting.',
     },
     {
-      diagnosis: 'Inflammatory bowel disease',
+      diagnosis: 'Acute cholecystitis',
+      whyConfused:
+        'Fatty meal precipitant, right upper quadrant or epigastric pain, nausea, and vomiting are shared features. Gallstone pancreatitis may coexist with cholecystitis.',
+      distinguishingPoint:
+        'Cholecystitis causes right upper quadrant tenderness, a positive Murphy sign, and fever with raised bilirubin; it does not cause lipase elevation unless concurrent pancreatitis is present.',
       keySeparator:
-        'IBD can cause malabsorption and anaemia but does not produce positive celiac serology or the characteristic pattern of villous atrophy with crypt hyperplasia.',
+        'Markedly elevated lipase with epigastric rather than RUQ localisation and normal bilirubin distinguishes pancreatitis from isolated cholecystitis.',
+      classicTrap:
+        'Gallstone pancreatitis can cause transient bilirubin elevation; do not exclude pancreatitis if bilirubin is mildly raised.',
     },
     {
-      diagnosis: 'Small intestinal bacterial overgrowth',
+      diagnosis: 'Mesenteric ischaemia',
+      whyConfused:
+        'Sudden severe abdominal pain, particularly in older or vascular patients, raises mesenteric ischaemia as an early concern.',
+      distinguishingPoint:
+        'Mesenteric ischaemia characteristically causes pain out of proportion to examination findings and does not elevate pancreatic enzymes.',
       keySeparator:
-        'SIBO causes bloating and diarrhoea but does not produce villous atrophy or positive tTG-IgA; breath testing is used for diagnosis.',
+        'Enzyme profile and CT findings localise pathology to the pancreas in acute pancreatitis; ischaemia requires CT angiography and shows bowel wall changes.',
     },
     {
-      diagnosis: 'Microscopic colitis',
+      diagnosis: 'Aortic dissection',
+      whyConfused:
+        'Sudden severe back pain with epigastric involvement can mimic aortic dissection, particularly type B dissection.',
+      distinguishingPoint:
+        'Dissection pain is typically tearing, migrating, and associated with pulse or blood pressure differentials; it does not cause pancreatic enzyme elevation.',
       keySeparator:
-        'Microscopic colitis causes watery diarrhoea without steatorrhoea, villous atrophy, or celiac-specific serology.',
+        'Postural relief and isolated enzyme elevation are not features of aortic dissection.',
+      classicTrap:
+        'In the haemodynamically unstable patient with back pain, exclude aortic dissection before attributing symptoms to pancreatitis.',
     },
   ],
 
   complications: [
     {
-      complication: 'Refractory celiac disease',
+      complication: 'Necrotising pancreatitis',
       whyItMatters:
-        'Persistent villous atrophy despite strict gluten-free diet; type II is pre-malignant and carries significant mortality risk.',
+        'Non-enhancing pancreatic tissue on CT indicates necrosis; infected necrosis carries mortality >20% and requires step-up management.',
     },
     {
-      complication: 'Enteropathy-associated T-cell lymphoma (EATL)',
+      complication: 'Pancreatic pseudocyst',
       whyItMatters:
-        'A rare but serious complication; risk is reduced by adherence to a gluten-free diet.',
+        'Fluid collections that fail to resolve may mature into pseudocysts over 4–6 weeks; symptomatic pseudocysts require endoscopic or surgical drainage.',
     },
     {
-      complication: 'Osteoporosis and fragility fractures',
+      complication: 'Acute respiratory distress syndrome (ARDS)',
       whyItMatters:
-        'Calcium and vitamin D malabsorption leads to reduced bone mineral density; DEXA screening and supplementation are important.',
+        'Cytokine-mediated pulmonary injury can develop within 24–48 hours; early supplemental oxygen and monitoring of oxygen saturation are essential.',
     },
     {
-      complication: 'Reproductive complications',
+      complication: 'Acute kidney injury',
       whyItMatters:
-        'Untreated celiac disease is associated with infertility, recurrent miscarriage, and adverse pregnancy outcomes.',
+        'Volume depletion and cytokine injury cause AKI; aggressive early fluid resuscitation and urine output monitoring are the key preventive measures.',
     },
     {
-      complication: 'Small bowel adenocarcinoma',
+      complication: 'Splenic vein thrombosis',
       whyItMatters:
-        'Rare but elevated risk compared to the general population; gluten-free diet may be protective.',
+        'Peripancreatic inflammation can thrombose the splenic vein, causing segmental portal hypertension and gastric varices.',
     },
   ],
 
   recallPrompts: [
     {
-      prompt: 'What is the first-line serological test for celiac disease?',
+      prompt: 'What enzyme is preferred over amylase for diagnosing acute pancreatitis, and why?',
       answer:
-        'Tissue transglutaminase IgA (tTG-IgA), always paired with total IgA to exclude selective IgA deficiency.',
+        'Serum lipase — it has higher specificity and remains elevated longer (3–5 days) than amylase (24–48 hours), making it more useful in delayed presentations.',
     },
     {
-      prompt: 'Why must patients be eating gluten before celiac testing?',
+      prompt: 'What are the two most common causes of acute pancreatitis?',
       answer:
-        'Gluten-free diet causes tTG-IgA to normalise, producing false-negative serology and potentially normal biopsies.',
+        'Gallstones (40–70%) and alcohol (25–35%). Together they account for most cases; always identify the aetiology to guide secondary prevention.',
     },
     {
-      prompt: 'What is the histological gold standard for diagnosing celiac disease?',
+      prompt: 'What CRP threshold at 48 hours predicts severe acute pancreatitis?',
       answer:
-        'Villous atrophy with crypt hyperplasia (Marsh grade 3) on duodenal biopsy taken during active gluten ingestion.',
+        'CRP >150 mg/L at 48 hours is an independent predictor of severe disease and guides escalation to HDU or ICU monitoring.',
     },
     {
-      prompt: 'Name two classic extra-intestinal presentations of celiac disease.',
+      prompt: 'Are prophylactic antibiotics recommended in acute pancreatitis?',
       answer:
-        'Refractory iron-deficiency anaemia and dermatitis herpetiformis (also: elevated transaminases, osteoporosis, infertility, peripheral neuropathy).',
+        'No. Prophylactic antibiotics have not been shown to reduce mortality or infectious complications. They are reserved for confirmed or strongly suspected infected pancreatic necrosis.',
     },
     {
-      prompt: 'What mnemonic helps recall the key features of celiac disease?',
+      prompt: 'What is the preferred IV fluid in acute pancreatitis resuscitation?',
       answer:
-        'COELIAC — Chronic diarrhoea, Oral/skin signs, Extra-intestinal features, Low iron/folate/B12, IgA tTG, Autoimmune associations, Complications.',
+        'Lactated Ringer (Hartmann\'s solution) is preferred over normal saline; it reduces the risk of SIRS and metabolic acidosis.',
+    },
+    {
+      prompt: 'Name the PANCREAS mnemonic features for acute pancreatitis.',
+      answer:
+        'Precipitant (gallstones/alcohol), Amylase/lipase >3× ULN, Necrosis on CT, CRP >150 at 48 h, Ranson/BISAP scoring, Early fluids and enteral feeding, Antibiotics only for infected necrosis, Systemic complications (SIRS/ARDS/AKI).',
     },
   ],
 
   references: [],
 };
 
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
 async function main() {
-  const canonicalName = 'celiac disease';
-  const displayLabel = 'Celiac Disease';
+  const canonicalName = 'acute pancreatitis';
+  const displayLabel = 'Acute Pancreatitis';
   const canonicalNormalized = normalizeClinicalText(canonicalName);
 
   const registry = await prisma.diagnosisRegistry.upsert({
@@ -648,23 +702,23 @@ async function main() {
       status: DiagnosisRegistryStatus.ACTIVE,
       active: true,
       specialty: 'Gastroenterology',
-      subspecialty: 'Small Bowel',
-      category: 'Autoimmune / Malabsorption',
+      subspecialty: 'Pancreas',
+      category: 'Inflammatory',
       bodySystem: 'Gastrointestinal',
-      organSystem: 'Small Intestine',
+      organSystem: 'Pancreas',
       difficultyBand: DiagnosisDifficultyBand.BASIC,
       rarityBand: DiagnosisRarityBand.COMMON,
-      clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
+      clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
       ageGroup: DiagnosisAgeGroup.ADULT,
-      urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
+      urgencyLevel: DiagnosisUrgencyLevel.URGENT,
       onboardingStatus: 'READY_FOR_REVIEW',
       isPlayable: true,
       isGeneratable: true,
-      preferredClueTypes: ['history', 'symptom', 'exam', 'lab', 'investigation'],
+      preferredClueTypes: ['history', 'symptom', 'exam', 'lab', 'imaging'],
       excludedClueTypes: [],
       searchPriority: 20,
       notes:
-        'Common autoimmune enteropathy presenting with malabsorption, nutritional deficiencies, and extra-intestinal manifestations. Frequently misdiagnosed as IBS.',
+        'Common acute surgical abdomen presenting with epigastric pain radiating to the back, elevated lipase, and peripancreatic inflammation. Two most common causes are gallstones and alcohol.',
     },
     create: {
       canonicalName,
@@ -673,24 +727,24 @@ async function main() {
       status: DiagnosisRegistryStatus.ACTIVE,
       active: true,
       specialty: 'Gastroenterology',
-      subspecialty: 'Small Bowel',
-      category: 'Autoimmune / Malabsorption',
+      subspecialty: 'Pancreas',
+      category: 'Inflammatory',
       bodySystem: 'Gastrointestinal',
-      organSystem: 'Small Intestine',
+      organSystem: 'Pancreas',
       difficultyBand: DiagnosisDifficultyBand.BASIC,
       rarityBand: DiagnosisRarityBand.COMMON,
-      clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
+      clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
       ageGroup: DiagnosisAgeGroup.ADULT,
-      urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
+      urgencyLevel: DiagnosisUrgencyLevel.URGENT,
       onboardingStatus: 'READY_FOR_REVIEW',
       onboardingStartedAt: now,
       isPlayable: true,
       isGeneratable: true,
-      preferredClueTypes: ['history', 'symptom', 'exam', 'lab', 'investigation'],
+      preferredClueTypes: ['history', 'symptom', 'exam', 'lab', 'imaging'],
       excludedClueTypes: [],
       searchPriority: 20,
       notes:
-        'Common autoimmune enteropathy presenting with malabsorption, nutritional deficiencies, and extra-intestinal manifestations. Frequently misdiagnosed as IBS.',
+        'Common acute surgical abdomen presenting with epigastric pain radiating to the back, elevated lipase, and peripancreatic inflammation. Two most common causes are gallstones and alcohol.',
     },
   });
 
@@ -702,44 +756,43 @@ async function main() {
       rank: 100,
     },
     {
-      term: 'celiac disease',
+      term: 'acute pancreatitis',
       kind: DiagnosisAliasKind.ACCEPTED,
       acceptedForMatch: true,
       rank: 95,
     },
     {
-      term: 'celiac sprue',
+      term: 'pancreatitis',
       kind: DiagnosisAliasKind.ACCEPTED,
       acceptedForMatch: true,
       rank: 85,
     },
     {
-      term: 'gluten-sensitive enteropathy',
+      term: 'alcoholic pancreatitis',
       kind: DiagnosisAliasKind.ACCEPTED,
       acceptedForMatch: true,
-      rank: 80,
+      rank: 75,
     },
     {
-      term: 'gluten intolerance',
-      kind: DiagnosisAliasKind.SEARCH_ONLY,
-      acceptedForMatch: false,
-      rank: 40,
+      term: 'gallstone pancreatitis',
+      kind: DiagnosisAliasKind.ACCEPTED,
+      acceptedForMatch: true,
+      rank: 75,
     },
     {
-      term: 'villous atrophy',
+      term: 'pancreatic inflammation',
       kind: DiagnosisAliasKind.SEARCH_ONLY,
       acceptedForMatch: false,
       rank: 30,
     },
   ];
+
   const seenAliasNormalizations = new Set<string>();
 
   for (const aliasSeed of aliasSeeds) {
     const term = aliasSeed.term;
     const normalizedTerm = normalizeClinicalText(term);
-    if (seenAliasNormalizations.has(normalizedTerm)) {
-      continue;
-    }
+    if (seenAliasNormalizations.has(normalizedTerm)) continue;
     seenAliasNormalizations.add(normalizedTerm);
 
     const existingAlias = await prisma.diagnosisAlias.findUnique({
@@ -751,6 +804,7 @@ async function main() {
       },
       select: { id: true },
     });
+
     await assertAliasValidWithClient(prisma, {
       aliasText: term,
       targetDiagnosisRegistryId: registry.id,
@@ -758,6 +812,7 @@ async function main() {
       ignoreAliasId: existingAlias?.id,
       allowTargetCanonicalAlias: normalizedTerm === canonicalNormalized,
     });
+
     await prisma.diagnosisAlias.upsert({
       where: {
         diagnosisRegistryId_normalizedTerm: {
@@ -905,7 +960,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Seeded frontend-aligned flagship Celiac Disease inventory case. DailyCase scheduler should assign the actual daily slot.',
+      'Seeded frontend-aligned flagship Acute Pancreatitis inventory case. DailyCase scheduler should assign the actual daily slot.',
   };
 
   const seededCase = reusableCase
@@ -934,7 +989,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Frontend-aligned flagship Celiac Disease inventory revision for DailyCase scheduler assignment.',
+      'Frontend-aligned flagship Acute Pancreatitis inventory revision for DailyCase scheduler assignment.',
   };
 
   const revision = reusableCase?.currentRevisionId
@@ -972,19 +1027,19 @@ async function main() {
       source: 'MANUAL',
       publishTrack: 'DAILY',
       outcome: 'PASSED',
-      validatorVersion: 'flagship-human-review:celiac-disease-v1',
+      validatorVersion: 'flagship-human-review:acute-pancreatitis-v1',
       summary: {
         contentTier: 'FLAGSHIP',
         seedVersion,
         humanReviewed: true,
-        note: 'Manual frontend-aligned Celiac Disease inventory case seeded for DailyCase scheduler assignment.',
+        note: 'Manual frontend-aligned Acute Pancreatitis inventory case seeded for DailyCase scheduler assignment.',
       },
       findings: [],
       completedAt: now,
     },
   });
 
-  console.log('Seeded frontend-aligned Celiac Disease:', {
+  console.log('Seeded frontend-aligned Acute Pancreatitis:', {
     registryId: registry.id,
     caseId: seededCase.id,
     publicNumber,
