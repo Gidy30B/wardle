@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { SettingsActionRow } from '../components/SettingsActionRow'
 import { SettingsBackHeader } from '../components/SettingsBackHeader'
@@ -13,6 +14,9 @@ import {
 } from '../settings.icons'
 import { getVisibleStreak } from '../../../../user-progress/streakVisibility'
 import type { UserStatsReport } from '../../../../user-stats/userStats.types'
+import { PerformanceReportPanel } from './PerformanceReportPanel'
+import { SpecialtySummaryPanel } from './SpecialtySummaryPanel'
+import { WeakAreasPanel } from './WeakAreasPanel'
 
 type StatsIconName =
   | 'xp'
@@ -177,6 +181,8 @@ export function StatsSettingsScreen({
   error: string | null
   onRetry: () => void
 }) {
+  const [panel, setPanel] = useState<'performance' | 'specialty' | 'weakAreas' | null>(null)
+
   const progress = statsReport?.progress
   const totals = statsReport?.totals
   const visibleStreak = getVisibleStreak(
@@ -228,6 +234,16 @@ export function StatsSettingsScreen({
       : null,
   ]
   const stats = rawStats.filter((stat): stat is StatCard => stat != null)
+
+  if (panel === 'performance') {
+    return <PerformanceReportPanel onBack={() => setPanel(null)} statsReport={statsReport} />
+  }
+  if (panel === 'specialty') {
+    return <SpecialtySummaryPanel onBack={() => setPanel(null)} statsReport={statsReport} />
+  }
+  if (panel === 'weakAreas') {
+    return <WeakAreasPanel onBack={() => setPanel(null)} statsReport={statsReport} />
+  }
 
   return (
     <SettingsShell>
@@ -357,7 +373,7 @@ export function StatsSettingsScreen({
                 )} avg attempts - ${formatDuration(totals?.averageTimeSecs)} avg time`
               : 'No performance report yet'
           }
-          onClick={() => {}}
+          onClick={() => setPanel('performance')}
         />
         <SettingsActionRow
           icon={
@@ -376,7 +392,7 @@ export function StatsSettingsScreen({
                 )} accuracy`
               : 'Complete cases to build specialty trends'
           }
-          onClick={() => {}}
+          onClick={() => setPanel('specialty')}
         />
         <SettingsActionRow
           icon={
@@ -395,7 +411,7 @@ export function StatsSettingsScreen({
                 ? 'No weak areas detected yet'
                 : 'Complete at least three cases in an area to detect trends'
           }
-          onClick={() => {}}
+          onClick={() => setPanel('weakAreas')}
           style={{ borderBottom: 'none' }}
         />
       </SettingsSection>
