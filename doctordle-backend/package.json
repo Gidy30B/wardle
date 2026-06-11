@@ -25,6 +25,7 @@
     "import:diagnosis-registry-csv": "ts-node ./scripts/import-diagnosis-registry-csv.ts",
     "seed:diagnosis-registry": "ts-node ./scripts/seed-diagnosis-registry.ts",
     "seed:diagnosis-teaching-rules": "ts-node ./scripts/seed-diagnosis-teaching-rules.ts",
+    "seed:editorial-workspace-qa": "ts-node prisma/seed/editorial-workspace-qa.seed.ts",
     "generate:cases": "ts-node src/scripts/generate-cases.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",

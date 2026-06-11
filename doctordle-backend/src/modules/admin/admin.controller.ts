@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Param,
@@ -93,6 +94,37 @@ type GenerateCasesBody = {
   difficulty?: string;
   registryFirst?: boolean;
   diagnosisRegistryIds?: string[];
+};
+
+type RepairUnsupportedClaimBody = {
+  artifactType?: string;
+  artifactId?: string;
+  claimId?: string;
+};
+
+type AiDraftDecisionBody = {
+  note?: string | null;
+};
+
+type CaseLearningGoalCoverageBody = {
+  caseId?: string;
+  learningGoalId?: string;
+  learningGoal?: string;
+  coverageStrength?: number;
+  coveredDiscriminators?: string[];
+  missingDiscriminators?: string[];
+  coveredMimics?: string[];
+  missingMimics?: string[];
+  evidenceSource?: string;
+};
+
+type CaseEscalationAnnotationBody = {
+  caseId?: string;
+  escalationType?: string;
+  covered?: boolean;
+  evidenceStrength?: number;
+  reasoningPathId?: string | null;
+  notes?: string | null;
 };
 
 @Controller('admin')
@@ -981,6 +1013,266 @@ export class AdminController {
     });
   }
 
+  @Post('diagnosis-workspace/:diagnosisRegistryId/draft-actions/generate-case-from-goal')
+  @EditorialAccess()
+  async generateCaseFromUncoveredGoal(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Body() body: TargetedCaseGenerationPayload,
+  ) {
+    this.validateTargetedCasePayload(body);
+
+    const result = await this.targetedCaseGenerationService.generate({
+      diagnosisRegistryId,
+      payload: body,
+    });
+
+    return {
+      action: 'generate_case_from_uncovered_goal',
+      publicationStatus: 'draft',
+      result,
+    };
+  }
+
+  @Post('diagnosis-workspace/:diagnosisRegistryId/draft-actions/repair-unsupported-claim')
+  @EditorialAccess()
+  async repairUnsupportedClaim(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: RepairUnsupportedClaimBody,
+  ) {
+    if (!body?.claimId) {
+      throw new BadRequestException('claimId is required');
+    }
+
+    return this.diagnosisEditorialWorkspaceService.repairUnsupportedClaim({
+      diagnosisRegistryId,
+      claimId: body.claimId,
+      userId: request.user.id,
+    });
+  }
+
+  @Post('diagnosis-workspace/:diagnosisRegistryId/claims/:claimId/repair')
+  @EditorialAccess()
+  async repairUnsupportedClaimById(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Param('claimId') claimId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.diagnosisEditorialWorkspaceService.repairUnsupportedClaim({
+      diagnosisRegistryId,
+      claimId,
+      userId: request.user.id,
+    });
+  }
+
+  @Post('diagnosis-workspace/:diagnosisRegistryId/ai-drafts/:auditId/accept')
+  @EditorialAccess()
+  async acceptAiDraftRevision(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Param('auditId', new ParseUUIDPipe()) auditId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: AiDraftDecisionBody = {},
+  ) {
+    return this.diagnosisEditorialWorkspaceService.decideAiDraftRevision({
+      diagnosisRegistryId,
+      auditId,
+      decision: 'accept',
+      userId: request.user.id,
+      note: body.note,
+    });
+  }
+
+  @Post('diagnosis-workspace/:diagnosisRegistryId/ai-drafts/:auditId/reject')
+  @EditorialAccess()
+  async rejectAiDraftRevision(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Param('auditId', new ParseUUIDPipe()) auditId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: AiDraftDecisionBody = {},
+  ) {
+    return this.diagnosisEditorialWorkspaceService.decideAiDraftRevision({
+      diagnosisRegistryId,
+      auditId,
+      decision: 'reject',
+      userId: request.user.id,
+      note: body.note,
+    });
+  }
+
+  @Post('diagnosis-workspace/:diagnosisRegistryId/ai-drafts/:auditId/request-changes')
+  @EditorialAccess()
+  async requestAiDraftRevisionChanges(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Param('auditId', new ParseUUIDPipe()) auditId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: AiDraftDecisionBody = {},
+  ) {
+    return this.diagnosisEditorialWorkspaceService.decideAiDraftRevision({
+      diagnosisRegistryId,
+      auditId,
+      decision: 'request_changes',
+      userId: request.user.id,
+      note: body.note,
+    });
+  }
+
+  @Post('diagnosis-workspace/:diagnosisRegistryId/ai-drafts/:auditId/supersede')
+  @EditorialAccess()
+  async supersedeAiDraftRevision(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Param('auditId', new ParseUUIDPipe()) auditId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: AiDraftDecisionBody = {},
+  ) {
+    return this.diagnosisEditorialWorkspaceService.decideAiDraftRevision({
+      diagnosisRegistryId,
+      auditId,
+      decision: 'supersede',
+      userId: request.user.id,
+      note: body.note,
+    });
+  }
+
+  @Post('diagnosis-workspace/:diagnosisRegistryId/case-learning-goal-coverage')
+  @EditorialAccess()
+  async createCaseLearningGoalCoverage(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: CaseLearningGoalCoverageBody,
+  ) {
+    const payload = this.validateCaseLearningGoalCoverageBody(body);
+    return this.diagnosisEditorialWorkspaceService.upsertCaseLearningGoalCoverage({
+      diagnosisRegistryId,
+      payload,
+      userId: request.user.id,
+    });
+  }
+
+  @Patch('diagnosis-workspace/:diagnosisRegistryId/case-learning-goal-coverage/:coverageId')
+  @EditorialAccess()
+  async updateCaseLearningGoalCoverage(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Param('coverageId', new ParseUUIDPipe()) coverageId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: CaseLearningGoalCoverageBody,
+  ) {
+    const payload = this.validateCaseLearningGoalCoverageBody(body);
+    return this.diagnosisEditorialWorkspaceService.upsertCaseLearningGoalCoverage({
+      diagnosisRegistryId,
+      coverageId,
+      payload,
+      userId: request.user.id,
+    });
+  }
+
+  @Delete('diagnosis-workspace/:diagnosisRegistryId/case-learning-goal-coverage/:coverageId')
+  @EditorialAccess()
+  async deleteCaseLearningGoalCoverage(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Param('coverageId', new ParseUUIDPipe()) coverageId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.diagnosisEditorialWorkspaceService.deleteCaseLearningGoalCoverage({
+      diagnosisRegistryId,
+      coverageId,
+      userId: request.user.id,
+    });
+  }
+
+  @Post('diagnosis-workspace/:diagnosisRegistryId/case-escalation-annotations')
+  @EditorialAccess()
+  async createCaseEscalationAnnotation(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: CaseEscalationAnnotationBody,
+  ) {
+    const payload = this.validateCaseEscalationAnnotationBody(body);
+    return this.diagnosisEditorialWorkspaceService.upsertCaseEscalationAnnotation({
+      diagnosisRegistryId,
+      payload,
+      userId: request.user.id,
+    });
+  }
+
+  @Patch('diagnosis-workspace/:diagnosisRegistryId/case-escalation-annotations/:annotationId')
+  @EditorialAccess()
+  async updateCaseEscalationAnnotation(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Param('annotationId', new ParseUUIDPipe()) annotationId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: CaseEscalationAnnotationBody,
+  ) {
+    const payload = this.validateCaseEscalationAnnotationBody(body);
+    return this.diagnosisEditorialWorkspaceService.upsertCaseEscalationAnnotation({
+      diagnosisRegistryId,
+      annotationId,
+      payload,
+      userId: request.user.id,
+    });
+  }
+
+  @Delete('diagnosis-workspace/:diagnosisRegistryId/case-escalation-annotations/:annotationId')
+  @EditorialAccess()
+  async deleteCaseEscalationAnnotation(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Param('annotationId', new ParseUUIDPipe()) annotationId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.diagnosisEditorialWorkspaceService.deleteCaseEscalationAnnotation({
+      diagnosisRegistryId,
+      annotationId,
+      userId: request.user.id,
+    });
+  }
+
+  @Post('diagnosis-workspace/:diagnosisRegistryId/draft-actions/strengthen-differential')
+  @EditorialAccess()
+  async strengthenDifferentialDraft(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+  ) {
+    const result = await this.reasoningPathService.generateCandidates({
+      diagnosisRegistryId,
+    });
+
+    return {
+      action: 'strengthen_differential',
+      publicationStatus: 'draft',
+      result,
+    };
+  }
+
+  @Post('diagnosis-workspace/:diagnosisRegistryId/draft-actions/suggest-teaching-distinction')
+  @EditorialAccess()
+  async suggestTeachingDistinctionDraft(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+  ) {
+    const result =
+      await this.diagnosisTeachingRelationshipService.generateCandidates({
+        diagnosisRegistryId,
+      });
+
+    return {
+      action: 'suggest_teaching_distinction',
+      publicationStatus: 'draft',
+      result,
+    };
+  }
+
   @Get('diagnosis-registry')
   @EditorialAccess()
   async searchDiagnosisRegistry(@Query() query: SearchDiagnosisRegistryDto) {
@@ -1162,6 +1454,42 @@ export class AdminController {
     }
 
     return value;
+  }
+
+  private validateCaseLearningGoalCoverageBody(
+    body: CaseLearningGoalCoverageBody,
+  ): Required<
+    Pick<
+      CaseLearningGoalCoverageBody,
+      'caseId' | 'learningGoalId' | 'learningGoal'
+    >
+  > &
+    Omit<CaseLearningGoalCoverageBody, 'caseId' | 'learningGoalId' | 'learningGoal'> {
+    if (!body?.caseId || !body.learningGoalId || !body.learningGoal) {
+      throw new BadRequestException(
+        'caseId, learningGoalId, and learningGoal are required',
+      );
+    }
+    return {
+      ...body,
+      caseId: body.caseId,
+      learningGoalId: body.learningGoalId,
+      learningGoal: body.learningGoal,
+    };
+  }
+
+  private validateCaseEscalationAnnotationBody(
+    body: CaseEscalationAnnotationBody,
+  ): Required<Pick<CaseEscalationAnnotationBody, 'caseId' | 'escalationType'>> &
+    Omit<CaseEscalationAnnotationBody, 'caseId' | 'escalationType'> {
+    if (!body?.caseId || !body.escalationType) {
+      throw new BadRequestException('caseId and escalationType are required');
+    }
+    return {
+      ...body,
+      caseId: body.caseId,
+      escalationType: body.escalationType,
+    };
   }
 
   private validateTargetedCasePayload(

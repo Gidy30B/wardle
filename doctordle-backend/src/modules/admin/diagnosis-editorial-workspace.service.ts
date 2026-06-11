@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import {
   CaseEditorialStatus,
   DifferentialResolutionStatus,
@@ -6,6 +11,7 @@ import {
   DiagnosisGraphCandidateStatus,
   DiagnosisGraphCandidateType,
   DiagnosisGraphFactStatus,
+  DiagnosisEducationStatus,
   ValidationOutcome,
   type Prisma,
 } from '@prisma/client';
@@ -101,6 +107,7 @@ type RegistryRow = {
     status: string;
     version: number;
     summary: string;
+    learningGoals: Prisma.JsonValue;
     updatedAt: Date;
   } | null;
   cases: CaseRow[];
@@ -152,6 +159,10 @@ export class DiagnosisEditorialWorkspaceService {
       lifecycleGovernanceResult,
       evidenceCoverageResult,
       reasoningPathsResult,
+      unsupportedClaimsResult,
+      caseLearningGoalCoverageResult,
+      caseEscalationAnnotationsResult,
+      aiDraftAuditTrailResult,
     ] = await Promise.allSettled([
       this.diagnosisWorkspaceQualityService.getSummary(diagnosisRegistryId),
       this.teachingUnitCoverageService.getCoverage(diagnosisRegistryId),
@@ -179,6 +190,10 @@ export class DiagnosisEditorialWorkspaceService {
       ),
       this.evidenceCoverageService?.getDiagnosis(diagnosisRegistryId),
       this.reasoningPathService?.listPaths({ diagnosisRegistryId }),
+      this.getUnsupportedClaimsBySection(diagnosisRegistryId),
+      this.getPersistedCaseLearningGoalCoverage(diagnosisRegistryId),
+      this.getPersistedCaseEscalationAnnotations(diagnosisRegistryId),
+      this.getAiDraftAuditTrail(diagnosisRegistryId),
     ]);
 
     const compositionWarnings = this.compositionWarnings({
@@ -219,6 +234,13 @@ export class DiagnosisEditorialWorkspaceService {
       this.valueOrNull(lifecycleGovernanceResult) ?? null;
     const evidenceCoverage = this.valueOrNull(evidenceCoverageResult) ?? null;
     const reasoningPaths = this.valueOrNull(reasoningPathsResult) ?? [];
+    const unsupportedClaimsBySection =
+      this.valueOrNull(unsupportedClaimsResult) ?? [];
+    const persistedCaseLearningGoalCoverage =
+      this.valueOrNull(caseLearningGoalCoverageResult) ?? [];
+    const persistedCaseEscalationAnnotations =
+      this.valueOrNull(caseEscalationAnnotationsResult) ?? [];
+    const aiDraftAuditTrail = this.valueOrNull(aiDraftAuditTrailResult) ?? [];
     const cases = this.buildCases(registry.cases);
     const coverageMatrix = this.buildCoverageMatrix({
       coverage,
@@ -245,6 +267,40 @@ export class DiagnosisEditorialWorkspaceService {
     const availableActions = this.buildAvailableActions({
       registry,
       hasEducation: Boolean(registry.education),
+    });
+    const learningGoalCoverage = this.buildLearningGoalCoverage({
+      registry,
+      brief: briefResponse?.brief ?? registry.editorialBrief,
+      cases,
+      coverageGaps,
+      teachingRelationships,
+      evidenceCoverage,
+      reasoningPaths,
+      persistedCoverage: persistedCaseLearningGoalCoverage,
+    });
+    const caseEscalationCoverage = this.buildCaseEscalationCoverage({
+      persistedAnnotations: persistedCaseEscalationAnnotations,
+      reasoningPaths,
+      cases,
+    });
+    const escalationCoverage = this.buildEscalationCoverage({
+      reasoningPaths,
+      teachingRelationships,
+      evidenceGraph,
+      cases,
+      evidenceCoverage,
+      caseEscalationCoverage,
+    });
+    const maturityGovernance = this.buildMaturityGovernance({
+      registry,
+      summary,
+      cases,
+      coverageGaps,
+      differentialCoverage,
+      evidenceCoverage,
+      lifecycleGovernance,
+      escalationCoverage,
+      learningGoalCoverage,
     });
 
     return {
@@ -331,6 +387,15 @@ export class DiagnosisEditorialWorkspaceService {
       evidenceCoverage,
       reasoningPaths,
       linkedDifferentials,
+      unsupportedClaimsBySection,
+      learningGoalCoverage,
+      caseLearningGoalCoverage: persistedCaseLearningGoalCoverage,
+      caseEscalationCoverage,
+      escalationCoverage,
+      maturityBreakdown: maturityGovernance.breakdown,
+      maturityWeighting: maturityGovernance.weighting,
+      maturityExplanation: maturityGovernance.explanation,
+      aiDraftAuditTrail,
       editorialLearning: {
         available: revisions.length >= 2,
         candidateCounts: {
@@ -348,6 +413,280 @@ export class DiagnosisEditorialWorkspaceService {
       recommendedActions,
       availableActions,
     };
+  }
+
+  async repairUnsupportedClaim(input: {
+    diagnosisRegistryId: string;
+    claimId: string;
+    userId?: string | null;
+  }) {
+    const claim = await this.findUnsupportedClaim(
+      input.diagnosisRegistryId,
+      input.claimId,
+    );
+    if (!claim) {
+      throw new NotFoundException('Unsupported claim signal not found');
+    }
+
+    const evidenceIds = claim.evidenceIds;
+    const proposedClaim = this.proposeClaimRepair(claim.claimText, evidenceIds);
+    const confidence = evidenceIds.length ? 0.72 : 0.42;
+    const audit = await this.prisma.aiDraftRevisionAudit.create({
+      data: {
+        diagnosisRegistryId: input.diagnosisRegistryId,
+        actionType: 'repair_unsupported_claim',
+        sourceIssue: {
+          claimId: claim.claimId,
+          sectionId: claim.sectionId,
+          sectionType: claim.sectionType,
+          severity: claim.severity,
+          originalClaim: claim.claimText,
+        } as Prisma.InputJsonValue,
+        inputContext: {
+          repairTarget: claim.repairTarget,
+          evidenceIds,
+          sourceType: claim.sourceType,
+          artifactId: claim.artifactId,
+        } as Prisma.InputJsonValue,
+        generatedOutput: {
+          originalClaim: claim.claimText,
+          proposedClaim,
+          evidenceIds,
+          confidence,
+        } as Prisma.InputJsonValue,
+        affectedArtifactType: claim.sourceType,
+        affectedArtifactId: claim.artifactId,
+        reviewStatus: 'PENDING_REVIEW',
+        createdByUserId: input.userId ?? null,
+      },
+    });
+
+    return {
+      repairId: audit.id,
+      claimId: claim.claimId,
+      originalClaim: claim.claimText,
+      proposedClaim,
+      evidenceIds,
+      confidence,
+      reviewStatus: audit.reviewStatus,
+      revisionId: audit.id,
+    };
+  }
+
+  async decideAiDraftRevision(input: {
+    diagnosisRegistryId: string;
+    auditId: string;
+    decision: 'accept' | 'reject' | 'request_changes' | 'supersede';
+    userId: string;
+    note?: string | null;
+  }) {
+    const audit = await this.prisma.aiDraftRevisionAudit.findFirst({
+      where: {
+        id: input.auditId,
+        diagnosisRegistryId: input.diagnosisRegistryId,
+      },
+    });
+    if (!audit) {
+      throw new NotFoundException('AI draft revision audit not found');
+    }
+
+    if (input.decision === 'accept') {
+      await this.applyAcceptedDraftOutput(audit);
+    }
+
+    const status = this.reviewStatusForDecision(input.decision);
+    return this.prisma.aiDraftRevisionAudit.update({
+      where: { id: audit.id },
+      data: {
+        editorDecision: input.decision,
+        reviewStatus: status,
+        reviewerUserId: input.userId,
+        decisionAt: new Date(),
+        reviewNote: input.note ?? null,
+      },
+    });
+  }
+
+  async upsertCaseLearningGoalCoverage(input: {
+    diagnosisRegistryId: string;
+    coverageId?: string | null;
+    payload: {
+      caseId: string;
+      learningGoalId: string;
+      learningGoal: string;
+      coverageStrength?: number;
+      coveredDiscriminators?: string[];
+      missingDiscriminators?: string[];
+      coveredMimics?: string[];
+      missingMimics?: string[];
+      evidenceSource?: string;
+    };
+    userId: string;
+  }) {
+    await this.assertCaseBelongsToDiagnosis(
+      input.diagnosisRegistryId,
+      input.payload.caseId,
+    );
+    const data = {
+      diagnosisRegistryId: input.diagnosisRegistryId,
+      caseId: input.payload.caseId,
+      learningGoalId: input.payload.learningGoalId,
+      learningGoal: input.payload.learningGoal,
+      coverageStrength: this.clampPercent(input.payload.coverageStrength ?? 0),
+      coveredDiscriminators:
+        (input.payload.coveredDiscriminators ?? []) as Prisma.InputJsonValue,
+      missingDiscriminators:
+        (input.payload.missingDiscriminators ?? []) as Prisma.InputJsonValue,
+      coveredMimics: (input.payload.coveredMimics ?? []) as Prisma.InputJsonValue,
+      missingMimics: (input.payload.missingMimics ?? []) as Prisma.InputJsonValue,
+      evidenceSource: input.payload.evidenceSource ?? 'editorial_annotation',
+    };
+    const row = input.coverageId
+      ? await this.prisma.caseLearningGoalCoverage.update({
+          where: { id: input.coverageId },
+          data,
+          include: { case: { select: { id: true, title: true } } },
+        })
+      : await this.prisma.caseLearningGoalCoverage.upsert({
+          where: {
+            caseId_learningGoalId: {
+              caseId: input.payload.caseId,
+              learningGoalId: input.payload.learningGoalId,
+            },
+          },
+          update: data,
+          create: data,
+          include: { case: { select: { id: true, title: true } } },
+        });
+    await this.recordCoverageAudit({
+      diagnosisRegistryId: input.diagnosisRegistryId,
+      actionType: input.coverageId
+        ? 'update_case_learning_goal_coverage'
+        : 'create_case_learning_goal_coverage',
+      caseId: row.caseId,
+      affectedArtifactType: 'CASE_LEARNING_GOAL_COVERAGE',
+      affectedArtifactId: row.id,
+      payload: row,
+      userId: input.userId,
+    });
+    return this.caseLearningGoalCoverageDto(row);
+  }
+
+  async deleteCaseLearningGoalCoverage(input: {
+    diagnosisRegistryId: string;
+    coverageId: string;
+    userId: string;
+  }) {
+    const row = await this.prisma.caseLearningGoalCoverage.findFirst({
+      where: {
+        id: input.coverageId,
+        diagnosisRegistryId: input.diagnosisRegistryId,
+      },
+      include: { case: { select: { id: true, title: true } } },
+    });
+    if (!row) {
+      throw new NotFoundException('Case learning-goal coverage row not found');
+    }
+    await this.prisma.caseLearningGoalCoverage.delete({
+      where: { id: row.id },
+    });
+    await this.recordCoverageAudit({
+      diagnosisRegistryId: input.diagnosisRegistryId,
+      actionType: 'delete_case_learning_goal_coverage',
+      caseId: row.caseId,
+      affectedArtifactType: 'CASE_LEARNING_GOAL_COVERAGE',
+      affectedArtifactId: row.id,
+      payload: row,
+      userId: input.userId,
+    });
+    return { deleted: true, id: row.id };
+  }
+
+  async upsertCaseEscalationAnnotation(input: {
+    diagnosisRegistryId: string;
+    annotationId?: string | null;
+    payload: {
+      caseId: string;
+      escalationType: string;
+      covered?: boolean;
+      evidenceStrength?: number;
+      reasoningPathId?: string | null;
+      notes?: string | null;
+    };
+    userId: string;
+  }) {
+    await this.assertCaseBelongsToDiagnosis(
+      input.diagnosisRegistryId,
+      input.payload.caseId,
+    );
+    const data = {
+      diagnosisRegistryId: input.diagnosisRegistryId,
+      caseId: input.payload.caseId,
+      escalationType: input.payload.escalationType,
+      covered: input.payload.covered ?? false,
+      evidenceStrength: this.clampPercent(input.payload.evidenceStrength ?? 0),
+      reasoningPathId: input.payload.reasoningPathId ?? null,
+      notes: input.payload.notes ?? null,
+    };
+    const row = input.annotationId
+      ? await this.prisma.caseEscalationAnnotation.update({
+          where: { id: input.annotationId },
+          data,
+          include: { case: { select: { id: true, title: true } } },
+        })
+      : await this.prisma.caseEscalationAnnotation.upsert({
+          where: {
+            caseId_escalationType: {
+              caseId: input.payload.caseId,
+              escalationType: input.payload.escalationType,
+            },
+          },
+          update: data,
+          create: data,
+          include: { case: { select: { id: true, title: true } } },
+        });
+    await this.recordCoverageAudit({
+      diagnosisRegistryId: input.diagnosisRegistryId,
+      actionType: input.annotationId
+        ? 'update_case_escalation_annotation'
+        : 'create_case_escalation_annotation',
+      caseId: row.caseId,
+      affectedArtifactType: 'CASE_ESCALATION_ANNOTATION',
+      affectedArtifactId: row.id,
+      payload: row,
+      userId: input.userId,
+    });
+    return this.caseEscalationAnnotationDto(row);
+  }
+
+  async deleteCaseEscalationAnnotation(input: {
+    diagnosisRegistryId: string;
+    annotationId: string;
+    userId: string;
+  }) {
+    const row = await this.prisma.caseEscalationAnnotation.findFirst({
+      where: {
+        id: input.annotationId,
+        diagnosisRegistryId: input.diagnosisRegistryId,
+      },
+      include: { case: { select: { id: true, title: true } } },
+    });
+    if (!row) {
+      throw new NotFoundException('Case escalation annotation not found');
+    }
+    await this.prisma.caseEscalationAnnotation.delete({
+      where: { id: row.id },
+    });
+    await this.recordCoverageAudit({
+      diagnosisRegistryId: input.diagnosisRegistryId,
+      actionType: 'delete_case_escalation_annotation',
+      caseId: row.caseId,
+      affectedArtifactType: 'CASE_ESCALATION_ANNOTATION',
+      affectedArtifactId: row.id,
+      payload: row,
+      userId: input.userId,
+    });
+    return { deleted: true, id: row.id };
   }
 
   async loadRegistry(diagnosisRegistryId: string): Promise<RegistryRow | null> {
@@ -383,6 +722,7 @@ export class DiagnosisEditorialWorkspaceService {
             status: true,
             version: true,
             summary: true,
+            learningGoals: true,
             updatedAt: true,
           },
         },
@@ -606,6 +946,851 @@ export class DiagnosisEditorialWorkspaceService {
       registryCandidateCount: 0,
       pendingRegistryCandidateCount: 0,
     };
+  }
+
+  private async getUnsupportedClaimsBySection(diagnosisRegistryId: string) {
+    const runs = await this.prisma.reasoningDraftValidationRun.findMany({
+      where: { diagnosisRegistryId },
+      orderBy: [{ createdAt: 'desc' }],
+      take: 100,
+      select: {
+        id: true,
+        artifactType: true,
+        artifactId: true,
+        trustTier: true,
+        validationStatus: true,
+        unsupportedClaimSignals: true,
+        createdAt: true,
+      },
+    });
+    const claims = new Map<
+      string,
+      {
+        sectionId: string;
+        sectionType: string;
+        claimId: string;
+        claimText: string;
+        severity: ReadinessSeverity;
+        artifactId: string;
+        evidenceIds: string[];
+        repairTarget: string;
+        sourceType: string;
+        createdAt: string;
+        repairableAutomatically: boolean;
+        blocksPublication: boolean;
+      }
+    >();
+
+    for (const run of runs) {
+      for (const signal of this.asRecordArray(run.unsupportedClaimSignals)) {
+        const claimText =
+          this.stringValue(signal.message) ??
+          this.stringValue(signal.claimText) ??
+          this.stringValue(signal.code) ??
+          'Unsupported claim requires review.';
+        const sectionType =
+          this.stringValue(signal.sectionType) ??
+          this.sectionTypeFromArtifact(String(run.artifactType));
+        const sectionId =
+          this.stringValue(signal.sectionId) ??
+          `${run.artifactType}:${run.artifactId}`;
+        const claimId =
+          this.stringValue(signal.claimId) ??
+          this.stableKey(`${sectionId}:${claimText}`);
+        const key = `${sectionId}:${claimId}`;
+        if (claims.has(key)) {
+          continue;
+        }
+
+        claims.set(key, {
+          sectionId,
+          sectionType,
+          claimId,
+          claimText,
+          severity:
+            run.trustTier === 'BLOCKED' || run.validationStatus === 'FAILED'
+              ? 'blocker'
+              : 'warning',
+          artifactId: run.artifactId,
+          evidenceIds: this.stringArray(signal.evidenceIds),
+          repairTarget:
+            this.stringValue(signal.repairTarget) ??
+            `${run.artifactType}:${run.artifactId}`,
+          sourceType: String(run.artifactType),
+          createdAt: this.toIso(run.createdAt),
+          repairableAutomatically:
+            run.artifactType === 'EDUCATION_SECTION' ||
+            run.artifactType === 'TEACHING_RULE',
+          blocksPublication:
+            run.trustTier === 'BLOCKED' || run.validationStatus === 'FAILED',
+        });
+      }
+    }
+
+    return [...claims.values()].sort(
+      (left, right) =>
+        Number(right.blocksPublication) - Number(left.blocksPublication) ||
+        right.createdAt.localeCompare(left.createdAt),
+    );
+  }
+
+  private async findUnsupportedClaim(
+    diagnosisRegistryId: string,
+    claimId: string,
+  ) {
+    const claims = await this.getUnsupportedClaimsBySection(diagnosisRegistryId);
+    return claims.find((claim) => claim.claimId === claimId) ?? null;
+  }
+
+  private proposeClaimRepair(claimText: string, evidenceIds: string[]) {
+    const softened = claimText
+      .replace(/\balways\b/gi, 'can')
+      .replace(/\bnever\b/gi, 'does not typically')
+      .replace(/\bpathognomonic\b/gi, 'supportive')
+      .replace(/\bdiagnostic of\b/gi, 'supportive of')
+      .replace(/\brules out\b/gi, 'makes less likely')
+      .replace(/\brules in\b/gi, 'supports')
+      .replace(/\bdefinitive\b/gi, 'supportive')
+      .replace(/\bguarantees\b/gi, 'supports');
+    const evidenceSuffix = evidenceIds.length
+      ? ` Supported evidence: ${evidenceIds.join(', ')}.`
+      : ' Evidence support still needs to be linked before acceptance.';
+    return `${softened}${softened.endsWith('.') ? '' : '.'}${evidenceSuffix}`;
+  }
+
+  private async getPersistedCaseLearningGoalCoverage(
+    diagnosisRegistryId: string,
+  ) {
+    const rows = await this.prisma.caseLearningGoalCoverage.findMany({
+      where: { diagnosisRegistryId },
+      include: {
+        case: { select: { id: true, title: true } },
+      },
+      orderBy: [
+        { learningGoalId: 'asc' },
+        { coverageStrength: 'desc' },
+        { updatedAt: 'desc' },
+      ],
+      take: 500,
+    });
+
+    return rows.map((row) => ({
+      caseId: row.caseId,
+      caseTitle: row.case.title,
+      learningGoalId: row.learningGoalId,
+      learningGoal: row.learningGoal,
+      coverageStrength: row.coverageStrength,
+      coveredDiscriminators: this.stringArray(row.coveredDiscriminators),
+      missingDiscriminators: this.stringArray(row.missingDiscriminators),
+      coveredMimics: this.stringArray(row.coveredMimics),
+      missingMimics: this.stringArray(row.missingMimics),
+      evidenceSource: row.evidenceSource,
+      updatedAt: this.toIso(row.updatedAt),
+    }));
+  }
+
+  private async getPersistedCaseEscalationAnnotations(
+    diagnosisRegistryId: string,
+  ) {
+    const rows = await this.prisma.caseEscalationAnnotation.findMany({
+      where: { diagnosisRegistryId },
+      include: {
+        case: { select: { id: true, title: true } },
+      },
+      orderBy: [
+        { covered: 'desc' },
+        { evidenceStrength: 'desc' },
+        { updatedAt: 'desc' },
+      ],
+      take: 250,
+    });
+
+    return rows.map((row) => ({
+      caseId: row.caseId,
+      caseTitle: row.case.title,
+      escalationType: row.escalationType,
+      covered: row.covered,
+      evidenceStrength: row.evidenceStrength,
+      reasoningPathId: row.reasoningPathId,
+      notes: row.notes,
+      coverageSource: 'explicit' as const,
+      updatedAt: this.toIso(row.updatedAt),
+    }));
+  }
+
+  private async getAiDraftAuditTrail(diagnosisRegistryId: string) {
+    const rows = await this.prisma.aiDraftRevisionAudit.findMany({
+      where: { diagnosisRegistryId },
+      orderBy: [{ createdAt: 'desc' }],
+      take: 25,
+      select: {
+        id: true,
+        actionType: true,
+        sourceIssue: true,
+        generatedOutput: true,
+        editorDecision: true,
+        affectedArtifactType: true,
+        affectedArtifactId: true,
+        reviewStatus: true,
+        createdByUserId: true,
+        reviewerUserId: true,
+        decisionAt: true,
+        reviewNote: true,
+        createdAt: true,
+      },
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      actionType: row.actionType,
+      sourceIssue: row.sourceIssue,
+      generatedOutput: row.generatedOutput,
+      editorDecision: row.editorDecision,
+      affectedArtifactType: row.affectedArtifactType,
+      affectedArtifactId: row.affectedArtifactId,
+      reviewStatus: row.reviewStatus,
+      createdByUserId: row.createdByUserId,
+      reviewerUserId: row.reviewerUserId,
+      decisionAt: row.decisionAt ? this.toIso(row.decisionAt) : null,
+      reviewNote: row.reviewNote,
+      createdAt: this.toIso(row.createdAt),
+    }));
+  }
+
+  private reviewStatusForDecision(
+    decision: 'accept' | 'reject' | 'request_changes' | 'supersede',
+  ) {
+    if (decision === 'accept') return 'ACCEPTED';
+    if (decision === 'reject') return 'REJECTED';
+    if (decision === 'request_changes') return 'NEEDS_CHANGES';
+    return 'SUPERSEDED';
+  }
+
+  private async applyAcceptedDraftOutput(audit: {
+    affectedArtifactType: string;
+    affectedArtifactId: string;
+    sourceIssue: Prisma.JsonValue;
+    generatedOutput: Prisma.JsonValue;
+  }) {
+    if (
+      audit.affectedArtifactType !== 'EDUCATION_SECTION' &&
+      audit.affectedArtifactType !== 'EDUCATION'
+    ) {
+      return;
+    }
+
+    const education = await this.prisma.diagnosisEducation.findUnique({
+      where: { id: audit.affectedArtifactId },
+    });
+    if (!education) {
+      throw new NotFoundException('Target education draft not found');
+    }
+    if (education.editorialStatus === DiagnosisEducationStatus.PUBLISHED) {
+      throw new BadRequestException(
+        'Accepted claim repairs can only update draft education artifacts',
+      );
+    }
+
+    const sourceIssue = this.jsonRecord(audit.sourceIssue);
+    const generatedOutput = this.jsonRecord(audit.generatedOutput);
+    const section = this.educationJsonField(
+      this.stringValue(sourceIssue.sectionId),
+    );
+    const currentValue = (education as Record<string, unknown>)[section] as
+      | Prisma.JsonValue
+      | null
+      | undefined;
+    const repairEntry = {
+      type: 'CLAIM_REPAIR',
+      originalClaim: this.stringValue(generatedOutput.originalClaim),
+      proposedClaim: this.stringValue(generatedOutput.proposedClaim),
+      evidenceIds: this.stringArray(generatedOutput.evidenceIds),
+      acceptedAt: new Date().toISOString(),
+    };
+
+    await this.prisma.diagnosisEducation.update({
+      where: { id: education.id },
+      data: {
+        editorialStatus: DiagnosisEducationStatus.DRAFT,
+        [section]: this.appendDraftRepair(currentValue, repairEntry),
+      },
+    });
+  }
+
+  private appendDraftRepair(
+    currentValue: Prisma.JsonValue | null | undefined,
+    repairEntry: Record<string, Prisma.JsonValue>,
+  ): Prisma.InputJsonValue {
+    if (Array.isArray(currentValue)) {
+      return [...currentValue, repairEntry] as Prisma.InputJsonValue;
+    }
+    if (
+      currentValue &&
+      typeof currentValue === 'object' &&
+      !Array.isArray(currentValue)
+    ) {
+      const record = currentValue as Record<string, Prisma.JsonValue>;
+      return {
+        ...record,
+        claimRepairs: [...this.asRecordArray(record.claimRepairs), repairEntry],
+      } as Prisma.InputJsonValue;
+    }
+    return [repairEntry] as Prisma.InputJsonValue;
+  }
+
+  private educationJsonField(sectionId: string | null) {
+    const field = sectionId ?? 'references';
+    const allowed = new Set([
+      'summary',
+      'clinicalPattern',
+      'keySymptoms',
+      'keySigns',
+      'examPearls',
+      'scoringSystems',
+      'investigations',
+      'differentials',
+      'management',
+      'complications',
+      'pitfalls',
+      'recallPrompts',
+      'references',
+    ]);
+    return allowed.has(field) ? field : 'references';
+  }
+
+  private async assertCaseBelongsToDiagnosis(
+    diagnosisRegistryId: string,
+    caseId: string,
+  ) {
+    const caseRecord = await this.prisma.case.findFirst({
+      where: { id: caseId, diagnosisRegistryId },
+      select: { id: true },
+    });
+    if (!caseRecord) {
+      throw new BadRequestException(
+        'Case does not belong to this diagnosis workspace',
+      );
+    }
+  }
+
+  private async recordCoverageAudit(input: {
+    diagnosisRegistryId: string;
+    actionType: string;
+    caseId: string;
+    affectedArtifactType: string;
+    affectedArtifactId: string;
+    payload: unknown;
+    userId: string;
+  }) {
+    await this.prisma.aiDraftRevisionAudit.create({
+      data: {
+        diagnosisRegistryId: input.diagnosisRegistryId,
+        caseId: input.caseId,
+        actionType: input.actionType,
+        sourceIssue: { source: 'coverage_annotation' } as Prisma.InputJsonValue,
+        inputContext: { caseId: input.caseId } as Prisma.InputJsonValue,
+        generatedOutput: this.toInputJson(input.payload),
+        affectedArtifactType: input.affectedArtifactType,
+        affectedArtifactId: input.affectedArtifactId,
+        reviewStatus: 'ACCEPTED',
+        createdByUserId: input.userId,
+        reviewerUserId: input.userId,
+        decisionAt: new Date(),
+        editorDecision: 'coverage_annotation_saved',
+      },
+    });
+  }
+
+  private caseLearningGoalCoverageDto(row: {
+    caseId: string;
+    case: { title: string };
+    learningGoalId: string;
+    learningGoal: string;
+    coverageStrength: number;
+    coveredDiscriminators: Prisma.JsonValue | null;
+    missingDiscriminators: Prisma.JsonValue | null;
+    coveredMimics: Prisma.JsonValue | null;
+    missingMimics: Prisma.JsonValue | null;
+    evidenceSource: string;
+    updatedAt: Date;
+  }) {
+    return {
+      caseId: row.caseId,
+      caseTitle: row.case.title,
+      learningGoalId: row.learningGoalId,
+      learningGoal: row.learningGoal,
+      coverageStrength: row.coverageStrength,
+      coveredDiscriminators: this.stringArray(row.coveredDiscriminators),
+      missingDiscriminators: this.stringArray(row.missingDiscriminators),
+      coveredMimics: this.stringArray(row.coveredMimics),
+      missingMimics: this.stringArray(row.missingMimics),
+      evidenceSource: row.evidenceSource,
+      updatedAt: this.toIso(row.updatedAt),
+    };
+  }
+
+  private caseEscalationAnnotationDto(row: {
+    caseId: string;
+    case: { title: string };
+    escalationType: string;
+    covered: boolean;
+    evidenceStrength: number;
+    reasoningPathId: string | null;
+    notes: string | null;
+    updatedAt: Date;
+  }) {
+    return {
+      caseId: row.caseId,
+      caseTitle: row.case.title,
+      escalationType: row.escalationType,
+      covered: row.covered,
+      evidenceStrength: row.evidenceStrength,
+      reasoningPathId: row.reasoningPathId,
+      notes: row.notes,
+      coverageSource: 'explicit' as const,
+      updatedAt: this.toIso(row.updatedAt),
+      status: row.covered ? 'explicitly_covered' : 'needs_review',
+    };
+  }
+
+  private buildLearningGoalCoverage(input: {
+    registry: RegistryRow;
+    brief: { learningGoals?: Prisma.JsonValue } | null | undefined;
+    cases: ReturnType<DiagnosisEditorialWorkspaceService['buildCases']>;
+    coverageGaps: ReturnType<
+      DiagnosisEditorialWorkspaceService['buildCoverageGaps']
+    >;
+    teachingRelationships: Array<{
+      relationshipType: string;
+      status: string;
+      targetDiagnosisRegistryId: string;
+    }>;
+    evidenceCoverage: {
+      missingEvidence?: Array<{ type: string; label: string }>;
+    } | null;
+    reasoningPaths: Array<{
+      status: string;
+      escalationEvidenceNodeIds: string[];
+    }>;
+    persistedCoverage: Array<{
+      caseId: string;
+      learningGoalId: string;
+      learningGoal: string;
+      coverageStrength: number;
+      coveredDiscriminators: string[];
+      missingDiscriminators: string[];
+      coveredMimics: string[];
+      missingMimics: string[];
+    }>;
+  }) {
+    const learningGoals = this.stringArray(input.brief?.learningGoals);
+    if (input.persistedCoverage.length) {
+      const goalIds = [
+        ...new Set(input.persistedCoverage.map((row) => row.learningGoalId)),
+      ];
+      return goalIds.map((learningGoalId) => {
+        const rows = input.persistedCoverage.filter(
+          (row) => row.learningGoalId === learningGoalId,
+        );
+        const strongest = rows.reduce(
+          (max, row) => Math.max(max, row.coverageStrength),
+          0,
+        );
+        return {
+          learningGoalId,
+          learningGoal: rows[0]?.learningGoal ?? learningGoalId,
+          coveredByCaseIds: rows
+            .filter((row) => row.coverageStrength > 0)
+            .map((row) => row.caseId),
+          uncoveredDiscriminators: this.unique(
+            rows.flatMap((row) => row.missingDiscriminators),
+          ),
+          missingMimics: this.unique(rows.flatMap((row) => row.missingMimics)),
+          generationPriority:
+            strongest >= 80
+              ? 'low'
+              : strongest >= 45
+                ? 'medium'
+                : 'high',
+          coveragePct: strongest,
+        };
+      });
+    }
+
+    const alignedCaseIds = input.cases.items
+      .filter(
+        (caseItem) =>
+          caseItem.qualityProjection.sourceSummary.hasTeachingAlignment,
+      )
+      .map((caseItem) => caseItem.id);
+    const missingMimics = input.teachingRelationships
+      .filter(
+        (relationship) =>
+          relationship.relationshipType === 'MIMIC_CONFUSION' &&
+          relationship.status !== 'ACTIVE',
+      )
+      .map((relationship) => relationship.targetDiagnosisRegistryId);
+    const uncoveredDiscriminators =
+      input.evidenceCoverage?.missingEvidence
+        ?.filter((item) => String(item.type).includes('discriminator'))
+        .map((item) => item.label) ?? [];
+    const hasEscalationGap = !input.reasoningPaths.some(
+      (path) =>
+        path.status === 'ACTIVE' && path.escalationEvidenceNodeIds.length > 0,
+    );
+    const caseGapCount = input.coverageGaps.filter(
+      (gap) => gap.missingCases,
+    ).length;
+
+    return learningGoals.map((goal, index) => {
+      const coveredByCaseIds =
+        alignedCaseIds.length && caseGapCount === 0 ? alignedCaseIds : [];
+      const missing = [
+        ...missingMimics,
+        ...(hasEscalationGap ? ['escalation_coverage'] : []),
+      ];
+      return {
+        learningGoalId: this.stableKey(goal) || `goal-${index + 1}`,
+        learningGoal: goal,
+        coveredByCaseIds,
+        uncoveredDiscriminators,
+        missingMimics: missing,
+        generationPriority:
+          coveredByCaseIds.length === 0 ||
+          uncoveredDiscriminators.length > 0 ||
+          missing.length > 0
+            ? 'high'
+            : 'low',
+        coveragePct: coveredByCaseIds.length ? 100 : 0,
+      };
+    });
+  }
+
+  private buildEscalationCoverage(input: {
+    reasoningPaths: Array<{
+      id: string;
+      status: string;
+      reasoningGoal: string;
+      escalationEvidenceNodeIds: string[];
+    }>;
+    teachingRelationships: Array<{
+      relationshipType: string;
+      status: string;
+      learnerPitfall: string | null;
+      commonConfusionReason: string | null;
+    }>;
+    evidenceGraph: {
+      relationships: Array<{
+        relationshipType: string;
+        status: string;
+      }>;
+    };
+    cases: ReturnType<DiagnosisEditorialWorkspaceService['buildCases']>;
+    evidenceCoverage: { coverageWeaknesses?: string[] } | null;
+    caseEscalationCoverage: ReturnType<
+      DiagnosisEditorialWorkspaceService['buildCaseEscalationCoverage']
+    >;
+  }) {
+    const escalationPaths = input.reasoningPaths.filter(
+      (path) => path.escalationEvidenceNodeIds.length > 0,
+    );
+    const activeEscalationPath = escalationPaths.find(
+      (path) => path.status === 'ACTIVE',
+    );
+    const activeEscalationRelationships = input.teachingRelationships.filter(
+      (relationship) =>
+        relationship.relationshipType === 'ESCALATION_CONTRAST' &&
+        relationship.status === 'ACTIVE',
+    );
+    const escalationEvidence = input.evidenceGraph.relationships.filter(
+      (relationship) =>
+        relationship.relationshipType === 'ESCALATES' &&
+        relationship.status === 'ACTIVE',
+    );
+    const escalationCaseIds =
+      input.caseEscalationCoverage.length
+        ? input.caseEscalationCoverage
+            .filter((annotation) => annotation.covered)
+            .map((annotation) => annotation.caseId)
+        : activeEscalationPath && input.cases.summary.usable
+          ? input.cases.items
+              .filter(
+                (caseItem) =>
+                  this.isUsableCaseStatus(caseItem.editorialStatus) &&
+                  !caseItem.qualityProjection.blockers.length,
+              )
+              .map((caseItem) => caseItem.id)
+          : [];
+    const escalationType =
+      activeEscalationPath?.reasoningGoal ??
+      activeEscalationRelationships[0]?.learnerPitfall ??
+      activeEscalationRelationships[0]?.commonConfusionReason ??
+      null;
+
+    return {
+      coversEscalation:
+        input.caseEscalationCoverage.some((annotation) => annotation.covered) ||
+        (Boolean(activeEscalationPath) &&
+          (activeEscalationRelationships.length > 0 ||
+            escalationEvidence.length > 0)),
+      escalationType,
+      escalationReasoningPathId: activeEscalationPath?.id ?? null,
+      escalationCaseIds,
+      missingEscalationTeaching: activeEscalationRelationships.length === 0,
+      weakEscalationEvidence:
+        escalationEvidence.length === 0 ||
+        Boolean(
+          input.evidenceCoverage?.coverageWeaknesses?.includes(
+            'weak_escalation_evidence',
+          ),
+        ),
+      noPlayableEscalationCase: escalationCaseIds.length === 0,
+    };
+  }
+
+  private buildCaseEscalationCoverage(input: {
+    persistedAnnotations: Array<{
+      caseId: string;
+      caseTitle: string;
+      escalationType: string;
+      covered: boolean;
+      evidenceStrength: number;
+      reasoningPathId: string | null;
+      notes: string | null;
+      coverageSource: 'explicit';
+      updatedAt: string;
+    }>;
+    reasoningPaths: Array<{
+      id: string;
+      status: string;
+      reasoningGoal: string;
+      escalationEvidenceNodeIds: string[];
+    }>;
+    cases: ReturnType<DiagnosisEditorialWorkspaceService['buildCases']>;
+  }) {
+    if (input.persistedAnnotations.length) {
+      return input.persistedAnnotations.map((annotation) => ({
+        ...annotation,
+        status: annotation.covered ? 'explicitly_covered' : 'needs_review',
+      }));
+    }
+
+    const activeEscalationPath = input.reasoningPaths.find(
+      (path) =>
+        path.status === 'ACTIVE' && path.escalationEvidenceNodeIds.length > 0,
+    );
+    if (!activeEscalationPath) {
+      return [];
+    }
+
+    return input.cases.items
+      .filter(
+        (caseItem) =>
+          this.isUsableCaseStatus(caseItem.editorialStatus) &&
+          !caseItem.qualityProjection.blockers.length,
+      )
+      .map((caseItem) => ({
+        caseId: caseItem.id,
+        caseTitle: caseItem.title,
+        escalationType: activeEscalationPath.reasoningGoal,
+        covered: true,
+        evidenceStrength: activeEscalationPath.escalationEvidenceNodeIds.length,
+        reasoningPathId: activeEscalationPath.id,
+        notes: 'Inferred from active reasoning path until explicit case escalation annotations are added.',
+        coverageSource: 'inferred' as const,
+        updatedAt: caseItem.updatedAt,
+        status: 'inferred_covered',
+      }));
+  }
+
+  private buildMaturityGovernance(input: {
+    registry: RegistryRow;
+    summary: DiagnosisWorkspaceQualitySummary | null;
+    cases: ReturnType<DiagnosisEditorialWorkspaceService['buildCases']>;
+    coverageGaps: ReturnType<
+      DiagnosisEditorialWorkspaceService['buildCoverageGaps']
+    >;
+    differentialCoverage: { totalDifferentials: number; resolvedLinks: number };
+    evidenceCoverage: { coverageScore?: number } | null;
+    lifecycleGovernance: { blockers: string[] } | null;
+    escalationCoverage: ReturnType<
+      DiagnosisEditorialWorkspaceService['buildEscalationCoverage']
+    >;
+    learningGoalCoverage: ReturnType<
+      DiagnosisEditorialWorkspaceService['buildLearningGoalCoverage']
+    >;
+  }) {
+    const weighting = {
+      objectivesWeight: 0.15,
+      evidenceWeight: 0.2,
+      teachingWeight: 0.15,
+      differentialWeight: 0.15,
+      caseWeight: 0.15,
+      escalationWeight: 0.1,
+    };
+    const objectives = input.registry.editorialBrief ? 1 : 0;
+    const evidence = this.percentToUnit(
+      input.evidenceCoverage?.coverageScore ??
+        input.summary?.educationQuality.graphReadiness ??
+        null,
+    );
+    const teaching = input.summary?.teachingCoverage.overall ?? 0;
+    const differentialCoverage = input.differentialCoverage.totalDifferentials
+      ? input.differentialCoverage.resolvedLinks /
+        input.differentialCoverage.totalDifferentials
+      : 0;
+    const caseCoverage = input.cases.summary.total
+      ? input.cases.summary.usable / input.cases.summary.total
+      : 0;
+    const escalationCoverage = input.escalationCoverage.coversEscalation ? 1 : 0;
+    const lifecyclePenalty =
+      (input.lifecycleGovernance?.blockers.length ?? 0) * 0.08;
+    const blockersPenalty =
+      (input.summary?.blockers.length ?? 0) * 0.08 +
+      input.coverageGaps.filter((gap) => gap.severity === 'blocker').length *
+        0.05;
+    const weighted =
+      objectives * weighting.objectivesWeight +
+      evidence * weighting.evidenceWeight +
+      teaching * weighting.teachingWeight +
+      differentialCoverage * weighting.differentialWeight +
+      caseCoverage * weighting.caseWeight +
+      escalationCoverage * weighting.escalationWeight;
+    const overall = Math.max(
+      0,
+      Math.min(1, weighted - lifecyclePenalty - blockersPenalty),
+    );
+
+    return {
+      weighting,
+      breakdown: {
+        objectives,
+        evidence,
+        teaching,
+        differentialCoverage,
+        caseCoverage,
+        escalationCoverage,
+        lifecyclePenalty,
+        blockersPenalty,
+        overall,
+      },
+      explanation: [
+        objectives
+          ? 'Objectives are present through an editorial brief.'
+          : 'Objectives score reduced because no editorial brief is present.',
+        `Evidence score is based on ${input.evidenceCoverage ? 'evidence coverage' : 'workspace graph readiness'}.`,
+        `Teaching coverage uses ${input.coverageGaps.length} current coverage gaps.`,
+        `Case coverage uses ${input.cases.summary.usable}/${input.cases.summary.total} usable cases.`,
+        `Learning-goal coverage uses ${input.learningGoalCoverage.length} explicit editorial goals.`,
+        input.escalationCoverage.coversEscalation
+          ? 'Escalation coverage has active reasoning support.'
+          : 'Escalation coverage is reduced because active escalation support is incomplete.',
+        lifecyclePenalty
+          ? `Lifecycle penalty applied for ${input.lifecycleGovernance?.blockers.length ?? 0} lifecycle blockers.`
+          : 'No lifecycle blocker penalty applied.',
+        blockersPenalty
+          ? 'Blocker penalty applied for workspace or critical coverage blockers.'
+          : 'No blocker penalty applied.',
+      ],
+    };
+  }
+
+  private asRecordArray(
+    value: Prisma.JsonValue | null | undefined,
+  ): Array<Record<string, Prisma.JsonValue>> {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value.filter(
+      (item): item is Record<string, Prisma.JsonValue> =>
+        Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+    );
+  }
+
+  private jsonRecord(
+    value: Prisma.JsonValue | null | undefined,
+  ): Record<string, Prisma.JsonValue> {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return value as Record<string, Prisma.JsonValue>;
+    }
+    return {};
+  }
+
+  private toInputJson(value: unknown): Prisma.InputJsonValue {
+    return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
+  }
+
+  private stringArray(value: Prisma.JsonValue | null | undefined): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .map((item) => {
+        if (typeof item === 'string') {
+          return item.trim();
+        }
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+          const record = item as Record<string, Prisma.JsonValue>;
+          return (
+            this.stringValue(record.id) ??
+            this.stringValue(record.label) ??
+            this.stringValue(record.title) ??
+            this.stringValue(record.text)
+          );
+        }
+        return null;
+      })
+      .filter((item): item is string => Boolean(item));
+  }
+
+  private stringValue(value: Prisma.JsonValue | null | undefined) {
+    return typeof value === 'string' && value.trim().length
+      ? value.trim()
+      : null;
+  }
+
+  private sectionTypeFromArtifact(artifactType: string) {
+    switch (artifactType) {
+      case 'EDUCATION_SECTION':
+        return 'education';
+      case 'TEACHING_RULE':
+        return 'teaching_rule';
+      case 'REASONING_PATH':
+        return 'differential_map';
+      case 'CASE':
+        return 'case';
+      default:
+        return artifactType.toLowerCase();
+    }
+  }
+
+  private stableKey(value: string) {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 100);
+  }
+
+  private percentToUnit(value: number | null | undefined) {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return 0;
+    }
+    return this.clampUnit(value > 1 ? value / 100 : value);
+  }
+
+  private clampUnit(value: number) {
+    return Math.max(0, Math.min(1, value));
+  }
+
+  private clampPercent(value: number) {
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+    return Math.max(0, Math.min(100, Math.round(value)));
   }
 
   private buildCases(cases: CaseRow[]) {

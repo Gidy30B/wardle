@@ -1,536 +1,808 @@
-/**
- * Targeted patch: updates the explanation on the existing Acute Pancreatitis case
- * and upserts the education record — without touching registry, aliases, or revisions.
- *
- * Usage:
- *   railway run npx tsx prisma/seed/patch-pancreatitis-explanation.ts
- */
-
 import {
   PrismaClient,
+  CaseEditorialStatus,
   DiagnosisEducationSource,
   DiagnosisEducationStatus,
+  DiagnosisMappingMethod,
+  DiagnosisMappingStatus,
 } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
 const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error('DATABASE_URL is required.');
+
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is required to run the COPD flagship seed.');
+}
 
 const pool = new Pool({ connectionString: databaseUrl });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
+function normalizeClinicalText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
 const now = new Date();
+const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 8, 12, 0, 0));
+const seedVersion = 'flagship-copd-v1';
 
-// The existing Pancreatitis registry id
-const REGISTRY_ID = '7fc95349-32a5-44a5-897c-d2524689f9ce';
+function addUtcDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
 
-// ─── Fixed reasoning — each step matches its paired clue by index ─────────────
-const updatedExplanation = {
-  diagnosis: 'Acute Pancreatitis',
+async function findAvailableInventoryPlaceholderDate(params: {
+  preferredDate: Date;
+  reusableCaseId?: string;
+  displayLabel: string;
+}): Promise<Date> {
+  const maxAttempts = 365;
+
+  for (let offset = 0; offset < maxAttempts; offset += 1) {
+    const candidateDate = addUtcDays(params.preferredDate, offset);
+    const owner = await prisma.case.findUnique({
+      where: { date: candidateDate },
+      select: {
+        id: true,
+        title: true,
+        diagnosisRegistryId: true,
+        currentRevisionId: true,
+        dailyCases: { select: { id: true }, take: 1 },
+      },
+    });
+
+    if (!owner) {
+      if (offset > 0) {
+        console.warn(
+          'Preferred inventory placeholder date was occupied; using next free date.',
+          {
+            displayLabel: params.displayLabel,
+            preferredDate: params.preferredDate.toISOString(),
+            assignedDate: candidateDate.toISOString(),
+            offsetDays: offset,
+          },
+        );
+      }
+      return candidateDate;
+    }
+
+    if (params.reusableCaseId && owner.id === params.reusableCaseId) {
+      return candidateDate;
+    }
+
+    console.warn('Inventory placeholder date occupied; trying next day.', {
+      displayLabel: params.displayLabel,
+      candidateDate: candidateDate.toISOString(),
+      occupiedByCaseId: owner.id,
+      occupiedByTitle: owner.title,
+      occupiedCaseIsScheduled: owner.dailyCases.length > 0,
+    });
+  }
+
+  throw new Error(
+    `Cannot seed ${params.displayLabel}: no free inventory placeholder date found within ${maxAttempts} days after ${params.preferredDate.toISOString()}.`,
+  );
+}
+
+async function getNextCasePublicNumber(): Promise<number> {
+  const latest = await prisma.case.findFirst({
+    where: { publicNumber: { not: null } },
+    orderBy: { publicNumber: 'desc' },
+    select: { publicNumber: true },
+  });
+
+  return (latest?.publicNumber ?? 0) + 1;
+}
+
+// ─── Clues ────────────────────────────────────────────────────────────────────
+
+const clues = [
+  {
+    order: 0,
+    type: 'history',
+    value:
+      'A 68-year-old man presents with gradually worsening shortness of breath over several years, now occurring even with mild activity.',
+  },
+  {
+    order: 1,
+    type: 'symptom',
+    value:
+      'He reports a long history of chronic cough productive of sputum, especially in the mornings.',
+  },
+  {
+    order: 2,
+    type: 'hx',
+    value:
+      'He has a 40-pack-year smoking history and continues to smoke.',
+  },
+  {
+    order: 3,
+    type: 'exam',
+    value:
+      'On examination, he has a barrel-shaped chest and a prolonged expiratory phase with wheeze on auscultation.',
+  },
+  {
+    order: 4,
+    type: 'vital',
+    value:
+      'His oxygen saturation is 90% on room air, and he uses accessory muscles when breathing.',
+  },
+  {
+    order: 5,
+    type: 'lab',
+    value:
+      'Spirometry shows a post-bronchodilator FEV1/FVC ratio of 0.58 with minimal reversibility after bronchodilator administration.',
+  },
+  {
+    order: 6,
+    type: 'lab',
+    value:
+      'Arterial blood gas reveals chronic compensated respiratory acidosis with an elevated CO₂.',
+  },
+] as const;
+
+const differentials = [
+  'Asthma',
+  'Congestive heart failure',
+  'Bronchiectasis',
+  'Lung cancer',
+  'Interstitial lung disease',
+];
+
+// ─── Explanation ─────────────────────────────────────────────────────────────
+
+const explanation = {
+  diagnosis: 'COPD',
   summary:
-    'Severe epigastric pain radiating to the back, markedly elevated lipase, peripancreatic inflammation on CT, and a background of significant alcohol use confirm acute pancreatitis.',
+    'This is chronic obstructive pulmonary disease: progressive, largely irreversible airflow limitation in a heavy smoker, confirmed by a post-bronchodilator FEV1/FVC of 0.58 with minimal reversibility, alongside chronic productive cough, hyperinflation, hypoxaemia, and chronic compensated hypercapnic (type 2) respiratory failure.',
   keyEvidence: [
-    'Epigastric pain radiating to the back',
-    'Positional relief on leaning forward',
-    'Serum lipase >3× upper limit of normal',
-    'Elevated CRP and leucocytosis',
-    'Peripancreatic fat stranding on CT',
-    'Significant alcohol history',
+    'Gradually progressive exertional dyspnoea over several years',
+    'Chronic cough productive of sputum, worse in the mornings',
+    '40-pack-year smoking history with ongoing smoking',
+    'Barrel-shaped chest with prolonged expiratory phase and wheeze',
+    'Accessory muscle use with oxygen saturation 90% on room air',
+    'Post-bronchodilator FEV1/FVC 0.58 with minimal reversibility',
+    'Chronic compensated respiratory acidosis with elevated CO₂',
   ],
   reasoning: [
-    'Acute severe epigastric pain after a heavy meal with no relief from eating points away from peptic pathology and raises immediate concern for a pancreatic or biliary cause.',
-    'Posterior radiation to the back with partial relief on leaning forward is the classic positional signature of retroperitoneal pancreatic inflammation — the pancreas lies behind the stomach and irritates structures posteriorly.',
-    'A background of heavy alcohol use and a prior similar episode strongly support an alcoholic aetiology; recurrent attacks are common in chronic heavy drinkers before overt chronic pancreatitis develops.',
-    'Epigastric guarding with reduced bowel sounds indicates localised peritoneal irritation and a paralytic ileus from peripancreatic inflammation — consistent with, and proportionate to, acute pancreatitis at this stage.',
-    'Lipase more than 30 times the upper limit of normal satisfies one of the Atlanta diagnostic criteria; normal bilirubin and LFTs argue against a biliary cause and support alcohol as the precipitant.',
-    'CT confirms interstitial oedematous pancreatitis with peripancreatic fat stranding and a small fluid collection, excluding necrosis at this stage and correlating with the clinical and biochemical picture.',
+    'Years of slowly progressive exertional dyspnoea with a chronic productive cough point to a chronic, progressive airway disease rather than an acute cardiorespiratory illness.',
+    'A 40-pack-year ongoing smoking history is the dominant risk factor and frames the differential around smoking-related airway and parenchymal disease.',
+    'A barrel chest, prolonged expiration, wheeze, and accessory muscle use are bedside signs of hyperinflation, air trapping, and increased work of breathing.',
+    'Oxygen saturation of 90% on room air with accessory muscle use indicates clinically significant gas-exchange impairment, not just deconditioning.',
+    'A post-bronchodilator FEV1/FVC of 0.58 confirms airflow obstruction (ratio below 0.70), and the minimal reversibility separates fixed COPD obstruction from reversible asthma.',
+    'Arterial blood gas showing chronic compensated respiratory acidosis with a raised CO₂ indicates long-standing type 2 respiratory failure with renal (metabolic) compensation, consistent with established COPD.',
+    'Together these features confirm COPD and argue against reversible/variable asthma, restrictive interstitial lung disease, and primarily cardiac dyspnoea.',
   ],
   keyFindings: [
-    'Epigastric pain radiating to the back',
-    'Positional relief on leaning forward',
-    'Lipase 1 840 U/L (>30× ULN)',
-    'CRP 148 mg/L; leucocytosis',
-    'Normal bilirubin and LFTs',
-    'Peripancreatic oedema and fat stranding on CT',
+    'Progressive exertional dyspnoea',
+    'Chronic productive cough',
+    '40-pack-year smoking history',
+    'Hyperinflation (barrel chest, prolonged expiration)',
+    'Wheeze and accessory muscle use',
+    'Oxygen saturation 90% on room air',
+    'Post-bronchodilator FEV1/FVC 0.58 with minimal reversibility',
+    'Chronic compensated respiratory acidosis with raised CO₂',
   ],
-  differentials: [
-    'Peptic ulcer disease',
-    'Acute cholecystitis',
-    'Mesenteric ischaemia',
-    'Aortic dissection',
+  differentials,
+  whyNotOthers: [
+    {
+      diagnosis: 'Asthma',
+      reason:
+        'Asthma typically shows variable, reversible airflow obstruction, often with earlier onset and atopy; here obstruction is fixed with minimal bronchodilator reversibility in a lifelong heavy smoker.',
+    },
+    {
+      diagnosis: 'Congestive heart failure',
+      reason:
+        'Heart failure causes dyspnoea with orthopnoea, raised JVP, oedema, and basal crepitations; the obstructive spirometry and hyperinflation point to airway disease instead.',
+    },
+    {
+      diagnosis: 'Bronchiectasis',
+      reason:
+        'Bronchiectasis also causes chronic productive cough, but usually with large-volume purulent sputum, recurrent infections, and haemoptysis; the unifying driver here is smoking-related fixed obstruction.',
+    },
+    {
+      diagnosis: 'Lung cancer',
+      reason:
+        'A heavy smoker is at risk, but the picture is diffuse slowly progressive airflow limitation rather than a focal mass, haemoptysis, or weight loss; imaging is still warranted to exclude it.',
+    },
+    {
+      diagnosis: 'Interstitial lung disease',
+      reason:
+        'ILD causes progressive dyspnoea but with a restrictive pattern (preserved or raised FEV1/FVC) and fine inspiratory crackles, not the obstructive ratio of 0.58 with wheeze seen here.',
+    },
   ],
+  managementPearl:
+    'Smoking cessation is the single most effective intervention to slow FEV1 decline and improve survival. Build care around inhaled bronchodilators (LAMA/LABA, adding ICS for eosinophilic or frequently exacerbating phenotypes), pulmonary rehabilitation, vaccination, and assessment for long-term oxygen therapy when chronically hypoxaemic. In acute hypercapnic exacerbations, give controlled oxygen targeting 88–92% to avoid worsening CO₂ retention.',
   differentialAnalysis: [
     {
-      diagnosis: 'Peptic ulcer disease',
+      diagnosis: 'Asthma',
       whyPlausibleEarly:
-        'Epigastric pain after eating can suggest peptic ulcer disease, and perforated ulcer may cause peritonism.',
+        'Wheeze, dyspnoea, and expiratory airflow obstruction occur in asthma, and asthma–COPD overlap is common in older smokers.',
       ruledOutByClues: [
         {
-          clueOrder: 1,
-          evidence: 'back radiation and relief on leaning forward',
+          clueOrder: 2,
+          evidence: '40-pack-year smoking history with ongoing smoking',
           reason:
-            'Posterior radiation with postural relief is characteristic of retroperitoneal inflammation, not ulcer disease.',
-        },
-        {
-          clueOrder: 4,
-          evidence: 'lipase >30× ULN',
-          reason:
-            'Marked lipase elevation is specific to pancreatic pathology and is not seen in peptic ulcer disease.',
-        },
-      ],
-      finalReasonLessLikely:
-        'The combination of back-radiating positional pain and markedly elevated pancreatic enzymes is inconsistent with peptic ulcer disease.',
-    },
-    {
-      diagnosis: 'Acute cholecystitis',
-      whyPlausibleEarly:
-        'Right upper quadrant pain after a fatty meal, nausea, and vomiting overlap with acute cholecystitis.',
-      ruledOutByClues: [
-        {
-          clueOrder: 3,
-          evidence: 'epigastric rather than right upper quadrant tenderness',
-          reason:
-            'Acute cholecystitis typically produces RUQ tenderness and a positive Murphy sign rather than central epigastric guarding.',
-        },
-        {
-          clueOrder: 4,
-          evidence: 'normal bilirubin and LFTs with markedly elevated lipase',
-          reason:
-            'Isolated lipase elevation without bilirubin or hepatic enzyme rise argues against a biliary cause.',
-        },
-      ],
-      finalReasonLessLikely:
-        'Normal liver enzymes and bilirubin with epigastric localisation and markedly elevated lipase point away from acute cholecystitis.',
-    },
-    {
-      diagnosis: 'Mesenteric ischaemia',
-      whyPlausibleEarly:
-        'Severe abdominal pain out of proportion to early examination findings can represent mesenteric ischaemia.',
-      ruledOutByClues: [
-        {
-          clueOrder: 4,
-          evidence: 'markedly elevated lipase and amylase',
-          reason:
-            'Pancreatic enzyme elevation is not a feature of mesenteric ischaemia; pain-enzyme dissociation would be expected if ischaemia were the cause.',
+            'Heavy cumulative smoking is the dominant COPD risk factor, whereas asthma is less tied to smoking dose.',
         },
         {
           clueOrder: 5,
-          evidence: 'CT showing pancreatic oedema and peripancreatic fat stranding',
+          evidence: 'minimal reversibility after bronchodilator',
           reason:
-            'CT directly demonstrates the pancreas as the source of pathology.',
+            'Asthma characteristically shows significant bronchodilator reversibility and variability; fixed obstruction favours COPD.',
+        },
+        {
+          clueOrder: 0,
+          evidence: 'gradual worsening over several years in later life',
+          reason:
+            'Asthma usually has earlier onset with an episodic, variable course rather than steady multi-year progression.',
         },
       ],
       finalReasonLessLikely:
-        'The enzyme profile and CT findings localise the pathology to the pancreas, making mesenteric ischaemia incompatible.',
+        'Fixed airflow obstruction with minimal reversibility in a lifelong heavy smoker fits COPD; asthma would show reversibility and symptom variability.',
     },
     {
-      diagnosis: 'Aortic dissection',
+      diagnosis: 'Congestive heart failure',
       whyPlausibleEarly:
-        'Severe tearing abdominal or back pain with rapid onset can mimic aortic dissection.',
+        'Older patients develop progressive exertional dyspnoea from heart failure, and pulmonary congestion can cause a "cardiac asthma" wheeze.',
+      ruledOutByClues: [
+        {
+          clueOrder: 3,
+          evidence: 'barrel chest with prolonged expiration and wheeze',
+          reason:
+            'Hyperinflation and expiratory airflow obstruction indicate airway disease rather than the congestion and gallop of heart failure.',
+        },
+        {
+          clueOrder: 5,
+          evidence: 'obstructive spirometry (FEV1/FVC 0.58)',
+          reason:
+            'An obstructive ventilatory defect points to intrinsic airway disease rather than a primarily cardiac cause of dyspnoea.',
+        },
+      ],
+      finalReasonLessLikely:
+        'There is no orthopnoea, paroxysmal nocturnal dyspnoea, oedema, or raised JVP, and the spirometry is obstructive, making heart failure an unlikely primary cause.',
+    },
+    {
+      diagnosis: 'Bronchiectasis',
+      whyPlausibleEarly:
+        'Chronic cough productive of sputum overlaps with the chronic bronchitis phenotype of COPD.',
       ruledOutByClues: [
         {
           clueOrder: 1,
-          evidence: 'positional relief on leaning forward',
+          evidence: 'morning sputum without copious purulent volumes',
           reason:
-            'Aortic dissection pain is typically constant, tearing, and not postural.',
+            'Bronchiectasis usually produces large-volume purulent sputum with recurrent infections and haemoptysis, which are not described here.',
         },
         {
-          clueOrder: 4,
-          evidence: 'markedly elevated lipase',
+          clueOrder: 2,
+          evidence: '40-pack-year smoking history',
           reason:
-            'Pancreatic enzyme elevation does not occur in aortic dissection.',
+            'Heavy smoking makes smoking-related COPD the most parsimonious unifying explanation for the obstruction.',
         },
       ],
       finalReasonLessLikely:
-        'The postural component and specific enzyme pattern are inconsistent with aortic dissection.',
+        'Smoking-driven fixed obstruction without large-volume purulent sputum, recurrent infection, or haemoptysis favours COPD; HRCT would confirm bronchiectasis if clinically suspected.',
+    },
+    {
+      diagnosis: 'Lung cancer',
+      whyPlausibleEarly:
+        'A heavy smoker with chronic cough is at high risk of lung malignancy, which must always be considered.',
+      ruledOutByClues: [
+        {
+          clueOrder: 0,
+          evidence: 'gradual progression over several years',
+          reason:
+            'A diffuse, slowly progressive airflow problem is more typical of COPD than the recent change, weight loss, or haemoptysis that flag malignancy.',
+        },
+        {
+          clueOrder: 5,
+          evidence: 'generalised obstructive spirometry',
+          reason:
+            'Diffuse airflow obstruction explains the symptoms, whereas a tumour tends to cause focal signs or localised obstruction.',
+        },
+      ],
+      finalReasonLessLikely:
+        'The presentation is diffuse airflow obstruction rather than focal disease, but as a heavy smoker he still warrants chest imaging and ongoing vigilance for malignancy.',
+    },
+    {
+      diagnosis: 'Interstitial lung disease',
+      whyPlausibleEarly:
+        'ILD also causes progressive exertional dyspnoea and reduced exercise tolerance.',
+      ruledOutByClues: [
+        {
+          clueOrder: 3,
+          evidence: 'wheeze and prolonged expiratory phase',
+          reason:
+            'ILD classically produces fine end-inspiratory ("velcro") crackles, not expiratory wheeze and prolonged expiration.',
+        },
+        {
+          clueOrder: 5,
+          evidence: 'FEV1/FVC 0.58 (obstructive)',
+          reason:
+            'ILD causes a restrictive pattern with preserved or raised FEV1/FVC, the opposite of the obstructive ratio seen here.',
+        },
+      ],
+      finalReasonLessLikely:
+        'Obstructive spirometry and hyperinflation are the opposite of the restrictive physiology of interstitial lung disease.',
     },
   ],
   generationQuality: {
     contentTier: 'FLAGSHIP',
     humanReviewed: true,
-    seedVersion: 'flagship-acute-pancreatitis-v1',
+    seedVersion,
   },
 };
 
-// ─── Updated education (no scoringSystems) ────────────────────────────────────
-const updatedEducation = {
+// ─── Education ────────────────────────────────────────────────────────────────
+
+const educationForFrontend = {
+  title: 'COPD',
+
   summary: {
     definition:
-      'Acute pancreatitis is an acute inflammatory process of the pancreas caused by premature activation of digestive enzymes within the gland, leading to autodigestion and a systemic inflammatory response.',
+      'Chronic obstructive pulmonary disease is a common, preventable, and treatable condition characterised by persistent respiratory symptoms and largely irreversible airflow limitation due to airway and/or alveolar abnormalities, usually caused by significant exposure to noxious particles or gases, most often tobacco smoke.',
     highYieldTakeaway:
-      'Think acute pancreatitis in any patient with severe epigastric pain radiating to the back — especially after alcohol or a fatty meal. Confirm with lipase >3× ULN and CT when the diagnosis is uncertain.',
+      'Diagnose COPD with post-bronchodilator spirometry showing FEV1/FVC below 0.70 and limited reversibility in a patient with a compatible exposure history and symptoms, after considering asthma, heart failure, bronchiectasis, malignancy, and interstitial lung disease.',
   },
+
   recognitionPattern: [
     {
-      pattern: 'Epigastric pain radiating to the back',
+      pattern: 'Fixed airflow obstruction in a smoker',
       whyItMatters:
-        'The retroperitoneal position of the pancreas means inflammation radiates posteriorly and is partially relieved by leaning forward.',
+        'A post-bronchodilator FEV1/FVC below 0.70 with minimal reversibility defines COPD and is the key feature that separates it from asthma.',
       progression:
-        'Sudden-onset epigastric pain → back radiation → postural relief → nausea and vomiting → enzyme rise → systemic inflammatory response.',
+        'Smoking exposure → airway inflammation and parenchymal destruction → progressive fixed airflow limitation → exertional dyspnoea and chronic cough → hypoxaemia and eventual hypercapnia.',
       discriminator:
-        'Posterior radiation with postural relief is strongly associated with retroperitoneal inflammation and is not a feature of peptic ulcer disease or cholecystitis.',
+        'Minimal bronchodilator reversibility plus a heavy smoking history points to COPD; marked reversibility and symptom variability point to asthma.',
       commonTrap:
-        'The pain may be severe from the outset without clear localisation; early peritonism can mask the classic distribution.',
+        'Do not anchor on wheeze alone. Wheeze occurs in both asthma and COPD, so spirometry is needed to confirm and characterise the obstruction.',
     },
     {
-      pattern: 'Precipitant history — alcohol or gallstones',
+      pattern: 'Chronic productive cough with progressive dyspnoea',
       whyItMatters:
-        'Gallstones (40–70%) and alcohol (25–35%) account for most cases. Identifying the cause guides secondary prevention.',
+        'A cough productive of sputum on most days for at least 3 months over 2 consecutive years defines the chronic bronchitis phenotype.',
       discriminator:
-        'Normal bilirubin and LFTs in a heavy drinker strongly favour alcohol as the aetiology; elevated bilirubin with dilated ducts favours gallstones.',
+        'Morning sputum in a smoker points to COPD; copious purulent sputum with recurrent infections and haemoptysis points to bronchiectasis.',
       commonTrap:
-        'Up to 20% of cases are idiopathic; do not dismiss the diagnosis if no precipitant is immediately apparent.',
+        'Dismissing a chronic "smoker\'s cough" as benign delays diagnosis and the chance to intervene early with cessation.',
     },
     {
-      pattern: 'Epigastric guarding and reduced bowel sounds',
+      pattern: 'Signs of hyperinflation and increased work of breathing',
       whyItMatters:
-        'Peripancreatic inflammation irritates the parietal peritoneum and causes a localised ileus.',
+        'Barrel chest, prolonged expiration, accessory muscle use, and pursed-lip breathing indicate air trapping and more advanced disease.',
       discriminator:
-        'Generalised peritonism or absent bowel sounds should raise concern for complications such as perforation or necrosis.',
+        'Hyperinflation and obstruction contrast with the basal crepitations, raised JVP, and oedema of heart failure.',
       commonTrap:
-        'Physical findings can be deceptively mild early in the course; do not underestimate severity based on examination alone.',
+        'In a patient at risk of chronic CO₂ retention, hypoxaemia should be corrected with controlled oxygen, not reflexive high-flow oxygen.',
     },
   ],
+
   keySymptoms: [
     {
-      symptom: 'Severe epigastric pain',
+      symptom: 'Progressive exertional dyspnoea',
       significance:
-        'The hallmark symptom; typically sudden in onset, constant, and severe — often described as the worst pain the patient has experienced.',
+        'The hallmark symptom of COPD; breathlessness that steadily worsens and limits activity reflects advancing airflow limitation and gas-exchange impairment.',
     },
     {
-      symptom: 'Back radiation',
+      symptom: 'Chronic productive cough',
       significance:
-        'Retroperitoneal extension of inflammation causes pain to radiate to the mid-back; relief on leaning forward is a useful positional clue.',
+        'A persistent cough with sputum, often worse in the mornings, reflects mucus hypersecretion and chronic airway inflammation.',
     },
     {
-      symptom: 'Nausea and vomiting',
+      symptom: 'Wheeze and chest tightness',
       significance:
-        'Present in most patients; vomiting does not relieve the pain, distinguishing it from some other causes of epigastric pain.',
+        'Expiratory wheeze indicates airflow obstruction; tightness can fluctuate and may worsen during exacerbations.',
     },
     {
-      symptom: 'Anorexia',
+      symptom: 'Reduced exercise tolerance and fatigue',
       significance:
-        'Universal in acute pancreatitis; enteral feeding decisions should be made early in severe disease.',
+        'Declining functional capacity is common and contributes to deconditioning, weight loss, and reduced quality of life.',
+    },
+    {
+      symptom: 'Frequent winter chest infections or exacerbations',
+      significance:
+        'Recurrent acute deteriorations with increased dyspnoea, cough, or sputum purulence drive hospitalisation and accelerate decline.',
     },
   ],
+
   keySigns: [
     {
-      finding: 'Epigastric tenderness and guarding',
+      finding: 'Barrel chest and hyperinflation',
       significance:
-        'Localised peritonism reflecting peripancreatic inflammation; the degree of guarding may underestimate severity.',
+        'An increased anteroposterior chest diameter and hyper-resonance reflect air trapping and loss of elastic recoil.',
       discriminator:
-        'More central than right upper quadrant tenderness of cholecystitis.',
+        'Hyperinflation supports obstructive airway disease; basal crepitations with oedema suggest heart failure instead.',
     },
     {
-      finding: "Grey Turner's sign",
+      finding: 'Prolonged expiratory phase with wheeze',
       significance:
-        'Flank bruising from retroperitoneal haemorrhage tracking to the flanks; indicates haemorrhagic or necrotising pancreatitis.',
-      urgency:
-        "Rare but indicates severe disease; escalate immediately if Grey Turner's or Cullen's sign is present.",
+        'A lengthened expiratory phase and polyphonic wheeze indicate expiratory airflow limitation.',
     },
     {
-      finding: "Cullen's sign",
+      finding: 'Accessory muscle use and pursed-lip breathing',
       significance:
-        'Periumbilical bruising from haemorrhage tracking along the falciform ligament; also suggests haemorrhagic pancreatitis.',
+        'These signs reflect increased work of breathing and attempts to maintain airway patency during expiration.',
     },
     {
-      finding: 'Reduced or absent bowel sounds',
+      finding: 'Hypoxaemia, with possible central cyanosis',
       significance:
-        'Paralytic ileus secondary to retroperitoneal inflammation; prolonged ileus may suggest developing complications.',
+        'A low oxygen saturation indicates impaired gas exchange; persistent hypoxaemia raises the question of long-term oxygen therapy.',
+    },
+    {
+      finding: 'Signs of cor pulmonale in advanced disease',
+      significance:
+        'Raised JVP, peripheral oedema, and a parasternal heave can appear late from pulmonary hypertension and right heart strain.',
+      discriminator:
+        'These overlap with left heart failure, so interpret them alongside spirometry, imaging, and echocardiography.',
     },
   ],
+
   examPearls: [
     {
       type: 'physical',
-      title: 'Leaning-forward sign',
+      title: 'Hyperinflation tells you the chest is obstructed, not congested',
       content:
-        'Ask the patient to sit forward or adopt the foetal position; partial relief of pain in this position supports a retroperitoneal source.',
+        'Look for an increased AP diameter, hyper-resonant percussion, reduced cricosternal distance, prolonged expiration, accessory muscle use, and pursed-lip breathing.',
       whyItMatters:
-        'A simple bedside manoeuvre that increases pre-test probability of pancreatic pathology.',
-      discriminator: 'Ulcer and cholecystitis pain is not typically postural.',
-      trapAvoided:
-        'Absence of postural relief does not exclude pancreatitis, especially in severe disease with peritonism.',
-    },
-    {
-      type: 'physical',
-      title: "Grey Turner's and Cullen's signs",
-      content:
-        "Inspect the flanks and periumbilical area for ecchymosis. Grey Turner's affects the flanks; Cullen's affects the periumbilical area.",
-      whyItMatters:
-        'Both indicate retroperitoneal haemorrhage and correlate with severe necrotising disease.',
+        'These bedside signs steer you toward obstructive airway disease and away from cardiac or restrictive causes of dyspnoea before any investigation returns.',
       discriminator:
-        'Their presence should immediately escalate the severity assessment and CT imaging.',
-      managementImplication:
-        'Requires ICU-level monitoring, early CT, and consideration of interventional radiology or surgery.',
+        'Hyperinflation supports COPD; bibasal fine crackles with raised JVP and oedema support heart failure; fine velcro crackles support interstitial lung disease.',
+      trapAvoided:
+        'Do not assume every breathless older smoker is in heart failure; confirm the physiology with spirometry.',
     },
     {
-      type: 'nutritional',
-      title: 'Assess for signs of chronic alcohol use',
+      type: 'lab_reasoning',
+      title: 'Post-bronchodilator spirometry is the diagnostic anchor',
       content:
-        'Look for palmar erythema, Dupuytren contracture, parotid enlargement, spider naevi, and hepatomegaly.',
+        'COPD requires a post-bronchodilator FEV1/FVC below 0.70. FEV1 percent predicted then grades airflow limitation, and reversibility testing helps separate COPD from asthma.',
       whyItMatters:
-        'Chronic alcohol use is the second most common aetiology and guides secondary prevention counselling.',
+        'A fixed ratio with minimal reversibility confirms COPD; significant reversibility or variability suggests asthma or asthma–COPD overlap.',
       managementImplication:
-        'Alcohol cessation support and thiamine supplementation should be initiated in alcohol-related pancreatitis.',
+        'Severity grading and exacerbation history guide inhaler choice, pulmonary rehabilitation, and decisions about oxygen and escalation.',
+    },
+    {
+      type: 'lab_reasoning',
+      title: 'Read the blood gas for chronicity, not just numbers',
+      content:
+        'A raised CO₂ with a near-normal pH and a compensatory rise in bicarbonate indicates chronic, compensated type 2 respiratory failure rather than an acute decompensation.',
+      whyItMatters:
+        'Chronic CO₂ retention changes oxygen targets and raises the threshold for non-invasive ventilation in acute deterioration.',
+      managementImplication:
+        'Target oxygen saturations of 88–92% in patients at risk of CO₂ retention, and consider NIV for persistent hypercapnic acidosis during exacerbations.',
+    },
+    {
+      type: 'MNEMONIC',
+      title: 'COPD diagnostic checklist',
+      content:
+        'C — Chronic symptoms (cough, sputum, progressive dyspnoea); O — Obstruction confirmed on post-bronchodilator spirometry (FEV1/FVC < 0.70); P — Poorly reversible airflow limitation; D — Driver of damage identified (smoking, biomass, occupational exposure, or alpha-1 antitrypsin deficiency).',
+      whyItMatters:
+        'Keeps the diagnosis operational: COPD is confirmed by symptoms plus objective fixed obstruction plus a plausible exposure, not by clinical impression alone.',
+      discriminator:
+        'The checklist prompts you to test reversibility (asthma), consider alpha-1 antitrypsin in young or non-smoking patients, and exclude cardiac and restrictive causes.',
+      trapAvoided:
+        'Mnemonic content belongs here; scoringSystems is intentionally left empty to avoid duplicate frontend rendering.',
     },
   ],
+
+  scoringSystems: [],
+
   investigations: [
     {
-      test: 'Serum lipase (preferred) and amylase',
+      test: 'Post-bronchodilator spirometry',
       interpretation:
-        'Lipase >3× ULN satisfies one of the Atlanta diagnostic criteria and has higher specificity than amylase. Amylase may normalise within 24–48 hours; lipase remains elevated longer.',
+        'FEV1/FVC below 0.70 after bronchodilator confirms airflow obstruction; FEV1 percent predicted grades severity from mild to very severe.',
       whyItMatters:
-        'First-line biochemical test; levels >3× ULN in the context of compatible pain are sufficient to diagnose acute pancreatitis without imaging in most cases.',
+        'This is the diagnostic gate for COPD and is required before committing to the diagnosis.',
     },
     {
-      test: 'LFTs, bilirubin, and GGT',
+      test: 'Bronchodilator reversibility testing',
       interpretation:
-        'Elevated bilirubin and transaminases with a dilated common bile duct suggest gallstone pancreatitis and may indicate cholangitis requiring urgent ERCP.',
+        'Minimal reversibility supports fixed COPD obstruction; large reversibility or variability suggests asthma or an asthmatic component.',
       whyItMatters:
-        'Differentiates biliary from alcoholic aetiology and identifies patients needing early endoscopic intervention.',
+        'Distinguishing COPD from asthma changes treatment, particularly the role of inhaled corticosteroids.',
     },
     {
-      test: 'Contrast-enhanced CT abdomen (CECT)',
+      test: 'Arterial blood gas',
       interpretation:
-        'Identifies pancreatic necrosis (non-enhancing tissue), peripancreatic fluid collections, and local complications. CT Severity Index guides prognostication.',
+        'Identifies hypoxaemia and type 2 respiratory failure, and distinguishes chronic compensated from acute uncompensated CO₂ retention.',
       whyItMatters:
-        'Not required for diagnosis in straightforward cases but essential when diagnosis is uncertain, clinical deterioration occurs, or severe disease is suspected.',
+        'Guides oxygen targets, the need for non-invasive ventilation, and assessment for long-term oxygen therapy.',
     },
     {
-      test: 'Abdominal ultrasound',
+      test: 'Chest radiograph',
       interpretation:
-        'Identifies gallstones, biliary dilation, and choledocholithiasis. The pancreas is often poorly visualised due to overlying bowel gas.',
+        'May show hyperinflation, flattened diaphragms, and bullae; importantly helps exclude malignancy, pneumonia, pneumothorax, and heart failure.',
       whyItMatters:
-        'First-line imaging to identify a biliary aetiology; should be performed in all patients with acute pancreatitis.',
+        'Excludes alternative or coexisting diagnoses, especially lung cancer in a heavy smoker.',
     },
     {
-      test: 'CRP at 48 hours',
+      test: 'Full blood count',
       interpretation:
-        'CRP >150 mg/L at 48 hours predicts severe pancreatitis with reasonable sensitivity and specificity.',
+        'May reveal secondary polycythaemia from chronic hypoxia or anaemia contributing to dyspnoea; eosinophil count can inform inhaled corticosteroid decisions.',
       whyItMatters:
-        'Guides escalation from ward to high-dependency or ICU-level care when combined with clinical assessment.',
+        'Supports prognostication and personalises inhaler therapy.',
     },
     {
-      test: 'Calcium, triglycerides, IgG4',
+      test: 'BNP and echocardiography when heart failure is suspected',
       interpretation:
-        'Hypercalcaemia, hypertriglyceridaemia (>11 mmol/L), and elevated IgG4 (autoimmune pancreatitis) are rarer but important and treatable causes.',
+        'Helps separate or identify coexisting cardiac dysfunction and assess for pulmonary hypertension and cor pulmonale.',
       whyItMatters:
-        'Identifies uncommon aetiologies that require specific management beyond supportive care.',
+        'Breathlessness in older smokers is often multifactorial, and cardiac disease frequently coexists.',
+    },
+    {
+      test: 'Alpha-1 antitrypsin level',
+      interpretation:
+        'A low level suggests alpha-1 antitrypsin deficiency, particularly with early-onset or basal-predominant emphysema.',
+      whyItMatters:
+        'Indicated in young patients, non- or light-smokers, or those with a family history, as it changes counselling and surveillance.',
+    },
+    {
+      test: 'Sputum culture during exacerbations',
+      interpretation:
+        'Identifies bacterial pathogens in infective exacerbations and guides antibiotic choice in non-responders.',
+      whyItMatters:
+        'Targets therapy and flags resistant or unusual organisms.',
     },
   ],
+
   pitfalls: [
     {
-      pitfall: 'Diagnosing pancreatitis without measuring lipase',
+      pitfall: 'Diagnosing COPD without spirometry',
       consequence:
-        'Amylase alone lacks specificity; lipase should always be measured and interpreted against the local reference range.',
+        'Clinical impression alone overlaps with asthma, heart failure, and other conditions, leading to mislabelling and inappropriate therapy.',
     },
     {
-      pitfall: 'Underestimating severity based on enzyme levels alone',
+      pitfall: 'Skipping reversibility testing and missing asthma or overlap',
       consequence:
-        'Enzyme levels do not correlate with disease severity. A patient with a lipase of 500 U/L may develop severe necrotising pancreatitis while a lipase of 2 000 U/L may follow an uncomplicated course.',
+        'Patients with a significant reversible component may be under-treated or denied appropriate inhaled corticosteroids.',
     },
     {
-      pitfall: 'Failing to perform early ultrasound',
+      pitfall: 'Giving uncontrolled high-flow oxygen in a CO₂ retainer',
       consequence:
-        'Missing gallstone aetiology delays cholecystectomy planning and risks recurrent attacks or progression to ascending cholangitis.',
+        'In patients at risk of chronic hypercapnia, excessive oxygen can worsen CO₂ retention and precipitate respiratory acidosis and narcosis; target 88–92%.',
     },
     {
-      pitfall: 'Prescribing prophylactic antibiotics',
+      pitfall: 'Attributing all symptoms to COPD and missing lung cancer',
       consequence:
-        'No evidence supports prophylactic antibiotics in acute pancreatitis; indiscriminate use promotes resistance and fungal superinfection.',
+        'New or changing symptoms, haemoptysis, or weight loss in a heavy smoker require imaging to exclude malignancy.',
     },
     {
-      pitfall: 'Delaying enteral feeding in severe disease',
+      pitfall: 'Relying on antibiotics and steroids while ignoring smoking cessation',
       consequence:
-        'Prolonged fasting increases gut permeability, bacterial translocation, and infectious complications. Early enteral feeding (within 24–48 h) is preferred over TPN.',
+        'Without cessation, disease progression continues; smoking cessation is the only intervention proven to slow FEV1 decline meaningfully.',
+    },
+    {
+      pitfall: 'Not assessing for long-term oxygen therapy or cor pulmonale',
+      consequence:
+        'Chronically hypoxaemic patients who would benefit from LTOT may be missed, and right heart strain can go unrecognised.',
     },
   ],
+
   managementOverview: [
     {
-      step: 'IV fluid resuscitation',
+      step: 'Smoking cessation and exposure reduction',
       rationale:
-        'Aggressive early fluid replacement (250–500 mL/h initially) with Lactated Ringer is preferred over normal saline and reduces pancreatic necrosis by maintaining microcirculation.',
+        'Stopping smoking is the single most effective intervention to slow disease progression and improve survival; offer behavioural support and pharmacotherapy.',
     },
     {
-      step: 'Analgesia and antiemetics',
+      step: 'Stepwise inhaled therapy',
       rationale:
-        'Adequate analgesia with opioids is appropriate; withholding analgesia does not aid diagnosis and increases distress. Ondansetron or metoclopramide for nausea.',
+        'Short-acting bronchodilators for relief, then long-acting bronchodilators (LAMA/LABA); add inhaled corticosteroids for eosinophilic or frequently exacerbating, asthmatic-feature phenotypes.',
     },
     {
-      step: 'Nil by mouth then early enteral feeding',
+      step: 'Pulmonary rehabilitation',
       rationale:
-        'Keep nil by mouth initially for comfort; restart enteral feeding as soon as tolerated (or within 24–48 h via NGT in severe disease) to protect the gut barrier.',
+        'Structured exercise and education improve exercise capacity, dyspnoea, and quality of life, and reduce hospitalisations.',
     },
     {
-      step: 'Severity assessment and monitoring',
+      step: 'Vaccination and preventive care',
       rationale:
-        'Calculate BISAP or Ranson score; measure CRP at 48 hours; monitor urine output, oxygen saturation, and renal function. Escalate to HDU/ICU if organ dysfunction develops.',
+        'Influenza, pneumococcal, and COVID vaccinations reduce infective exacerbations and complications.',
     },
     {
-      step: 'Biliary workup and ERCP if indicated',
+      step: 'Manage exacerbations promptly',
       rationale:
-        'Perform ultrasound in all patients. Urgent ERCP within 24–48 hours is indicated if concurrent cholangitis or persistent biliary obstruction is present.',
+        'Use controlled oxygen targeting 88–92%, nebulised bronchodilators, oral corticosteroids, antibiotics for infective exacerbations, and non-invasive ventilation for persistent hypercapnic acidosis.',
     },
     {
-      step: 'Cholecystectomy before discharge',
+      step: 'Assess for long-term oxygen therapy',
       rationale:
-        'Patients with gallstone pancreatitis should undergo same-admission or early interval cholecystectomy to prevent recurrence (recurrence risk ~30% without surgery).',
+        'In chronically hypoxaemic, stable, non-smoking patients meeting blood-gas criteria, LTOT improves survival; assess and treat cor pulmonale and comorbidities.',
     },
     {
-      step: 'Manage complications',
+      step: 'Escalate and consider advanced options in selected patients',
       rationale:
-        'Necrotising pancreatitis, infected necrosis, walled-off necrosis, and pseudocysts may require step-up intervention: antibiotics, endoscopic drainage, or surgical necrosectomy.',
+        'Severe, refractory, or rapidly declining disease warrants specialist input and consideration of lung volume reduction or transplantation in suitable candidates.',
     },
   ],
+
   differentialDistinguishers: [
     {
-      diagnosis: 'Peptic ulcer disease',
+      diagnosis: 'Asthma',
       whyConfused:
-        'Epigastric pain after meals and nausea overlap significantly with pancreatitis, especially before enzyme results are available.',
+        'Both cause expiratory wheeze and airflow obstruction, and asthma–COPD overlap is common in older smokers.',
       distinguishingPoint:
-        'PUD pain is often burning, relieved by antacids, and associated with Helicobacter pylori risk factors; it does not cause back radiation or enzyme elevation.',
+        'Asthma usually has earlier onset, atopy, symptom variability, and significant bronchodilator reversibility.',
       keySeparator:
-        'Back radiation with postural relief and lipase >3× ULN are specific to pancreatic pathology.',
+        'Minimal post-bronchodilator reversibility with a heavy smoking history supports COPD over asthma.',
       classicTrap:
-        'Do not treat empirically for PUD and discharge before checking lipase in a patient with epigastric pain and vomiting.',
+        'Treating fixed COPD obstruction as asthma can lead to inappropriate reliance on inhaled corticosteroids and missed cessation opportunities.',
     },
     {
-      diagnosis: 'Acute cholecystitis',
+      diagnosis: 'Congestive heart failure',
       whyConfused:
-        'Fatty meal precipitant, right upper quadrant or epigastric pain, nausea, and vomiting are shared features. Gallstone pancreatitis may coexist with cholecystitis.',
+        'Heart failure causes progressive dyspnoea and can produce a "cardiac asthma" wheeze.',
       distinguishingPoint:
-        'Cholecystitis causes right upper quadrant tenderness, a positive Murphy sign, and fever with raised bilirubin; it does not cause lipase elevation unless concurrent pancreatitis is present.',
+        'Heart failure features orthopnoea, paroxysmal nocturnal dyspnoea, raised JVP, oedema, and basal crepitations, with a restrictive or normal spirometry pattern.',
       keySeparator:
-        'Markedly elevated lipase with epigastric rather than RUQ localisation and normal bilirubin distinguishes pancreatitis from isolated cholecystitis.',
+        'Obstructive spirometry and hyperinflation point to airway disease, even though the two frequently coexist.',
       classicTrap:
-        'Gallstone pancreatitis can cause transient bilirubin elevation; do not exclude pancreatitis if bilirubin is mildly raised.',
+        'Do not interpret breathlessness and wheeze alone as heart failure; confirm with spirometry, imaging, and natriuretic peptides.',
     },
     {
-      diagnosis: 'Mesenteric ischaemia',
+      diagnosis: 'Bronchiectasis',
       whyConfused:
-        'Sudden severe abdominal pain, particularly in older or vascular patients, raises mesenteric ischaemia as an early concern.',
+        'Both produce chronic productive cough and can show obstructive spirometry.',
       distinguishingPoint:
-        'Mesenteric ischaemia characteristically causes pain out of proportion to examination findings and does not elevate pancreatic enzymes.',
+        'Bronchiectasis typically has copious purulent sputum, recurrent infections, haemoptysis, and coarse crackles, with characteristic HRCT changes.',
       keySeparator:
-        'Enzyme profile and CT findings localise pathology to the pancreas in acute pancreatitis; ischaemia requires CT angiography and shows bowel wall changes.',
+        'Smoking-driven fixed obstruction without large-volume purulent sputum or recurrent infection favours COPD.',
+      classicTrap:
+        'Missing coexisting bronchiectasis in a frequent exacerbator can lead to under-treatment of suppurative disease.',
     },
     {
-      diagnosis: 'Aortic dissection',
+      diagnosis: 'Lung cancer',
       whyConfused:
-        'Sudden severe back pain with epigastric involvement can mimic aortic dissection, particularly type B dissection.',
+        'Heavy smokers with chronic cough are at high risk, and symptoms overlap.',
       distinguishingPoint:
-        'Dissection pain is typically tearing, migrating, and associated with pulse or blood pressure differentials; it does not cause pancreatic enzyme elevation.',
+        'Suspect malignancy with new or changing symptoms, haemoptysis, weight loss, or a focal abnormality on imaging.',
       keySeparator:
-        'Postural relief and isolated enzyme elevation are not features of aortic dissection.',
+        'Diffuse airflow obstruction explains COPD symptoms, but malignancy must still be actively excluded with imaging.',
       classicTrap:
-        'In the haemodynamically unstable patient with back pain, exclude aortic dissection before attributing symptoms to pancreatitis.',
+        'Attributing red-flag symptoms to COPD and delaying a chest X-ray or CT.',
+    },
+    {
+      diagnosis: 'Interstitial lung disease',
+      whyConfused:
+        'ILD also causes progressive exertional dyspnoea and reduced exercise tolerance.',
+      distinguishingPoint:
+        'ILD shows a restrictive pattern with preserved or raised FEV1/FVC and fine end-inspiratory crackles.',
+      keySeparator:
+        'An obstructive ratio of 0.58 with wheeze and hyperinflation is the opposite of restrictive ILD physiology.',
+      classicTrap:
+        'Overlooking a mixed obstructive–restrictive picture in patients with combined emphysema and fibrosis.',
     },
   ],
+
   complications: [
     {
-      complication: 'Necrotising pancreatitis',
+      complication: 'Acute exacerbations',
       whyItMatters:
-        'Non-enhancing pancreatic tissue on CT indicates necrosis; infected necrosis carries mortality >20% and requires step-up management.',
+        'Exacerbations, often infective, drive hospitalisation, accelerate lung function decline, and increase mortality.',
     },
     {
-      complication: 'Pancreatic pseudocyst',
+      complication: 'Type 2 respiratory failure and CO₂ narcosis',
       whyItMatters:
-        'Fluid collections that fail to resolve may mature into pseudocysts over 4–6 weeks; symptomatic pseudocysts require endoscopic or surgical drainage.',
+        'Worsening hypercapnia can cause confusion, drowsiness, and acidosis requiring non-invasive ventilation; uncontrolled oxygen can precipitate it.',
     },
     {
-      complication: 'Acute respiratory distress syndrome (ARDS)',
+      complication: 'Cor pulmonale and pulmonary hypertension',
       whyItMatters:
-        'Cytokine-mediated pulmonary injury can develop within 24–48 hours; early supplemental oxygen and monitoring of oxygen saturation are essential.',
+        'Chronic hypoxia and lung destruction raise pulmonary pressures, leading to right heart strain, oedema, and reduced survival.',
     },
     {
-      complication: 'Acute kidney injury',
+      complication: 'Secondary polycythaemia',
       whyItMatters:
-        'Volume depletion and cytokine injury cause AKI; aggressive early fluid resuscitation and urine output monitoring are the key preventive measures.',
+        'Chronic hypoxaemia drives erythropoiesis, increasing blood viscosity and thrombotic risk.',
     },
     {
-      complication: 'Splenic vein thrombosis',
+      complication: 'Pneumothorax from bullae rupture',
       whyItMatters:
-        'Peripancreatic inflammation can thrombose the splenic vein, causing segmental portal hypertension and gastric varices.',
+        'Rupture of emphysematous bullae can cause sudden deterioration and requires prompt recognition and drainage.',
+    },
+    {
+      complication: 'Increased risk of lung cancer and systemic effects',
+      whyItMatters:
+        'Shared smoking exposure raises malignancy risk, and systemic effects include weight loss, cachexia, osteoporosis, and depression.',
     },
   ],
+
   recallPrompts: [
     {
-      prompt: 'What enzyme is preferred over amylase for diagnosing acute pancreatitis, and why?',
+      prompt: 'What spirometry result defines COPD?',
       answer:
-        'Serum lipase — it has higher specificity and remains elevated longer (3–5 days) than amylase (24–48 hours), making it more useful in delayed presentations.',
+        'A post-bronchodilator FEV1/FVC ratio below 0.70 with limited reversibility, confirming fixed airflow obstruction.',
     },
     {
-      prompt: 'What are the two most common causes of acute pancreatitis?',
+      prompt: 'What is the single most effective intervention to slow disease progression?',
       answer:
-        'Gallstones (40–70%) and alcohol (25–35%). Together they account for most cases; always identify the aetiology to guide secondary prevention.',
+        'Smoking cessation, which is the only measure shown to meaningfully slow the rate of FEV1 decline and improve survival.',
     },
     {
-      prompt: 'What CRP threshold at 48 hours predicts severe acute pancreatitis?',
+      prompt: 'Why target oxygen saturations of 88–92% in patients at risk of CO₂ retention?',
       answer:
-        'CRP >150 mg/L at 48 hours is an independent predictor of severe disease and guides escalation to HDU or ICU monitoring.',
+        'Excessive oxygen can worsen CO₂ retention and precipitate respiratory acidosis and narcosis, so controlled oxygen is used.',
     },
     {
-      prompt: 'Are prophylactic antibiotics recommended in acute pancreatitis?',
+      prompt: 'When should alpha-1 antitrypsin deficiency be considered?',
       answer:
-        'No. Prophylactic antibiotics have not been shown to reduce mortality or infectious complications. They are reserved for confirmed or strongly suspected infected pancreatic necrosis.',
+        'In young or non- or light-smoking patients, those with basal-predominant emphysema, or a positive family history.',
     },
     {
-      prompt: 'What is the preferred IV fluid in acute pancreatitis resuscitation?',
+      prompt: 'What blood-gas picture suggests chronic rather than acute type 2 respiratory failure?',
       answer:
-        "Lactated Ringer (Hartmann's solution) is preferred over normal saline; it reduces the risk of SIRS and metabolic acidosis.",
+        'A raised CO₂ with a near-normal pH and a compensatory rise in bicarbonate, indicating chronic compensated hypercapnia.',
     },
   ],
-  references: [] as string[],
+
+  references: [],
 };
 
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
 async function main() {
-  // 1. Find the existing case for this registry
-  const existingCase = await prisma.case.findFirst({
-    where: { diagnosisRegistryId: REGISTRY_ID, proposedDiagnosisText: 'Acute Pancreatitis' },
-    orderBy: { approvedAt: 'asc' },
-    select: { id: true, currentRevisionId: true },
+  const canonicalName = 'copd';
+  const displayLabel = 'COPD';
+  const normalizedTerms = [
+    canonicalName,
+    displayLabel,
+    'chronic obstructive pulmonary disease',
+    'chronic obstructive airways disease',
+    'chronic obstructive lung disease',
+  ].map(normalizeClinicalText);
+
+  const registry = await prisma.diagnosisRegistry.findFirst({
+    where: {
+      active: true,
+      OR: [
+        { canonicalNormalized: { in: normalizedTerms } },
+        {
+          aliases: {
+            some: {
+              normalizedTerm: { in: normalizedTerms },
+              active: true,
+            },
+          },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      canonicalName: true,
+      canonicalNormalized: true,
+      displayLabel: true,
+    },
   });
 
-  if (!existingCase) {
-    throw new Error('Acute Pancreatitis case not found — run the full seed first.');
+  if (!registry) {
+    throw new Error(
+      `Cannot seed ${displayLabel}: active DiagnosisRegistry entry not found for any of ${normalizedTerms.join(', ')}. Create/review the registry separately before running this seed.`,
+    );
   }
 
-  // 2. Update explanation on the case
-  await prisma.case.update({
-    where: { id: existingCase.id },
-    data: { explanation: updatedExplanation as object },
-  });
-  console.log('Updated case explanation:', existingCase.id);
-
-  // 3. Update explanation on the current revision
-  if (existingCase.currentRevisionId) {
-    await prisma.caseRevision.update({
-      where: { id: existingCase.currentRevisionId },
-      data: { explanation: updatedExplanation as object },
-    });
-    console.log('Updated revision explanation:', existingCase.currentRevisionId);
-  }
-
-  // 4. Upsert education (no scoringSystems)
   const education = await prisma.diagnosisEducation.upsert({
-    where: { diagnosisRegistryId: REGISTRY_ID },
+    where: { diagnosisRegistryId: registry.id },
     update: {
-      title: 'Acute Pancreatitis',
-      summary: updatedEducation.summary,
-      clinicalPattern: updatedEducation.recognitionPattern,
-      keySymptoms: updatedEducation.keySymptoms,
-      keySigns: updatedEducation.keySigns,
-      examPearls: updatedEducation.examPearls,
-      scoringSystems: null,
-      investigations: updatedEducation.investigations,
-      differentials: updatedEducation.differentialDistinguishers,
-      management: updatedEducation.managementOverview,
-      complications: updatedEducation.complications,
-      pitfalls: updatedEducation.pitfalls,
-      recallPrompts: updatedEducation.recallPrompts,
-      references: updatedEducation.references,
+      title: educationForFrontend.title,
+      summary: educationForFrontend.summary,
+      clinicalPattern: educationForFrontend.recognitionPattern,
+      keySymptoms: educationForFrontend.keySymptoms,
+      keySigns: educationForFrontend.keySigns,
+      examPearls: educationForFrontend.examPearls,
+      scoringSystems: educationForFrontend.scoringSystems,
+      investigations: educationForFrontend.investigations,
+      differentials: educationForFrontend.differentialDistinguishers,
+      management: educationForFrontend.managementOverview,
+      complications: educationForFrontend.complications,
+      pitfalls: educationForFrontend.pitfalls,
+      recallPrompts: educationForFrontend.recallPrompts,
+      references: educationForFrontend.references,
       editorialStatus: DiagnosisEducationStatus.PUBLISHED,
       source: DiagnosisEducationSource.MANUAL,
       reviewedAt: now,
@@ -538,20 +810,21 @@ async function main() {
       version: { increment: 1 },
     },
     create: {
-      diagnosisRegistryId: REGISTRY_ID,
-      title: 'Acute Pancreatitis',
-      summary: updatedEducation.summary,
-      clinicalPattern: updatedEducation.recognitionPattern,
-      keySymptoms: updatedEducation.keySymptoms,
-      keySigns: updatedEducation.keySigns,
-      examPearls: updatedEducation.examPearls,
-      investigations: updatedEducation.investigations,
-      differentials: updatedEducation.differentialDistinguishers,
-      management: updatedEducation.managementOverview,
-      complications: updatedEducation.complications,
-      pitfalls: updatedEducation.pitfalls,
-      recallPrompts: updatedEducation.recallPrompts,
-      references: updatedEducation.references,
+      diagnosisRegistryId: registry.id,
+      title: educationForFrontend.title,
+      summary: educationForFrontend.summary,
+      clinicalPattern: educationForFrontend.recognitionPattern,
+      keySymptoms: educationForFrontend.keySymptoms,
+      keySigns: educationForFrontend.keySigns,
+      examPearls: educationForFrontend.examPearls,
+      scoringSystems: educationForFrontend.scoringSystems,
+      investigations: educationForFrontend.investigations,
+      differentials: educationForFrontend.differentialDistinguishers,
+      management: educationForFrontend.managementOverview,
+      complications: educationForFrontend.complications,
+      pitfalls: educationForFrontend.pitfalls,
+      recallPrompts: educationForFrontend.recallPrompts,
+      references: educationForFrontend.references,
       editorialStatus: DiagnosisEducationStatus.PUBLISHED,
       source: DiagnosisEducationSource.MANUAL,
       reviewedAt: now,
@@ -559,14 +832,13 @@ async function main() {
       version: 1,
     },
   });
-  console.log('Upserted education:', education.id);
 
   await prisma.diagnosisEducationRevision.create({
     data: {
       educationId: education.id,
       version: education.version,
       snapshot: {
-        ...updatedEducation,
+        ...educationForFrontend,
         storedColumnMap: {
           recognitionPattern: 'clinicalPattern',
           managementOverview: 'management',
@@ -577,7 +849,159 @@ async function main() {
       source: DiagnosisEducationSource.MANUAL,
     },
   });
-  console.log('Created education revision v', education.version);
+
+  const history =
+    clues.find((clue) => clue.type === 'history')?.value ?? displayLabel;
+  const symptoms = clues
+    .filter((clue) => clue.type === 'symptom')
+    .map((clue) => clue.value);
+
+  const existingCases = await prisma.case.findMany({
+    where: {
+      diagnosisRegistryId: registry.id,
+      proposedDiagnosisText: { in: [displayLabel, registry.displayLabel] },
+    },
+    orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      currentRevisionId: true,
+      publicNumber: true,
+      title: true,
+      dailyCases: { select: { id: true }, take: 1 },
+    },
+  });
+
+  const reusableCase = existingCases.find((caseRecord) => caseRecord.dailyCases.length === 0);
+  const scheduledDuplicate = existingCases.find((caseRecord) => caseRecord.dailyCases.length > 0);
+
+  if (!reusableCase && scheduledDuplicate) {
+    throw new Error(
+      `Cannot seed ${displayLabel}: a scheduled case already exists for this registry (${scheduledDuplicate.id}, ${scheduledDuplicate.title}). Refusing to create a duplicate flagship inventory case.`,
+    );
+  }
+
+  const publicNumber =
+    reusableCase?.publicNumber ?? (await getNextCasePublicNumber());
+
+  console.log('Assigned public case number', {
+    displayLabel,
+    publicNumber,
+    reusedExistingCase: Boolean(reusableCase),
+  });
+
+  const assignedInventoryPlaceholderDate =
+    await findAvailableInventoryPlaceholderDate({
+      preferredDate: inventoryPlaceholderDate,
+      reusableCaseId: reusableCase?.id,
+      displayLabel,
+    });
+
+  const caseData = {
+    title: displayLabel,
+    publicNumber,
+    date: assignedInventoryPlaceholderDate,
+    difficulty: 'medium',
+    history,
+    symptoms,
+    clues: clues as unknown as object,
+    explanation: explanation as object,
+    differentials,
+    editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
+    approvedAt: now,
+    publishedAt: null,
+    diagnosisRegistryId: registry.id,
+    proposedDiagnosisText: displayLabel,
+    diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
+    diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
+    diagnosisMappingConfidence: 1,
+    diagnosisEditorialNote:
+      'Seeded frontend-aligned flagship COPD inventory case using existing registry lookup only. DailyCase scheduler should assign the actual daily slot.',
+  };
+
+  const seededCase = reusableCase
+    ? await prisma.case.update({
+        where: { id: reusableCase.id },
+        data: caseData,
+        select: { id: true },
+      })
+    : await prisma.case.create({ data: caseData, select: { id: true } });
+
+  const revisionData = {
+    source: 'MANUAL' as const,
+    publishTrack: 'DAILY' as const,
+    title: displayLabel,
+    publicNumber,
+    date: assignedInventoryPlaceholderDate,
+    difficulty: 'medium',
+    history,
+    symptoms,
+    clues: clues as unknown as object,
+    explanation: explanation as object,
+    differentials,
+    diagnosisRegistryId: registry.id,
+    proposedDiagnosisText: displayLabel,
+    diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
+    diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
+    diagnosisMappingConfidence: 1,
+    diagnosisEditorialNote:
+      'Frontend-aligned flagship COPD inventory revision using registry lookup and duplicate-safe case reuse.',
+  };
+
+  const revision = reusableCase?.currentRevisionId
+    ? await prisma.caseRevision.update({
+        where: { id: reusableCase.currentRevisionId },
+        data: revisionData,
+        select: { id: true },
+      })
+    : await (async () => {
+        const latestRevision = await prisma.caseRevision.findFirst({
+          where: { caseId: seededCase.id },
+          orderBy: { revisionNumber: 'desc' },
+          select: { revisionNumber: true },
+        });
+
+        return prisma.caseRevision.create({
+          data: {
+            caseId: seededCase.id,
+            revisionNumber: (latestRevision?.revisionNumber ?? 0) + 1,
+            ...revisionData,
+          },
+          select: { id: true },
+        });
+      })();
+
+  await prisma.case.update({
+    where: { id: seededCase.id },
+    data: { currentRevisionId: revision.id },
+  });
+
+  await prisma.caseValidationRun.create({
+    data: {
+      caseId: seededCase.id,
+      revisionId: revision.id,
+      source: 'MANUAL',
+      publishTrack: 'DAILY',
+      outcome: 'PASSED',
+      validatorVersion: 'flagship-human-review:copd-v1',
+      summary: {
+        contentTier: 'FLAGSHIP',
+        seedVersion,
+        humanReviewed: true,
+        note: 'Manual frontend-aligned COPD inventory case seeded with registry lookup only, supported clue types (history, symptom, hx, exam, vital, lab), mnemonic in examPearls, and duplicate-safe case reuse.',
+      },
+      findings: [],
+      completedAt: now,
+    },
+  });
+
+  console.log('Seeded frontend-aligned COPD:', {
+    registryId: registry.id,
+    registryDisplayLabel: registry.displayLabel,
+    caseId: seededCase.id,
+    publicNumber,
+    educationId: education.id,
+    inventoryPlaceholderDate: assignedInventoryPlaceholderDate.toISOString(),
+  });
 }
 
 main()

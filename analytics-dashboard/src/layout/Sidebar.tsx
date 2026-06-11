@@ -1,22 +1,38 @@
 import { NavLink } from 'react-router-dom';
+import {
+  Activity,
+  BarChart3,
+  BookOpen,
+  BrainCircuit,
+  ClipboardList,
+  GitMerge,
+  GitPullRequest,
+  Home,
+  Layers3,
+  Network,
+  PenLine,
+  Send,
+  Sparkles,
+  type LucideIcon,
+} from 'lucide-react';
 
 const editorialNavigationItems = [
-  { to: '/editorial', label: 'Editorial', icon: 'E' },
-  { to: '/editorial/workspace', label: 'Workspace Queue', icon: 'W' },
-  { to: '/editorial/inbox', label: 'Review Inbox', icon: 'I' },
-  { to: '/editorial/coverage', label: 'Coverage Dashboard', icon: 'V' },
-  { to: '/editorial/planner', label: 'Curriculum Planner', icon: 'L' },
-  { to: '/editorial/differentials', label: 'Differentials', icon: 'D' },
-  { to: '/editorial/registry-candidates', label: 'Registry Queue', icon: 'R' },
+  { to: '/editorial', label: 'Editorial', icon: PenLine },
+  { to: '/editorial/workspace', label: 'Workspace Queue', icon: Layers3 },
+  { to: '/editorial/inbox', label: 'Review Inbox', icon: ClipboardList },
+  { to: '/editorial/coverage', label: 'Coverage Dashboard', icon: BarChart3 },
+  { to: '/editorial/planner', label: 'Curriculum Planner', icon: BookOpen },
+  { to: '/editorial/differentials', label: 'Differentials', icon: GitMerge },
+  { to: '/editorial/registry-candidates', label: 'Registry Queue', icon: GitPullRequest },
 ];
 
 const administrationNavigationItems = [
-  { to: '/', label: 'Overview', icon: 'O', end: true },
-  { to: '/cases', label: 'Cases', icon: 'C' },
-  { to: '/generate', label: 'Generate Cases', icon: 'G' },
-  { to: '/publish', label: 'Publish', icon: 'P' },
-  { to: '/diagnosis-graph/candidates', label: 'Graph', icon: 'K' },
-  { to: '/analytics', label: 'Analytics', icon: 'A' },
+  { to: '/', label: 'Overview', icon: Home, end: true },
+  { to: '/cases', label: 'Cases', icon: Activity },
+  { to: '/generate', label: 'Generate Cases', icon: Sparkles },
+  { to: '/publish', label: 'Publish', icon: Send },
+  { to: '/diagnosis-graph/candidates', label: 'Graph', icon: Network },
+  { to: '/analytics', label: 'Analytics', icon: BrainCircuit },
 ];
 
 type SidebarProps = {
@@ -33,7 +49,7 @@ function NavigationGroup({
 }: {
   title: string;
   collapsed: boolean;
-  items: Array<{ to: string; label: string; icon: string; end?: boolean }>;
+  items: Array<{ to: string; label: string; icon: LucideIcon; end?: boolean }>;
 }) {
   if (!items.length) {
     return null;
@@ -56,21 +72,19 @@ function NavigationGroup({
               'flex items-center rounded-lg px-3 py-2 text-sm font-medium transition',
               collapsed ? 'justify-center' : 'gap-3',
               isActive
-                ? 'bg-slate-900 text-white'
-                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                ? 'bg-[var(--color-teal)]/12 text-[var(--color-teal)] ring-1 ring-[var(--color-teal)]/30'
+                : 'text-slate-400 hover:bg-white/5 hover:text-slate-100',
             ].join(' ')
           }
         >
-          <span
+          <item.icon
             className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs font-semibold ${
               collapsed
-                ? 'border-slate-300 bg-slate-100 text-slate-700'
-                : 'border-slate-200 bg-slate-50 text-slate-700'
+                ? 'border-[var(--color-navy-border)] bg-white/5 p-1.5'
+                : 'border-[var(--color-navy-border)] bg-white/5 p-1.5'
             }`}
             aria-hidden="true"
-          >
-            {item.icon}
-          </span>
+          />
           {!collapsed && <span>{item.label}</span>}
         </NavLink>
       ))}
@@ -91,23 +105,23 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`shrink-0 border-r border-slate-200 bg-white transition-all duration-200 ${
+      className={`shrink-0 border-r border-[var(--color-navy-border)] bg-[var(--color-navy-mid)] transition-all duration-200 ${
         collapsed ? 'w-20' : 'w-64'
       }`}
     >
       <div
-        className={`border-b border-slate-200 ${collapsed ? 'px-3 py-4' : 'px-5 py-4'}`}
+        className={`border-b border-[var(--color-navy-border)] ${collapsed ? 'px-3 py-4' : 'px-5 py-4'}`}
       >
         <div className="flex items-center justify-between gap-2">
           {collapsed ? (
-            <h1 className="text-sm font-semibold text-slate-900">DX</h1>
+            <h1 className="text-sm font-semibold text-[var(--color-teal)]">WD</h1>
           ) : (
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-                Admin Console
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                Editorial Console
               </p>
-              <h1 className="mt-2 text-lg font-semibold text-slate-900">
-                DxLab Admin
+              <h1 className="mt-2 text-lg font-semibold text-slate-100">
+                Wardle
               </h1>
             </div>
           )}
@@ -116,7 +130,7 @@ export default function Sidebar({
             type="button"
             onClick={onToggle}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+            className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-2 py-1 text-xs font-semibold text-slate-300 transition hover:bg-white/10"
           >
             {collapsed ? '>>' : '<<'}
           </button>

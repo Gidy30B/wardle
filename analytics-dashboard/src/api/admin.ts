@@ -79,6 +79,11 @@ import type {
   GenerateTargetedCasePayload,
   GenerateTargetedCaseResult,
   CaseInventoryHealth,
+  AiDraftDecisionAction,
+  AiDraftRevisionAudit,
+  CaseEscalationAnnotationPayload,
+  CaseLearningGoalCoveragePayload,
+  ClaimRepairResult,
   LinkCaseDiagnosisPayload,
   MarkCaseReadyToPublishResult,
   PublishResultsSummary,
@@ -764,6 +769,124 @@ export function generateTargetedDiagnosisCase(
   return client.post<GenerateTargetedCaseResult>(
     `/admin/diagnosis-workspace/${diagnosisRegistryId}/generate-case`,
     payload,
+  );
+}
+
+export function generateCaseFromUncoveredGoal(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  payload: GenerateTargetedCasePayload,
+) {
+  return client.post<{ action: string; publicationStatus: 'draft'; result: GenerateTargetedCaseResult }>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/draft-actions/generate-case-from-goal`,
+    payload,
+  );
+}
+
+export function repairUnsupportedClaimDraft(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  payload: { claimId: string },
+) {
+  return client.post<ClaimRepairResult>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/claims/${payload.claimId}/repair`,
+  );
+}
+
+export function strengthenDifferentialDraft(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.post(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/draft-actions/strengthen-differential`,
+  );
+}
+
+export function suggestTeachingDistinctionDraft(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.post(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/draft-actions/suggest-teaching-distinction`,
+  );
+}
+
+export function decideAiDraftRevision(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  auditId: string,
+  action: AiDraftDecisionAction,
+  payload: { note?: string | null } = {},
+) {
+  return client.post<AiDraftRevisionAudit>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/ai-drafts/${auditId}/${action}`,
+    payload,
+  );
+}
+
+export function createCaseLearningGoalCoverage(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  payload: CaseLearningGoalCoveragePayload,
+) {
+  return client.post(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/case-learning-goal-coverage`,
+    payload,
+  );
+}
+
+export function updateCaseLearningGoalCoverage(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  coverageId: string,
+  payload: CaseLearningGoalCoveragePayload,
+) {
+  return client.patch(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/case-learning-goal-coverage/${coverageId}`,
+    payload,
+  );
+}
+
+export function deleteCaseLearningGoalCoverage(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  coverageId: string,
+) {
+  return client.delete(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/case-learning-goal-coverage/${coverageId}`,
+  );
+}
+
+export function createCaseEscalationAnnotation(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  payload: CaseEscalationAnnotationPayload,
+) {
+  return client.post(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/case-escalation-annotations`,
+    payload,
+  );
+}
+
+export function updateCaseEscalationAnnotation(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  annotationId: string,
+  payload: CaseEscalationAnnotationPayload,
+) {
+  return client.patch(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/case-escalation-annotations/${annotationId}`,
+    payload,
+  );
+}
+
+export function deleteCaseEscalationAnnotation(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  annotationId: string,
+) {
+  return client.delete(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/case-escalation-annotations/${annotationId}`,
   );
 }
 

@@ -5,7 +5,32 @@ import { DiagnosisEditorialWorkspaceService } from './diagnosis-editorial-worksp
 describe('DiagnosisEditorialWorkspaceService', () => {
   const diagnosisRegistryId = 'diagnosis-1';
   const now = new Date('2026-06-01T12:00:00.000Z');
-  let prisma: { diagnosisRegistry: { findUnique: jest.Mock } };
+  let prisma: {
+    diagnosisRegistry: { findUnique: jest.Mock };
+    reasoningDraftValidationRun: { findMany: jest.Mock };
+    caseLearningGoalCoverage: {
+      findMany: jest.Mock;
+      findFirst: jest.Mock;
+      upsert: jest.Mock;
+      update: jest.Mock;
+      delete: jest.Mock;
+    };
+    caseEscalationAnnotation: {
+      findMany: jest.Mock;
+      findFirst: jest.Mock;
+      upsert: jest.Mock;
+      update: jest.Mock;
+      delete: jest.Mock;
+    };
+    aiDraftRevisionAudit: {
+      findMany: jest.Mock;
+      create: jest.Mock;
+      findFirst: jest.Mock;
+      update: jest.Mock;
+    };
+    diagnosisEducation: { findUnique: jest.Mock; update: jest.Mock };
+    case: { findFirst: jest.Mock };
+  };
   let qualityService: { getSummary: jest.Mock };
   let coverageService: { getCoverage: jest.Mock };
   let teachingRulesService: { listRules: jest.Mock };
@@ -19,6 +44,36 @@ describe('DiagnosisEditorialWorkspaceService', () => {
     prisma = {
       diagnosisRegistry: {
         findUnique: jest.fn(),
+      },
+      reasoningDraftValidationRun: {
+        findMany: jest.fn(),
+      },
+      caseLearningGoalCoverage: {
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        upsert: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      },
+      caseEscalationAnnotation: {
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        upsert: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      },
+      aiDraftRevisionAudit: {
+        findMany: jest.fn(),
+        create: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+      },
+      diagnosisEducation: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+      },
+      case: {
+        findFirst: jest.fn(),
       },
     };
     qualityService = {
@@ -64,6 +119,26 @@ describe('DiagnosisEditorialWorkspaceService', () => {
     );
 
     prisma.diagnosisRegistry.findUnique.mockResolvedValue(registry());
+    prisma.reasoningDraftValidationRun.findMany.mockResolvedValue([]);
+    prisma.caseLearningGoalCoverage.findMany.mockResolvedValue([]);
+    prisma.caseEscalationAnnotation.findMany.mockResolvedValue([]);
+    prisma.aiDraftRevisionAudit.findMany.mockResolvedValue([]);
+    prisma.aiDraftRevisionAudit.create.mockResolvedValue({
+      id: 'repair-1',
+      reviewStatus: 'PENDING_REVIEW',
+    });
+    prisma.aiDraftRevisionAudit.findFirst.mockResolvedValue(null);
+    prisma.aiDraftRevisionAudit.update.mockResolvedValue({
+      id: 'audit-1',
+      reviewStatus: 'ACCEPTED',
+    });
+    prisma.diagnosisEducation.findUnique.mockResolvedValue({
+      id: 'education-1',
+      editorialStatus: 'DRAFT',
+      management: [],
+    });
+    prisma.diagnosisEducation.update.mockResolvedValue({ id: 'education-1' });
+    prisma.case.findFirst.mockResolvedValue({ id: 'case-1' });
     qualityService.getSummary.mockResolvedValue(summary());
     coverageService.getCoverage.mockResolvedValue(coverage());
     teachingRulesService.listRules.mockResolvedValue({
@@ -101,6 +176,254 @@ describe('DiagnosisEditorialWorkspaceService', () => {
     expect(result.education.id).toBe('education-1');
     expect(result.cases.summary.usable).toBe(1);
     expect(result.graph.readiness).toBe('fact_ready');
+    expect(result.maturityBreakdown).toEqual(
+      expect.objectContaining({ overall: expect.any(Number) }),
+    );
+  });
+
+  it('returns unsupported claims grouped by section', async () => {
+    prisma.reasoningDraftValidationRun.findMany.mockResolvedValue([
+      {
+        id: 'run-1',
+        artifactType: 'EDUCATION_SECTION',
+        artifactId: 'education-1',
+        trustTier: 'BLOCKED',
+        validationStatus: 'FAILED',
+        unsupportedClaimSignals: [
+          {
+            sectionId: 'management',
+            sectionType: 'education',
+            claimId: 'claim-1',
+            claimText: 'Antibiotics always cure appendicitis',
+            evidenceIds: ['evidence-1'],
+          },
+        ],
+        createdAt: now,
+      },
+    ]);
+
+    const result = await service.getFullWorkspace(diagnosisRegistryId);
+
+    expect(result.unsupportedClaimsBySection).toEqual([
+      expect.objectContaining({
+        claimId: 'claim-1',
+        sectionId: 'management',
+        blocksPublication: true,
+      }),
+    ]);
+  });
+
+  it('uses persisted case-to-learning-goal coverage when available', async () => {
+    prisma.caseLearningGoalCoverage.findMany.mockResolvedValue([
+      {
+        caseId: 'case-1',
+        case: { id: 'case-1', title: 'RLQ pain' },
+        learningGoalId: 'goal-1',
+        learningGoal: 'Distinguish appendicitis from ovarian torsion',
+        coverageStrength: 85,
+        coveredDiscriminators: ['migration'],
+        missingDiscriminators: [],
+        coveredMimics: ['torsion'],
+        missingMimics: [],
+        evidenceSource: 'editorial_annotation',
+        updatedAt: now,
+      },
+    ]);
+
+    const result = await service.getFullWorkspace(diagnosisRegistryId);
+
+    expect(result.caseLearningGoalCoverage).toEqual([
+      expect.objectContaining({
+        caseId: 'case-1',
+        learningGoalId: 'goal-1',
+        coverageStrength: 85,
+      }),
+    ]);
+    expect(result.learningGoalCoverage).toEqual([
+      expect.objectContaining({
+        learningGoalId: 'goal-1',
+        coveredByCaseIds: ['case-1'],
+        coveragePct: 85,
+      }),
+    ]);
+  });
+
+  it('uses explicit escalation annotations before inferred fallback', async () => {
+    prisma.caseEscalationAnnotation.findMany.mockResolvedValue([
+      {
+        caseId: 'case-1',
+        case: { id: 'case-1', title: 'RLQ pain' },
+        escalationType: 'sepsis',
+        covered: true,
+        evidenceStrength: 90,
+        reasoningPathId: null,
+        notes: 'Explicitly reviewed',
+        updatedAt: now,
+      },
+    ]);
+
+    const result = await service.getFullWorkspace(diagnosisRegistryId);
+
+    expect(result.caseEscalationCoverage).toEqual([
+      expect.objectContaining({
+        escalationType: 'sepsis',
+        coverageSource: 'explicit',
+        status: 'explicitly_covered',
+      }),
+    ]);
+    expect(result.escalationCoverage.coversEscalation).toBe(true);
+  });
+
+  it('creates a draft audit entry for claim repair', async () => {
+    prisma.reasoningDraftValidationRun.findMany.mockResolvedValue([
+      {
+        id: 'run-1',
+        artifactType: 'EDUCATION_SECTION',
+        artifactId: 'education-1',
+        trustTier: 'BLOCKED',
+        validationStatus: 'FAILED',
+        unsupportedClaimSignals: [
+          {
+            sectionId: 'management',
+            claimId: 'claim-1',
+            claimText: 'Appendicitis always requires surgery',
+            evidenceIds: ['evidence-1'],
+          },
+        ],
+        createdAt: now,
+      },
+    ]);
+
+    const result = await service.repairUnsupportedClaim({
+      diagnosisRegistryId,
+      claimId: 'claim-1',
+      userId: 'admin-1',
+    });
+
+    expect(prisma.aiDraftRevisionAudit.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          actionType: 'repair_unsupported_claim',
+          reviewStatus: 'PENDING_REVIEW',
+          createdByUserId: 'admin-1',
+        }),
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        repairId: 'repair-1',
+        proposedClaim: expect.stringContaining('can'),
+      }),
+    );
+  });
+
+  it('accepts a draft repair and applies it only to a draft education artifact', async () => {
+    prisma.aiDraftRevisionAudit.findFirst.mockResolvedValue({
+      id: 'audit-1',
+      diagnosisRegistryId,
+      affectedArtifactType: 'EDUCATION_SECTION',
+      affectedArtifactId: 'education-1',
+      sourceIssue: { sectionId: 'management' },
+      generatedOutput: {
+        originalClaim: 'Appendicitis always requires surgery',
+        proposedClaim: 'Appendicitis can require surgery.',
+        evidenceIds: ['evidence-1'],
+      },
+    });
+
+    await service.decideAiDraftRevision({
+      diagnosisRegistryId,
+      auditId: 'audit-1',
+      decision: 'accept',
+      userId: 'admin-1',
+      note: 'Looks good',
+    });
+
+    expect(prisma.diagnosisEducation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'education-1' },
+        data: expect.objectContaining({
+          editorialStatus: 'DRAFT',
+          management: expect.arrayContaining([
+            expect.objectContaining({
+              proposedClaim: 'Appendicitis can require surgery.',
+            }),
+          ]),
+        }),
+      }),
+    );
+    expect(prisma.aiDraftRevisionAudit.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reviewStatus: 'ACCEPTED',
+          reviewerUserId: 'admin-1',
+          reviewNote: 'Looks good',
+        }),
+      }),
+    );
+  });
+
+  it('rejects a draft revision without applying output', async () => {
+    prisma.aiDraftRevisionAudit.findFirst.mockResolvedValue({
+      id: 'audit-1',
+      diagnosisRegistryId,
+      affectedArtifactType: 'EDUCATION_SECTION',
+      affectedArtifactId: 'education-1',
+      sourceIssue: {},
+      generatedOutput: {},
+    });
+
+    await service.decideAiDraftRevision({
+      diagnosisRegistryId,
+      auditId: 'audit-1',
+      decision: 'reject',
+      userId: 'admin-1',
+    });
+
+    expect(prisma.diagnosisEducation.update).not.toHaveBeenCalled();
+    expect(prisma.aiDraftRevisionAudit.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ reviewStatus: 'REJECTED' }),
+      }),
+    );
+  });
+
+  it('creates and audits learning-goal coverage annotations', async () => {
+    prisma.caseLearningGoalCoverage.upsert = jest.fn().mockResolvedValue({
+      id: 'coverage-1',
+      caseId: 'case-1',
+      case: { id: 'case-1', title: 'RLQ pain' },
+      learningGoalId: 'goal-1',
+      learningGoal: 'Distinguish appendicitis',
+      coverageStrength: 80,
+      coveredDiscriminators: ['migration'],
+      missingDiscriminators: [],
+      coveredMimics: [],
+      missingMimics: ['torsion'],
+      evidenceSource: 'editorial_annotation',
+      updatedAt: now,
+    });
+
+    const result = await service.upsertCaseLearningGoalCoverage({
+      diagnosisRegistryId,
+      payload: {
+        caseId: 'case-1',
+        learningGoalId: 'goal-1',
+        learningGoal: 'Distinguish appendicitis',
+        coverageStrength: 80,
+      },
+      userId: 'admin-1',
+    });
+
+    expect(result.coverageStrength).toBe(80);
+    expect(prisma.aiDraftRevisionAudit.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          actionType: 'create_case_learning_goal_coverage',
+          reviewStatus: 'ACCEPTED',
+        }),
+      }),
+    );
   });
 
   it('returns partial workspace and education action when teaching rules exist without education', async () => {
@@ -304,6 +627,9 @@ describe('DiagnosisEditorialWorkspaceService', () => {
       status: 'ACTIVE',
       version: 3,
       summary: 'Teach appendicitis as a progressive RLQ pain pattern.',
+      learningGoals: [
+        'Distinguish appendicitis from ovarian torsion',
+      ],
       updatedAt: now,
     };
   }

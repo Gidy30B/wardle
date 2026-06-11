@@ -1419,6 +1419,153 @@ export type WorkspaceAvailableAction = {
   targetEndpoint?: string;
 };
 
+export type UnsupportedClaimBySection = {
+  sectionId: string;
+  sectionType: string;
+  claimId: string;
+  claimText: string;
+  severity: 'info' | 'warning' | 'blocker';
+  artifactId: string;
+  evidenceIds: string[];
+  repairTarget: string;
+  sourceType: string;
+  createdAt: string;
+  repairableAutomatically: boolean;
+  blocksPublication: boolean;
+};
+
+export type LearningGoalCoverageRow = {
+  learningGoalId: string;
+  learningGoal: string;
+  coveredByCaseIds: string[];
+  uncoveredDiscriminators: string[];
+  missingMimics: string[];
+  generationPriority: 'low' | 'medium' | 'high' | string;
+  coveragePct: number;
+};
+
+export type CaseLearningGoalCoverageRow = {
+  id?: string;
+  caseId: string;
+  caseTitle: string;
+  learningGoalId: string;
+  learningGoal: string;
+  coverageStrength: number;
+  coveredDiscriminators: string[];
+  missingDiscriminators: string[];
+  coveredMimics: string[];
+  missingMimics: string[];
+  evidenceSource: string;
+  updatedAt: string;
+};
+
+export type EscalationCoverage = {
+  coversEscalation: boolean;
+  escalationType: string | null;
+  escalationReasoningPathId: string | null;
+  escalationCaseIds: string[];
+  missingEscalationTeaching: boolean;
+  weakEscalationEvidence: boolean;
+  noPlayableEscalationCase: boolean;
+};
+
+export type CaseEscalationCoverageRow = {
+  id?: string;
+  caseId: string;
+  caseTitle?: string;
+  escalationType: string;
+  covered: boolean;
+  evidenceStrength: number;
+  reasoningPathId: string | null;
+  notes: string | null;
+  coverageSource?: 'explicit' | 'inferred' | string;
+  status?: 'explicitly_covered' | 'inferred_covered' | 'needs_review' | string;
+  updatedAt?: string;
+};
+
+export type AiDraftRevisionAudit = {
+  id: string;
+  actionType: string;
+  sourceIssue: unknown;
+  generatedOutput: unknown;
+  editorDecision: string | null;
+  affectedArtifactType: string;
+  affectedArtifactId: string;
+  reviewStatus:
+    | 'DRAFT'
+    | 'REVIEW_REQUIRED'
+    | 'PENDING_REVIEW'
+    | 'ACCEPTED'
+    | 'REJECTED'
+    | 'NEEDS_CHANGES'
+    | 'SUPERSEDED'
+    | string;
+  createdByUserId: string | null;
+  reviewerUserId?: string | null;
+  decisionAt?: string | null;
+  reviewNote?: string | null;
+  createdAt: string;
+};
+
+export type AiDraftDecisionAction =
+  | 'accept'
+  | 'reject'
+  | 'request-changes'
+  | 'supersede';
+
+export type CaseLearningGoalCoveragePayload = {
+  caseId: string;
+  learningGoalId: string;
+  learningGoal: string;
+  coverageStrength?: number;
+  coveredDiscriminators?: string[];
+  missingDiscriminators?: string[];
+  coveredMimics?: string[];
+  missingMimics?: string[];
+  evidenceSource?: string;
+};
+
+export type CaseEscalationAnnotationPayload = {
+  caseId: string;
+  escalationType: string;
+  covered?: boolean;
+  evidenceStrength?: number;
+  reasoningPathId?: string | null;
+  notes?: string | null;
+};
+
+export type ClaimRepairResult = {
+  repairId: string;
+  claimId: string;
+  originalClaim: string;
+  proposedClaim: string;
+  evidenceIds: string[];
+  confidence: number;
+  reviewStatus: string;
+  revisionId: string;
+};
+
+export type MaturityWeighting = {
+  objectivesWeight: number;
+  evidenceWeight: number;
+  teachingWeight: number;
+  differentialWeight: number;
+  caseWeight: number;
+  escalationWeight: number;
+};
+
+export type MaturityBreakdown = {
+  objectives: number;
+  evidence: number;
+  teaching: number;
+  differentialCoverage: number;
+  caseCoverage: number;
+  escalationCoverage: number;
+  lifecyclePenalty: number;
+  blockersPenalty: number;
+  overall: number;
+};
+
 export type DiagnosisEditorialWorkspace = {
   diagnosis: {
     id: string;
@@ -1439,6 +1586,15 @@ export type DiagnosisEditorialWorkspace = {
   onboardingRecommendations?: DiagnosisEditorialOnboarding['recommendedActions'];
   lifecycle: WorkspaceLifecycle;
   lifecycleGovernance?: DiagnosisRegistryLifecycleReport | null;
+  unsupportedClaimsBySection?: UnsupportedClaimBySection[];
+  learningGoalCoverage?: LearningGoalCoverageRow[];
+  caseLearningGoalCoverage?: CaseLearningGoalCoverageRow[];
+  caseEscalationCoverage?: CaseEscalationCoverageRow[];
+  escalationCoverage?: EscalationCoverage;
+  maturityBreakdown?: MaturityBreakdown;
+  maturityWeighting?: MaturityWeighting;
+  maturityExplanation?: string[];
+  aiDraftAuditTrail?: AiDraftRevisionAudit[];
   workspaceSummary: {
     status: DiagnosisWorkspaceOverallStatus | 'ready' | 'needs_review' | string;
     overallScore: number | null;

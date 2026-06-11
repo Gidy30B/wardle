@@ -335,6 +335,16 @@ enum ReasoningDraftValidationStatus {
   FAILED
 }
 
+enum AiDraftReviewStatus {
+  DRAFT
+  REVIEW_REQUIRED
+  PENDING_REVIEW
+  ACCEPTED
+  REJECTED
+  NEEDS_CHANGES
+  SUPERSEDED
+}
+
 model Diagnosis {
   id            String               @id @default(uuid())
   name          String               @unique
@@ -456,6 +466,9 @@ model DiagnosisRegistry {
   strictMatchedAttempts                 Attempt[]                           @relation("AttemptStrictMatchedDiagnosisRegistry")
   reasoningPaths                        ReasoningPath[]
   reasoningDraftValidationRuns          ReasoningDraftValidationRun[]
+  caseLearningGoalCoverage              CaseLearningGoalCoverage[]
+  caseEscalationAnnotations             CaseEscalationAnnotation[]
+  aiDraftRevisionAudits                 AiDraftRevisionAudit[]
 
   @@index([status])
   @@index([onboardingStatus])
@@ -495,6 +508,7 @@ model ReasoningPath {
   updatedAt                         DateTime            @updatedAt
   diagnosisRegistry                 DiagnosisRegistry   @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
   reviewedByUser                    User?               @relation("ReasoningPathReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  caseEscalationAnnotations         CaseEscalationAnnotation[]
 
   @@index([diagnosisRegistryId])
   @@index([status])
@@ -869,10 +883,89 @@ model Case {
   differentialMappings       CaseDifferentialMapping[]
   differentialLinks          CaseDifferentialLink[]
   evidenceRelationships      DiagnosisEvidenceRelationship[] @relation("DiagnosisEvidenceRelationshipCase")
+  learningGoalCoverage       CaseLearningGoalCoverage[]
+  escalationAnnotations      CaseEscalationAnnotation[]
+  aiDraftRevisionAudits      AiDraftRevisionAudit[]
 
   @@index([diagnosisId])
   @@index([diagnosisRegistryId])
   @@index([diagnosisMappingStatus])
+}
+
+model CaseLearningGoalCoverage {
+  id                  String            @id @default(uuid())
+  diagnosisRegistryId String
+  caseId              String
+  learningGoalId      String
+  learningGoal        String
+  coverageStrength    Int               @default(0)
+  coveredDiscriminators Json?
+  missingDiscriminators Json?
+  coveredMimics       Json?
+  missingMimics       Json?
+  evidenceSource      String            @default("editorial_annotation")
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  diagnosisRegistry   DiagnosisRegistry @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  case                Case              @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@unique([caseId, learningGoalId])
+  @@index([diagnosisRegistryId])
+  @@index([learningGoalId])
+  @@index([caseId])
+}
+
+model CaseEscalationAnnotation {
+  id                  String            @id @default(uuid())
+  diagnosisRegistryId String
+  caseId              String
+  escalationType      String
+  covered             Boolean           @default(false)
+  evidenceStrength    Int               @default(0)
+  reasoningPathId     String?
+  notes               String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  diagnosisRegistry   DiagnosisRegistry @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  case                Case              @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  reasoningPath       ReasoningPath?     @relation(fields: [reasoningPathId], references: [id], onDelete: SetNull)
+
+  @@unique([caseId, escalationType])
+  @@index([diagnosisRegistryId])
+  @@index([caseId])
+  @@index([reasoningPathId])
+  @@index([covered])
+}
+
+model AiDraftRevisionAudit {
+  id                  String              @id @default(uuid())
+  diagnosisRegistryId String
+  caseId              String?
+  actionType          String
+  sourceIssue         Json
+  inputContext        Json
+  generatedOutput     Json
+  editorDecision      String?
+  reviewerUserId      String?
+  decisionAt          DateTime?
+  reviewNote          String?
+  affectedArtifactType String
+  affectedArtifactId  String
+  reviewStatus        AiDraftReviewStatus @default(PENDING_REVIEW)
+  createdByUserId     String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  diagnosisRegistry   DiagnosisRegistry   @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  case                Case?               @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  createdByUser       User?               @relation("AiDraftRevisionAuditCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  reviewerUser        User?               @relation("AiDraftRevisionAuditReviewerUser", fields: [reviewerUserId], references: [id], onDelete: SetNull)
+
+  @@index([diagnosisRegistryId, createdAt])
+  @@index([actionType])
+  @@index([affectedArtifactType, affectedArtifactId])
+  @@index([reviewStatus])
+  @@index([createdByUserId])
+  @@index([reviewerUserId])
 }
 
 model CaseRevision {
@@ -1271,6 +1364,8 @@ model User {
   approvedDiagnosisRegistryCandidates    DiagnosisRegistryCandidate[]    @relation("DiagnosisRegistryCandidateApprovedByUser")
   activationReviewedDiagnoses            DiagnosisRegistry[]             @relation("DiagnosisRegistryActivationReviewedByUser")
   reviewedReasoningPaths                 ReasoningPath[]                 @relation("ReasoningPathReviewedByUser")
+  aiDraftRevisionAudits                  AiDraftRevisionAudit[]          @relation("AiDraftRevisionAuditCreatedByUser")
+  reviewedAiDraftRevisionAudits          AiDraftRevisionAudit[]          @relation("AiDraftRevisionAuditReviewerUser")
   primaryOrganization                    Organization?                   @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
   organizations                          UserOrganization[]
 

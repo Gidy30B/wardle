@@ -4,6 +4,7 @@ export type ApiClient = {
   get<T>(path: string): Promise<T>;
   patch<T>(path: string, body?: unknown): Promise<T>;
   post<T>(path: string, body?: unknown): Promise<T>;
+  delete<T>(path: string): Promise<T>;
 };
 
 export class ApiError extends Error {
@@ -114,6 +115,9 @@ export function createApiClient(getToken: TokenGetter): ApiClient {
     },
     post<T>(path: string, body?: unknown) {
       return request<T>(path, { method: 'POST' }, body);
+    },
+    delete<T>(path: string) {
+      return request<T>(path, { method: 'DELETE' });
     },
   };
 }

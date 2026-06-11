@@ -13,11 +13,11 @@ type StatusBadgeProps = {
 };
 
 const toneClasses: Record<StatusBadgeTone, string> = {
-  neutral: 'border-slate-200 bg-slate-100 text-slate-700',
-  success: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  warning: 'border-amber-200 bg-amber-50 text-amber-700',
-  danger: 'border-rose-200 bg-rose-50 text-rose-700',
-  info: 'border-sky-200 bg-sky-50 text-sky-700',
+  neutral: 'border-[var(--color-navy-border)] bg-white/5 text-slate-300',
+  success: 'border-[var(--color-green)]/35 bg-[var(--color-green)]/10 text-[var(--color-green)]',
+  warning: 'border-[var(--color-amber)]/35 bg-[var(--color-amber)]/10 text-[var(--color-amber)]',
+  danger: 'border-[var(--color-rose)]/35 bg-[var(--color-rose)]/10 text-[var(--color-rose)]',
+  info: 'border-[var(--color-teal)]/35 bg-[var(--color-teal)]/10 text-[var(--color-teal)]',
 };
 
 export default function StatusBadge({

@@ -1,24 +1,22 @@
 import { useAuth } from '@clerk/clerk-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
   compareDiagnosisEducationRevisions,
+  createCaseEscalationAnnotation,
+  createCaseLearningGoalCoverage,
   createDiagnosisEditorialBrief,
   createDiagnosisTeachingRule,
+  decideAiDraftRevision,
+  generateCaseFromUncoveredGoal,
   generateDiagnosisEditorialBrief,
   generateDiagnosisTeachingRuleCandidates,
-  generateDiagnosisTeachingRelationshipCandidates,
-  generateEvidenceGraphCandidates,
-  generateReasoningPathCandidates,
-  generateTargetedDiagnosisCase,
   getDiagnosisEditorialBrief,
   getDiagnosisEditorialWorkspace,
   regenerateDiagnosisEducationSection,
+  repairUnsupportedClaimDraft,
   reviewDiagnosisEditorialBrief,
   reviewDiagnosisTeachingRule,
-  reviewDiagnosisTeachingRelationship,
-  reviewEvidenceGraphRelationship,
-  reviewReasoningPath,
   seedLegacyDiagnosisTeachingRules,
   updateDiagnosisRegistryLifecycle,
   updateDiagnosisEditorialBrief,
@@ -27,82 +25,56 @@ import {
   type DiagnosisEditorialBriefReviewAction,
   type DiagnosisEditorialBriefWritePayload,
   type DiagnosisEditorialWorkspace,
+  type ClaimRepairResult,
+  type AiDraftDecisionAction,
+  type CaseEscalationAnnotationPayload,
+  type CaseLearningGoalCoveragePayload,
   type DiagnosisRegistryLifecycleAction,
-  type DiagnosisRegistryLifecycleEvaluation,
-  type DiagnosisRegistryLifecycleReport,
-  type DiagnosisEducationRevisionAnalysis,
   type DiagnosisEducationRevisionCompareResult,
-  type DiagnosisGraphCandidate,
-  type DiagnosisEvidenceRelationship,
-  type EvidenceGraphReviewAction,
-  type DiagnosisTeachingRelationship,
-  type DiagnosisTeachingRelationshipReviewAction,
-  type ReasoningPath,
-  type ReasoningPathReviewAction,
   type DiagnosisTeachingRuleReviewAction,
-  type DiagnosisTeachingRulesResponse,
   type DiagnosisTeachingRuleWritePayload,
   type EducationRegenerableSection,
   type GenerateTargetedCasePayload,
   type GenerateTargetedCaseResult,
-  type StructuredDifferentialLink,
-  type TeachingUnitCoverageMap,
-  type WorkspaceAvailableAction,
   type WorkspaceCoverageGap,
   type WorkspaceCoverageMatrixRow,
-  type WorkspaceLifecycle,
-  type WorkspaceReadinessItem,
-  type WorkspaceRecommendedAction,
 } from '../../api/admin';
-import { createApiClient, type ApiClient } from '../../api/client';
+import { createApiClient } from '../../api/client';
 import ActionFeedback from '../../components/ui/ActionFeedback';
 import ErrorState from '../../components/ui/ErrorState';
-import LoadingState from '../../components/ui/LoadingState';
-import StatusBadge from '../../components/ui/StatusBadge';
-import type { StatusBadgeTone } from '../../components/ui/statusBadgeMeta';
 import { useActionFeedback } from '../../hooks/useActionFeedback';
 import {
   useConsoleAccess,
   type ConsoleAccessState,
 } from '../../hooks/useConsoleAccess';
-import EditorialBriefCard from '../cases/education/EditorialBriefCard';
-import RevisionCompareCard from '../cases/education/RevisionCompareCard';
-import RevisionHistoryCard from '../cases/education/RevisionHistoryCard';
-import TargetedCaseGenerationCard from '../cases/education/TargetedCaseGenerationCard';
-import TeachingRulesCard from '../cases/education/TeachingRulesCard';
-import { SpecialtyIcon } from '../specialties/specialty-icons';
-
-type WorkspaceTab =
-  | 'overview'
-  | 'teaching-rules'
-  | 'editorial-brief'
-  | 'education'
-  | 'cases'
-  | 'graph';
-
-type RuleDrawerAction =
-  | 'education'
-  | 'generate-case'
-  | 'review-graph'
-  | 'edit-rule';
-
-const tabs: Array<{ id: WorkspaceTab; label: string }> = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'teaching-rules', label: 'Teaching & Learning' },
-  { id: 'editorial-brief', label: 'Objectives' },
-  { id: 'education', label: 'Clinical Picture' },
-  { id: 'cases', label: 'Cases' },
-  { id: 'graph', label: 'Differential Map' },
-];
-
-const VALID_TABS = new Set<WorkspaceTab>([
-  'overview',
-  'teaching-rules',
-  'editorial-brief',
-  'education',
-  'cases',
-  'graph',
-]);
+import {
+  CoverageStatusBlock,
+  DrawerActionButton,
+  WorkspaceLoadingSkeleton,
+} from './workspace/EditorialPrimitives';
+import { EditorialRightRail } from './workspace/EditorialRightRail';
+import { TabBar, WorkspaceHeader } from './workspace/WorkspaceHeader';
+import { CasesTab } from './workspace/tabs/CasesTab';
+import { ClinicalPictureTab } from './workspace/tabs/ClinicalPictureTab';
+import { DifferentialMapTab } from './workspace/tabs/DifferentialMapTab';
+import { ObjectivesTab } from './workspace/tabs/ObjectivesTab';
+import { OverviewTab } from './workspace/tabs/OverviewTab';
+import { TeachingLearningTab } from './workspace/tabs/TeachingLearningTab';
+import {
+  coverageCompositeStatus,
+  errorMessage,
+  findCoverageRowForGap,
+  formatLabel,
+  getCoverageRowKey,
+  sortRevisionsNewestFirst,
+  toTeachingRulesResponse,
+  toTeachingUnitCoverageMap,
+} from './workspace/workspaceTransforms';
+import type {
+  RuleDrawerAction,
+  WorkspaceTab,
+} from './workspace/workspaceTypes';
+import { VALID_WORKSPACE_TABS } from './workspace/workspaceTypes';
 
 export default function EditorialDiagnosisWorkspacePage() {
   const { diagnosisRegistryId } = useParams<{ diagnosisRegistryId: string }>();
@@ -111,7 +83,9 @@ export default function EditorialDiagnosisWorkspacePage() {
   const client = useMemo(() => createApiClient(getToken), [getToken]);
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTabParam = searchParams.get('tab') ?? '';
-  const activeTab: WorkspaceTab = VALID_TABS.has(activeTabParam as WorkspaceTab)
+  const activeTab: WorkspaceTab = VALID_WORKSPACE_TABS.has(
+    activeTabParam as WorkspaceTab,
+  )
     ? (activeTabParam as WorkspaceTab)
     : 'overview';
   const setActiveTab = (tab: WorkspaceTab) => {
@@ -148,6 +122,8 @@ export default function EditorialDiagnosisWorkspacePage() {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [generatedTargetedCase, setGeneratedTargetedCase] =
     useState<GenerateTargetedCaseResult['generatedCase'] | null>(null);
+  const [latestClaimRepair, setLatestClaimRepair] =
+    useState<ClaimRepairResult | null>(null);
   const { feedback, clear, showError, showPending, showSuccess } =
     useActionFeedback();
 
@@ -259,6 +235,21 @@ export default function EditorialDiagnosisWorkspacePage() {
   useEffect(() => {
     void refreshWorkspace();
   }, [refreshWorkspace]);
+
+  useEffect(() => {
+    if (!diagnosisRegistryId) {
+      return;
+    }
+    const key = `editorial-workspace-scroll:${diagnosisRegistryId}:${activeTab}`;
+    const saved = Number(sessionStorage.getItem(key) ?? 0);
+    if (saved > 0) {
+      window.requestAnimationFrame(() => window.scrollTo({ top: saved }));
+    }
+
+    return () => {
+      sessionStorage.setItem(key, String(window.scrollY));
+    };
+  }, [activeTab, diagnosisRegistryId]);
 
   useEffect(() => {
     closeRuleDrawer();
@@ -533,13 +524,87 @@ export default function EditorialDiagnosisWorkspacePage() {
       pending: 'Generating targeted case...',
       success: 'Targeted case generated for review.',
       action: async () => {
-        const result = await generateTargetedDiagnosisCase(
+        const result = await generateCaseFromUncoveredGoal(
           client,
           diagnosisRegistryId,
           payload,
         );
-        setGeneratedTargetedCase(result.generatedCase);
+        setGeneratedTargetedCase(result.result.generatedCase);
       },
+    });
+  }
+
+  function handleRepairUnsupportedClaim(claim: {
+    artifactId: string;
+    sourceType: string;
+    claimId: string;
+  }) {
+    if (!diagnosisRegistryId) {
+      return;
+    }
+
+    void runWorkspaceAction({
+      id: `repair-claim-${claim.claimId}`,
+      pending: 'Refreshing unsupported claim validation...',
+      success: 'Draft claim repair created for editor review.',
+      action: async () => {
+        const repair = await repairUnsupportedClaimDraft(
+          client,
+          diagnosisRegistryId,
+          { claimId: claim.claimId },
+        );
+        setLatestClaimRepair(repair);
+      },
+    });
+  }
+
+  function handleAiDraftDecision(
+    auditId: string,
+    action: AiDraftDecisionAction,
+    note?: string,
+  ) {
+    if (!diagnosisRegistryId) {
+      return;
+    }
+
+    void runWorkspaceAction({
+      id: `ai-draft-${action}-${auditId}`,
+      pending: 'Saving draft review decision...',
+      success: 'Draft review decision saved.',
+      action: () =>
+        decideAiDraftRevision(client, diagnosisRegistryId, auditId, action, {
+          note,
+        }),
+    });
+  }
+
+  function handleCreateLearningGoalCoverage(
+    payload: CaseLearningGoalCoveragePayload,
+  ) {
+    if (!diagnosisRegistryId) {
+      return;
+    }
+    void runWorkspaceAction({
+      id: `goal-coverage-${payload.caseId}-${payload.learningGoalId}`,
+      pending: 'Saving learning-goal coverage...',
+      success: 'Learning-goal coverage saved.',
+      action: () =>
+        createCaseLearningGoalCoverage(client, diagnosisRegistryId, payload),
+    });
+  }
+
+  function handleCreateEscalationAnnotation(
+    payload: CaseEscalationAnnotationPayload,
+  ) {
+    if (!diagnosisRegistryId) {
+      return;
+    }
+    void runWorkspaceAction({
+      id: `escalation-coverage-${payload.caseId}-${payload.escalationType}`,
+      pending: 'Saving escalation annotation...',
+      success: 'Escalation annotation saved.',
+      action: () =>
+        createCaseEscalationAnnotation(client, diagnosisRegistryId, payload),
     });
   }
 
@@ -571,12 +636,7 @@ export default function EditorialDiagnosisWorkspacePage() {
   }
 
   if (loading && !workspace) {
-    return (
-      <LoadingState
-        title="Loading editorial workspace"
-        description="Fetching the unified diagnosis workspace read model."
-      />
-    );
+    return <WorkspaceLoadingSkeleton />;
   }
 
   if (!diagnosisRegistryId) {
@@ -617,7 +677,7 @@ export default function EditorialDiagnosisWorkspacePage() {
           onDismiss={pendingAction ? undefined : clear}
         />
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
           <main className="min-w-0 space-y-4">
           {activeTab === 'overview' ? (
             <OverviewTab
@@ -633,12 +693,12 @@ export default function EditorialDiagnosisWorkspacePage() {
             />
           ) : null}
           {activeTab === 'teaching-rules' ? (
-            <div className="space-y-4">
-              <TeachingRulesCard
+            <TeachingLearningTab
+                workspace={workspace}
                 rules={rulesResponse}
                 loading={loading}
-                error={null}
                 pendingAction={pendingAction}
+                selectedRow={selectedCoverageRow}
                 onGenerateCandidates={handleGenerateTeachingRuleCandidates}
                 onSeedLegacy={handleSeedLegacyTeachingRules}
                 onCreateRule={handleCreateTeachingRule}
@@ -646,34 +706,27 @@ export default function EditorialDiagnosisWorkspacePage() {
                 onReviewRule={handleReviewTeachingRule}
                 canReviewRules={canRunSeniorActions}
                 reviewDisabledReason={seniorDisabledReason}
-              />
-              <CoverageMatrixCard
-                rows={workspace.coverageMatrix}
-                selectedRow={selectedCoverageRow}
                 onRowSelect={openCoverageRow}
               />
-            </div>
           ) : null}
           {activeTab === 'editorial-brief' ? (
-            <div className="space-y-4">
-              <EditorialBriefSummaryCard workspace={workspace} />
-              <EditorialBriefCard
-                briefResponse={briefDetail}
+            <ObjectivesTab
+                workspace={workspace}
+                briefDetail={briefDetail}
                 teachingRules={rulesResponse}
                 loading={briefDetailLoading}
                 error={briefDetailError}
                 pendingAction={pendingAction}
+                canReviewBrief={canRunSeniorActions}
+                reviewDisabledReason={seniorDisabledReason}
                 onGenerate={handleGenerateEditorialBrief}
                 onCreate={handleCreateEditorialBrief}
                 onUpdate={handleUpdateEditorialBrief}
                 onReview={handleReviewEditorialBrief}
-                canReviewBrief={canRunSeniorActions}
-                reviewDisabledReason={seniorDisabledReason}
               />
-            </div>
           ) : null}
           {activeTab === 'education' ? (
-            <EducationTab
+            <ClinicalPictureTab
               workspace={workspace}
               revisions={revisions}
               revisionCompare={revisionCompare}
@@ -682,7 +735,9 @@ export default function EditorialDiagnosisWorkspacePage() {
               compareFromVersion={compareFromVersion}
               compareToVersion={compareToVersion}
               pendingAction={pendingAction}
+              latestClaimRepair={latestClaimRepair}
               onRegenerateSection={handleRegenerateSection}
+              onRepairUnsupportedClaim={handleRepairUnsupportedClaim}
               onFromVersionChange={setCompareFromVersion}
               onToVersionChange={setCompareToVersion}
             />
@@ -696,10 +751,12 @@ export default function EditorialDiagnosisWorkspacePage() {
                 generatedTargetedCase={generatedTargetedCase}
                 onGapSelect={openCoverageGap}
                 onGenerateTargetedCase={handleGenerateTargetedCase}
+                onCreateLearningGoalCoverage={handleCreateLearningGoalCoverage}
+                onCreateEscalationAnnotation={handleCreateEscalationAnnotation}
               />
           ) : null}
           {activeTab === 'graph' ? (
-            <GraphTab
+            <DifferentialMapTab
               workspace={workspace}
               selectedRow={selectedCoverageRow}
               onRowSelect={openCoverageRow}
@@ -714,10 +771,11 @@ export default function EditorialDiagnosisWorkspacePage() {
           ) : null}
           </main>
 
-          <WorkspaceRail
+          <EditorialRightRail
             workspace={workspace}
             onGapSelect={openCoverageGap}
             onTabChange={setActiveTab}
+            onAiDraftDecision={handleAiDraftDecision}
           />
         </div>
       </div>
@@ -738,2319 +796,6 @@ export default function EditorialDiagnosisWorkspacePage() {
         </>
       ) : null}
     </div>
-  );
-}
-
-function WorkspaceHeader({
-  workspace,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-}) {
-  const canonicalDifferent =
-    workspace.diagnosis.canonicalName &&
-    workspace.diagnosis.canonicalName.toLowerCase() !==
-      workspace.diagnosis.displayLabel.toLowerCase();
-  const taxonomy = [
-    workspace.diagnosis.bodySystem,
-    workspace.diagnosis.category,
-    workspace.diagnosis.difficultyBand,
-  ].filter(Boolean);
-
-  return (
-    <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950 text-white shadow-sm">
-      <div className="p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <Link
-              to="/editorial/workspace"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 transition hover:text-slate-200"
-            >
-              ‹ Queue
-            </Link>
-            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300">
-              Editorial Diagnosis Workspace
-            </p>
-            <h2 className="mt-2 text-[26px] font-semibold leading-tight">
-              {workspace.diagnosis.displayLabel}
-            </h2>
-            {canonicalDifferent ? (
-              <p className="mt-1 text-sm text-slate-300">
-                {workspace.diagnosis.canonicalName}
-              </p>
-            ) : null}
-            {workspace.diagnosis.specialty || taxonomy.length ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {workspace.diagnosis.specialty ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-sm text-slate-300">
-                    <SpecialtyIcon
-                      specialty={workspace.diagnosis.specialty}
-                      className="h-3.5 w-3.5"
-                    />
-                    {formatLabel(workspace.diagnosis.specialty)}
-                  </span>
-                ) : null}
-                {taxonomy.map((item) => (
-                  <span
-                    key={item}
-                    className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-sm text-slate-300"
-                  >
-                    {formatLabel(String(item))}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            <p className="mt-2 break-all font-mono text-xs text-slate-400">
-              {workspace.diagnosis.id}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <HeaderPill label={formatLabel(workspace.workspaceSummary.status)} />
-            <HeaderPill label={formatLabel(workspace.lifecycle.ready)} />
-          </div>
-        </div>
-        <div className="mt-5 grid gap-3 md:grid-cols-4">
-          <HeaderMetric label="Education" value={workspace.education.status} />
-          <HeaderMetric
-            label="Usable cases"
-            value={`${workspace.cases.summary.usable}/${workspace.cases.summary.total}`}
-          />
-          <HeaderMetric
-            label="Coverage"
-            value={formatScore(workspace.workspaceSummary.overallScore)}
-          />
-          <HeaderMetric label="Graph" value={workspace.graph.readiness} />
-        </div>
-      </div>
-
-      {/* Lifecycle stage track — prototype-style maturity bar */}
-      <div className="flex overflow-x-auto border-t border-white/10">
-        {lifecycleSteps.map((step, i) => {
-          const state = workspace.lifecycle[step.key];
-          const isDone = state === 'complete';
-          const isBlocked = state === 'blocked';
-          return (
-            <div
-              key={step.key}
-              className={[
-                'flex min-w-fit items-center gap-2 border-r border-white/10 px-4 py-2.5 text-xs font-medium',
-                isDone
-                  ? 'text-emerald-400'
-                  : isBlocked
-                    ? 'text-rose-400'
-                    : i === 0
-                      ? 'font-semibold text-white'
-                      : 'text-slate-500',
-              ].join(' ')}
-            >
-              <span
-                className={[
-                  'inline-block h-1.5 w-1.5 rounded-full',
-                  isDone
-                    ? 'bg-emerald-400'
-                    : isBlocked
-                      ? 'bg-rose-400'
-                      : 'bg-current',
-                ].join(' ')}
-              />
-              {step.label}
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-const lifecycleSteps: Array<{
-  key: keyof WorkspaceLifecycle;
-  label: string;
-}> = [
-  { key: 'curriculum', label: 'Curriculum' },
-  { key: 'brief', label: 'Brief' },
-  { key: 'education', label: 'Education' },
-  { key: 'cases', label: 'Cases' },
-  { key: 'graph', label: 'Graph' },
-  { key: 'ready', label: 'Ready' },
-];
-
-function HeaderPill({ label }: { label: string }) {
-  return (
-    <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-100">
-      {label}
-    </span>
-  );
-}
-
-function HeaderMetric({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number | null | undefined;
-}) {
-  return (
-    <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-        {label}
-      </p>
-      <p className="mt-1 text-sm font-semibold text-white">
-        {value === null || value === undefined ? 'Unknown' : formatLabel(String(value))}
-      </p>
-    </div>
-  );
-}
-
-function TabBar({
-  activeTab,
-  onChange,
-}: {
-  activeTab: WorkspaceTab;
-  onChange: (tab: WorkspaceTab) => void;
-}) {
-  return (
-    <div className="overflow-x-auto border-b border-white/10 bg-slate-950">
-      <div className="flex min-w-max">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => onChange(tab.id)}
-            className={[
-              'border-b-2 px-5 py-3 text-sm font-medium whitespace-nowrap transition-colors',
-              activeTab === tab.id
-                ? 'border-cyan-400 text-cyan-300 font-semibold'
-                : 'border-transparent text-slate-400 hover:border-slate-500 hover:text-slate-200',
-            ].join(' ')}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SummaryStatCard({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
-      <p className="mt-1 text-sm text-slate-500">{sub}</p>
-    </div>
-  );
-}
-
-function OverviewTab({
-  workspace,
-  selectedRow,
-  onRowSelect,
-  onGapSelect,
-  onTabChange,
-  canRunSeniorActions,
-  seniorDisabledReason,
-  pendingAction,
-  onLifecycleAction,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-  selectedRow: WorkspaceCoverageMatrixRow | null;
-  onRowSelect: (row: WorkspaceCoverageMatrixRow) => void;
-  onGapSelect: (gap: WorkspaceCoverageGap) => void;
-  onTabChange: (tab: WorkspaceTab) => void;
-  canRunSeniorActions: boolean;
-  seniorDisabledReason: string;
-  pendingAction: string | null;
-  onLifecycleAction: (action: DiagnosisRegistryLifecycleAction) => void;
-}) {
-  const blockers = workspace.workspaceSummary.blockers;
-  const warnings = workspace.workspaceSummary.warnings;
-  const hasIssues = blockers.length > 0 || warnings.length > 0;
-
-  return (
-    <div className="space-y-4">
-      {/* ① Action queue — prototype's first card */}
-      {hasIssues ? (
-        <CompactPanel title="Action queue">
-          {blockers.map((msg, i) => (
-            <div
-              key={i}
-              className="mb-2 flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5"
-            >
-              <span className="mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-rose-500" />
-              <p className="text-sm text-rose-800">{msg}</p>
-            </div>
-          ))}
-          {warnings.map((msg, i) => (
-            <div
-              key={i}
-              className="mb-2 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5"
-            >
-              <span className="mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-amber-500" />
-              <p className="text-sm text-amber-800">{msg}</p>
-            </div>
-          ))}
-        </CompactPanel>
-      ) : null}
-
-      {/* ② Summary metrics strip */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <SummaryStatCard
-          label="Coverage"
-          value={formatScore(workspace.workspaceSummary.overallScore)}
-          sub={`${workspace.coverageMatrix.filter((r) => r.fullCoverageStatus === 'covered').length}/${workspace.coverageMatrix.length} teaching rules`}
-        />
-        <SummaryStatCard
-          label="Usable cases"
-          value={`${workspace.cases.summary.usable}/${workspace.cases.summary.total}`}
-          sub="case inventory"
-        />
-        <SummaryStatCard
-          label="Education"
-          value={formatLabel(workspace.education.status)}
-          sub={`score ${formatScore(workspace.workspaceSummary.educationScore)}`}
-        />
-      </div>
-
-      {/* ③ Recommended actions + coverage gaps side by side */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <RecommendedActionsCard
-          actions={workspace.recommendedActions}
-          onTabChange={onTabChange}
-        />
-        <CoverageGapsCard gaps={workspace.coverageGaps} onGapSelect={onGapSelect} />
-      </div>
-
-      {/* ④ Coverage matrix */}
-      <CoverageMatrixCard
-        rows={workspace.coverageMatrix}
-        selectedRow={selectedRow}
-        onRowSelect={onRowSelect}
-      />
-
-      {/* ⑤ Detail cards (governance, onboarding, readiness) */}
-      <OnboardingCard workspace={workspace} onTabChange={onTabChange} />
-      <ReadinessBreakdownCard
-        items={workspace.readinessBreakdown}
-        onTabChange={onTabChange}
-      />
-      <LifecycleGovernanceCard
-        lifecycle={workspace.lifecycleGovernance}
-        canRunSeniorActions={canRunSeniorActions}
-        seniorDisabledReason={seniorDisabledReason}
-        pendingAction={pendingAction}
-        onAction={onLifecycleAction}
-      />
-      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <WorkspaceSummaryCard workspace={workspace} />
-        <CoverageScoreCard workspace={workspace} />
-      </div>
-    </div>
-  );
-}
-
-function OnboardingCard({
-  workspace,
-  onTabChange,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-  onTabChange: (tab: WorkspaceTab) => void;
-}) {
-  const onboarding = workspace.onboarding;
-  if (!onboarding) {
-    return null;
-  }
-
-  return (
-    <CompactPanel title="Registry onboarding">
-      <div className="grid gap-3 lg:grid-cols-[240px_1fr]">
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-            Progress
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">
-            {onboarding.progress.percent}%
-          </p>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-            <div
-              className="h-full rounded-full bg-emerald-600"
-              style={{ width: `${onboarding.progress.percent}%` }}
-            />
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <StatusBadge status={formatLabel(onboarding.onboardingStatus)} />
-            <StatusBadge status={formatLabel(onboarding.readiness)} tone="info" />
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Missing components
-            </p>
-            {onboarding.missingComponents.length ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {onboarding.missingComponents.map((component) => (
-                  <StatusBadge
-                    key={component}
-                    status={formatLabel(component)}
-                    tone="warning"
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="mt-2 text-sm text-slate-600">
-                Core editorial assets are present.
-              </p>
-            )}
-          </div>
-
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Recommended actions
-            </p>
-            {onboarding.recommendedActions.length ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {onboarding.recommendedActions.slice(0, 6).map((action) => (
-                  <button
-                    key={action.id}
-                    type="button"
-                    onClick={() => onTabChange(action.targetTab)}
-                    className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                    title={action.reason}
-                  >
-                    {action.label}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-2 text-sm text-slate-600">
-                No onboarding recommendations remain.
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-    </CompactPanel>
-  );
-}
-
-function LifecycleGovernanceCard({
-  lifecycle,
-  canRunSeniorActions,
-  seniorDisabledReason,
-  pendingAction,
-  onAction,
-}: {
-  lifecycle?: DiagnosisRegistryLifecycleReport | null;
-  canRunSeniorActions: boolean;
-  seniorDisabledReason: string;
-  pendingAction: string | null;
-  onAction: (action: DiagnosisRegistryLifecycleAction) => void;
-}) {
-  if (!lifecycle) {
-    return null;
-  }
-
-  const actionButtons: Array<{
-    action: DiagnosisRegistryLifecycleAction;
-    label: string;
-    enabled: boolean;
-  }> = [
-    {
-      action: lifecycle.lifecycle.active ? 'deactivate' : 'activate',
-      label: lifecycle.lifecycle.active ? 'Deactivate' : 'Activate',
-      enabled:
-        lifecycle.lifecycle.active || lifecycle.readiness.activation.allowed,
-    },
-    {
-      action: lifecycle.lifecycle.isPlayable ? 'unmark_playable' : 'mark_playable',
-      label: lifecycle.lifecycle.isPlayable ? 'Unmark playable' : 'Mark playable',
-      enabled:
-        lifecycle.lifecycle.isPlayable || lifecycle.readiness.playability.allowed,
-    },
-    {
-      action: lifecycle.lifecycle.isGeneratable
-        ? 'unmark_generatable'
-        : 'mark_generatable',
-      label: lifecycle.lifecycle.isGeneratable
-        ? 'Unmark generatable'
-        : 'Mark generatable',
-      enabled:
-        lifecycle.lifecycle.isGeneratable ||
-        lifecycle.readiness.generatability.allowed,
-    },
-  ];
-
-  return (
-    <CompactPanel title="Lifecycle governance">
-      <div className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-4">
-          <LifecycleMetric
-            label="Active"
-            value={lifecycle.lifecycle.active ? 'Yes' : 'No'}
-            tone={lifecycle.lifecycle.active ? 'success' : 'warning'}
-          />
-          <LifecycleMetric
-            label="Playable"
-            value={lifecycle.lifecycle.isPlayable ? 'Yes' : 'No'}
-            tone={lifecycle.lifecycle.isPlayable ? 'success' : 'warning'}
-          />
-          <LifecycleMetric
-            label="Generatable"
-            value={lifecycle.lifecycle.isGeneratable ? 'Yes' : 'No'}
-            tone={lifecycle.lifecycle.isGeneratable ? 'success' : 'warning'}
-          />
-          <LifecycleMetric
-            label="Onboarding"
-            value={formatLabel(lifecycle.lifecycle.onboardingStatus ?? 'NEW')}
-            tone="info"
-          />
-        </div>
-
-        <div className="grid gap-3 lg:grid-cols-3">
-          <ReadinessMeter
-            title="Activation readiness"
-            evaluation={lifecycle.readiness.activation}
-          />
-          <ReadinessMeter
-            title="Playability readiness"
-            evaluation={lifecycle.readiness.playability}
-          />
-          <ReadinessMeter
-            title="Generatability readiness"
-            evaluation={lifecycle.readiness.generatability}
-          />
-        </div>
-
-        <div className="grid gap-3 lg:grid-cols-2">
-          <LifecycleList
-            title="Blockers"
-            items={lifecycle.blockers}
-            emptyText="No lifecycle blockers."
-            tone="danger"
-          />
-          <LifecycleList
-            title="Warnings"
-            items={lifecycle.warnings}
-            emptyText="No lifecycle warnings."
-            tone="warning"
-          />
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <StatusBadge
-            status={`Canonical duplicates: ${lifecycle.duplicateRisk.registryCanonicalMatches}`}
-            tone={lifecycle.duplicateRisk.registryCanonicalMatches ? 'danger' : 'success'}
-          />
-          <StatusBadge
-            status={`Alias duplicates: ${lifecycle.duplicateRisk.registryAliasMatches}`}
-            tone={lifecycle.duplicateRisk.registryAliasMatches ? 'danger' : 'success'}
-          />
-          <StatusBadge
-            status={`Candidate conflicts: ${lifecycle.duplicateRisk.pendingCandidateConflicts}`}
-            tone={lifecycle.duplicateRisk.pendingCandidateConflicts ? 'warning' : 'success'}
-          />
-          {hasDuplicateRisk(lifecycle) ? (
-            <Link
-              to={`/editorial/registry-merge?source=${lifecycle.diagnosisRegistryId}`}
-              className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
-            >
-              Potential duplicate
-            </Link>
-          ) : null}
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {actionButtons.map((button) => {
-            const disabled =
-              pendingAction !== null ||
-              !canRunSeniorActions ||
-              !button.enabled;
-            const title = !canRunSeniorActions
-              ? seniorDisabledReason
-              : !button.enabled
-                ? 'Resolve lifecycle blockers first'
-                : undefined;
-            return (
-              <button
-                key={button.action}
-                type="button"
-                disabled={disabled}
-                title={title}
-                onClick={() => onAction(button.action)}
-                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {button.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </CompactPanel>
-  );
-}
-
-function LifecycleMetric({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: StatusBadgeTone;
-}) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-        {label}
-      </p>
-      <div className="mt-2">
-        <StatusBadge status={value} tone={tone} />
-      </div>
-    </div>
-  );
-}
-
-function hasDuplicateRisk(lifecycle: DiagnosisRegistryLifecycleReport) {
-  return (
-    lifecycle.duplicateRisk.registryCanonicalMatches > 0 ||
-    lifecycle.duplicateRisk.registryAliasMatches > 0 ||
-    lifecycle.duplicateRisk.pendingCandidateConflicts > 0
-  );
-}
-
-function ReadinessMeter({
-  title,
-  evaluation,
-}: {
-  title: string;
-  evaluation: DiagnosisRegistryLifecycleEvaluation;
-}) {
-  const tone: StatusBadgeTone = evaluation.allowed ? 'success' : 'warning';
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-slate-800">{title}</p>
-        <StatusBadge
-          status={`${evaluation.readinessScore}%`}
-          tone={tone}
-        />
-      </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-        <div
-          className={[
-            'h-full rounded-full',
-            evaluation.allowed ? 'bg-emerald-600' : 'bg-amber-500',
-          ].join(' ')}
-          style={{ width: `${evaluation.readinessScore}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function LifecycleList({
-  title,
-  items,
-  emptyText,
-  tone,
-}: {
-  title: string;
-  items: string[];
-  emptyText: string;
-  tone: StatusBadgeTone;
-}) {
-  return (
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-        {title}
-      </p>
-      {items.length ? (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {items.slice(0, 8).map((item) => (
-            <StatusBadge key={item} status={item} tone={tone} />
-          ))}
-        </div>
-      ) : (
-        <p className="mt-2 text-sm text-slate-600">{emptyText}</p>
-      )}
-    </div>
-  );
-}
-
-function WorkspaceSummaryCard({
-  workspace,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-}) {
-  const summary = workspace.workspaceSummary;
-  return (
-    <CompactPanel title="Workspace summary">
-      <MetricGrid
-        items={[
-          { label: 'Status', value: formatLabel(summary.status) },
-          { label: 'Overall score', value: formatScore(summary.overallScore) },
-          { label: 'Education score', value: formatScore(summary.educationScore) },
-          { label: 'Graph readiness', value: formatSummaryValue(summary.graphReadiness) },
-          {
-            label: 'Differential links',
-            value: summary.differentialCoverage
-              ? `${summary.differentialCoverage.resolvedLinks}/${summary.differentialCoverage.totalDifferentials}`
-              : '0/0',
-          },
-        ]}
-      />
-      {summary.blockers.length || summary.warnings.length ? (
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <MessageList title="Blockers" tone="blocker" messages={summary.blockers} />
-          <MessageList title="Warnings" tone="warning" messages={summary.warnings} />
-        </div>
-      ) : (
-        <p className="mt-3 text-sm text-slate-500">No workspace blockers loaded.</p>
-      )}
-    </CompactPanel>
-  );
-}
-
-function CoverageScoreCard({
-  workspace,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-}) {
-  const counts = workspace.coverageMatrix.reduce(
-    (acc, row) => {
-      acc[row.fullCoverageStatus] = (acc[row.fullCoverageStatus] ?? 0) + 1;
-      return acc;
-    },
-    {} as Record<string, number>,
-  );
-  const total = workspace.coverageMatrix.length;
-  const covered = counts.covered ?? 0;
-
-  return (
-    <CompactPanel title="Coverage control">
-      <div className="rounded-lg border border-slate-900 bg-slate-950 p-4 text-white">
-        <p className="text-sm font-semibold text-slate-300">Full coverage</p>
-        <p className="mt-2 text-3xl font-semibold">
-          {total ? `${covered}/${total}` : '0/0'}
-        </p>
-        <p className="mt-1 text-sm text-slate-400">
-          {total
-            ? `${Math.round((covered / total) * 100)}% of teaching rules fully covered`
-            : 'No teaching rules are available yet.'}
-        </p>
-      </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        <CoverageCount label="Partial" value={counts.partial ?? 0} />
-        <CoverageCount label="Missing" value={counts.missing ?? 0} />
-        <CoverageCount label="Unknown" value={counts.unknown ?? 0} />
-      </div>
-    </CompactPanel>
-  );
-}
-
-function CoverageCount({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-      <p className="text-sm font-semibold text-slate-900">{value}</p>
-      <p className="mt-1 text-sm text-slate-500">{label}</p>
-    </div>
-  );
-}
-
-function ReadinessBreakdownCard({
-  items,
-  onTabChange,
-}: {
-  items: WorkspaceReadinessItem[];
-  onTabChange: (tab: WorkspaceTab) => void;
-}) {
-  const sortedItems = [...items].sort(
-    (left, right) => severityRank(left.severity) - severityRank(right.severity),
-  );
-
-  return (
-    <CompactPanel title="Readiness breakdown">
-      {sortedItems.length ? (
-        <div className="space-y-2">
-          {sortedItems.slice(0, 12).map((item, index) => (
-            <button
-              key={`${item.actionId}-${index}`}
-              type="button"
-              onClick={() => onTabChange(item.targetTab)}
-              className={[
-                'w-full rounded-lg border px-3 py-2 text-left text-sm transition hover:bg-slate-50',
-                item.severity === 'blocker'
-                  ? 'border-rose-200 bg-rose-50 text-rose-900'
-                  : item.severity === 'warning'
-                    ? 'border-amber-200 bg-amber-50 text-amber-900'
-                    : 'border-slate-200 bg-white text-slate-700',
-              ].join(' ')}
-            >
-              <span className="mr-2 inline-flex min-w-20 justify-center rounded-full border border-current/20 px-2 py-0.5 text-xs font-semibold uppercase">
-                {formatLabel(item.severity)}
-              </span>
-              <span className="font-semibold">{formatLabel(item.source)}:</span>
-              <span className="ml-1">{item.message}</span>
-              <span className="ml-2 text-xs opacity-75">
-                {formatLabel(item.targetTab)}
-              </span>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-slate-500">No readiness issues reported.</p>
-      )}
-    </CompactPanel>
-  );
-}
-
-function CoverageMatrixCard({
-  rows,
-  selectedRow,
-  onRowSelect,
-}: {
-  rows: WorkspaceCoverageMatrixRow[];
-  selectedRow: WorkspaceCoverageMatrixRow | null;
-  onRowSelect: (row: WorkspaceCoverageMatrixRow) => void;
-}) {
-  if (!rows.length) {
-    return (
-      <CompactPanel title="Coverage matrix">
-        <p className="text-sm text-slate-500">
-          No curriculum coverage rows are available yet.
-        </p>
-      </CompactPanel>
-    );
-  }
-
-  return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-base font-semibold text-slate-900">
-              Coverage matrix
-            </p>
-            <p className="mt-1 text-sm text-slate-500">
-              Curriculum coverage across education, cases, and graph support.
-            </p>
-          </div>
-          <StatusBadge status={`${rows.length} rules`} tone="info" />
-        </div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-4 py-3">Teaching rule</th>
-              <th className="px-4 py-3">Education</th>
-              <th className="px-4 py-3">Cases</th>
-              <th className="px-4 py-3">Graph</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((row) => {
-              const selected =
-                selectedRow?.stableKey === row.stableKey ||
-                selectedRow?.teachingRuleId === row.teachingRuleId;
-              const compositeStatus = coverageCompositeStatus(row);
-
-              return (
-              <tr
-                key={`${row.stableKey}-${row.teachingRuleId ?? 'legacy'}`}
-                className={[
-                  'cursor-pointer transition hover:bg-slate-50',
-                  selected ? 'bg-cyan-50/70 ring-1 ring-inset ring-cyan-200' : '',
-                ].join(' ')}
-                onClick={() => onRowSelect(row)}
-              >
-                <td className="px-4 py-3">
-                  <button
-                    type="button"
-                    className="text-left"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onRowSelect(row);
-                    }}
-                  >
-                    <span className="block font-medium text-slate-900">
-                      {row.title}
-                    </span>
-                    <span className="mt-1 block text-sm text-slate-500">
-                      {formatLabel(row.category)} - {formatLabel(row.importance)}
-                    </span>
-                  </button>
-                </td>
-                <td className="px-4 py-3">
-                  <CoverageStatusPill status={row.educationCoverage} />
-                </td>
-                <td className="px-4 py-3">
-                  <CoverageStatusPill status={row.caseCoverage} />
-                </td>
-                <td className="px-4 py-3">
-                  <CoverageStatusPill status={row.graphCoverage} />
-                </td>
-                <td className="px-4 py-3">
-                  <StatusBadge
-                    status={compositeStatus.label}
-                    tone={compositeStatus.tone}
-                  />
-                </td>
-                <td className="max-w-xs px-4 py-3 text-slate-600">
-                  {row.recommendedAction}
-                </td>
-              </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-function CoverageGapsCard({
-  gaps,
-  onGapSelect,
-}: {
-  gaps: WorkspaceCoverageGap[];
-  onGapSelect: (gap: WorkspaceCoverageGap) => void;
-}) {
-  return (
-    <CompactPanel title="Coverage gaps">
-      {gaps.length ? (
-        <div className="grid gap-2 md:grid-cols-2">
-          {gaps.slice(0, 10).map((gap, index) => (
-            <button
-              key={`${gap.teachingRuleId ?? gap.title}-${index}`}
-              type="button"
-              onClick={() => onGapSelect(gap)}
-              className={[
-                'rounded-lg border px-3 py-2 text-left transition hover:bg-slate-50',
-                gap.severity === 'blocker'
-                  ? 'border-rose-200 bg-rose-50'
-                  : 'border-amber-200 bg-amber-50',
-              ].join(' ')}
-            >
-              <p className="text-sm font-semibold text-slate-900">{gap.title}</p>
-              <p className="mt-1 text-xs text-slate-600">
-                {gap.recommendedAction}
-              </p>
-              <p className="mt-2 text-xs text-slate-500">
-                {[
-                  gap.missingEducation ? 'education' : null,
-                  gap.missingCases ? 'cases' : null,
-                  gap.missingGraph ? 'graph' : null,
-                ]
-                  .filter(Boolean)
-                  .join(', ')}
-              </p>
-              <span className="mt-2 inline-flex text-xs font-semibold text-slate-700">
-                Open {formatLabel(gap.targetTab)}
-              </span>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-slate-500">No coverage gaps reported.</p>
-      )}
-    </CompactPanel>
-  );
-}
-
-function RecommendedActionsCard({
-  actions,
-  onTabChange,
-}: {
-  actions: WorkspaceRecommendedAction[];
-  onTabChange: (tab: WorkspaceTab) => void;
-}) {
-  return (
-    <CompactPanel title="Recommended actions">
-      {actions.length ? (
-        <div className="space-y-2">
-          {actions.map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              disabled={!action.enabled}
-              onClick={() => onTabChange(action.targetTab)}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm transition enabled:hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <span className="font-semibold text-slate-900">{action.label}</span>
-              {action.disabledReason ? (
-                <span className="mt-1 block text-xs text-slate-500">
-                  {action.disabledReason}
-                </span>
-              ) : null}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-slate-500">No recommended actions yet.</p>
-      )}
-    </CompactPanel>
-  );
-}
-
-function EditorialBriefSummaryCard({
-  workspace,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-}) {
-  return (
-    <CompactPanel title="Unified brief summary">
-      <MetricGrid
-        items={[
-          { label: 'Status', value: workspace.editorialBrief.status ?? 'Missing' },
-          { label: 'Version', value: workspace.editorialBrief.version ?? 'None' },
-          {
-            label: 'Generation',
-            value: workspace.editorialBrief.activeForGeneration
-              ? 'Active'
-              : 'Inactive',
-          },
-          {
-            label: 'Updated',
-            value: workspace.editorialBrief.updatedAt
-              ? formatDate(workspace.editorialBrief.updatedAt)
-              : 'Unknown',
-          },
-        ]}
-      />
-      {workspace.editorialBrief.summary ? (
-        <p className="mt-3 text-sm leading-6 text-slate-700">
-          {workspace.editorialBrief.summary}
-        </p>
-      ) : (
-        <p className="mt-3 text-sm text-slate-500">
-          No editorial brief summary exists yet.
-        </p>
-      )}
-    </CompactPanel>
-  );
-}
-
-function EducationTab({
-  workspace,
-  revisions,
-  revisionCompare,
-  revisionCompareLoading,
-  revisionCompareError,
-  compareFromVersion,
-  compareToVersion,
-  pendingAction,
-  onRegenerateSection,
-  onFromVersionChange,
-  onToVersionChange,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-  revisions: DiagnosisEducationRevisionAnalysis[];
-  revisionCompare: DiagnosisEducationRevisionCompareResult | null;
-  revisionCompareLoading: boolean;
-  revisionCompareError: string | null;
-  compareFromVersion: number | null;
-  compareToVersion: number | null;
-  pendingAction: string | null;
-  onRegenerateSection: (section: EducationRegenerableSection) => void;
-  onFromVersionChange: (version: number | null) => void;
-  onToVersionChange: (version: number | null) => void;
-}) {
-  return (
-    <div className="space-y-4">
-      <EducationQualityCard
-        workspace={workspace}
-        pendingAction={pendingAction}
-        onRegenerateSection={onRegenerateSection}
-      />
-      <RevisionHistoryCard revisions={revisions} loading={false} error={null} />
-      <RevisionCompareCard
-        revisions={revisions}
-        selectedFromVersion={compareFromVersion}
-        selectedToVersion={compareToVersion}
-        comparison={revisionCompare}
-        loading={revisionCompareLoading}
-        error={revisionCompareError}
-        onFromVersionChange={onFromVersionChange}
-        onToVersionChange={onToVersionChange}
-      />
-    </div>
-  );
-}
-
-function EducationQualityCard({
-  workspace,
-  pendingAction,
-  onRegenerateSection,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-  pendingAction: string | null;
-  onRegenerateSection: (section: EducationRegenerableSection) => void;
-}) {
-  const regenerableSections: EducationRegenerableSection[] = [
-    'differentials',
-    'investigations',
-    'examPearls',
-    'management',
-  ];
-
-  return (
-    <CompactPanel title="Education quality">
-      <MetricGrid
-        items={[
-          { label: 'Status', value: formatLabel(workspace.education.status) },
-          { label: 'Version', value: workspace.education.version ?? 'None' },
-          { label: 'Quality', value: formatScore(workspace.education.qualityScore) },
-          {
-            label: 'Updated',
-            value: workspace.education.updatedAt
-              ? formatDate(workspace.education.updatedAt)
-              : 'Unknown',
-          },
-        ]}
-      />
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <MessageList title="Blockers" tone="blocker" messages={workspace.education.blockers} />
-        <MessageList title="Warnings" tone="warning" messages={workspace.education.warnings} />
-      </div>
-      {workspace.education.sectionHealth.length ? (
-        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-3 py-2">Section</th>
-                <th className="px-3 py-2">Score</th>
-                <th className="px-3 py-2">Regenerate</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {workspace.education.sectionHealth.map((section) => (
-                <tr key={section.section}>
-                  <td className="px-3 py-2 font-medium text-slate-900">
-                    {formatLabel(section.section)}
-                  </td>
-                  <td className="px-3 py-2 text-slate-700">
-                    {formatScore(section.score)}
-                  </td>
-                  <td className="px-3 py-2">
-                    {regenerableSections.includes(
-                      section.section as EducationRegenerableSection,
-                    ) ? (
-                      <button
-                        type="button"
-                        disabled={pendingAction !== null}
-                        onClick={() =>
-                          onRegenerateSection(
-                            section.section as EducationRegenerableSection,
-                          )
-                        }
-                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        Regenerate
-                      </button>
-                    ) : (
-                      <span className="text-xs text-slate-400">N/A</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="mt-3 text-sm text-slate-500">
-          Section health will appear after education quality analysis runs.
-        </p>
-      )}
-    </CompactPanel>
-  );
-}
-
-function CasesTab({
-  workspace,
-  coverage,
-  mimicCandidates,
-  pendingAction,
-  generatedTargetedCase,
-  onGapSelect,
-  onGenerateTargetedCase,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-  coverage: TeachingUnitCoverageMap | null;
-  mimicCandidates: DiagnosisGraphCandidate[];
-  pendingAction: string | null;
-  generatedTargetedCase: GenerateTargetedCaseResult['generatedCase'] | null;
-  onGapSelect: (gap: WorkspaceCoverageGap) => void;
-  onGenerateTargetedCase: (payload: GenerateTargetedCasePayload) => void;
-}) {
-  const caseGaps = workspace.coverageGaps.filter((gap) => gap.missingCases);
-
-  return (
-    <div className="space-y-4">
-      <CompactPanel title="Case inventory">
-        <MetricGrid
-          items={[
-            { label: 'Total', value: workspace.cases.summary.total },
-            { label: 'Usable', value: workspace.cases.summary.usable },
-            { label: 'Warnings', value: workspace.cases.summary.warningCount },
-            { label: 'Blockers', value: workspace.cases.summary.blockerCount },
-          ]}
-        />
-        {workspace.cases.summary.latest ? (
-          <Link
-            to={`/cases/${workspace.cases.summary.latest.id}`}
-            className="mt-3 inline-flex text-sm font-semibold text-slate-900 underline"
-          >
-            Open latest case
-          </Link>
-        ) : (
-          <p className="mt-3 text-sm text-slate-500">
-            No cases are attached to this diagnosis yet.
-          </p>
-        )}
-      </CompactPanel>
-      <CaseContributionCard workspace={workspace} />
-      <CoverageGapsCard gaps={caseGaps} onGapSelect={onGapSelect} />
-      <TargetedCaseGenerationCard
-        coverage={coverage}
-        mimicCandidates={mimicCandidates}
-        disabled={pendingAction !== null}
-        pending={pendingAction === 'targeted-case'}
-        generatedCase={generatedTargetedCase}
-        onGenerate={onGenerateTargetedCase}
-      />
-    </div>
-  );
-}
-
-function CaseContributionCard({
-  workspace,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-}) {
-  const cases = workspace.cases.items;
-
-  return (
-    <CompactPanel title="Cases by coverage contribution">
-      {cases.length ? (
-        <div className="space-y-2">
-          {cases.slice(0, 12).map((caseItem) => (
-            <Link
-              key={caseItem.id}
-              to={`/cases/${caseItem.id}`}
-              className="block rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 transition hover:bg-white"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {caseItem.title}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {formatLabel(caseItem.difficulty)} difficulty
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <StatusBadge
-                    status={caseItem.editorialStatus ?? 'unknown'}
-                    tone={caseTone(caseItem)}
-                  />
-                  <StatusBadge
-                    status={
-                      caseItem.qualityProjection.sourceSummary.hasTeachingAlignment
-                        ? 'Aligned'
-                        : 'Unmapped'
-                    }
-                    tone={
-                      caseItem.qualityProjection.sourceSummary.hasTeachingAlignment
-                        ? 'success'
-                        : 'neutral'
-                    }
-                  />
-                </div>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2 text-sm">
-                <span className="text-slate-600">
-                  Warnings: {caseItem.qualityProjection.warnings.length}
-                </span>
-                <span className="text-slate-600">
-                  Blockers: {caseItem.qualityProjection.blockers.length}
-                </span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-slate-500">
-          No cases are available in the unified workspace payload.
-        </p>
-      )}
-    </CompactPanel>
-  );
-}
-
-function GraphTab({
-  workspace,
-  selectedRow,
-  onRowSelect,
-  access,
-  client,
-  onRefresh,
-  onGenerateTargetedCase,
-  showError,
-  showPending,
-  showSuccess,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-  selectedRow: WorkspaceCoverageMatrixRow | null;
-  onRowSelect: (row: WorkspaceCoverageMatrixRow) => void;
-  access: ConsoleAccessState;
-  client: ApiClient;
-  onRefresh: () => Promise<void>;
-  onGenerateTargetedCase: (payload: GenerateTargetedCasePayload) => void;
-  showError: (message: string) => void;
-  showPending: (message: string) => void;
-  showSuccess: (message: string) => void;
-}) {
-  return (
-    <div className="space-y-4">
-      <CompactPanel title="Graph readiness">
-        <MetricGrid
-          items={[
-            { label: 'Status', value: formatLabel(workspace.graph.readiness) },
-            { label: 'Facts', value: workspace.graph.factCount },
-            { label: 'Candidates', value: workspace.graph.candidateCount },
-            { label: 'Reviewable', value: workspace.graph.reviewableCandidateCount },
-          ]}
-        />
-        <Link
-          to="/diagnosis-graph/candidates"
-          className="mt-3 inline-flex text-sm font-semibold text-slate-900 underline"
-        >
-          Open graph candidate queue
-        </Link>
-      </CompactPanel>
-      <TeachingRelationshipPanel
-        diagnosisRegistryId={workspace.diagnosis.id}
-        relationships={workspace.graph.teachingRelationships ?? []}
-        access={access}
-        client={client}
-        onRefresh={onRefresh}
-        showError={showError}
-        showPending={showPending}
-        showSuccess={showSuccess}
-      />
-      <ReasoningPathsPanel
-        diagnosisRegistryId={workspace.diagnosis.id}
-        paths={workspace.reasoningPaths ?? []}
-        access={access}
-        client={client}
-        onRefresh={onRefresh}
-        onGenerateTargetedCase={onGenerateTargetedCase}
-        showError={showError}
-        showPending={showPending}
-        showSuccess={showSuccess}
-      />
-      <EvidenceGraphPanel
-        diagnosisRegistryId={workspace.diagnosis.id}
-        relationships={workspace.evidenceGraph?.relationships ?? []}
-        summary={workspace.evidenceGraph?.summary}
-        access={access}
-        client={client}
-        onRefresh={onRefresh}
-        showError={showError}
-        showPending={showPending}
-        showSuccess={showSuccess}
-      />
-      <EvidenceCoveragePanel coverage={workspace.evidenceCoverage} />
-      <CoverageMatrixCard
-        rows={workspace.coverageMatrix.filter(
-          (row) => row.graphCoverage !== 'covered',
-        )}
-        selectedRow={selectedRow}
-        onRowSelect={onRowSelect}
-      />
-      <LinkedDifferentialsList links={workspace.linkedDifferentials ?? []} />
-      <GraphCandidateList candidates={workspace.graph.candidates} />
-    </div>
-  );
-}
-
-function EvidenceCoveragePanel({
-  coverage,
-}: {
-  coverage: DiagnosisEditorialWorkspace['evidenceCoverage'];
-}) {
-  if (!coverage) {
-    return (
-      <CompactPanel title="Evidence coverage">
-        <p className="text-sm text-slate-500">
-          Evidence coverage scoring is not available for this diagnosis yet.
-        </p>
-      </CompactPanel>
-    );
-  }
-
-  return (
-    <CompactPanel title="Evidence coverage">
-      <MetricGrid
-        items={[
-          { label: 'Coverage score', value: `${coverage.coverageScore}%` },
-          {
-            label: 'Readiness',
-            value: `${coverage.generationReadinessScore}% ${formatLabel(
-              coverage.generationReadinessTier,
-            )}`,
-          },
-          {
-            label: 'Discriminators',
-            value: coverage.coverageBreakdown.discriminatorEvidenceCount,
-          },
-          {
-            label: 'Diversity',
-            value: coverage.coverageBreakdown.evidenceDiversityCount,
-          },
-          {
-            label: 'Case coverage',
-            value: `${coverage.coverageBreakdown.caseEvidenceCoverage}%`,
-          },
-          {
-            label: 'Education coverage',
-            value: `${coverage.coverageBreakdown.educationEvidenceCoverage}%`,
-          },
-          {
-            label: 'Low-trust drafts',
-            value: coverage.coverageBreakdown.lowTrustDraftCount,
-          },
-          {
-            label: 'Blocked drafts',
-            value: coverage.coverageBreakdown.blockedDraftCount,
-          },
-          {
-            label: 'Risk signals',
-            value: coverage.coverageBreakdown.hallucinationRiskDraftCount,
-          },
-        ]}
-      />
-      <div className="mt-4 grid gap-3 lg:grid-cols-3">
-        <ReadinessIndicator
-          label="Case generation"
-          readiness={coverage.generationReadiness.caseGeneration}
-        />
-        <ReadinessIndicator
-          label="Differential generation"
-          readiness={coverage.generationReadiness.differentialGeneration}
-        />
-        <ReadinessIndicator
-          label="Teaching generation"
-          readiness={coverage.generationReadiness.teachingRuleGeneration}
-        />
-      </div>
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        <EvidenceList
-          title="Evidence gaps"
-          items={coverage.missingEvidence.map((item) => item.label)}
-          empty="No evidence gaps reported."
-        />
-        <EvidenceList
-          title="Overused evidence"
-          items={coverage.redundancy.overusedEvidence.map(
-            (item) => `${formatLabel(item.evidenceKey)} (${item.count})`,
-          )}
-          empty="No overused evidence patterns reported."
-        />
-      </div>
-      {coverage.generationHooks.suggestedGenerationPrerequisites.length ? (
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
-            Generation prerequisites
-          </p>
-          <p className="mt-2 text-sm text-amber-900">
-            {coverage.generationHooks.suggestedGenerationPrerequisites.join(', ')}
-          </p>
-        </div>
-      ) : null}
-      {coverage.generationHooks.suggestedDraftValidationReview ? (
-        <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-orange-800">
-            Draft trust review
-          </p>
-          <p className="mt-2 text-sm text-orange-900">
-            Low-trust, blocked, or hallucination-risk generated drafts need
-            senior review or regeneration before publication decisions.
-          </p>
-        </div>
-      ) : null}
-    </CompactPanel>
-  );
-}
-
-function ReadinessIndicator({
-  label,
-  readiness,
-}: {
-  label: string;
-  readiness: {
-    score: number;
-    tier: string;
-    reasons: string[];
-  };
-}) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-slate-900">{label}</p>
-        <StatusBadge
-          status={`${readiness.score}% ${readiness.tier}`}
-          tone={readiness.tier === 'weak' ? 'warning' : 'info'}
-        />
-      </div>
-      <p className="mt-2 text-xs text-slate-600">
-        {readiness.reasons.slice(0, 2).join(', ') || 'Ready prerequisites met'}
-      </p>
-    </div>
-  );
-}
-
-function EvidenceList({
-  title,
-  items,
-  empty,
-}: {
-  title: string;
-  items: string[];
-  empty: string;
-}) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {title}
-      </p>
-      {items.length ? (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {items.slice(0, 8).map((item) => (
-            <span
-              key={item}
-              className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600"
-            >
-              {item}
-            </span>
-          ))}
-        </div>
-      ) : (
-        <p className="mt-2 text-sm text-slate-500">{empty}</p>
-      )}
-    </div>
-  );
-}
-
-function EvidenceGraphPanel({
-  diagnosisRegistryId,
-  relationships,
-  summary,
-  access,
-  client,
-  onRefresh,
-  showError,
-  showPending,
-  showSuccess,
-}: {
-  diagnosisRegistryId: string;
-  relationships: DiagnosisEvidenceRelationship[];
-  summary?: DiagnosisEditorialWorkspace['evidenceGraph']['summary'];
-  access: ConsoleAccessState;
-  client: ApiClient;
-  onRefresh: () => Promise<void>;
-  showError: (message: string) => void;
-  showPending: (message: string) => void;
-  showSuccess: (message: string) => void;
-}) {
-  const [busyAction, setBusyAction] = useState<string | null>(null);
-  const grouped = useMemo(() => groupEvidenceRelationships(relationships), [relationships]);
-
-  async function generateCandidates() {
-    try {
-      setBusyAction('generate-evidence');
-      showPending('Generating evidence graph candidates...');
-      const result = await generateEvidenceGraphCandidates(
-        client,
-        diagnosisRegistryId,
-      );
-      await onRefresh();
-      showSuccess(`Generated ${result.createdCount} evidence candidates.`);
-    } catch (error) {
-      showError(errorMessage(error, 'Failed to generate evidence graph.'));
-    } finally {
-      setBusyAction(null);
-    }
-  }
-
-  async function reviewRelationship(
-    id: string,
-    action: EvidenceGraphReviewAction,
-  ) {
-    try {
-      setBusyAction(`${action}:${id}`);
-      showPending('Updating evidence relationship...');
-      await reviewEvidenceGraphRelationship(client, id, action);
-      await onRefresh();
-      showSuccess('Evidence relationship updated.');
-    } catch (error) {
-      showError(errorMessage(error, 'Failed to update evidence relationship.'));
-    } finally {
-      setBusyAction(null);
-    }
-  }
-
-  return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-        <div>
-          <p className="text-sm font-semibold text-slate-900">Evidence graph</p>
-          <p className="text-xs text-slate-500">
-            Findings, clues, labs, imaging, and reasoning evidence linked to this diagnosis.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={generateCandidates}
-          disabled={busyAction !== null}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Generate candidates
-        </button>
-      </div>
-      <MetricGrid
-        items={[
-          { label: 'Evidence', value: summary?.total ?? 0 },
-          { label: 'Active', value: summary?.active ?? 0 },
-          { label: 'Discriminators', value: summary?.discriminatorEvidence ?? 0 },
-          { label: 'Weak coverage', value: summary?.weakEvidenceCoverage ?? 0 },
-        ]}
-      />
-      {relationships.length ? (
-        <div className="space-y-4 border-t border-slate-200 px-4 py-4">
-          {grouped.map(([type, items]) => (
-            <div key={type}>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {formatLabel(type)}
-              </p>
-              <div className="mt-2 grid gap-2">
-                {items.slice(0, 12).map((relationship) => (
-                  <div
-                    key={relationship.id}
-                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          {relationship.evidenceNode.displayLabel}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-600">
-                          {formatLabel(relationship.relationshipType)} · strength{' '}
-                          {relationship.strength} · discriminator{' '}
-                          {relationship.discriminatorWeight}
-                        </p>
-                      </div>
-                      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                        {formatLabel(relationship.status)}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-xs text-slate-600">
-                      {relationship.reasoningSummary || 'No reasoning summary yet.'}
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                      {relationship.supportingCase ? (
-                        <Link
-                          to={`/cases/${relationship.supportingCase.id}`}
-                          className="font-semibold text-slate-800 underline"
-                        >
-                          Open case
-                        </Link>
-                      ) : null}
-                      {relationship.supportingTeachingRule ? (
-                        <Link
-                          to={`/editorial/diagnoses/${diagnosisRegistryId}?tab=teaching-rules`}
-                          className="font-semibold text-slate-800 underline"
-                        >
-                          Open rule
-                        </Link>
-                      ) : null}
-                      {relationship.supportingTeachingRelationship ? (
-                        <span className="text-slate-500">
-                          Teaching relationship linked
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <RelationshipActionButton
-                        label="Activate"
-                        disabled={!access.canPublishEditorial || busyAction !== null}
-                        onClick={() =>
-                          reviewRelationship(relationship.id, 'activate')
-                        }
-                      />
-                      <RelationshipActionButton
-                        label="Reject"
-                        disabled={!access.canPublishEditorial || busyAction !== null}
-                        onClick={() => reviewRelationship(relationship.id, 'reject')}
-                      />
-                      <RelationshipActionButton
-                        label="Deprecate"
-                        disabled={!access.canPublishEditorial || busyAction !== null}
-                        onClick={() =>
-                          reviewRelationship(relationship.id, 'deprecate')
-                        }
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="border-t border-slate-200 px-4 py-6 text-sm text-slate-500">
-          No evidence relationships have been created for this diagnosis yet.
-        </div>
-      )}
-    </section>
-  );
-}
-
-function TeachingRelationshipPanel({
-  diagnosisRegistryId,
-  relationships,
-  access,
-  client,
-  onRefresh,
-  showError,
-  showPending,
-  showSuccess,
-}: {
-  diagnosisRegistryId: string;
-  relationships: DiagnosisTeachingRelationship[];
-  access: ConsoleAccessState;
-  client: ApiClient;
-  onRefresh: () => Promise<void>;
-  showError: (message: string) => void;
-  showPending: (message: string) => void;
-  showSuccess: (message: string) => void;
-}) {
-  const [busyAction, setBusyAction] = useState<string | null>(null);
-  const canReview = access.canPublishEditorial;
-
-  async function generateCandidates() {
-    try {
-      setBusyAction('generate');
-      showPending('Generating teaching relationship candidates...');
-      const result = await generateDiagnosisTeachingRelationshipCandidates(
-        client,
-        diagnosisRegistryId,
-      );
-      await onRefresh();
-      showSuccess(
-        `Generated ${result.createdCount} teaching relationship candidates.`,
-      );
-    } catch (error) {
-      showError(errorMessage(error, 'Failed to generate teaching relationships.'));
-    } finally {
-      setBusyAction(null);
-    }
-  }
-
-  async function reviewRelationship(
-    id: string,
-    action: DiagnosisTeachingRelationshipReviewAction,
-  ) {
-    try {
-      setBusyAction(`${action}:${id}`);
-      showPending('Updating teaching relationship...');
-      await reviewDiagnosisTeachingRelationship(client, id, action);
-      await onRefresh();
-      showSuccess('Teaching relationship updated.');
-    } catch (error) {
-      showError(errorMessage(error, 'Failed to update teaching relationship.'));
-    } finally {
-      setBusyAction(null);
-    }
-  }
-
-  return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-        <div>
-          <p className="text-sm font-semibold text-slate-900">Teaching graph</p>
-          <p className="text-xs text-slate-500">
-            Reviewed teaching relationships layered over graph and differential evidence.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={generateCandidates}
-          disabled={busyAction !== null}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Generate candidates
-        </button>
-      </div>
-      {relationships.length ? (
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-4 py-3">Relationship</th>
-                <th className="px-4 py-3">Teaching intent</th>
-                <th className="px-4 py-3">Evidence</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {relationships.slice(0, 30).map((relationship) => (
-                <tr key={relationship.id}>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-slate-900">
-                      {relationship.sourceDiagnosisRegistry.displayLabel}{' '}
-                      {'->'}{' '}
-                      <Link
-                        to={`/editorial/diagnoses/${relationship.targetDiagnosisRegistryId}`}
-                        className="underline"
-                      >
-                        {relationship.targetDiagnosisRegistry.displayLabel}
-                      </Link>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {formatLabel(relationship.relationshipType)} · strength{' '}
-                      {relationship.strength}
-                    </p>
-                  </td>
-                  <td className="max-w-md px-4 py-3 text-slate-700">
-                    <p className="font-medium">
-                      {formatLabel(relationship.teachingPurpose)}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-600">
-                      {relationship.discriminatorSummary ||
-                        relationship.commonConfusionReason ||
-                        relationship.learnerPitfall ||
-                        'No teaching summary yet.'}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-600">
-                    {relationship.supportingGraphFact ? (
-                      <span>
-                        Graph: {formatLabel(relationship.supportingGraphFact.type)}
-                      </span>
-                    ) : relationship.supportingTeachingRule ? (
-                      <span>
-                        Rule:{' '}
-                        <Link
-                          to={`/editorial/diagnoses/${diagnosisRegistryId}?tab=teaching-rules`}
-                          className="underline"
-                        >
-                          {relationship.supportingTeachingRule.title}
-                        </Link>
-                      </span>
-                    ) : relationship.supportingDifferentialLinkId ? (
-                      <span>{relationship.supportingDifferentialLinkId}</span>
-                    ) : (
-                      <span>No linked evidence</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">
-                    {formatLabel(relationship.status)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <RelationshipActionButton
-                        label="Activate"
-                        disabled={!canReview || busyAction !== null}
-                        onClick={() =>
-                          reviewRelationship(relationship.id, 'activate')
-                        }
-                      />
-                      <RelationshipActionButton
-                        label="Reject"
-                        disabled={!canReview || busyAction !== null}
-                        onClick={() =>
-                          reviewRelationship(relationship.id, 'reject')
-                        }
-                      />
-                      <RelationshipActionButton
-                        label="Deprecate"
-                        disabled={!canReview || busyAction !== null}
-                        onClick={() =>
-                          reviewRelationship(relationship.id, 'deprecate')
-                        }
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="px-4 py-6 text-sm text-slate-500">
-          No teaching relationships have been created for this diagnosis yet.
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ReasoningPathsPanel({
-  diagnosisRegistryId,
-  paths,
-  access,
-  client,
-  onRefresh,
-  onGenerateTargetedCase,
-  showError,
-  showPending,
-  showSuccess,
-}: {
-  diagnosisRegistryId: string;
-  paths: ReasoningPath[];
-  access: ConsoleAccessState;
-  client: ApiClient;
-  onRefresh: () => Promise<void>;
-  onGenerateTargetedCase: (payload: GenerateTargetedCasePayload) => void;
-  showError: (message: string) => void;
-  showPending: (message: string) => void;
-  showSuccess: (message: string) => void;
-}) {
-  const [busyAction, setBusyAction] = useState<string | null>(null);
-  const canReview = access.canPublishEditorial;
-  const activePathGroups = groupReasoningPaths(
-    paths.filter(
-      (path) => path.status !== 'DEPRECATED' && path.status !== 'REJECTED',
-    ),
-  );
-  const inactivePaths = paths.filter(
-    (path) => path.status === 'DEPRECATED' || path.status === 'REJECTED',
-  );
-
-  async function generateCandidates() {
-    try {
-      setBusyAction('generate');
-      showPending('Generating reasoning path candidates...');
-      const result = await generateReasoningPathCandidates(
-        client,
-        diagnosisRegistryId,
-      );
-      await onRefresh();
-      showSuccess(`Generated ${result.createdCount} reasoning path candidates.`);
-    } catch (error) {
-      showError(errorMessage(error, 'Failed to generate reasoning paths.'));
-    } finally {
-      setBusyAction(null);
-    }
-  }
-
-  async function reviewPath(id: string, action: ReasoningPathReviewAction) {
-    try {
-      setBusyAction(`${action}:${id}`);
-      showPending('Updating reasoning path...');
-      await reviewReasoningPath(client, id, action);
-      await onRefresh();
-      showSuccess('Reasoning path updated.');
-    } catch (error) {
-      showError(errorMessage(error, 'Failed to update reasoning path.'));
-    } finally {
-      setBusyAction(null);
-    }
-  }
-
-  return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-        <div>
-          <p className="text-sm font-semibold text-slate-900">Reasoning paths</p>
-          <p className="text-xs text-slate-500">
-            Constrained draft contexts grounded in reviewed relationships and evidence.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={generateCandidates}
-          disabled={busyAction !== null}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Generate paths
-        </button>
-      </div>
-      {paths.length ? (
-        <div className="space-y-4 p-4">
-          {activePathGroups.map(([purpose, groupedPaths]) => (
-            <div key={purpose}>
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  {formatLabel(purpose)}
-                </p>
-                <span className="text-xs text-slate-500">
-                  {groupedPaths.length} paths
-                </span>
-              </div>
-              <div className="grid gap-3 lg:grid-cols-2">
-                {groupedPaths.slice(0, 12).map((path) => (
-                  <ReasoningPathCard
-                    key={path.id}
-                    path={path}
-                    busyAction={busyAction}
-                    canReview={canReview}
-                    onReview={reviewPath}
-                    onGenerateTargetedCase={onGenerateTargetedCase}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-          {inactivePaths.length ? (
-            <details className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <summary className="cursor-pointer text-sm font-semibold text-slate-700">
-                Deprecated and rejected paths ({inactivePaths.length})
-              </summary>
-              <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                {inactivePaths.slice(0, 12).map((path) => (
-                  <ReasoningPathCard
-                    key={path.id}
-                    path={path}
-                    busyAction={busyAction}
-                    canReview={canReview}
-                    onReview={reviewPath}
-                    onGenerateTargetedCase={onGenerateTargetedCase}
-                  />
-                ))}
-              </div>
-            </details>
-          ) : null}
-        </div>
-      ) : (
-        <div className="px-4 py-6 text-sm text-slate-500">
-          No reasoning paths have been generated for this diagnosis yet.
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ReasoningPathCard({
-  path,
-  busyAction,
-  canReview,
-  onReview,
-  onGenerateTargetedCase,
-}: {
-  path: ReasoningPath;
-  busyAction: string | null;
-  canReview: boolean;
-  onReview: (id: string, action: ReasoningPathReviewAction) => void;
-  onGenerateTargetedCase: (payload: GenerateTargetedCasePayload) => void;
-}) {
-  return (
-    <div
-      className={[
-        'rounded-lg border p-3',
-        path.status === 'ACTIVE'
-          ? 'border-emerald-200 bg-emerald-50'
-          : path.status === 'CANDIDATE'
-            ? 'border-slate-200 bg-slate-50'
-            : 'border-slate-200 bg-white opacity-75',
-      ].join(' ')}
-    >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-slate-900">{path.title}</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {formatLabel(path.reasoningGoal)} ·{' '}
-                    {formatLabel(path.generationPurpose)}
-                  </p>
-                </div>
-                <StatusBadge
-                  status={`${path.readinessScore}% ${path.readinessTier}`}
-                  tone={path.readinessTier === 'weak' ? 'warning' : 'info'}
-                />
-              </div>
-              <MetricGrid
-                items={[
-                  {
-                    label: 'Differentials',
-                    value: path.primaryDifferentialIds.length,
-                  },
-                  {
-                    label: 'Teaching links',
-                    value: path.supportingTeachingRelationshipIds.length,
-                  },
-                  {
-                    label: 'Evidence links',
-                    value: path.supportingEvidenceRelationshipIds.length,
-                  },
-                  {
-                    label: 'Discriminators',
-                    value: path.discriminatorEvidenceNodeIds.length,
-                  },
-                ]}
-              />
-              {path.readinessReasons?.length ? (
-                <p className="mt-2 text-xs text-slate-600">
-                  {path.readinessReasons.slice(0, 3).join(' · ')}
-                </p>
-              ) : null}
-              <EvidenceList
-                title="Required teaching points"
-                items={path.requiredTeachingPoints}
-                empty="No required teaching points attached."
-              />
-              <EvidenceList
-                title="Forbidden shortcuts"
-                items={[
-                  ...path.forbiddenEvidencePatterns,
-                  ...(path.reasoningQualityWarnings ?? []),
-                ]}
-                empty="No forbidden reasoning patterns attached."
-              />
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <StatusBadge
-                  status={formatLabel(path.status)}
-                  tone={path.status === 'ACTIVE' ? 'success' : 'neutral'}
-                />
-                <div className="flex flex-wrap gap-2">
-                  <RelationshipActionButton
-                    label="Activate"
-                    disabled={!canReview || busyAction !== null}
-                    onClick={() => onReview(path.id, 'activate')}
-                  />
-                  <RelationshipActionButton
-                    label="Reject"
-                    disabled={!canReview || busyAction !== null}
-                    onClick={() => onReview(path.id, 'reject')}
-                  />
-                  <RelationshipActionButton
-                    label="Deprecate"
-                    disabled={!canReview || busyAction !== null}
-                    onClick={() => onReview(path.id, 'deprecate')}
-                  />
-                  <RelationshipActionButton
-                    label="Draft case"
-                    disabled={
-                      busyAction !== null ||
-                      path.generationPurpose !== 'CASE_GENERATION' ||
-                      path.status !== 'ACTIVE'
-                    }
-                    onClick={() =>
-                      onGenerateTargetedCase({
-                        difficulty: 'MEDIUM',
-                        teachingUnitIds: [],
-                        reasoningPathId: path.id,
-                        clueRevealStrategy: 'late_discriminator',
-                      })
-                    }
-                  />
-                </div>
-              </div>
-    </div>
-  );
-}
-
-function groupReasoningPaths(paths: ReasoningPath[]) {
-  const grouped = new Map<string, ReasoningPath[]>();
-  for (const path of paths) {
-    grouped.set(path.generationPurpose, [
-      ...(grouped.get(path.generationPurpose) ?? []),
-      path,
-    ]);
-  }
-  return [...grouped.entries()].sort(([left], [right]) =>
-    left.localeCompare(right),
-  );
-}
-
-function RelationshipActionButton({
-  label,
-  disabled,
-  onClick,
-}: {
-  label: string;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      {label}
-    </button>
-  );
-}
-
-function groupEvidenceRelationships(
-  relationships: DiagnosisEvidenceRelationship[],
-) {
-  const grouped = new Map<string, DiagnosisEvidenceRelationship[]>();
-  for (const relationship of relationships) {
-    const type = relationship.evidenceNode.evidenceType;
-    grouped.set(type, [...(grouped.get(type) ?? []), relationship]);
-  }
-  return [...grouped.entries()].sort(([left], [right]) =>
-    left.localeCompare(right),
-  );
-}
-
-function LinkedDifferentialsList({
-  links,
-}: {
-  links: StructuredDifferentialLink[];
-}) {
-  if (!links.length) {
-    return (
-      <CompactPanel title="Linked differentials">
-        <p className="text-sm text-slate-500">
-          No resolved differential links are attached to this diagnosis yet.
-        </p>
-      </CompactPanel>
-    );
-  }
-
-  return (
-    <CompactPanel title="Linked differentials">
-      <div className="grid gap-2 sm:grid-cols-2">
-        {links.map((link) => (
-          <div
-            key={`${link.diagnosisRegistryId}-${link.sourceText}`}
-            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-semibold text-slate-900">
-                {link.displayLabel}
-              </p>
-              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                {formatLabel(link.role)}
-              </span>
-            </div>
-            <p className="mt-1 text-xs text-slate-600">Source: {link.sourceText}</p>
-          </div>
-        ))}
-      </div>
-    </CompactPanel>
-  );
-}
-
-function GraphCandidateList({
-  candidates,
-}: {
-  candidates: DiagnosisGraphCandidate[];
-}) {
-  if (!candidates.length) {
-    return (
-      <CompactPanel title="Candidates">
-        <p className="text-sm text-slate-500">
-          No graph candidates are currently attached to this diagnosis.
-        </p>
-      </CompactPanel>
-    );
-  }
-
-  return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="border-b border-slate-200 px-4 py-3">
-        <p className="text-sm font-semibold text-slate-900">Candidates</p>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3">Text</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Source</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {candidates.slice(0, 20).map((candidate) => (
-              <tr key={candidate.id}>
-                <td className="px-4 py-3 font-medium text-slate-900">
-                  {formatLabel(candidate.type)}
-                </td>
-                <td className="max-w-lg px-4 py-3 text-slate-700">
-                  {candidate.rawText}
-                </td>
-                <td className="px-4 py-3 text-slate-700">
-                  {formatLabel(candidate.status)}
-                </td>
-                <td className="px-4 py-3 text-slate-700">
-                  {formatLabel(candidate.sourceType)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {candidates.length > 20 ? (
-        <p className="border-t border-slate-200 px-4 py-3 text-sm text-slate-500">
-          Showing 20 of {candidates.length} candidates.
-        </p>
-      ) : null}
-    </section>
-  );
-}
-
-function WorkspaceRail({
-  workspace,
-  onGapSelect,
-  onTabChange,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-  onGapSelect: (gap: WorkspaceCoverageGap) => void;
-  onTabChange: (tab: WorkspaceTab) => void;
-}) {
-  return (
-    <aside className="space-y-4">
-      <RecommendedActionsCard
-        actions={workspace.recommendedActions}
-        onTabChange={onTabChange}
-      />
-      <CoverageGapsCard gaps={workspace.coverageGaps} onGapSelect={onGapSelect} />
-      <AvailableActionsCard actions={workspace.availableActions} />
-    </aside>
-  );
-}
-
-function AvailableActionsCard({ actions }: { actions: WorkspaceAvailableAction[] }) {
-  return (
-    <CompactPanel title="Available actions">
-      {actions.length ? (
-        <div className="space-y-2">
-          {actions.map((action) => (
-            <div
-              key={action.id}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
-            >
-              <p className="font-semibold text-slate-900">{action.label}</p>
-              <p className="mt-1 text-xs text-slate-500">
-                {action.enabled ? formatLabel(action.targetTab) : action.disabledReason}
-              </p>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-slate-500">No actions advertised.</p>
-      )}
-    </CompactPanel>
   );
 }
 
@@ -3197,135 +942,6 @@ function DrawerFact({ label, value }: { label: string; value: string }) {
   );
 }
 
-function CoverageStatusBlock({
-  label,
-  status,
-}: {
-  label: string;
-  status: WorkspaceCoverageMatrixRow['educationCoverage'];
-}) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white px-3 py-3">
-      <p className="text-sm font-semibold text-slate-900">{label}</p>
-      <div className="mt-2">
-        <CoverageStatusPill status={status} />
-      </div>
-    </div>
-  );
-}
-
-function DrawerActionButton({
-  label,
-  onClick,
-}: {
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded-lg border border-slate-300 px-3 py-2 text-left text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-    >
-      {label}
-    </button>
-  );
-}
-
-function CompactPanel({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-100 px-4 py-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-          {title}
-        </p>
-      </div>
-      <div className="p-4">{children}</div>
-    </section>
-  );
-}
-
-function MetricGrid({
-  items,
-}: {
-  items: Array<{ label: string; value: string | number | null | undefined }>;
-}) {
-  return (
-    <div className="grid gap-2 sm:grid-cols-2">
-      {items.map((item) => (
-        <div
-          key={item.label}
-          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
-        >
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-            {item.label}
-          </p>
-          <p className="mt-1 text-sm font-semibold text-slate-900">
-            {item.value === null || item.value === undefined ? 'Unknown' : item.value}
-          </p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function MessageList({
-  title,
-  tone,
-  messages,
-}: {
-  title: string;
-  tone: 'warning' | 'blocker';
-  messages: string[];
-}) {
-  return (
-    <div
-      className={[
-        'rounded-lg border px-3 py-2',
-        tone === 'blocker'
-          ? 'border-rose-200 bg-rose-50'
-          : 'border-amber-200 bg-amber-50',
-      ].join(' ')}
-    >
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-        {title}
-      </p>
-      {messages.length ? (
-        <ul className="mt-2 space-y-1 text-sm text-slate-700">
-          {messages.slice(0, 5).map((message) => (
-            <li key={message}>{message}</li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-2 text-sm text-slate-500">None</p>
-      )}
-    </div>
-  );
-}
-
-function CoverageStatusPill({
-  status,
-}: {
-  status: WorkspaceCoverageMatrixRow['educationCoverage'];
-}) {
-  const tone =
-    status === 'covered'
-      ? 'success'
-      : status === 'missing'
-        ? 'danger'
-        : status === 'partial'
-          ? 'warning'
-          : 'neutral';
-
-  return <StatusBadge status={formatLabel(status)} tone={tone} />;
-}
-
 function AccessDenied({ access }: { access: ConsoleAccessState }) {
   return (
     <div className="flex min-h-[50vh] items-center justify-center">
@@ -3344,147 +960,4 @@ function AccessDenied({ access }: { access: ConsoleAccessState }) {
       </section>
     </div>
   );
-}
-
-function toTeachingRulesResponse(
-  workspace: DiagnosisEditorialWorkspace | null,
-): DiagnosisTeachingRulesResponse | null {
-  if (!workspace) {
-    return null;
-  }
-
-  return {
-    diagnosisRegistryId: workspace.diagnosis.id,
-    diagnosisName: workspace.diagnosis.displayLabel,
-    rules: workspace.teachingRules.items,
-  };
-}
-
-function toTeachingUnitCoverageMap(
-  workspace: DiagnosisEditorialWorkspace | null,
-): TeachingUnitCoverageMap | null {
-  if (!workspace) {
-    return null;
-  }
-
-  return {
-    diagnosisRegistryId: workspace.diagnosis.id,
-    diagnosisName: workspace.diagnosis.displayLabel,
-    teachingUnits: workspace.coverageMatrix.map((row) => ({
-      id: row.stableKey,
-      title: row.title,
-      source: 'unified_workspace',
-      status: row.fullCoverageStatus,
-      educationCoverage: row.educationCoverage,
-      caseCoverage: {
-        count: row.caseCoverage === 'covered' ? 1 : 0,
-        status: row.caseCoverage,
-      },
-      graphCoverage: row.graphCoverage,
-      relatedSections: [],
-      relatedCaseIds: [],
-      relatedGraphFactIds: [],
-      warnings: [],
-      recommendedAction: row.recommendedAction,
-    })),
-  };
-}
-
-function sortRevisionsNewestFirst(revisionList: DiagnosisEducationRevisionAnalysis[]) {
-  return [...revisionList].sort((left, right) => {
-    if (right.version !== left.version) {
-      return right.version - left.version;
-    }
-    return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-  });
-}
-
-
-function severityRank(severity: WorkspaceReadinessItem['severity']) {
-  if (severity === 'blocker') return 0;
-  if (severity === 'warning') return 1;
-  return 2;
-}
-
-function coverageCompositeStatus(row: WorkspaceCoverageMatrixRow): {
-  label: string;
-  tone: StatusBadgeTone;
-} {
-  if (row.fullCoverageStatus === 'covered') {
-    return { label: 'Complete', tone: 'success' };
-  }
-  if (row.fullCoverageStatus === 'unknown') {
-    return { label: 'Not started', tone: 'neutral' };
-  }
-  if (row.educationCoverage === 'missing') {
-    return { label: 'Missing education', tone: 'danger' };
-  }
-  if (row.graphCoverage === 'missing') {
-    return { label: 'Missing graph', tone: 'warning' };
-  }
-  if (row.caseCoverage === 'missing') {
-    return { label: 'Missing assessment', tone: 'warning' };
-  }
-  return { label: 'Partial', tone: 'warning' };
-}
-
-function findCoverageRowForGap(
-  workspace: DiagnosisEditorialWorkspace | null,
-  gap: WorkspaceCoverageGap,
-) {
-  return (
-    workspace?.coverageMatrix.find(
-      (row) =>
-        row.teachingRuleId === gap.teachingRuleId || row.title === gap.title,
-    ) ?? null
-  );
-}
-
-function getCoverageRowKey(row: WorkspaceCoverageMatrixRow) {
-  return row.teachingRuleId ?? row.stableKey;
-}
-
-function caseTone(
-  caseItem: DiagnosisEditorialWorkspace['cases']['items'][number],
-): StatusBadgeTone {
-  if (caseItem.qualityProjection.blockers.length) return 'danger';
-  if (caseItem.qualityProjection.warnings.length) return 'warning';
-  if (
-    caseItem.editorialStatus === 'APPROVED' ||
-    caseItem.editorialStatus === 'READY_TO_PUBLISH' ||
-    caseItem.editorialStatus === 'PUBLISHED'
-  ) {
-    return 'success';
-  }
-  return 'neutral';
-}
-
-function formatSummaryValue(value: string | number | null | undefined) {
-  return typeof value === 'number' ? formatScore(value) : value ?? 'Unknown';
-}
-
-function formatScore(value: number | null | undefined) {
-  return typeof value === 'number' ? `${Math.round(value * 100)}%` : 'Unknown';
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
-}
-
-function formatLabel(value: string) {
-  return value
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/_/g, ' ')
-    .replace(/-/g, ' ')
-    .toLowerCase()
-    .split(' ')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
-
-function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
 }

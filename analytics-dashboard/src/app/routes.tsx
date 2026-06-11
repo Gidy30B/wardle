@@ -1,22 +1,44 @@
 import { AuthenticateWithRedirectCallback, SignIn } from '@clerk/clerk-react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
-import AnalyticsPage from '../features/analytics/AnalyticsPage';
-import CasesPage from '../features/cases/CasesPage';
-import DashboardPage from '../features/dashboard/DashboardPage';
-import DiagnosisGraphCandidatesPage from '../features/diagnosis-graph/DiagnosisGraphCandidatesPage';
-import EditorialDiagnosisWorkspacePage from '../features/editorial/EditorialDiagnosisWorkspacePage';
-import EditorialWorkspaceQueuePage from '../features/editorial/EditorialWorkspaceQueuePage';
-import EditorialCoverageDashboardPage from '../features/editorial/EditorialCoverageDashboardPage';
-import CurriculumPlannerPage from '../features/editorial/CurriculumPlannerPage';
-import EditorialHomePage from '../features/editorial/EditorialHomePage';
-import EditorialReviewInboxPage from '../features/editorial/EditorialReviewInboxPage';
-import RegistryCandidatesPage from '../features/editorial/RegistryCandidatesPage';
-import RegistryMergeAnalysisPage from '../features/editorial/RegistryMergeAnalysisPage';
-import UnresolvedDifferentialsPage from '../features/editorial/UnresolvedDifferentialsPage';
-import GeneratePage from '../features/generation/GeneratePage';
-import PublishPage from '../features/publish/PublishPage';
 import { useConsoleAccess } from '../hooks/useConsoleAccess';
 import AdminLayout from '../layout/AdminLayout';
+
+const AnalyticsPage = lazy(() => import('../features/analytics/AnalyticsPage'));
+const CasesPage = lazy(() => import('../features/cases/CasesPage'));
+const DashboardPage = lazy(() => import('../features/dashboard/DashboardPage'));
+const DiagnosisGraphCandidatesPage = lazy(
+  () => import('../features/diagnosis-graph/DiagnosisGraphCandidatesPage'),
+);
+const EditorialDiagnosisWorkspacePage = lazy(
+  () => import('../features/editorial/EditorialDiagnosisWorkspacePage'),
+);
+const EditorialWorkspaceQueuePage = lazy(
+  () => import('../features/editorial/EditorialWorkspaceQueuePage'),
+);
+const EditorialCoverageDashboardPage = lazy(
+  () => import('../features/editorial/EditorialCoverageDashboardPage'),
+);
+const CurriculumPlannerPage = lazy(
+  () => import('../features/editorial/CurriculumPlannerPage'),
+);
+const EditorialHomePage = lazy(
+  () => import('../features/editorial/EditorialHomePage'),
+);
+const EditorialReviewInboxPage = lazy(
+  () => import('../features/editorial/EditorialReviewInboxPage'),
+);
+const RegistryCandidatesPage = lazy(
+  () => import('../features/editorial/RegistryCandidatesPage'),
+);
+const RegistryMergeAnalysisPage = lazy(
+  () => import('../features/editorial/RegistryMergeAnalysisPage'),
+);
+const UnresolvedDifferentialsPage = lazy(
+  () => import('../features/editorial/UnresolvedDifferentialsPage'),
+);
+const GeneratePage = lazy(() => import('../features/generation/GeneratePage'));
+const PublishPage = lazy(() => import('../features/publish/PublishPage'));
 
 const routeContext: Record<string, { title: string; subtitle: string }> = {
   '/': {
@@ -192,6 +214,16 @@ function AdminShell() {
   );
 }
 
+function RouteFallback() {
+  return (
+    <p className="p-6 text-sm text-slate-500">Loading workspace route...</p>
+  );
+}
+
+function lazyPage(page: ReactNode) {
+  return <Suspense fallback={<RouteFallback />}>{page}</Suspense>;
+}
+
 export default function AppRoutes() {
   return (
     <Routes>
@@ -204,46 +236,49 @@ export default function AppRoutes() {
         }
       />
       <Route element={<AdminShell />}>
-        <Route path="/" element={<DashboardPage />} />
+        <Route path="/" element={lazyPage(<DashboardPage />)} />
         <Route path="/dashboard" element={<Navigate to="/" replace />} />
-        <Route path="/cases" element={<CasesPage />} />
-        <Route path="/cases/:caseId" element={<CasesPage />} />
-        <Route path="/generate" element={<GeneratePage />} />
-        <Route path="/analytics" element={<AnalyticsPage />} />
-        <Route path="/publish" element={<PublishPage />} />
-        <Route path="/editorial" element={<EditorialHomePage />} />
-        <Route path="/editorial/inbox" element={<EditorialReviewInboxPage />} />
+        <Route path="/cases" element={lazyPage(<CasesPage />)} />
+        <Route path="/cases/:caseId" element={lazyPage(<CasesPage />)} />
+        <Route path="/generate" element={lazyPage(<GeneratePage />)} />
+        <Route path="/analytics" element={lazyPage(<AnalyticsPage />)} />
+        <Route path="/publish" element={lazyPage(<PublishPage />)} />
+        <Route path="/editorial" element={lazyPage(<EditorialHomePage />)} />
+        <Route
+          path="/editorial/inbox"
+          element={lazyPage(<EditorialReviewInboxPage />)}
+        />
         <Route
           path="/editorial/coverage"
-          element={<EditorialCoverageDashboardPage />}
+          element={lazyPage(<EditorialCoverageDashboardPage />)}
         />
         <Route
           path="/editorial/planner"
-          element={<CurriculumPlannerPage />}
+          element={lazyPage(<CurriculumPlannerPage />)}
         />
         <Route
           path="/editorial/differentials"
-          element={<UnresolvedDifferentialsPage />}
+          element={lazyPage(<UnresolvedDifferentialsPage />)}
         />
         <Route
           path="/editorial/registry-candidates"
-          element={<RegistryCandidatesPage />}
+          element={lazyPage(<RegistryCandidatesPage />)}
         />
         <Route
           path="/editorial/registry-merge"
-          element={<RegistryMergeAnalysisPage />}
+          element={lazyPage(<RegistryMergeAnalysisPage />)}
         />
         <Route
           path="/editorial/workspace"
-          element={<EditorialWorkspaceQueuePage />}
+          element={lazyPage(<EditorialWorkspaceQueuePage />)}
         />
         <Route
           path="/editorial/diagnoses/:diagnosisRegistryId"
-          element={<EditorialDiagnosisWorkspacePage />}
+          element={lazyPage(<EditorialDiagnosisWorkspacePage />)}
         />
         <Route
           path="/diagnosis-graph/candidates"
-          element={<DiagnosisGraphCandidatesPage />}
+          element={lazyPage(<DiagnosisGraphCandidatesPage />)}
         />
         <Route
           path="/admin/diagnosis-graph/candidates"

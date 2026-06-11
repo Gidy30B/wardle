@@ -14,6 +14,16 @@ describe('AdminController generateCases', () => {
       getFullWorkspace: jest
         .fn()
         .mockResolvedValue({ diagnosis: { id: 'registry-1' } }),
+      repairUnsupportedClaim: jest.fn().mockResolvedValue({ repairId: 'repair-1' }),
+      decideAiDraftRevision: jest.fn().mockResolvedValue({ id: 'audit-1' }),
+      upsertCaseLearningGoalCoverage: jest
+        .fn()
+        .mockResolvedValue({ id: 'coverage-1' }),
+      deleteCaseLearningGoalCoverage: jest.fn().mockResolvedValue({ deleted: true }),
+      upsertCaseEscalationAnnotation: jest
+        .fn()
+        .mockResolvedValue({ id: 'annotation-1' }),
+      deleteCaseEscalationAnnotation: jest.fn().mockResolvedValue({ deleted: true }),
     };
     const diagnosisWorkspaceQualityService = {};
     const teachingUnitCoverageService = {};
@@ -383,6 +393,74 @@ describe('AdminController generateCases', () => {
     expect(
       diagnosisEditorialWorkspaceService.getFullWorkspace,
     ).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
+  });
+
+  it('creates a draft claim repair through the workspace service', async () => {
+    const { controller, diagnosisEditorialWorkspaceService } =
+      buildController();
+
+    await controller.repairUnsupportedClaimById(
+      '11111111-1111-4111-8111-111111111111',
+      'claim-1',
+      { user: { id: 'admin-1' } } as never,
+    );
+
+    expect(
+      diagnosisEditorialWorkspaceService.repairUnsupportedClaim,
+    ).toHaveBeenCalledWith({
+      diagnosisRegistryId: '11111111-1111-4111-8111-111111111111',
+      claimId: 'claim-1',
+      userId: 'admin-1',
+    });
+  });
+
+  it('accepts an AI draft revision through the workspace service', async () => {
+    const { controller, diagnosisEditorialWorkspaceService } =
+      buildController();
+
+    await controller.acceptAiDraftRevision(
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+      { user: { id: 'admin-1' } } as never,
+      { note: 'Approved for draft' },
+    );
+
+    expect(
+      diagnosisEditorialWorkspaceService.decideAiDraftRevision,
+    ).toHaveBeenCalledWith({
+      diagnosisRegistryId: '11111111-1111-4111-8111-111111111111',
+      auditId: '22222222-2222-4222-8222-222222222222',
+      decision: 'accept',
+      userId: 'admin-1',
+      note: 'Approved for draft',
+    });
+  });
+
+  it('creates case learning-goal coverage through the workspace service', async () => {
+    const { controller, diagnosisEditorialWorkspaceService } =
+      buildController();
+
+    await controller.createCaseLearningGoalCoverage(
+      '11111111-1111-4111-8111-111111111111',
+      { user: { id: 'admin-1' } } as never,
+      {
+        caseId: 'case-1',
+        learningGoalId: 'goal-1',
+        learningGoal: 'Distinguish appendicitis',
+        coverageStrength: 75,
+      },
+    );
+
+    expect(
+      diagnosisEditorialWorkspaceService.upsertCaseLearningGoalCoverage,
+    ).toHaveBeenCalledWith({
+      diagnosisRegistryId: '11111111-1111-4111-8111-111111111111',
+      payload: expect.objectContaining({
+        caseId: 'case-1',
+        learningGoalId: 'goal-1',
+      }),
+      userId: 'admin-1',
+    });
   });
 
   it('reviews an editorial brief', async () => {

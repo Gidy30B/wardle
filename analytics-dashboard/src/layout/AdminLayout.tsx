@@ -27,7 +27,7 @@ export default function AdminLayout({
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <div className="flex h-screen bg-slate-50">
+    <div className="flex h-screen bg-[var(--color-navy)] text-slate-100">
       <Sidebar
         collapsed={collapsed}
         onToggle={() => setCollapsed((previous) => !previous)}
@@ -43,7 +43,9 @@ export default function AdminLayout({
           email={user.email}
           role={user.role}
         />
-        <main className="min-w-0 flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="min-w-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,var(--color-navy)_0%,#0a1424_100%)] p-6">
+          {children}
+        </main>
       </div>
     </div>
   );
