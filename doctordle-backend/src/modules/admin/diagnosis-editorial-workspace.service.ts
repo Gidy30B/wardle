@@ -37,6 +37,7 @@ import { DiagnosisEditorialOnboardingService } from './diagnosis-editorial-onboa
 import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
 import { EvidenceCoverageService } from './evidence-coverage.service';
 import { ReasoningPathService } from './reasoning-path.service';
+import { EditorialTriageProjectionService } from './editorial-triage-projection.service';
 
 type LifecycleState = 'complete' | 'warning' | 'blocked' | 'not_started';
 type ReadinessSeverity = 'info' | 'warning' | 'blocker';
@@ -101,6 +102,19 @@ type RegistryRow = {
     editorialStatus: string;
     version: number;
     updatedAt: Date;
+    summary: Prisma.JsonValue | null;
+    clinicalPattern: Prisma.JsonValue | null;
+    keySymptoms: Prisma.JsonValue | null;
+    keySigns: Prisma.JsonValue | null;
+    examPearls: Prisma.JsonValue | null;
+    scoringSystems: Prisma.JsonValue | null;
+    investigations: Prisma.JsonValue | null;
+    differentials: Prisma.JsonValue | null;
+    management: Prisma.JsonValue | null;
+    complications: Prisma.JsonValue | null;
+    pitfalls: Prisma.JsonValue | null;
+    recallPrompts: Prisma.JsonValue | null;
+    references: Prisma.JsonValue | null;
   } | null;
   editorialBrief: {
     id: string;
@@ -116,6 +130,9 @@ type RegistryRow = {
 
 @Injectable()
 export class DiagnosisEditorialWorkspaceService {
+  private readonly fallbackEditorialTriageProjectionService =
+    new EditorialTriageProjectionService();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly diagnosisWorkspaceQualityService: DiagnosisWorkspaceQualityService,
@@ -134,6 +151,8 @@ export class DiagnosisEditorialWorkspaceService {
     private readonly evidenceCoverageService?: EvidenceCoverageService,
     @Optional()
     private readonly reasoningPathService?: ReasoningPathService,
+    @Optional()
+    private readonly editorialTriageProjectionService?: EditorialTriageProjectionService,
   ) {}
 
   async getFullWorkspace(diagnosisRegistryId: string) {
@@ -302,6 +321,42 @@ export class DiagnosisEditorialWorkspaceService {
       escalationCoverage,
       learningGoalCoverage,
     });
+    const editorialPrioritization = this.triageProjectionService.project({
+      workspaceBlockerCount: summary?.blockers.length ?? 0,
+      coverageBlockerCount: coverageGaps.filter(
+        (gap) => gap.severity === 'blocker',
+      ).length,
+      missingGraphGapCount: coverageGaps.filter((gap) => gap.missingGraph)
+        .length,
+      unsupportedClaimCount: unsupportedClaimsBySection.length,
+      unsupportedClaimBlockerCount: unsupportedClaimsBySection.filter(
+        (claim) => claim.blocksPublication || claim.severity === 'blocker',
+      ).length,
+      escalationMissing: !escalationCoverage.coversEscalation,
+      totalDifferentials: differentialCoverage.totalDifferentials,
+      resolvedDifferentials: differentialCoverage.resolvedLinks,
+      discriminatorRuleCount: rules.rules.filter((rule) =>
+        ['differential_concept', 'pitfall_concept'].includes(rule.category),
+      ).length,
+      totalCases: cases.summary.total,
+      usableCases: cases.summary.usable,
+      evidenceCoverageScore: evidenceCoverage?.coverageScore ?? null,
+      lowTrustDraftCount:
+        evidenceCoverage?.coverageBreakdown?.lowTrustDraftCount ?? 0,
+      blockedDraftCount:
+        evidenceCoverage?.coverageBreakdown?.blockedDraftCount ?? 0,
+      hallucinationRiskDraftCount:
+        evidenceCoverage?.coverageBreakdown?.hallucinationRiskDraftCount ?? 0,
+      pendingDraftCount: aiDraftAuditTrail.filter((audit) =>
+        ['PENDING_REVIEW', 'REVIEW_REQUIRED'].includes(audit.reviewStatus),
+      ).length,
+      maturityOverall: maturityGovernance.breakdown.overall,
+      lifecyclePlayable: lifecycle.gameplay === 'complete',
+      lifecycleActive: lifecycle.curriculum !== 'blocked',
+      hasEducation: Boolean(registry.education),
+      activeTeachingRuleCount: rules.rules.length,
+      graphRelationshipCount: registry.graphFacts.length,
+    });
 
     return {
       diagnosis: {
@@ -395,6 +450,7 @@ export class DiagnosisEditorialWorkspaceService {
       maturityBreakdown: maturityGovernance.breakdown,
       maturityWeighting: maturityGovernance.weighting,
       maturityExplanation: maturityGovernance.explanation,
+      editorialPrioritization,
       aiDraftAuditTrail,
       editorialLearning: {
         available: revisions.length >= 2,
@@ -413,6 +469,13 @@ export class DiagnosisEditorialWorkspaceService {
       recommendedActions,
       availableActions,
     };
+  }
+
+  private get triageProjectionService() {
+    return (
+      this.editorialTriageProjectionService ??
+      this.fallbackEditorialTriageProjectionService
+    );
   }
 
   async repairUnsupportedClaim(input: {
@@ -463,7 +526,11 @@ export class DiagnosisEditorialWorkspaceService {
 
     return {
       repairId: audit.id,
+      auditId: audit.id,
       claimId: claim.claimId,
+      targetClaimId: claim.claimId,
+      targetSectionId: claim.sectionId,
+      targetTab: 'education',
       originalClaim: claim.claimText,
       proposedClaim,
       evidenceIds,
@@ -491,7 +558,7 @@ export class DiagnosisEditorialWorkspaceService {
     }
 
     if (input.decision === 'accept') {
-      await this.applyAcceptedDraftOutput(audit);
+      await this.applyAcceptedDraftOutput(audit, input.userId);
     }
 
     const status = this.reviewStatusForDecision(input.decision);
@@ -714,6 +781,19 @@ export class DiagnosisEditorialWorkspaceService {
             editorialStatus: true,
             version: true,
             updatedAt: true,
+            summary: true,
+            clinicalPattern: true,
+            keySymptoms: true,
+            keySigns: true,
+            examPearls: true,
+            scoringSystems: true,
+            investigations: true,
+            differentials: true,
+            management: true,
+            complications: true,
+            pitfalls: true,
+            recallPrompts: true,
+            references: true,
           },
         },
         editorialBrief: {
@@ -1166,12 +1246,16 @@ export class DiagnosisEditorialWorkspaceService {
     return 'SUPERSEDED';
   }
 
-  private async applyAcceptedDraftOutput(audit: {
-    affectedArtifactType: string;
-    affectedArtifactId: string;
-    sourceIssue: Prisma.JsonValue;
-    generatedOutput: Prisma.JsonValue;
-  }) {
+  private async applyAcceptedDraftOutput(
+    audit: {
+      id: string;
+      affectedArtifactType: string;
+      affectedArtifactId: string;
+      sourceIssue: Prisma.JsonValue;
+      generatedOutput: Prisma.JsonValue;
+    },
+    reviewerUserId: string,
+  ) {
     if (
       audit.affectedArtifactType !== 'EDUCATION_SECTION' &&
       audit.affectedArtifactType !== 'EDUCATION'
@@ -1203,9 +1287,12 @@ export class DiagnosisEditorialWorkspaceService {
     const repairEntry = {
       type: 'CLAIM_REPAIR',
       originalClaim: this.stringValue(generatedOutput.originalClaim),
+      acceptedClaim: this.stringValue(generatedOutput.proposedClaim),
       proposedClaim: this.stringValue(generatedOutput.proposedClaim),
       evidenceIds: this.stringArray(generatedOutput.evidenceIds),
       acceptedAt: new Date().toISOString(),
+      reviewerUserId,
+      sourceAuditId: audit.id,
     };
 
     await this.prisma.diagnosisEducation.update({
@@ -1221,8 +1308,29 @@ export class DiagnosisEditorialWorkspaceService {
     currentValue: Prisma.JsonValue | null | undefined,
     repairEntry: Record<string, Prisma.JsonValue>,
   ): Prisma.InputJsonValue {
+    const appendUnique = (items: Array<Record<string, Prisma.JsonValue>>) => {
+      const sourceAuditId = this.stringValue(repairEntry.sourceAuditId);
+      const exists = items.some(
+        (item) =>
+          sourceAuditId &&
+          this.stringValue(item.sourceAuditId) === sourceAuditId,
+      );
+      return exists ? items : [...items, repairEntry];
+    };
+
     if (Array.isArray(currentValue)) {
-      return [...currentValue, repairEntry] as Prisma.InputJsonValue;
+      const sourceAuditId = this.stringValue(repairEntry.sourceAuditId);
+      const exists = currentValue.some(
+        (item) =>
+          sourceAuditId &&
+          Boolean(item) &&
+          typeof item === 'object' &&
+          !Array.isArray(item) &&
+          this.stringValue(
+            (item as Record<string, Prisma.JsonValue>).sourceAuditId,
+          ) === sourceAuditId,
+      );
+      return (exists ? currentValue : [...currentValue, repairEntry]) as Prisma.InputJsonValue;
     }
     if (
       currentValue &&
@@ -1232,7 +1340,7 @@ export class DiagnosisEditorialWorkspaceService {
       const record = currentValue as Record<string, Prisma.JsonValue>;
       return {
         ...record,
-        claimRepairs: [...this.asRecordArray(record.claimRepairs), repairEntry],
+        claimRepairs: appendUnique(this.asRecordArray(record.claimRepairs)),
       } as Prisma.InputJsonValue;
     }
     return [repairEntry] as Prisma.InputJsonValue;
@@ -2187,8 +2295,61 @@ export class DiagnosisEditorialWorkspaceService {
         summary?.sectionHealth ?? latestRevision?.quality.sectionHealth ?? [],
       blockers: latestRevision?.quality.blockers ?? [],
       warnings: latestRevision?.quality.warnings ?? [],
+      acceptedRepairs: this.acceptedEducationRepairs(education),
       updatedAt: education ? this.toIso(education.updatedAt) : null,
     };
+  }
+
+  private acceptedEducationRepairs(education: RegistryRow['education']) {
+    if (!education) return [];
+    const sections = [
+      'summary',
+      'clinicalPattern',
+      'keySymptoms',
+      'keySigns',
+      'examPearls',
+      'scoringSystems',
+      'investigations',
+      'differentials',
+      'management',
+      'complications',
+      'pitfalls',
+      'recallPrompts',
+      'references',
+    ] as const;
+
+    return sections.flatMap((section) =>
+      this.extractClaimRepairs(section, education[section]),
+    );
+  }
+
+  private extractClaimRepairs(
+    section: string,
+    value: Prisma.JsonValue | null,
+  ) {
+    const records = Array.isArray(value)
+      ? this.asRecordArray(value)
+      : value && typeof value === 'object'
+        ? this.asRecordArray(
+            (value as Record<string, Prisma.JsonValue>).claimRepairs,
+          )
+        : [];
+
+    return records
+      .filter((record) => this.stringValue(record.type) === 'CLAIM_REPAIR')
+      .map((record) => ({
+        section,
+        originalClaim: this.stringValue(record.originalClaim) ?? '',
+        acceptedClaim:
+          this.stringValue(record.acceptedClaim) ??
+          this.stringValue(record.proposedClaim) ??
+          '',
+        evidenceIds: this.stringArray(record.evidenceIds),
+        acceptedAt: this.stringValue(record.acceptedAt),
+        reviewerUserId: this.stringValue(record.reviewerUserId),
+        sourceAuditId: this.stringValue(record.sourceAuditId),
+      }))
+      .filter((repair) => repair.acceptedClaim);
   }
 
   private teachingRuleSummary(

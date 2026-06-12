@@ -21,9 +21,19 @@ export class ApiError extends Error {
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, '');
+const localQaAuthEnabled = import.meta.env.VITE_LOCAL_QA_AUTH_ENABLED === 'true';
+const localQaAuthToken = import.meta.env.VITE_LOCAL_QA_AUTH_TOKEN;
+
+if (import.meta.env.PROD && localQaAuthEnabled) {
+  throw new Error('VITE_LOCAL_QA_AUTH_ENABLED must not be enabled in production builds');
+}
 
 if (!apiBaseUrl) {
   throw new Error('Missing VITE_API_URL');
+}
+
+export function isLocalQaAuthEnabled(): boolean {
+  return localQaAuthEnabled;
 }
 
 function toApiUrl(path: string): string {
@@ -72,16 +82,25 @@ export function createApiClient(getToken: TokenGetter): ApiClient {
     init: RequestInit = {},
     body?: unknown,
   ): Promise<T> {
-    const token = await getToken({
-      template: import.meta.env.VITE_CLERK_JWT_AUDIENCE,
-    });
-
-    if (!token) {
-      throw new Error('Missing Clerk token');
-    }
-
     const headers = new Headers(init.headers);
-    headers.set('Authorization', `Bearer ${token}`);
+    if (localQaAuthEnabled) {
+      if (!localQaAuthToken) {
+        throw new Error(
+          'Missing VITE_LOCAL_QA_AUTH_TOKEN while local QA auth is enabled',
+        );
+      }
+      headers.set('x-wardle-local-qa-token', localQaAuthToken);
+    } else {
+      const token = await getToken({
+        template: import.meta.env.VITE_CLERK_JWT_AUDIENCE,
+      });
+
+      if (!token) {
+        throw new Error('Missing Clerk token');
+      }
+
+      headers.set('Authorization', `Bearer ${token}`);
+    }
 
     let payload = init.body;
     if (body !== undefined) {

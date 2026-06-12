@@ -8,6 +8,8 @@ import {
   createDiagnosisEditorialBrief,
   createDiagnosisTeachingRule,
   decideAiDraftRevision,
+  deleteCaseEscalationAnnotation,
+  deleteCaseLearningGoalCoverage,
   generateCaseFromUncoveredGoal,
   generateDiagnosisEditorialBrief,
   generateDiagnosisTeachingRuleCandidates,
@@ -21,6 +23,8 @@ import {
   updateDiagnosisRegistryLifecycle,
   updateDiagnosisEditorialBrief,
   updateDiagnosisTeachingRule,
+  updateCaseEscalationAnnotation,
+  updateCaseLearningGoalCoverage,
   type DiagnosisEditorialBriefResponse,
   type DiagnosisEditorialBriefReviewAction,
   type DiagnosisEditorialBriefWritePayload,
@@ -74,7 +78,11 @@ import type {
   RuleDrawerAction,
   WorkspaceTab,
 } from './workspace/workspaceTypes';
-import { VALID_WORKSPACE_TABS } from './workspace/workspaceTypes';
+import {
+  getClaimTarget,
+  hasClaimTarget,
+  normalizeWorkspaceTab,
+} from './workspace/workspaceDeepLinks';
 
 export default function EditorialDiagnosisWorkspacePage() {
   const { diagnosisRegistryId } = useParams<{ diagnosisRegistryId: string }>();
@@ -82,12 +90,9 @@ export default function EditorialDiagnosisWorkspacePage() {
   const { getToken } = useAuth();
   const client = useMemo(() => createApiClient(getToken), [getToken]);
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTabParam = searchParams.get('tab') ?? '';
-  const activeTab: WorkspaceTab = VALID_WORKSPACE_TABS.has(
-    activeTabParam as WorkspaceTab,
-  )
-    ? (activeTabParam as WorkspaceTab)
-    : 'overview';
+  const claimTarget = useMemo(() => getClaimTarget(searchParams), [searchParams]);
+  const hasExplicitClaimTarget = hasClaimTarget(claimTarget);
+  const activeTab: WorkspaceTab = normalizeWorkspaceTab(searchParams.get('tab'));
   const setActiveTab = (tab: WorkspaceTab) => {
     const next = new URLSearchParams(searchParams);
     if (tab === 'overview') {
@@ -122,8 +127,9 @@ export default function EditorialDiagnosisWorkspacePage() {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [generatedTargetedCase, setGeneratedTargetedCase] =
     useState<GenerateTargetedCaseResult['generatedCase'] | null>(null);
-  const [latestClaimRepair, setLatestClaimRepair] =
-    useState<ClaimRepairResult | null>(null);
+  const [claimRepairs, setClaimRepairs] = useState<Record<string, ClaimRepairResult>>(
+    {},
+  );
   const { feedback, clear, showError, showPending, showSuccess } =
     useActionFeedback();
 
@@ -158,6 +164,25 @@ export default function EditorialDiagnosisWorkspacePage() {
   }, []);
   const canRunSeniorActions = access.canPublishEditorial;
   const seniorDisabledReason = 'Requires senior editor';
+  const targetedUnsupportedClaim = useMemo(() => {
+    if (!workspace || !hasExplicitClaimTarget) {
+      return null;
+    }
+    return (
+      workspace.unsupportedClaimsBySection?.find((claim) => {
+        const claimMatches =
+          !claimTarget.claimId || claim.claimId === claimTarget.claimId;
+        const sectionMatches =
+          !claimTarget.sectionId || claim.sectionId === claimTarget.sectionId;
+        return claimMatches && sectionMatches;
+      }) ?? null
+    );
+  }, [claimTarget.claimId, claimTarget.sectionId, hasExplicitClaimTarget, workspace]);
+  const showClaimTargetUnavailable =
+    Boolean(workspace) &&
+    hasExplicitClaimTarget &&
+    activeTab === 'education' &&
+    !targetedUnsupportedClaim;
 
   function openCoverageRow(row: WorkspaceCoverageMatrixRow) {
     setSelectedCoverageKey(getCoverageRowKey(row));
@@ -241,6 +266,9 @@ export default function EditorialDiagnosisWorkspacePage() {
       return;
     }
     const key = `editorial-workspace-scroll:${diagnosisRegistryId}:${activeTab}`;
+    if (hasExplicitClaimTarget) {
+      return;
+    }
     const saved = Number(sessionStorage.getItem(key) ?? 0);
     if (saved > 0) {
       window.requestAnimationFrame(() => window.scrollTo({ top: saved }));
@@ -249,7 +277,7 @@ export default function EditorialDiagnosisWorkspacePage() {
     return () => {
       sessionStorage.setItem(key, String(window.scrollY));
     };
-  }, [activeTab, diagnosisRegistryId]);
+  }, [activeTab, diagnosisRegistryId, hasExplicitClaimTarget]);
 
   useEffect(() => {
     closeRuleDrawer();
@@ -538,6 +566,7 @@ export default function EditorialDiagnosisWorkspacePage() {
     artifactId: string;
     sourceType: string;
     claimId: string;
+    sectionId: string;
   }) {
     if (!diagnosisRegistryId) {
       return;
@@ -553,7 +582,46 @@ export default function EditorialDiagnosisWorkspacePage() {
           diagnosisRegistryId,
           { claimId: claim.claimId },
         );
-        setLatestClaimRepair(repair);
+        setClaimRepairs((current) => ({
+          ...current,
+          [claimRepairKey(claim.sectionId, claim.claimId)]: repair,
+        }));
+        return repair;
+      },
+    });
+  }
+
+  function handleInlineClaimRepairDecision(
+    claim: { sectionId: string; claimId: string },
+    repair: ClaimRepairResult,
+    action: AiDraftDecisionAction,
+    note?: string,
+  ) {
+    if (!diagnosisRegistryId) {
+      return;
+    }
+    const auditId = repair.auditId ?? repair.repairId ?? repair.revisionId;
+    void runWorkspaceAction({
+      id: `claim-repair-${auditId}-${action}`,
+      pending: `${formatLabel(action)} repair...`,
+      success: `Repair ${formatLabel(action)}.`,
+      action: async () => {
+        const result = await decideAiDraftRevision(
+          client,
+          diagnosisRegistryId,
+          auditId,
+          action,
+          { note },
+        );
+        setClaimRepairs((current) => ({
+          ...current,
+          [claimRepairKey(claim.sectionId, claim.claimId)]: {
+            ...repair,
+            reviewStatus: result.reviewStatus,
+          },
+        }));
+        await refreshWorkspace();
+        return result;
       },
     });
   }
@@ -593,6 +661,44 @@ export default function EditorialDiagnosisWorkspacePage() {
     });
   }
 
+  function handleUpdateLearningGoalCoverage(
+    coverageId: string,
+    payload: CaseLearningGoalCoveragePayload,
+  ) {
+    if (!diagnosisRegistryId) {
+      return;
+    }
+    void runWorkspaceAction({
+      id: `goal-coverage-update-${coverageId}`,
+      pending: 'Updating learning-goal coverage...',
+      success: 'Learning-goal coverage updated.',
+      action: () =>
+        updateCaseLearningGoalCoverage(
+          client,
+          diagnosisRegistryId,
+          coverageId,
+          payload,
+        ),
+    });
+  }
+
+  function handleDeleteLearningGoalCoverage(coverageId: string) {
+    if (!diagnosisRegistryId) {
+      return;
+    }
+    const confirmed = window.confirm('Remove this learning-goal coverage annotation?');
+    if (!confirmed) {
+      return;
+    }
+    void runWorkspaceAction({
+      id: `goal-coverage-delete-${coverageId}`,
+      pending: 'Removing learning-goal coverage...',
+      success: 'Learning-goal coverage removed.',
+      action: () =>
+        deleteCaseLearningGoalCoverage(client, diagnosisRegistryId, coverageId),
+    });
+  }
+
   function handleCreateEscalationAnnotation(
     payload: CaseEscalationAnnotationPayload,
   ) {
@@ -605,6 +711,44 @@ export default function EditorialDiagnosisWorkspacePage() {
       success: 'Escalation annotation saved.',
       action: () =>
         createCaseEscalationAnnotation(client, diagnosisRegistryId, payload),
+    });
+  }
+
+  function handleUpdateEscalationAnnotation(
+    annotationId: string,
+    payload: CaseEscalationAnnotationPayload,
+  ) {
+    if (!diagnosisRegistryId) {
+      return;
+    }
+    void runWorkspaceAction({
+      id: `escalation-coverage-update-${annotationId}`,
+      pending: 'Updating escalation annotation...',
+      success: 'Escalation annotation updated.',
+      action: () =>
+        updateCaseEscalationAnnotation(
+          client,
+          diagnosisRegistryId,
+          annotationId,
+          payload,
+        ),
+    });
+  }
+
+  function handleDeleteEscalationAnnotation(annotationId: string) {
+    if (!diagnosisRegistryId) {
+      return;
+    }
+    const confirmed = window.confirm('Remove this escalation annotation?');
+    if (!confirmed) {
+      return;
+    }
+    void runWorkspaceAction({
+      id: `escalation-coverage-delete-${annotationId}`,
+      pending: 'Removing escalation annotation...',
+      success: 'Escalation annotation removed.',
+      action: () =>
+        deleteCaseEscalationAnnotation(client, diagnosisRegistryId, annotationId),
     });
   }
 
@@ -676,6 +820,16 @@ export default function EditorialDiagnosisWorkspacePage() {
           feedback={feedback}
           onDismiss={pendingAction ? undefined : clear}
         />
+        {showClaimTargetUnavailable ? (
+          <div className="rounded-lg border border-amber-300/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            <p className="font-semibold">Claim target unavailable</p>
+            <p className="mt-1 leading-6 text-amber-100/80">
+              The linked unsupported claim is not present in the current
+              workspace payload. It may have been repaired, deduped, or replaced
+              by a newer validation run.
+            </p>
+          </div>
+        ) : null}
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
           <main className="min-w-0 space-y-4">
@@ -735,9 +889,12 @@ export default function EditorialDiagnosisWorkspacePage() {
               compareFromVersion={compareFromVersion}
               compareToVersion={compareToVersion}
               pendingAction={pendingAction}
-              latestClaimRepair={latestClaimRepair}
+              claimRepairs={claimRepairs}
+              targetClaimId={claimTarget.claimId}
+              targetSectionId={claimTarget.sectionId}
               onRegenerateSection={handleRegenerateSection}
               onRepairUnsupportedClaim={handleRepairUnsupportedClaim}
+              onClaimRepairDecision={handleInlineClaimRepairDecision}
               onFromVersionChange={setCompareFromVersion}
               onToVersionChange={setCompareToVersion}
             />
@@ -753,6 +910,10 @@ export default function EditorialDiagnosisWorkspacePage() {
                 onGenerateTargetedCase={handleGenerateTargetedCase}
                 onCreateLearningGoalCoverage={handleCreateLearningGoalCoverage}
                 onCreateEscalationAnnotation={handleCreateEscalationAnnotation}
+                onUpdateLearningGoalCoverage={handleUpdateLearningGoalCoverage}
+                onDeleteLearningGoalCoverage={handleDeleteLearningGoalCoverage}
+                onUpdateEscalationAnnotation={handleUpdateEscalationAnnotation}
+                onDeleteEscalationAnnotation={handleDeleteEscalationAnnotation}
               />
           ) : null}
           {activeTab === 'graph' ? (
@@ -940,6 +1101,10 @@ function DrawerFact({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-sm text-slate-500">{label}</p>
     </div>
   );
+}
+
+function claimRepairKey(sectionId: string, claimId: string) {
+  return `${sectionId}:${claimId}`;
 }
 
 function AccessDenied({ access }: { access: ConsoleAccessState }) {

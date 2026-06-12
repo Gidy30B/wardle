@@ -32,6 +32,11 @@ async function bootstrap() {
   const host = '0.0.0.0';
 
   await app.listen(port, host);
+  if (env.LOCAL_QA_AUTH_ENABLED) {
+    console.warn(
+      `LOCAL QA AUTH ENABLED for ${env.LOCAL_QA_AUTH_EMAIL} (${env.LOCAL_QA_AUTH_ROLE}). Do not use outside local QA.`,
+    );
+  }
 
   console.log(`🚀 Server running on ${host}:${port}`);
   console.log(`🌍 Environment: ${env.NODE_ENV}`);

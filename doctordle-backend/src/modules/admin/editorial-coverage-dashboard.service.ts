@@ -18,6 +18,7 @@ import { PrismaService } from '../../core/db/prisma.service';
 import { CaseEligibilityPolicyService } from '../cases/case-eligibility-policy.service';
 import { EditorialReviewInboxService } from './editorial-review-inbox.service';
 import { EvidenceCoverageService } from './evidence-coverage.service';
+import { EditorialTriageProjectionService } from './editorial-triage-projection.service';
 
 export type CoverageWeakness =
   | 'missing_teaching_rules'
@@ -72,6 +73,7 @@ export class EditorialCoverageDashboardService {
     private readonly prisma: PrismaService,
     private readonly caseEligibilityPolicy: CaseEligibilityPolicyService,
     private readonly editorialReviewInboxService: EditorialReviewInboxService,
+    private readonly editorialTriageProjectionService: EditorialTriageProjectionService,
     @Optional()
     private readonly evidenceCoverageService?: EvidenceCoverageService,
   ) {}
@@ -171,6 +173,8 @@ export class EditorialCoverageDashboardService {
     const duplicateCounts = await this.loadDuplicateRiskCounts(rows);
     const reviewBacklog = await this.loadReviewBacklogCounts(rows);
     const oneWayGraphTargets = await this.loadOneWayGraphTargets();
+    const unsupportedClaimsByDiagnosis =
+      await this.loadUnsupportedClaimSummaries(rows);
     const evidenceCoverageRows = this.evidenceCoverageService
       ? await this.evidenceCoverageService.getDiagnoses({
           specialty: query.specialty,
@@ -182,8 +186,8 @@ export class EditorialCoverageDashboardService {
       evidenceCoverageRows.map((item) => [item.diagnosisRegistryId, item]),
     );
 
-    const diagnoses = rows.map((row) =>
-      ({
+    const diagnoses = rows.map((row) => {
+      const diagnosis = {
         ...this.toDiagnosisCoverage(row, {
           duplicateRisk: duplicateCounts.get(row.id) ?? 0,
           reviewBacklog: reviewBacklog.get(row.id) ?? 0,
@@ -191,8 +195,60 @@ export class EditorialCoverageDashboardService {
         }),
         evidenceCoverage:
           evidenceCoverageByDiagnosis.get(row.id) ?? null,
-      }),
-    );
+        unsupportedClaims:
+          unsupportedClaimsByDiagnosis.get(row.id) ??
+          this.emptyUnsupportedClaimSummary(),
+      };
+      const editorialTriage = this.editorialTriageProjectionService.project({
+        workspaceBlockerCount: diagnosis.weaknesses.filter((weakness) =>
+          [
+            'missing_playable_cases',
+            'missing_graph_coverage',
+            'unresolved_differentials',
+          ].includes(weakness),
+        ).length,
+        missingGraphGapCount:
+          diagnosis.graph.relationshipCount === 0 ||
+          diagnosis.graph.mimicRelationshipCount === 0
+            ? 1
+            : 0,
+        escalationMissing:
+          diagnosis.evidenceCoverage?.coverageWeaknesses.includes(
+            'weak_escalation_evidence',
+          ) ?? false,
+        unsupportedClaimCount: diagnosis.unsupportedClaims.unsupportedClaimCount,
+        unsupportedClaimBlockerCount:
+          diagnosis.unsupportedClaims.blockingUnsupportedClaimCount,
+        totalDifferentials: Math.max(
+          diagnosis.teaching.requiredDifferentialCount,
+          diagnosis.differentials.linkedDifferentialCount,
+        ),
+        resolvedDifferentials: diagnosis.differentials.linkedDifferentialCount,
+        discriminatorRuleCount: diagnosis.teaching.discriminatorRuleCount,
+        totalCases: diagnosis.inventory.caseCount,
+        playableCases: diagnosis.inventory.playableCaseCount,
+        evidenceCoverageScore: diagnosis.evidenceCoverage?.coverageScore ?? null,
+        lowTrustDraftCount:
+          diagnosis.evidenceCoverage?.coverageBreakdown.lowTrustDraftCount ?? 0,
+        blockedDraftCount:
+          diagnosis.evidenceCoverage?.coverageBreakdown.blockedDraftCount ?? 0,
+        hallucinationRiskDraftCount:
+          diagnosis.evidenceCoverage?.coverageBreakdown
+            .hallucinationRiskDraftCount ?? 0,
+        reviewBacklogCount: diagnosis.risk.reviewBacklog,
+        lifecyclePlayable: diagnosis.lifecycle.playable,
+        lifecycleActive: diagnosis.lifecycle.active,
+        hasEducation: diagnosis.education.version !== null,
+        activeTeachingRuleCount: diagnosis.teaching.activeRuleCount,
+        graphRelationshipCount: diagnosis.graph.relationshipCount,
+      });
+
+      return {
+        ...diagnosis,
+        editorialTriage,
+        editorialPrioritization: editorialTriage,
+      };
+    });
 
     return diagnoses.filter((item) => this.matchesWeakness(item, query));
   }
@@ -488,6 +544,145 @@ export class EditorialCoverageDashboardService {
     }
 
     return counts;
+  }
+
+  private async loadUnsupportedClaimSummaries(rows: Array<{ id: string }>) {
+    const diagnosisIds = rows.map((row) => row.id);
+    const summaries = new Map(
+      diagnosisIds.map((id) => [id, this.emptyUnsupportedClaimSummary()]),
+    );
+    if (!diagnosisIds.length) {
+      return summaries;
+    }
+
+    const runs = await this.prisma.reasoningDraftValidationRun.findMany({
+      where: { diagnosisRegistryId: { in: diagnosisIds } },
+      orderBy: [{ createdAt: 'desc' }],
+      select: {
+        diagnosisRegistryId: true,
+        artifactType: true,
+        artifactId: true,
+        trustTier: true,
+        validationStatus: true,
+        unsupportedClaimSignals: true,
+        createdAt: true,
+      },
+    });
+
+    const claimsByDiagnosis = new Map<
+      string,
+      Map<
+        string,
+        {
+          claimId: string;
+          sectionId: string;
+          sectionType: string;
+          claimText: string;
+          severity: 'blocker' | 'warning';
+          targetTab: 'education';
+          repairable: boolean;
+          blocksPublication: boolean;
+          createdAt: string;
+        }
+      >
+    >();
+
+    for (const run of runs) {
+      const diagnosisClaims =
+        claimsByDiagnosis.get(run.diagnosisRegistryId) ?? new Map();
+      for (const signal of this.asRecordArray(run.unsupportedClaimSignals)) {
+        const claimText =
+          this.stringValue(signal.message) ??
+          this.stringValue(signal.claimText) ??
+          this.stringValue(signal.code) ??
+          'Unsupported claim requires review.';
+        const sectionType =
+          this.stringValue(signal.sectionType) ??
+          this.sectionTypeFromArtifact(String(run.artifactType));
+        const sectionId =
+          this.stringValue(signal.sectionId) ??
+          `${run.artifactType}:${run.artifactId}`;
+        const claimId =
+          this.stringValue(signal.claimId) ??
+          this.stableKey(`${sectionId}:${claimText}`);
+        const key = `${sectionId}:${claimId}`;
+        if (diagnosisClaims.has(key)) {
+          continue;
+        }
+
+        diagnosisClaims.set(key, {
+          claimId,
+          sectionId,
+          sectionType,
+          claimText,
+          severity:
+            run.trustTier === 'BLOCKED' || run.validationStatus === 'FAILED'
+              ? 'blocker'
+              : 'warning',
+          targetTab: 'education',
+          repairable:
+            run.artifactType === 'EDUCATION_SECTION' ||
+            run.artifactType === 'TEACHING_RULE',
+          blocksPublication:
+            run.trustTier === 'BLOCKED' || run.validationStatus === 'FAILED',
+          createdAt: run.createdAt.toISOString(),
+        });
+      }
+      claimsByDiagnosis.set(run.diagnosisRegistryId, diagnosisClaims);
+    }
+
+    for (const [diagnosisId, claims] of claimsByDiagnosis.entries()) {
+      const values = [...claims.values()];
+      const blockerCount = values.filter(
+        (claim) => claim.severity === 'blocker',
+      ).length;
+      const warningCount = values.length - blockerCount;
+      summaries.set(diagnosisId, {
+        unsupportedClaimCount: values.length,
+        blockingUnsupportedClaimCount: blockerCount,
+        unsupportedClaimSeveritySummary: {
+          blocker: blockerCount,
+          warning: warningCount,
+        },
+        unsupportedClaimSectionTypes: [...new Set(values.map((claim) => claim.sectionType))],
+        unsupportedClaimSignalsPreview: values.slice(0, 3).map((claim) => ({
+          sectionType: claim.sectionType,
+          sectionId: claim.sectionId,
+          claimId: claim.claimId,
+          claimText: claim.claimText,
+          targetTab: claim.targetTab,
+          repairable: claim.repairable,
+          severity: claim.severity,
+          blocksPublication: claim.blocksPublication,
+          createdAt: claim.createdAt,
+        })),
+      });
+    }
+
+    return summaries;
+  }
+
+  private emptyUnsupportedClaimSummary() {
+    return {
+      unsupportedClaimCount: 0,
+      blockingUnsupportedClaimCount: 0,
+      unsupportedClaimSeveritySummary: {
+        blocker: 0,
+        warning: 0,
+      },
+      unsupportedClaimSectionTypes: [] as string[],
+      unsupportedClaimSignalsPreview: [] as Array<{
+        claimId: string;
+        sectionId: string;
+        sectionType: string;
+        claimText: string;
+        targetTab: 'education';
+        repairable: boolean;
+        severity: 'blocker' | 'warning';
+        blocksPublication: boolean;
+        createdAt: string;
+      }>,
+    };
   }
 
   private async loadOneWayGraphTargets() {
@@ -1200,6 +1395,35 @@ export class EditorialCoverageDashboardService {
     if (Array.isArray(value)) return value.length > 0;
     if (value && typeof value === 'object') return Object.keys(value).length > 0;
     return typeof value === 'string' && value.trim().length > 0;
+  }
+
+  private asRecordArray(
+    value: Prisma.JsonValue | null | undefined,
+  ): Array<Record<string, Prisma.JsonValue>> {
+    if (!Array.isArray(value)) return [];
+    return value.filter(
+      (item): item is Record<string, Prisma.JsonValue> =>
+        Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+    );
+  }
+
+  private stringValue(value: Prisma.JsonValue | null | undefined) {
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+  }
+
+  private sectionTypeFromArtifact(artifactType: string) {
+    if (artifactType.includes('EDUCATION')) return 'education';
+    if (artifactType.includes('TEACHING')) return 'teaching_rule';
+    if (artifactType.includes('CASE')) return 'case';
+    return artifactType.toLowerCase();
+  }
+
+  private stableKey(value: string) {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 96);
   }
 }
 

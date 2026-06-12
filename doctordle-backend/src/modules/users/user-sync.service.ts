@@ -84,6 +84,44 @@ export class UserSyncService {
     return this.loadSyncedUser(createdUser.id);
   }
 
+  async ensureLocalQaUser(input: {
+    id: string;
+    email: string;
+    role: 'editor' | 'senior_editor' | 'admin';
+  }): Promise<SyncedUser> {
+    const username = `${input.email.split('@')[0] || 'local-qa-editor'}-${input.id}`;
+    const normalizedUsername = username
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-');
+
+    await this.prisma.user.upsert({
+      where: { id: input.id },
+      create: {
+        id: input.id,
+        clerkId: `local_qa_${input.id}`,
+        email: input.email,
+        username,
+        normalizedUsername,
+        individualMode: false,
+        onboardingStatus: UserOnboardingStatus.COMPLETE,
+        onboardingCompletedAt: new Date(),
+        role: input.role,
+        subscriptionTier: 'free',
+      },
+      update: {
+        email: input.email,
+        username,
+        normalizedUsername,
+        individualMode: false,
+        onboardingStatus: UserOnboardingStatus.COMPLETE,
+        onboardingCompletedAt: new Date(),
+        role: input.role,
+      },
+    });
+
+    return this.loadSyncedUser(input.id);
+  }
+
   private async loadSyncedUser(userId: string): Promise<SyncedUser> {
     const rows = await this.prisma.$queryRawUnsafe<SyncedUser[]>(
       `

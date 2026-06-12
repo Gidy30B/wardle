@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types src/features/specialties/specialty-icon-registry.test.ts",
+    "test": "node --experimental-strip-types src/features/specialties/specialty-icon-registry.test.ts && node --experimental-strip-types src/features/editorial/coverageQueues.test.ts && node --experimental-strip-types src/features/editorial/workspace/workspaceDeepLinks.test.ts && node --experimental-strip-types src/features/editorial/workspace/acceptedRepairs.test.ts",
+    "qa:editorial-smoke": "npx playwright test -c playwright.local-qa.config.ts",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.60.0",
     "@types/node": "^24.12.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

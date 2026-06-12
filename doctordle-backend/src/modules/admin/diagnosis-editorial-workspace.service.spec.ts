@@ -211,6 +211,15 @@ describe('DiagnosisEditorialWorkspaceService', () => {
         blocksPublication: true,
       }),
     ]);
+    expect(result.editorialPrioritization.publicationRisk.score).toBeGreaterThan(0);
+    expect(result.editorialPrioritization.highestImpactFixes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'repair_unsupported_claims',
+          targetTab: 'education',
+        }),
+      ]),
+    );
   });
 
   it('uses persisted case-to-learning-goal coverage when available', async () => {
@@ -312,7 +321,13 @@ describe('DiagnosisEditorialWorkspaceService', () => {
     expect(result).toEqual(
       expect.objectContaining({
         repairId: 'repair-1',
+        auditId: 'repair-1',
+        targetClaimId: 'claim-1',
+        targetSectionId: 'management',
+        targetTab: 'education',
+        originalClaim: 'Appendicitis always requires surgery',
         proposedClaim: expect.stringContaining('can'),
+        reviewStatus: 'PENDING_REVIEW',
       }),
     );
   });
@@ -346,7 +361,13 @@ describe('DiagnosisEditorialWorkspaceService', () => {
           editorialStatus: 'DRAFT',
           management: expect.arrayContaining([
             expect.objectContaining({
+              type: 'CLAIM_REPAIR',
+              originalClaim: 'Appendicitis always requires surgery',
+              acceptedClaim: 'Appendicitis can require surgery.',
               proposedClaim: 'Appendicitis can require surgery.',
+              evidenceIds: ['evidence-1'],
+              reviewerUserId: 'admin-1',
+              sourceAuditId: 'audit-1',
             }),
           ]),
         }),
@@ -361,6 +382,110 @@ describe('DiagnosisEditorialWorkspaceService', () => {
         }),
       }),
     );
+  });
+
+  it('does not duplicate an accepted repair for the same audit', async () => {
+    prisma.aiDraftRevisionAudit.findFirst.mockResolvedValue({
+      id: 'audit-1',
+      diagnosisRegistryId,
+      affectedArtifactType: 'EDUCATION_SECTION',
+      affectedArtifactId: 'education-1',
+      sourceIssue: { sectionId: 'management' },
+      generatedOutput: {
+        originalClaim: 'Appendicitis always requires surgery',
+        proposedClaim: 'Appendicitis can require surgery.',
+        evidenceIds: ['evidence-1'],
+      },
+    });
+    prisma.diagnosisEducation.findUnique.mockResolvedValue({
+      id: 'education-1',
+      editorialStatus: 'DRAFT',
+      management: [
+        {
+          type: 'CLAIM_REPAIR',
+          originalClaim: 'Appendicitis always requires surgery',
+          acceptedClaim: 'Appendicitis can require surgery.',
+          sourceAuditId: 'audit-1',
+        },
+      ],
+    });
+
+    await service.decideAiDraftRevision({
+      diagnosisRegistryId,
+      auditId: 'audit-1',
+      decision: 'accept',
+      userId: 'admin-1',
+    });
+
+    const updateArg = prisma.diagnosisEducation.update.mock.calls[0][0];
+    expect(updateArg.data.management).toHaveLength(1);
+  });
+
+  it('does not apply accepted repairs to published education artifacts', async () => {
+    prisma.aiDraftRevisionAudit.findFirst.mockResolvedValue({
+      id: 'audit-1',
+      diagnosisRegistryId,
+      affectedArtifactType: 'EDUCATION_SECTION',
+      affectedArtifactId: 'education-1',
+      sourceIssue: { sectionId: 'management' },
+      generatedOutput: {
+        originalClaim: 'Appendicitis always requires surgery',
+        proposedClaim: 'Appendicitis can require surgery.',
+        evidenceIds: ['evidence-1'],
+      },
+    });
+    prisma.diagnosisEducation.findUnique.mockResolvedValue({
+      id: 'education-1',
+      editorialStatus: 'PUBLISHED',
+      management: [],
+    });
+
+    await expect(
+      service.decideAiDraftRevision({
+        diagnosisRegistryId,
+        auditId: 'audit-1',
+        decision: 'accept',
+        userId: 'admin-1',
+      }),
+    ).rejects.toThrow('Accepted claim repairs can only update draft education artifacts');
+    expect(prisma.diagnosisEducation.update).not.toHaveBeenCalled();
+  });
+
+  it('returns accepted repairs from draft education section payload', async () => {
+    prisma.diagnosisRegistry.findUnique.mockResolvedValue(
+      registry({
+        education: {
+          id: 'education-1',
+          editorialStatus: 'DRAFT',
+          version: 3,
+          updatedAt: now,
+          management: [
+            {
+              type: 'CLAIM_REPAIR',
+              originalClaim: 'Appendicitis always requires surgery',
+              acceptedClaim: 'Appendicitis can require surgery.',
+              evidenceIds: ['evidence-1'],
+              acceptedAt: now.toISOString(),
+              reviewerUserId: 'admin-1',
+              sourceAuditId: 'audit-1',
+            },
+          ],
+        },
+      }),
+    );
+
+    const result = await service.getFullWorkspace(diagnosisRegistryId);
+
+    expect(result.education.acceptedRepairs).toEqual([
+      expect.objectContaining({
+        section: 'management',
+        originalClaim: 'Appendicitis always requires surgery',
+        acceptedClaim: 'Appendicitis can require surgery.',
+        evidenceIds: ['evidence-1'],
+        reviewerUserId: 'admin-1',
+        sourceAuditId: 'audit-1',
+      }),
+    ]);
   });
 
   it('rejects a draft revision without applying output', async () => {

@@ -43,6 +43,23 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === 'true'),
+  LOCAL_QA_AUTH_ENABLED: optionalBooleanWithDefault(false),
+  LOCAL_QA_AUTH_TOKEN: z.preprocess(
+    emptyToUndefined,
+    z.string().min(12).optional(),
+  ),
+  LOCAL_QA_AUTH_USER_ID: z
+    .preprocess(emptyToUndefined, z.string().min(1).optional())
+    .default('local-qa-editor'),
+  LOCAL_QA_AUTH_EMAIL: z
+    .preprocess(emptyToUndefined, z.string().email().optional())
+    .default('local-qa-editor@example.test'),
+  LOCAL_QA_AUTH_ROLE: z
+    .preprocess(
+      emptyToUndefined,
+      z.enum(['editor', 'senior_editor', 'admin']).optional(),
+    )
+    .default('admin'),
   DIAGNOSIS_REGISTRY_ENABLED: z
     .string()
     .optional()
@@ -134,6 +151,14 @@ export function validateEnv(): AppEnv {
 
   if (parsed.data.NODE_ENV === 'production' && parsed.data.ENABLE_DEV_REPLAY) {
     throw new Error('ENABLE_DEV_REPLAY must not be enabled in production');
+  }
+
+  if (parsed.data.NODE_ENV === 'production' && parsed.data.LOCAL_QA_AUTH_ENABLED) {
+    throw new Error('LOCAL_QA_AUTH_ENABLED must not be enabled in production');
+  }
+
+  if (parsed.data.LOCAL_QA_AUTH_ENABLED && !parsed.data.LOCAL_QA_AUTH_TOKEN) {
+    throw new Error('LOCAL_QA_AUTH_TOKEN is required when LOCAL_QA_AUTH_ENABLED=true');
   }
 
   cachedEnv = parsed.data;

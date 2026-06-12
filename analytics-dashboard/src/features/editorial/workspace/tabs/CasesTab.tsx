@@ -2,7 +2,9 @@ import { Link } from 'react-router-dom';
 
 import type {
   CaseEscalationAnnotationPayload,
+  CaseEscalationCoverageRow,
   CaseLearningGoalCoveragePayload,
+  CaseLearningGoalCoverageRow,
   DiagnosisEditorialWorkspace,
   DiagnosisGraphCandidate,
   GenerateTargetedCasePayload,
@@ -37,6 +39,10 @@ export function CasesTab({
   onGenerateTargetedCase,
   onCreateLearningGoalCoverage,
   onCreateEscalationAnnotation,
+  onUpdateLearningGoalCoverage,
+  onDeleteLearningGoalCoverage,
+  onUpdateEscalationAnnotation,
+  onDeleteEscalationAnnotation,
 }: {
   workspace: DiagnosisEditorialWorkspace;
   coverage: TeachingUnitCoverageMap | null;
@@ -51,6 +57,16 @@ export function CasesTab({
   onCreateEscalationAnnotation: (
     payload: CaseEscalationAnnotationPayload,
   ) => void;
+  onUpdateLearningGoalCoverage: (
+    coverageId: string,
+    payload: CaseLearningGoalCoveragePayload,
+  ) => void;
+  onDeleteLearningGoalCoverage: (coverageId: string) => void;
+  onUpdateEscalationAnnotation: (
+    annotationId: string,
+    payload: CaseEscalationAnnotationPayload,
+  ) => void;
+  onDeleteEscalationAnnotation: (annotationId: string) => void;
 }) {
   const caseGaps = workspace.coverageGaps.filter((gap) => gap.missingCases);
 
@@ -91,6 +107,10 @@ export function CasesTab({
         onGenerateTargetedCase={onGenerateTargetedCase}
         onCreateLearningGoalCoverage={onCreateLearningGoalCoverage}
         onCreateEscalationAnnotation={onCreateEscalationAnnotation}
+        onUpdateLearningGoalCoverage={onUpdateLearningGoalCoverage}
+        onDeleteLearningGoalCoverage={onDeleteLearningGoalCoverage}
+        onUpdateEscalationAnnotation={onUpdateEscalationAnnotation}
+        onDeleteEscalationAnnotation={onDeleteEscalationAnnotation}
       />
       <CaseContributionCard workspace={workspace} />
       <CoverageGapsCard gaps={caseGaps} onGapSelect={onGapSelect} />
@@ -178,6 +198,10 @@ function CaseCoverageExplainabilityCard({
   onGenerateTargetedCase,
   onCreateLearningGoalCoverage,
   onCreateEscalationAnnotation,
+  onUpdateLearningGoalCoverage,
+  onDeleteLearningGoalCoverage,
+  onUpdateEscalationAnnotation,
+  onDeleteEscalationAnnotation,
 }: {
   workspace: DiagnosisEditorialWorkspace;
   caseGaps: WorkspaceCoverageGap[];
@@ -189,6 +213,16 @@ function CaseCoverageExplainabilityCard({
   onCreateEscalationAnnotation: (
     payload: CaseEscalationAnnotationPayload,
   ) => void;
+  onUpdateLearningGoalCoverage: (
+    coverageId: string,
+    payload: CaseLearningGoalCoveragePayload,
+  ) => void;
+  onDeleteLearningGoalCoverage: (coverageId: string) => void;
+  onUpdateEscalationAnnotation: (
+    annotationId: string,
+    payload: CaseEscalationAnnotationPayload,
+  ) => void;
+  onDeleteEscalationAnnotation: (annotationId: string) => void;
 }) {
   const dimensions = aggregateCaseDimensions(workspace);
   const learningGoalCoverage = workspace.learningGoalCoverage ?? [];
@@ -287,6 +321,12 @@ function CaseCoverageExplainabilityCard({
                         status={`${goal.coverageStrength}%`}
                         tone={scoreTone(goal.coverageStrength / 100)}
                       />
+                      <CoverageAnnotationActions
+                        row={goal.row}
+                        pendingAction={pendingAction}
+                        onUpdate={onUpdateLearningGoalCoverage}
+                        onDelete={onDeleteLearningGoalCoverage}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -326,22 +366,12 @@ function CaseCoverageExplainabilityCard({
       {caseEscalationCoverage.length ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {caseEscalationCoverage.slice(0, 6).map((item) => (
-            <StatusBadge
+            <EscalationAnnotationPill
               key={`${item.caseId}-${item.escalationType}`}
-              status={`${formatLabel(item.escalationType)}: ${
-                item.coverageSource === 'explicit'
-                  ? item.covered
-                    ? 'explicit'
-                    : 'needs review'
-                  : 'inferred'
-              }`}
-              tone={
-                item.coverageSource === 'explicit' && item.covered
-                  ? 'success'
-                  : item.coverageSource === 'inferred'
-                    ? 'info'
-                    : 'warning'
-              }
+              item={item}
+              pendingAction={pendingAction}
+              onUpdate={onUpdateEscalationAnnotation}
+              onDelete={onDeleteEscalationAnnotation}
             />
           ))}
         </div>
@@ -416,5 +446,118 @@ function CaseCoverageExplainabilityCard({
         empty="No case-specific coverage gaps are currently reported."
       />
     </CompactPanel>
+  );
+}
+
+function CoverageAnnotationActions({
+  row,
+  pendingAction,
+  onUpdate,
+  onDelete,
+}: {
+  row: CaseLearningGoalCoverageRow | undefined;
+  pendingAction: string | null;
+  onUpdate: (
+    coverageId: string,
+    payload: CaseLearningGoalCoveragePayload,
+  ) => void;
+  onDelete: (coverageId: string) => void;
+}) {
+  if (!row?.id) {
+    return null;
+  }
+
+  const nextStrength = Math.min(100, Math.max(row.coverageStrength + 10, 70));
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      <button
+        type="button"
+        disabled={pendingAction !== null}
+        onClick={() =>
+          onUpdate(row.id!, {
+            caseId: row.caseId,
+            learningGoalId: row.learningGoalId,
+            learningGoal: row.learningGoal,
+            coverageStrength: nextStrength,
+            coveredDiscriminators: row.coveredDiscriminators,
+            missingDiscriminators: row.missingDiscriminators,
+            coveredMimics: row.coveredMimics,
+            missingMimics: row.missingMimics,
+            evidenceSource: row.evidenceSource,
+          })
+        }
+        className="editorial-action px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        Strengthen
+      </button>
+      <button
+        type="button"
+        disabled={pendingAction !== null}
+        onClick={() => onDelete(row.id!)}
+        className="editorial-action px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        Remove
+      </button>
+    </div>
+  );
+}
+
+function EscalationAnnotationPill({
+  item,
+  pendingAction,
+  onUpdate,
+  onDelete,
+}: {
+  item: CaseEscalationCoverageRow;
+  pendingAction: string | null;
+  onUpdate: (
+    annotationId: string,
+    payload: CaseEscalationAnnotationPayload,
+  ) => void;
+  onDelete: (annotationId: string) => void;
+}) {
+  const explicit = item.coverageSource === 'explicit';
+  const status =
+    explicit ? (item.covered ? 'explicit' : 'needs review') : 'inferred';
+  const tone =
+    explicit && item.covered ? 'success' : item.coverageSource === 'inferred' ? 'info' : 'warning';
+
+  return (
+    <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-[var(--color-navy-border)] bg-white/5 px-2 py-1">
+      <StatusBadge
+        status={`${formatLabel(item.escalationType)}: ${status}`}
+        tone={tone}
+      />
+      {item.id ? (
+        <>
+          <button
+            type="button"
+            disabled={pendingAction !== null}
+            onClick={() =>
+              onUpdate(item.id!, {
+                caseId: item.caseId,
+                escalationType: item.escalationType,
+                covered: !item.covered,
+                evidenceStrength: item.evidenceStrength,
+                reasoningPathId: item.reasoningPathId,
+                notes: item.notes,
+              })
+            }
+            className="text-xs font-semibold text-[var(--color-teal)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Toggle
+          </button>
+          <button
+            type="button"
+            disabled={pendingAction !== null}
+            onClick={() => onDelete(item.id!)}
+            className="text-xs font-semibold text-[var(--color-rose)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Remove
+          </button>
+        </>
+      ) : null}
+    </div>
   );
 }

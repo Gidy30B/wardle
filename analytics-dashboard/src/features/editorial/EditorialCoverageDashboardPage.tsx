@@ -14,6 +14,8 @@ import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { SpecialtyIcon } from '../specialties/specialty-icons';
+import { buildEditorialQueues, diagnosisQueueIds } from './coverageQueues';
+import { buildUnsupportedClaimDeepLink } from './workspace/workspaceDeepLinks';
 
 const weaknessOptions: Array<{
   value: EditorialCoverageWeakness | '';
@@ -44,6 +46,7 @@ export default function EditorialCoverageDashboardPage() {
   const [overview, setOverview] = useState<EditorialCoverageOverview | null>(
     null,
   );
+  const [activeQueue, setActiveQueue] = useState<string>('all');
   const [inventoryHealth, setInventoryHealth] =
     useState<CaseInventoryHealth | null>(null);
   const [loading, setLoading] = useState(true);
@@ -104,6 +107,14 @@ export default function EditorialCoverageDashboardPage() {
   if (!overview) {
     return null;
   }
+
+  const queues = buildEditorialQueues(overview.weakDiagnoses);
+  const filteredWeakDiagnoses =
+    activeQueue === 'all'
+      ? overview.weakDiagnoses
+      : overview.weakDiagnoses.filter((diagnosis) =>
+          diagnosisQueueIds(diagnosis).includes(activeQueue),
+        );
 
   return (
     <div className="space-y-5">
@@ -183,6 +194,32 @@ export default function EditorialCoverageDashboardPage() {
           label="Readiness score"
           value={overview.evidenceCoverageReadiness.averageGenerationReadinessScore}
         />
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <SectionHeader
+          title="Editorial Queues"
+          subtitle="Risk-focused slices for operational triage"
+        />
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <QueueButton
+            active={activeQueue === 'all'}
+            label="All weak diagnoses"
+            count={overview.weakDiagnoses.length}
+            tone="neutral"
+            onClick={() => setActiveQueue('all')}
+          />
+          {queues.map((queue) => (
+            <QueueButton
+              key={queue.id}
+              active={activeQueue === queue.id}
+              label={queue.label}
+              count={queue.count}
+              tone={queue.tone}
+              onClick={() => setActiveQueue(queue.id)}
+            />
+          ))}
+        </div>
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.8fr)]">
@@ -294,20 +331,30 @@ export default function EditorialCoverageDashboardPage() {
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <SectionHeader
           title="Weak Diagnoses"
-          subtitle={`${overview.weakDiagnoses.length} shown`}
+          subtitle={`${filteredWeakDiagnoses.length} shown`}
         />
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
-          {overview.weakDiagnoses.map((diagnosis) => (
-            <Link
-              key={diagnosis.diagnosisRegistryId}
-              to={diagnosis.targetUrl}
-              className="rounded-lg border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-white"
-            >
+          {filteredWeakDiagnoses.map((diagnosis) => {
+            const triage =
+              diagnosis.editorialTriage ?? diagnosis.editorialPrioritization;
+            const targetUrl = targetUrlWithTab(
+              diagnosis.targetUrl,
+              triage?.targetTab,
+            );
+
+            return (
+              <article
+                key={diagnosis.diagnosisRegistryId}
+                className="rounded-lg border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-white"
+              >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="font-semibold text-slate-900">
+                  <Link
+                    to={targetUrl}
+                    className="font-semibold text-slate-900 hover:text-slate-700"
+                  >
                     {diagnosis.diagnosisName}
-                  </p>
+                  </Link>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-slate-500">
                     {diagnosis.specialty ? (
                       <span className="inline-flex items-center gap-1.5">
@@ -328,6 +375,14 @@ export default function EditorialCoverageDashboardPage() {
                 <StatusBadge status={diagnosis.lifecycleState} />
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
+                {diagnosisQueueIds(diagnosis).slice(0, 3).map((queueId) => (
+                  <span
+                    key={queueId}
+                    className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800"
+                  >
+                    {formatLabel(queueId)}
+                  </span>
+                ))}
                 {diagnosis.weaknesses.slice(0, 5).map((weakness) => (
                   <span
                     key={weakness}
@@ -337,14 +392,89 @@ export default function EditorialCoverageDashboardPage() {
                   </span>
                 ))}
               </div>
+              {triage?.recommendedNextAction ? (
+                <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Next action
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {triage.recommendedNextAction}
+                  </p>
+                  {triage.triageReasons?.length ? (
+                    <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
+                      {triage.triageReasons.slice(0, 2).map((reason) => (
+                        <li key={reason}>{reason}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
+              {diagnosis.unsupportedClaims?.unsupportedClaimCount ? (
+                <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-rose-950">
+                      Unsupported claims
+                    </p>
+                    <StatusBadge
+                      status={`${diagnosis.unsupportedClaims.unsupportedClaimCount} signal${
+                        diagnosis.unsupportedClaims.unsupportedClaimCount === 1
+                          ? ''
+                          : 's'
+                      }`}
+                      tone={
+                        diagnosis.unsupportedClaims.blockingUnsupportedClaimCount
+                          ? 'danger'
+                          : 'warning'
+                      }
+                    />
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-rose-800">
+                    {diagnosis.unsupportedClaims.blockingUnsupportedClaimCount
+                      ? `${diagnosis.unsupportedClaims.blockingUnsupportedClaimCount} block publication.`
+                      : 'Needs editor verification before readiness review.'}
+                    {diagnosis.unsupportedClaims.unsupportedClaimSectionTypes
+                      .length
+                      ? ` Sections: ${diagnosis.unsupportedClaims.unsupportedClaimSectionTypes
+                          .map(formatLabel)
+                          .join(', ')}.`
+                      : ''}
+                  </p>
+                  {diagnosis.unsupportedClaims.unsupportedClaimSignalsPreview
+                    .length ? (
+                    <div className="mt-2 space-y-1">
+                      {diagnosis.unsupportedClaims.unsupportedClaimSignalsPreview
+                        .slice(0, 2)
+                        .map((claim) => (
+                          <Link
+                            key={`${claim.sectionId ?? claim.sectionType}-${claim.claimId ?? claim.claimText}`}
+                            to={buildUnsupportedClaimDeepLink({
+                              targetUrl: diagnosis.targetUrl,
+                              claimId: claim.claimId,
+                              sectionId: claim.sectionId,
+                              targetTab: claim.targetTab,
+                            })}
+                            className="block rounded-md border border-rose-200 bg-white/70 px-2 py-1.5 text-xs leading-5 text-rose-800 transition hover:border-rose-300 hover:bg-white"
+                          >
+                            <span className="font-semibold">
+                              {formatLabel(claim.sectionType)}
+                            </span>
+                            {': '}
+                            {claim.claimText}
+                          </Link>
+                        ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="mt-3 grid grid-cols-4 gap-2 text-center">
                 <TinyMetric label="Rules" value={diagnosis.teaching.activeRuleCount} />
                 <TinyMetric label="Cases" value={diagnosis.inventory.playableCaseCount} />
                 <TinyMetric label="Diffs" value={diagnosis.differentials.linkedDifferentialCount} />
                 <TinyMetric label="Graph" value={diagnosis.graph.relationshipCount} />
               </div>
-            </Link>
-          ))}
+              </article>
+            );
+          })}
         </div>
       </section>
 
@@ -515,6 +645,42 @@ function TinyMetric({ label, value }: { label: string; value: number }) {
   );
 }
 
+function QueueButton({
+  active,
+  label,
+  count,
+  tone,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  count: number;
+  tone: 'danger' | 'warning' | 'neutral';
+  onClick: () => void;
+}) {
+  const toneClass =
+    tone === 'danger'
+      ? 'border-rose-200 bg-rose-50 text-rose-900'
+      : tone === 'warning'
+        ? 'border-amber-200 bg-amber-50 text-amber-900'
+        : 'border-slate-200 bg-slate-50 text-slate-900';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        'rounded-lg border px-4 py-3 text-left transition hover:bg-white',
+        toneClass,
+        active ? 'ring-2 ring-slate-900/15' : '',
+      ].join(' ')}
+    >
+      <span className="block text-sm font-semibold">{label}</span>
+      <span className="mt-1 block text-2xl font-semibold">{count}</span>
+    </button>
+  );
+}
+
 function HealthRow({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center justify-between gap-3">
@@ -564,4 +730,11 @@ function formatLabel(value: string) {
     .split(' ')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
+}
+
+function targetUrlWithTab(targetUrl: string, targetTab: string | undefined) {
+  if (!targetTab || targetTab === 'overview') {
+    return targetUrl;
+  }
+  return `${targetUrl}?tab=${encodeURIComponent(targetTab)}`;
 }

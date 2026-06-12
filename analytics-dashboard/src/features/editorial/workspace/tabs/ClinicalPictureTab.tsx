@@ -1,5 +1,6 @@
 import type {
   ClaimRepairResult,
+  AiDraftDecisionAction,
   DiagnosisEditorialWorkspace,
   DiagnosisEducationRevisionAnalysis,
   DiagnosisEducationRevisionCompareResult,
@@ -7,6 +8,7 @@ import type {
 } from '../../../../api/admin';
 import RevisionCompareCard from '../../../cases/education/RevisionCompareCard';
 import RevisionHistoryCard from '../../../cases/education/RevisionHistoryCard';
+import StatusBadge from '../../../../components/ui/StatusBadge';
 import { ClaimRepairPanel } from '../ClaimRepairPanel';
 import {
   CompactPanel,
@@ -16,6 +18,7 @@ import {
   TabNextStepCard,
 } from '../EditorialPrimitives';
 import { formatDate, formatLabel, formatScore } from '../workspaceTransforms';
+import { repairsBySection } from '../acceptedRepairs';
 export function ClinicalPictureTab({
   workspace,
   revisions,
@@ -25,9 +28,12 @@ export function ClinicalPictureTab({
   compareFromVersion,
   compareToVersion,
   pendingAction,
-  latestClaimRepair,
+  claimRepairs,
+  targetClaimId,
+  targetSectionId,
   onRegenerateSection,
   onRepairUnsupportedClaim,
+  onClaimRepairDecision,
   onFromVersionChange,
   onToVersionChange,
 }: {
@@ -39,12 +45,20 @@ export function ClinicalPictureTab({
   compareFromVersion: number | null;
   compareToVersion: number | null;
   pendingAction: string | null;
-  latestClaimRepair: ClaimRepairResult | null;
+  claimRepairs: Record<string, ClaimRepairResult>;
+  targetClaimId: string | null;
+  targetSectionId: string | null;
   onRegenerateSection: (section: EducationRegenerableSection) => void;
   onRepairUnsupportedClaim: (
     claim: NonNullable<
       DiagnosisEditorialWorkspace['unsupportedClaimsBySection']
     >[number],
+  ) => void;
+  onClaimRepairDecision: (
+    claim: { sectionId: string; claimId: string },
+    repair: ClaimRepairResult,
+    action: AiDraftDecisionAction,
+    note?: string,
   ) => void;
   onFromVersionChange: (version: number | null) => void;
   onToVersionChange: (version: number | null) => void;
@@ -77,11 +91,15 @@ export function ClinicalPictureTab({
         pendingAction={pendingAction}
         onRegenerateSection={onRegenerateSection}
       />
+      <AcceptedRepairsPanel workspace={workspace} />
       <ClaimRepairPanel
         claims={workspace.unsupportedClaimsBySection ?? []}
-        latestRepair={latestClaimRepair}
+        repairs={claimRepairs}
         pendingAction={pendingAction}
+        targetClaimId={targetClaimId}
+        targetSectionId={targetSectionId}
         onRepairUnsupportedClaim={onRepairUnsupportedClaim}
+        onClaimRepairDecision={onClaimRepairDecision}
       />
       <DraftAIActionsPanel
         actions={weakSections.slice(0, 4).map((section) => ({
@@ -112,6 +130,80 @@ export function ClinicalPictureTab({
         onToVersionChange={onToVersionChange}
       />
     </div>
+  );
+}
+
+function AcceptedRepairsPanel({
+  workspace,
+}: {
+  workspace: DiagnosisEditorialWorkspace;
+}) {
+  const repairs = workspace.education.acceptedRepairs ?? [];
+  if (!repairs.length) {
+    return null;
+  }
+  const groups = repairsBySection(repairs);
+
+  return (
+    <CompactPanel
+      title="Accepted repairs"
+      subtitle="Draft education content now includes these reviewed claim repairs."
+    >
+      <div className="space-y-3">
+        {Object.entries(groups).map(([section, sectionRepairs]) => (
+          <div
+            key={section}
+            className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-3"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={formatLabel(section)} tone="success" />
+              <StatusBadge
+                status={`${sectionRepairs.length} accepted`}
+                tone="neutral"
+              />
+            </div>
+            <div className="mt-3 space-y-2">
+              {sectionRepairs.map((repair) => (
+                <div
+                  key={`${repair.section}-${repair.sourceAuditId ?? repair.acceptedClaim}`}
+                  className="rounded-md border border-[var(--color-teal)]/25 bg-[var(--color-teal)]/10 px-3 py-2"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    Accepted repair
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-slate-100">
+                    {repair.acceptedClaim}
+                  </p>
+                  {repair.originalClaim ? (
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Replaced: {repair.originalClaim}
+                    </p>
+                  ) : null}
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs font-semibold text-slate-300">
+                      Evidence-supported details
+                    </summary>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      Evidence:{' '}
+                      {repair.evidenceIds.length
+                        ? repair.evidenceIds.join(', ')
+                        : 'none linked'}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Accepted:{' '}
+                      {repair.acceptedAt ? formatDate(repair.acceptedAt) : 'Unknown'}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Source audit: {repair.sourceAuditId ?? 'unknown'}
+                    </p>
+                  </details>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </CompactPanel>
   );
 }
 

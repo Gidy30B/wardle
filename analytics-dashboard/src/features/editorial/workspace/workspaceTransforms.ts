@@ -163,6 +163,9 @@ export function groupCaseLearningGoalCoverage(
       missingDiscriminators: string[];
       missingMimics: string[];
       coverageStrength: number;
+      row?: NonNullable<
+        DiagnosisEditorialWorkspace['caseLearningGoalCoverage']
+      >[number];
     }
   >();
 
@@ -175,6 +178,7 @@ export function groupCaseLearningGoalCoverage(
         missingDiscriminators: [],
         missingMimics: [],
         coverageStrength: 0,
+        row,
       };
     current.caseTitles = uniqueText([...current.caseTitles, row.caseTitle]);
     current.missingDiscriminators = uniqueText([
@@ -189,6 +193,12 @@ export function groupCaseLearningGoalCoverage(
       current.coverageStrength,
       row.coverageStrength,
     );
+    if (
+      !current.row ||
+      row.coverageStrength > current.row.coverageStrength
+    ) {
+      current.row = row;
+    }
     groups.set(row.learningGoalId, current);
   }
 

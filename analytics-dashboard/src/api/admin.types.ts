@@ -1536,7 +1536,11 @@ export type CaseEscalationAnnotationPayload = {
 
 export type ClaimRepairResult = {
   repairId: string;
+  auditId?: string;
   claimId: string;
+  targetClaimId?: string;
+  targetSectionId?: string;
+  targetTab?: WorkspaceTargetTab | string;
   originalClaim: string;
   proposedClaim: string;
   evidenceIds: string[];
@@ -1564,6 +1568,59 @@ export type MaturityBreakdown = {
   lifecyclePenalty: number;
   blockersPenalty: number;
   overall: number;
+};
+
+export type EditorialRiskTier = 'low' | 'medium' | 'high' | 'critical' | string;
+export type EditorialWorkflowQueueId =
+  | 'needs_review'
+  | 'high_publication_risk'
+  | 'weak_discriminator_coverage'
+  | 'unsupported_claims'
+  | 'sparse_diagnosis'
+  | 'draft_heavy'
+  | 'escalation_coverage_gaps'
+  | string;
+
+export type EditorialPrioritization = {
+  editorialPriority: {
+    score: number;
+    tier: EditorialRiskTier;
+    reasons: string[];
+  };
+  publicationRisk: {
+    score: number;
+    tier: EditorialRiskTier;
+  };
+  learnerRisk: {
+    score: number;
+    tier: EditorialRiskTier;
+  };
+  reasoningRisk: {
+    score: number;
+    tier: EditorialRiskTier;
+  };
+  highestImpactFixes: Array<{
+    id: string;
+    label: string;
+    reason: string;
+    targetTab: WorkspaceTargetTab | string;
+    severity: WorkspaceReadinessSeverity | string;
+  }>;
+  workflowQueues?: Array<{
+    id: EditorialWorkflowQueueId;
+    label: string;
+    count: number;
+    severity: WorkspaceReadinessSeverity | string;
+  }>;
+  queues: Array<{
+    id: EditorialWorkflowQueueId;
+    label: string;
+    count: number;
+    severity: WorkspaceReadinessSeverity | string;
+  }>;
+  triageReasons?: string[];
+  recommendedNextAction?: string;
+  targetTab?: WorkspaceTargetTab | string;
 };
 
 export type DiagnosisEditorialWorkspace = {
@@ -1594,6 +1651,7 @@ export type DiagnosisEditorialWorkspace = {
   maturityBreakdown?: MaturityBreakdown;
   maturityWeighting?: MaturityWeighting;
   maturityExplanation?: string[];
+  editorialPrioritization?: EditorialPrioritization;
   aiDraftAuditTrail?: AiDraftRevisionAudit[];
   workspaceSummary: {
     status: DiagnosisWorkspaceOverallStatus | 'ready' | 'needs_review' | string;
@@ -1646,6 +1704,15 @@ export type DiagnosisEditorialWorkspace = {
     version: number | null;
     qualityScore: number | null;
     sectionHealth: WorkspaceSectionFailureSummary[];
+    acceptedRepairs?: Array<{
+      section: string;
+      originalClaim: string;
+      acceptedClaim: string;
+      evidenceIds: string[];
+      acceptedAt: string | null;
+      reviewerUserId: string | null;
+      sourceAuditId: string | null;
+    }>;
     blockers: string[];
     warnings: string[];
     updatedAt: string | null;
@@ -2167,6 +2234,28 @@ export type EditorialCoverageDiagnosis = {
     weakDiversity: boolean;
   };
   evidenceCoverage: EvidenceCoverageDiagnosis | null;
+  unsupportedClaims?: {
+    unsupportedClaimCount: number;
+    blockingUnsupportedClaimCount: number;
+    unsupportedClaimSeveritySummary: {
+      blocker: number;
+      warning: number;
+    };
+    unsupportedClaimSectionTypes: string[];
+    unsupportedClaimSignalsPreview: Array<{
+      claimId?: string;
+      sectionId?: string;
+      sectionType: string;
+      claimText: string;
+      targetTab?: WorkspaceTargetTab | 'clinical-picture' | string;
+      repairable?: boolean;
+      severity: WorkspaceReadinessSeverity | 'blocker' | 'warning' | string;
+      blocksPublication?: boolean;
+      createdAt: string;
+    }>;
+  };
+  editorialTriage?: EditorialPrioritization;
+  editorialPrioritization?: EditorialPrioritization;
   risk: {
     duplicateRisk: number;
     mergeRisk: number;

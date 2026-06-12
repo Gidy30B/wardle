@@ -49,11 +49,12 @@ export function EditorialRightRail({
   return (
     <aside className="space-y-4 xl:sticky xl:top-5 xl:self-start">
       <CopilotSnapshotCard workspace={workspace} />
-      <MaturityInputsCard workspace={workspace} />
+      <PriorityDecisionCard workspace={workspace} onTabChange={onTabChange} />
       <CopilotSuggestionsCard
         suggestions={suggestions}
         onTabChange={onTabChange}
       />
+      <MaturityInputsCard workspace={workspace} />
       <AuditTrailPanel
         audits={workspace.aiDraftAuditTrail ?? []}
         onDecision={onAiDraftDecision}
@@ -62,6 +63,112 @@ export function EditorialRightRail({
       <AvailableActionsCard actions={workspace.availableActions} />
     </aside>
   );
+}
+
+function PriorityDecisionCard({
+  workspace,
+  onTabChange,
+}: {
+  workspace: DiagnosisEditorialWorkspace;
+  onTabChange: (tab: WorkspaceTab) => void;
+}) {
+  const priority = workspace.editorialPrioritization;
+  const fixes = priority?.highestImpactFixes ?? [];
+  const queues = priority?.workflowQueues ?? priority?.queues ?? [];
+
+  if (!priority) {
+    return null;
+  }
+
+  return (
+    <CompactPanel
+      title="Highest impact fixes"
+      subtitle="Priority is derived from blockers, learner risk, evidence, cases, and lifecycle state."
+      action={
+        <StatusBadge
+          status={`${priority.editorialPriority.score} ${formatLabel(
+            priority.editorialPriority.tier,
+          )}`}
+          tone={riskTone(priority.editorialPriority.tier)}
+        />
+      }
+    >
+      <div className="grid gap-2">
+        <RiskRow label="Publication" risk={priority.publicationRisk} />
+        <RiskRow label="Learner confusion" risk={priority.learnerRisk} />
+        <RiskRow label="Reasoning" risk={priority.reasoningRisk} />
+      </div>
+      {fixes.length ? (
+        <div className="mt-3 space-y-2">
+          {fixes.slice(0, 4).map((fix) => (
+            <button
+              key={fix.id}
+              type="button"
+              onClick={() => onTabChange(fix.targetTab as WorkspaceTab)}
+              className="w-full rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-2 text-left transition hover:border-[var(--color-teal)]/40 hover:bg-[var(--color-teal)]/10"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-sm font-semibold text-slate-100">
+                  {fix.label}
+                </span>
+                <StatusBadge
+                  status={formatLabel(fix.severity)}
+                  tone={fix.severity === 'blocker' ? 'danger' : 'warning'}
+                />
+              </div>
+              <p className="mt-1 text-xs leading-5 text-slate-400">
+                {fix.reason}
+              </p>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-slate-500">
+          No high-impact editorial fixes are currently reported.
+        </p>
+      )}
+      {queues.length ? (
+        <details className="mt-3 rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+            Queue membership
+          </summary>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {queues.map((queue) => (
+              <StatusBadge
+                key={queue.id}
+                status={`${queue.label} (${queue.count})`}
+                tone={queue.severity === 'blocker' ? 'danger' : 'warning'}
+              />
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </CompactPanel>
+  );
+}
+
+function RiskRow({
+  label,
+  risk,
+}: {
+  label: string;
+  risk: { score: number; tier: string };
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-2">
+      <span className="text-sm text-slate-300">{label}</span>
+      <StatusBadge
+        status={`${risk.score} ${formatLabel(risk.tier)}`}
+        tone={riskTone(risk.tier)}
+      />
+    </div>
+  );
+}
+
+function riskTone(tier: string): StatusBadgeTone {
+  if (tier === 'critical' || tier === 'high') return 'danger';
+  if (tier === 'medium') return 'warning';
+  return 'success';
 }
 
 function MaturityInputsCard({
@@ -169,11 +276,16 @@ function MaturityInputsCard({
         />
       </div>
       {workspace.maturityExplanation?.length ? (
-        <ul className="mt-3 space-y-1 text-xs leading-5 text-slate-500">
-          {workspace.maturityExplanation.slice(0, 4).map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
+        <details className="mt-3 rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+            Explain maturity inputs
+          </summary>
+          <ul className="mt-3 space-y-1 text-xs leading-5 text-slate-500">
+            {workspace.maturityExplanation.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </details>
       ) : (
         <p className="mt-3 text-xs leading-5 text-slate-500">
           Score is provided by the workspace API; these rows expose the real inputs

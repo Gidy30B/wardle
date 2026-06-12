@@ -1,7 +1,7 @@
 import { useAuth, useUser } from '@clerk/clerk-react';
 import { useEffect, useMemo, useState } from 'react';
 import { fetchAdminViewer, type AdminViewer } from '../api/admin';
-import { createApiClient } from '../api/client';
+import { createApiClient, isLocalQaAuthEnabled } from '../api/client';
 
 export const USER_ROLES = {
   USER: 'user',
@@ -59,7 +59,8 @@ export function useConsoleAccess(): ConsoleAccessState {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn) {
+    const localQaAuth = isLocalQaAuthEnabled();
+    if (!localQaAuth && (!isLoaded || !isSignedIn)) {
       return;
     }
 
@@ -98,8 +99,11 @@ export function useConsoleAccess(): ConsoleAccessState {
     };
   }, [client, isLoaded, isSignedIn]);
 
-  const effectiveViewer = isSignedIn ? viewer : null;
-  const effectiveStatus: ConsoleAccessStatus = !isLoaded
+  const localQaAuth = isLocalQaAuthEnabled();
+  const effectiveViewer = isSignedIn || localQaAuth ? viewer : null;
+  const effectiveStatus: ConsoleAccessStatus = localQaAuth
+    ? status
+    : !isLoaded
     ? 'loading'
     : !isSignedIn
       ? 'signed-out'
