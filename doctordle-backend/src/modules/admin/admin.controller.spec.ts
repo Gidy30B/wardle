@@ -100,6 +100,11 @@ describe('AdminController generateCases', () => {
       normalizeAll: jest.fn().mockResolvedValue({ repaired: [] }),
       normalizeOne: jest.fn().mockResolvedValue({ repaired: [] }),
     };
+    const diagnosisRegistryAiMetadataSuggestionService = {
+      generateAiMetadataSuggestion: jest
+        .fn()
+        .mockResolvedValue({ suggestion: { canonicalName: 'Appendicitis' } }),
+    };
     const diagnosisRegistryMetadataSuggestionService = {
       suggestRegistryMetadata: jest
         .fn()
@@ -137,6 +142,7 @@ describe('AdminController generateCases', () => {
         diagnosisEditorialOnboardingService as never,
         diagnosisRegistryLifecyclePolicyService as never,
         diagnosisRegistryLifecycleTelemetryService as never,
+        diagnosisRegistryAiMetadataSuggestionService as never,
         diagnosisRegistryMetadataSuggestionService as never,
         diagnosisRegistryMergeAnalysisService as never,
         diagnosisRegistryMergeExecutionService as never,
@@ -155,6 +161,7 @@ describe('AdminController generateCases', () => {
       diagnosisEditorialWorkspaceService,
       diagnosisEditorialOnboardingService,
       diagnosisRegistryLifecyclePolicyService,
+      diagnosisRegistryAiMetadataSuggestionService,
       diagnosisRegistryMergeAnalysisService,
       diagnosisRegistryMergeExecutionService,
     };
@@ -222,6 +229,25 @@ describe('AdminController generateCases', () => {
       specialty: 'Cardiology',
       limit: 25,
       page: 2,
+    });
+  });
+
+  it('generates AI metadata suggestions for a registry row', async () => {
+    const {
+      controller,
+      diagnosisRegistryAiMetadataSuggestionService,
+    } = buildController();
+
+    await controller.generateAiDiagnosisRegistryMetadataSuggestions(
+      '11111111-1111-4111-8111-111111111111',
+      { includeAliases: true, includeMetadata: true },
+    );
+
+    expect(
+      diagnosisRegistryAiMetadataSuggestionService.generateAiMetadataSuggestion,
+    ).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111', {
+      includeAliases: true,
+      includeMetadata: true,
     });
   });
 

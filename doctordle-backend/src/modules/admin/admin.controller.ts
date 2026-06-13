@@ -77,6 +77,10 @@ import {
   type DiagnosisRegistryLifecycleAction,
 } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
 import { DiagnosisRegistryLifecycleTelemetryService } from '../diagnosis-registry/diagnosis-registry-lifecycle-telemetry.service';
+import {
+  DiagnosisRegistryAiMetadataSuggestionService,
+  type GenerateAiRegistryMetadataInput,
+} from '../diagnosis-registry/diagnosis-registry-ai-metadata-suggestion.service';
 import { DiagnosisRegistryMetadataSuggestionService } from '../diagnosis-registry/diagnosis-registry-metadata-suggestion.service';
 import { DiagnosisRegistryMergeAnalysisService } from '../diagnosis-registry/diagnosis-registry-merge-analysis.service';
 import { DiagnosisRegistryMergeExecutionService } from '../diagnosis-registry/diagnosis-registry-merge-execution.service';
@@ -160,6 +164,7 @@ export class AdminController {
     private readonly diagnosisEditorialOnboardingService: DiagnosisEditorialOnboardingService,
     private readonly diagnosisRegistryLifecyclePolicyService: DiagnosisRegistryLifecyclePolicyService,
     private readonly diagnosisRegistryLifecycleTelemetryService: DiagnosisRegistryLifecycleTelemetryService,
+    private readonly diagnosisRegistryAiMetadataSuggestionService: DiagnosisRegistryAiMetadataSuggestionService,
     private readonly diagnosisRegistryMetadataSuggestionService: DiagnosisRegistryMetadataSuggestionService,
     private readonly diagnosisRegistryMergeAnalysisService: DiagnosisRegistryMergeAnalysisService,
     private readonly diagnosisRegistryMergeExecutionService: DiagnosisRegistryMergeExecutionService,
@@ -811,6 +816,19 @@ export class AdminController {
   ) {
     return this.diagnosisRegistryMetadataSuggestionService.suggestRegistryMetadata(
       diagnosisRegistryId,
+    );
+  }
+
+  @Post('diagnosis-registry/:diagnosisRegistryId/metadata-suggestions/generate-ai')
+  @SeniorEditorialAccess()
+  async generateAiDiagnosisRegistryMetadataSuggestions(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Body() body: GenerateAiRegistryMetadataInput,
+  ) {
+    return this.diagnosisRegistryAiMetadataSuggestionService.generateAiMetadataSuggestion(
+      diagnosisRegistryId,
+      body,
     );
   }
 

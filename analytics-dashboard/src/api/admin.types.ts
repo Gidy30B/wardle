@@ -3168,6 +3168,36 @@ export type DiagnosisRegistryMetadataSuggestion = {
   rationale: string[];
 };
 
+export type GenerateAiDiagnosisRegistryMetadataSuggestionPayload = {
+  includeAliases?: boolean;
+  includeMetadata?: boolean;
+};
+
+export type AiDiagnosisRegistryMetadataSuggestion = {
+  canonicalName: string;
+  displayLabel: string;
+  aliases: string[];
+  specialty: string;
+  subspecialty: string | null;
+  category: string;
+  bodySystem: string;
+  organSystem: string;
+  difficultyBand: DiagnosisDifficultyBand;
+  rarityBand: string;
+  clinicalSetting: string;
+  ageGroup: string;
+  urgencyLevel: string;
+  preferredClueTypes: string[];
+  excludedClueTypes: string[];
+  confidence: number;
+  rationale: string;
+  warnings: string[];
+};
+
+export type AiDiagnosisRegistryMetadataSuggestionResponse = {
+  suggestion: AiDiagnosisRegistryMetadataSuggestion;
+};
+
 export type CreateDiagnosisAndLinkPayload = CreateDiagnosisRegistryPayload & {
   diagnosisEditorialNote?: string;
 };

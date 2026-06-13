@@ -4,11 +4,13 @@ import { Link } from 'react-router-dom';
 import {
   addDiagnosisAlias,
   createRegistryFromCandidate,
+  generateDiagnosisRegistryAiMetadataSuggestion,
   getDiagnosisRegistryMetadataSuggestions,
   getDiagnosisRegistryCandidates,
   reviewDiagnosisRegistryCandidate,
   updateDiagnosisRegistryLifecycle,
   updateDiagnosisRegistryMetadata,
+  type AiDiagnosisRegistryMetadataSuggestion,
   type CreateRegistryFromCandidateResult,
   type DiagnosisRegistryMetadataSuggestion,
   type DiagnosisRegistryCandidate,
@@ -53,11 +55,19 @@ export default function RegistryCandidatesPage() {
     useState<CreateRegistryFromCandidateResult | null>(null);
   const [metadataSuggestion, setMetadataSuggestion] =
     useState<DiagnosisRegistryMetadataSuggestion | null>(null);
+  const [aiMetadataSuggestion, setAiMetadataSuggestion] =
+    useState<AiDiagnosisRegistryMetadataSuggestion | null>(null);
   const [metadataDraft, setMetadataDraft] =
     useState<UpdateDiagnosisRegistryMetadataPayload | null>(null);
   const [selectedAliases, setSelectedAliases] = useState<Set<string>>(
     () => new Set(),
   );
+  const [aiMetadataLoading, setAiMetadataLoading] = useState(false);
+  const [metadataApplyBusy, setMetadataApplyBusy] = useState(false);
+  const [aiManualConfirmed, setAiManualConfirmed] = useState(false);
+  const [metadataApplyMessage, setMetadataApplyMessage] = useState<
+    string | null
+  >(null);
   const [activationBusy, setActivationBusy] = useState(false);
   const [activationMessage, setActivationMessage] = useState<string | null>(
     null,
@@ -103,8 +113,11 @@ export default function RegistryCandidatesPage() {
       setActionError(null);
       setCreationResult(null);
       setMetadataSuggestion(null);
+      setAiMetadataSuggestion(null);
       setMetadataDraft(null);
       setSelectedAliases(new Set());
+      setAiManualConfirmed(false);
+      setMetadataApplyMessage(null);
       await action();
       await load();
     } catch (reviewError) {
@@ -171,8 +184,11 @@ export default function RegistryCandidatesPage() {
       setActionError(null);
       setCreationResult(null);
       setMetadataSuggestion(null);
+      setAiMetadataSuggestion(null);
       setMetadataDraft(null);
       setSelectedAliases(new Set());
+      setAiManualConfirmed(false);
+      setMetadataApplyMessage(null);
       const result = await createRegistryFromCandidate(client, candidate.id);
       setCreationResult(result);
       setCandidateToCreate(null);
@@ -198,6 +214,9 @@ export default function RegistryCandidatesPage() {
       try {
         setActivationError(null);
         setActivationMessage(null);
+        setAiMetadataSuggestion(null);
+        setAiManualConfirmed(false);
+        setMetadataApplyMessage(null);
         const suggestion = await getDiagnosisRegistryMetadataSuggestions(
           client,
           creationResult.registry.id,
@@ -228,8 +247,111 @@ export default function RegistryCandidatesPage() {
     };
   }, [client, creationResult]);
 
+  async function generateAiMetadata() {
+    if (!creationResult) {
+      return;
+    }
+
+    try {
+      setAiMetadataLoading(true);
+      setActivationError(null);
+      setActivationMessage(null);
+      setMetadataApplyMessage(null);
+      setAiManualConfirmed(false);
+      const response = await generateDiagnosisRegistryAiMetadataSuggestion(
+        client,
+        creationResult.registry.id,
+        {
+          includeAliases: true,
+          includeMetadata: true,
+        },
+      );
+      const suggestion = response.suggestion;
+      setAiMetadataSuggestion(suggestion);
+      setMetadataDraft((current) => ({
+        ...(current ?? {}),
+        specialty: suggestion.specialty,
+        subspecialty: suggestion.subspecialty,
+        category: suggestion.category,
+        bodySystem: suggestion.bodySystem,
+        organSystem: suggestion.organSystem,
+        difficultyBand: suggestion.difficultyBand,
+        rarityBand: suggestion.rarityBand,
+        clinicalSetting: suggestion.clinicalSetting,
+        ageGroup: suggestion.ageGroup,
+        urgencyLevel: suggestion.urgencyLevel,
+        preferredClueTypes: suggestion.preferredClueTypes,
+        excludedClueTypes: suggestion.excludedClueTypes,
+        isPlayable: current?.isPlayable ?? true,
+        isGeneratable:
+          current?.isGeneratable ?? creationResult.registry.isGeneratable,
+      }));
+      setSelectedAliases((current) => {
+        const next = new Set(current);
+        for (const alias of suggestion.aliases) {
+          const normalizedTerm = normalizeAlias(alias);
+          if (normalizedTerm) {
+            next.add(normalizedTerm);
+          }
+        }
+        return next;
+      });
+    } catch (aiError) {
+      setActivationError(
+        aiError instanceof Error
+          ? aiError.message
+          : 'AI metadata generation failed.',
+      );
+    } finally {
+      setAiMetadataLoading(false);
+    }
+  }
+
+  async function applyMetadataDraft() {
+    if (!creationResult || !metadataDraft) {
+      return;
+    }
+
+    if ((aiMetadataSuggestion?.confidence ?? 1) < 0.6 && !aiManualConfirmed) {
+      setActivationError(
+        'Low-confidence AI metadata requires manual confirmation before applying.',
+      );
+      return;
+    }
+
+    try {
+      setMetadataApplyBusy(true);
+      setActivationError(null);
+      setMetadataApplyMessage(null);
+      await updateDiagnosisRegistryMetadata(
+        client,
+        creationResult.registry.id,
+        metadataDraft,
+      );
+      setMetadataApplyMessage(
+        'Metadata saved to the draft registry row. Activation is still gated by duplicate and lifecycle checks.',
+      );
+      await load();
+    } catch (applyError) {
+      setActivationError(
+        applyError instanceof Error
+          ? applyError.message
+          : 'Metadata could not be applied.',
+      );
+    } finally {
+      setMetadataApplyBusy(false);
+    }
+  }
+
   async function activateCreatedRegistry() {
     if (!creationResult || !metadataDraft) {
+      return;
+    }
+
+    if ((aiMetadataSuggestion?.confidence ?? 1) < 0.6 && !aiManualConfirmed) {
+      setActivationError(
+        'Low-confidence AI metadata requires manual confirmation before activation.',
+      );
       return;
     }
 
@@ -242,10 +364,10 @@ export default function RegistryCandidatesPage() {
         creationResult.registry.id,
         metadataDraft,
       );
-      const aliasesToCreate =
-        metadataSuggestion?.aliases.filter((alias) =>
-          selectedAliases.has(alias.normalizedTerm),
-        ) ?? [];
+      const aliasesToCreate = getMergedAliasSuggestions(
+        metadataSuggestion,
+        aiMetadataSuggestion,
+      ).filter((alias) => selectedAliases.has(alias.normalizedTerm));
       for (const alias of aliasesToCreate) {
         await addDiagnosisAlias(client, creationResult.registry.id, {
           alias: alias.term,
@@ -285,8 +407,11 @@ export default function RegistryCandidatesPage() {
     setActivationError(null);
     setActivationMessage(null);
     setMetadataSuggestion(null);
+    setAiMetadataSuggestion(null);
     setMetadataDraft(null);
     setSelectedAliases(new Set());
+    setAiManualConfirmed(false);
+    setMetadataApplyMessage(null);
     setCreationResult({
       candidate,
       registry: {
@@ -374,12 +499,20 @@ export default function RegistryCandidatesPage() {
         <RegistryCreationSuccess
           result={creationResult}
           suggestion={metadataSuggestion}
+          aiSuggestion={aiMetadataSuggestion}
           metadataDraft={metadataDraft}
           selectedAliases={selectedAliases}
+          aiMetadataLoading={aiMetadataLoading}
+          metadataApplyBusy={metadataApplyBusy}
+          metadataApplyMessage={metadataApplyMessage}
+          aiManualConfirmed={aiManualConfirmed}
           activationBusy={activationBusy}
           activationMessage={activationMessage}
           activationError={activationError}
           onMetadataDraftChange={setMetadataDraft}
+          onGenerateAiMetadata={() => void generateAiMetadata()}
+          onApplyMetadata={() => void applyMetadataDraft()}
+          onAiManualConfirmedChange={setAiManualConfirmed}
           onToggleAlias={(normalizedTerm) => {
             setSelectedAliases((current) => {
               const next = new Set(current);
@@ -769,29 +902,49 @@ function RegistryQueueStateBadges({
 function RegistryCreationSuccess({
   result,
   suggestion,
+  aiSuggestion,
   metadataDraft,
   selectedAliases,
+  aiMetadataLoading,
+  metadataApplyBusy,
+  metadataApplyMessage,
+  aiManualConfirmed,
   activationBusy,
   activationMessage,
   activationError,
   onMetadataDraftChange,
+  onGenerateAiMetadata,
+  onApplyMetadata,
+  onAiManualConfirmedChange,
   onToggleAlias,
   onActivate,
 }: {
   result: CreateRegistryFromCandidateResult;
   suggestion: DiagnosisRegistryMetadataSuggestion | null;
+  aiSuggestion: AiDiagnosisRegistryMetadataSuggestion | null;
   metadataDraft: UpdateDiagnosisRegistryMetadataPayload | null;
   selectedAliases: Set<string>;
+  aiMetadataLoading: boolean;
+  metadataApplyBusy: boolean;
+  metadataApplyMessage: string | null;
+  aiManualConfirmed: boolean;
   activationBusy: boolean;
   activationMessage: string | null;
   activationError: string | null;
   onMetadataDraftChange: (
     next: UpdateDiagnosisRegistryMetadataPayload | null,
   ) => void;
+  onGenerateAiMetadata: () => void;
+  onApplyMetadata: () => void;
+  onAiManualConfirmedChange: (checked: boolean) => void;
   onToggleAlias: (normalizedTerm: string) => void;
   onActivate: () => void;
 }) {
   const workspacePath = `/editorial/diagnoses/${result.registry.id}`;
+  const aliasSuggestions = getMergedAliasSuggestions(suggestion, aiSuggestion);
+  const lowConfidenceAi = Boolean(
+    aiSuggestion && aiSuggestion.confidence < 0.6,
+  );
   return (
     <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -868,27 +1021,107 @@ function RegistryCreationSuccess({
               Step 1 - Review metadata
             </p>
             <p className="mt-1 text-sm text-slate-700">
-              Suggestions are heuristic and should be checked before activation.
+              Suggestions are draft-only and must be checked before activation.
             </p>
           </div>
-          {suggestion ? (
-            <StatusBadge
-              status={`${Math.round(suggestion.confidence * 100)}% confidence`}
-              tone="info"
-            />
-          ) : (
-            <StatusBadge status="Loading suggestions" tone="warning" />
-          )}
+          <div className="flex flex-wrap gap-2">
+            {suggestion ? (
+              <StatusBadge
+                status={`Heuristic ${Math.round(
+                  suggestion.confidence * 100,
+                )}%`}
+                tone="info"
+              />
+            ) : (
+              <StatusBadge status="Loading suggestions" tone="warning" />
+            )}
+            {aiSuggestion ? (
+              <StatusBadge
+                status={`AI ${Math.round(aiSuggestion.confidence * 100)}%`}
+                tone={lowConfidenceAi ? 'warning' : 'success'}
+              />
+            ) : null}
+          </div>
         </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onGenerateAiMetadata}
+            disabled={aiMetadataLoading || activationBusy}
+            className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-800 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {aiMetadataLoading ? 'Generating AI metadata...' : 'Generate AI metadata'}
+          </button>
+          <button
+            type="button"
+            onClick={onApplyMetadata}
+            disabled={
+              !metadataDraft ||
+              metadataApplyBusy ||
+              activationBusy ||
+              (lowConfidenceAi && !aiManualConfirmed)
+            }
+            className="rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {metadataApplyBusy ? 'Applying metadata...' : 'Apply metadata'}
+          </button>
+        </div>
+
+        {aiSuggestion ? (
+          <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-800">
+                  AI proposal
+                </p>
+                <p className="mt-1 text-sm font-semibold text-indigo-950">
+                  {aiSuggestion.displayLabel} / {aiSuggestion.canonicalName}
+                </p>
+              </div>
+              <StatusBadge
+                status={`${Math.round(aiSuggestion.confidence * 100)}% confidence`}
+                tone={lowConfidenceAi ? 'warning' : 'success'}
+              />
+            </div>
+            <p className="mt-2 text-sm text-indigo-900">
+              {aiSuggestion.rationale}
+            </p>
+            {aiSuggestion.warnings.length ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-900">
+                {aiSuggestion.warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            ) : null}
+            {lowConfidenceAi ? (
+              <label className="mt-3 flex items-start gap-2 text-sm font-semibold text-amber-900">
+                <input
+                  type="checkbox"
+                  checked={aiManualConfirmed}
+                  onChange={(event) =>
+                    onAiManualConfirmedChange(event.target.checked)
+                  }
+                />
+                I reviewed this low-confidence AI proposal and confirm the
+                metadata manually.
+              </label>
+            ) : null}
+          </div>
+        ) : null}
 
         {metadataDraft ? (
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             {[
               ['specialty', 'Specialty'],
+              ['subspecialty', 'Subspecialty'],
               ['category', 'Category'],
               ['bodySystem', 'Body system'],
               ['organSystem', 'Organ system'],
+              ['difficultyBand', 'Difficulty'],
+              ['rarityBand', 'Rarity'],
               ['clinicalSetting', 'Clinical setting'],
+              ['ageGroup', 'Age group'],
               ['urgencyLevel', 'Urgency'],
             ].map(([field, label]) => (
               <label
@@ -931,9 +1164,9 @@ function RegistryCreationSuccess({
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
             Step 2 - Review aliases
           </p>
-          {suggestion?.aliases.length ? (
+          {aliasSuggestions.length ? (
             <div className="mt-2 flex flex-wrap gap-2">
-              {suggestion.aliases.map((alias) => (
+              {aliasSuggestions.map((alias) => (
                 <label
                   key={alias.normalizedTerm}
                   className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
@@ -963,6 +1196,12 @@ function RegistryCreationSuccess({
           </ul>
         ) : null}
 
+        {metadataApplyMessage ? (
+          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+            {metadataApplyMessage}
+          </div>
+        ) : null}
+
         {activationError ? (
           <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
             {activationError}
@@ -981,7 +1220,11 @@ function RegistryCreationSuccess({
           <button
             type="button"
             onClick={onActivate}
-            disabled={!metadataDraft || activationBusy}
+            disabled={
+              !metadataDraft ||
+              activationBusy ||
+              (lowConfidenceAi && !aiManualConfirmed)
+            }
             className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {activationBusy ? 'Activating...' : 'Activate for dictionary'}
@@ -990,6 +1233,51 @@ function RegistryCreationSuccess({
       </div>
     </section>
   );
+}
+
+type RegistryAliasSuggestion = {
+  term: string;
+  normalizedTerm: string;
+  acceptedForMatch: boolean;
+  confidence: number;
+  rationale: string;
+};
+
+function getMergedAliasSuggestions(
+  heuristic: DiagnosisRegistryMetadataSuggestion | null,
+  aiSuggestion: AiDiagnosisRegistryMetadataSuggestion | null,
+): RegistryAliasSuggestion[] {
+  const seen = new Set<string>();
+  const aliases: RegistryAliasSuggestion[] = [];
+
+  const add = (alias: RegistryAliasSuggestion) => {
+    if (!alias.normalizedTerm || seen.has(alias.normalizedTerm)) {
+      return;
+    }
+    seen.add(alias.normalizedTerm);
+    aliases.push(alias);
+  };
+
+  for (const alias of heuristic?.aliases ?? []) {
+    add(alias);
+  }
+
+  const aiConfidence = aiSuggestion?.confidence ?? 0.5;
+  for (const alias of aiSuggestion?.aliases ?? []) {
+    const normalizedTerm = normalizeAlias(alias);
+    if (!normalizedTerm) {
+      continue;
+    }
+    add({
+      term: alias,
+      normalizedTerm,
+      acceptedForMatch: true,
+      confidence: aiConfidence,
+      rationale: 'Proposed by AI metadata generation',
+    });
+  }
+
+  return aliases;
 }
 
 function DuplicateSuggestions({
@@ -1081,6 +1369,16 @@ function getStringArray(value: JsonValue | string[] | null): string[] {
 
   const items: unknown[] = value;
   return items.filter((item): item is string => typeof item === 'string');
+}
+
+function normalizeAlias(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[''`]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
 }
 
 function formatLabel(value: string) {

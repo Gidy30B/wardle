@@ -32,6 +32,8 @@ import type {
   DiagnosisRegistryLifecycleActionResult,
   DiagnosisRegistryLifecycleReport,
   DiagnosisRegistryMetadataSuggestion,
+  AiDiagnosisRegistryMetadataSuggestionResponse,
+  GenerateAiDiagnosisRegistryMetadataSuggestionPayload,
   DiagnosisEditorialBriefResponse,
   DiagnosisEditorialBriefReviewAction,
   DiagnosisEditorialBriefWritePayload,
@@ -271,6 +273,20 @@ export function getDiagnosisRegistryMetadataSuggestions(
 ) {
   return client.get<DiagnosisRegistryMetadataSuggestion>(
     `/admin/diagnosis-registry/${diagnosisRegistryId}/metadata-suggestions`,
+  );
+}
+
+export function generateDiagnosisRegistryAiMetadataSuggestion(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  payload: GenerateAiDiagnosisRegistryMetadataSuggestionPayload = {
+    includeAliases: true,
+    includeMetadata: true,
+  },
+) {
+  return client.post<AiDiagnosisRegistryMetadataSuggestionResponse>(
+    `/admin/diagnosis-registry/${diagnosisRegistryId}/metadata-suggestions/generate-ai`,
+    payload,
   );
 }
 

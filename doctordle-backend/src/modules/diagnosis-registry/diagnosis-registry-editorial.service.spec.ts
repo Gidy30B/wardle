@@ -18,6 +18,7 @@ describe('DiagnosisRegistryEditorialService', () => {
         findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn(),
         findFirst: jest.fn(),
+        update: jest.fn(),
       },
       diagnosisAlias: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -280,5 +281,96 @@ describe('DiagnosisRegistryEditorialService', () => {
     ).rejects.toThrow('Alias validation failed');
 
     expect(fixture.prisma.diagnosisAlias.upsert).not.toHaveBeenCalled();
+  });
+
+  it('updates activation metadata without changing canonical identity', async () => {
+    const fixture = createFixture();
+    const registryRow = {
+      id: 'registry-jia',
+      canonicalName: 'JIA',
+      canonicalNormalized: 'jia',
+      displayLabel: 'JIA',
+      status: DiagnosisRegistryStatus.DRAFT,
+      category: null,
+      specialty: null,
+      subspecialty: null,
+      bodySystem: null,
+      organSystem: null,
+      difficultyBand: null,
+      rarityBand: null,
+      clinicalSetting: null,
+      ageGroup: null,
+      urgencyLevel: null,
+      isPlayable: true,
+      isGeneratable: false,
+      preferredClueTypes: null,
+      excludedClueTypes: null,
+      searchPriority: 0,
+      isDescriptive: false,
+      isCompositional: false,
+      notes: null,
+      legacyDiagnosisId: null,
+      aliases: [],
+    };
+    fixture.prisma.diagnosisRegistry.findUnique
+      .mockResolvedValueOnce(registryRow)
+      .mockResolvedValueOnce({
+        ...registryRow,
+        specialty: 'Rheumatology',
+        subspecialty: 'Pediatric Rheumatology',
+        category: 'Inflammatory',
+        bodySystem: 'Musculoskeletal',
+        organSystem: 'Joints',
+        difficultyBand: 'INTERMEDIATE',
+        rarityBand: 'UNCOMMON',
+        clinicalSetting: 'OUTPATIENT',
+        ageGroup: 'PEDIATRIC',
+        urgencyLevel: 'ROUTINE',
+        preferredClueTypes: ['history', 'exam', 'lab', 'imaging'],
+        isGeneratable: true,
+      });
+
+    const result = await fixture.service.updateMetadata('registry-jia', {
+      specialty: 'Rheumatology',
+      subspecialty: 'Pediatric Rheumatology',
+      category: 'Inflammatory',
+      bodySystem: 'Musculoskeletal',
+      organSystem: 'Joints',
+      difficultyBand: 'INTERMEDIATE',
+      rarityBand: 'UNCOMMON',
+      clinicalSetting: 'OUTPATIENT',
+      ageGroup: 'PEDIATRIC',
+      urgencyLevel: 'ROUTINE',
+      preferredClueTypes: ['history', 'exam', 'lab', 'imaging'],
+      isGeneratable: true,
+    });
+
+    expect(fixture.prisma.diagnosisRegistry.update).toHaveBeenCalledWith({
+      where: { id: 'registry-jia' },
+      data: expect.objectContaining({
+        specialty: 'Rheumatology',
+        subspecialty: 'Pediatric Rheumatology',
+        category: 'Inflammatory',
+        bodySystem: 'Musculoskeletal',
+        organSystem: 'Joints',
+        difficultyBand: 'INTERMEDIATE',
+        rarityBand: 'UNCOMMON',
+        clinicalSetting: 'OUTPATIENT',
+        ageGroup: 'PEDIATRIC',
+        urgencyLevel: 'ROUTINE',
+        preferredClueTypes: ['history', 'exam', 'lab', 'imaging'],
+        isGeneratable: true,
+      }),
+    });
+    expect(
+      fixture.prisma.diagnosisRegistry.update.mock.calls[0][0].data,
+    ).not.toHaveProperty('canonicalName');
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 'registry-jia',
+        canonicalName: 'JIA',
+        specialty: 'Rheumatology',
+      }),
+    );
   });
 });

@@ -45,6 +45,7 @@ import { AliasValidationService } from '../diagnosis-registry/alias-validation.s
 import { DiagnosisRegistryCandidateService } from '../diagnosis-registry/diagnosis-registry-candidate.service';
 import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
 import { DiagnosisRegistryLifecycleTelemetryService } from '../diagnosis-registry/diagnosis-registry-lifecycle-telemetry.service';
+import { DiagnosisRegistryAiMetadataSuggestionService } from '../diagnosis-registry/diagnosis-registry-ai-metadata-suggestion.service';
 import { DiagnosisRegistryMetadataSuggestionService } from '../diagnosis-registry/diagnosis-registry-metadata-suggestion.service';
 import { DiagnosisRegistryMergeAnalysisService } from '../diagnosis-registry/diagnosis-registry-merge-analysis.service';
 import { DiagnosisRegistryMergeExecutionService } from '../diagnosis-registry/diagnosis-registry-merge-execution.service';
@@ -96,6 +97,7 @@ import { DiagnosisRegistryMergeExecutionService } from '../diagnosis-registry/di
     DiagnosisRegistryCandidateService,
     DiagnosisRegistryLifecyclePolicyService,
     DiagnosisRegistryLifecycleTelemetryService,
+    DiagnosisRegistryAiMetadataSuggestionService,
     DiagnosisRegistryMetadataSuggestionService,
     DiagnosisRegistryMergeAnalysisService,
     DiagnosisRegistryMergeExecutionService,
