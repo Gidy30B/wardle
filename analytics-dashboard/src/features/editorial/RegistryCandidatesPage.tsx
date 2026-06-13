@@ -17,6 +17,7 @@ import {
   type DiagnosisRegistryMetadataSuggestion,
   type DiagnosisRegistryCandidate,
   type DiagnosisRegistryCandidateDuplicateSuggestions,
+  type DiagnosisRegistryDuplicateSummary,
   type DiagnosisRegistryCandidateStatus,
   type JsonValue,
   type UpdateDiagnosisRegistryMetadataPayload,
@@ -67,6 +68,9 @@ export default function RegistryCandidatesPage() {
   const [aiMetadataLoading, setAiMetadataLoading] = useState(false);
   const [metadataApplyBusy, setMetadataApplyBusy] = useState(false);
   const [duplicateCompleteBusy, setDuplicateCompleteBusy] = useState(false);
+  const [preferredDuplicateKeeperId, setPreferredDuplicateKeeperId] = useState<
+    string | null
+  >(null);
   const [aiManualConfirmed, setAiManualConfirmed] = useState(false);
   const [metadataApplyMessage, setMetadataApplyMessage] = useState<
     string | null
@@ -115,6 +119,7 @@ export default function RegistryCandidatesPage() {
       setBusyId(candidate.id);
       setActionError(null);
       setCreationResult(null);
+      setPreferredDuplicateKeeperId(null);
       setMetadataSuggestion(null);
       setAiMetadataSuggestion(null);
       setMetadataDraft(null);
@@ -156,22 +161,16 @@ export default function RegistryCandidatesPage() {
     );
   }
 
-  function mergeDuplicate(candidate: DiagnosisRegistryCandidate) {
-    const suggestions = getDuplicateSuggestions(candidate);
-    const defaultDuplicateId = suggestions.candidateMatches?.find(
-      (match) => match.id !== candidate.id,
-    )?.id;
-    const duplicateCandidateId = window.prompt(
-      'Duplicate candidate ID',
-      defaultDuplicateId ?? '',
+  function markNotDuplicate(candidate: DiagnosisRegistryCandidate) {
+    const note = window.prompt(
+      'Why is this not a duplicate?',
+      'Reviewed duplicate risk; keep this draft separate.',
     );
-    if (!duplicateCandidateId) return;
-    const note = window.prompt('Review note', '') ?? undefined;
+    if (note === null) return;
     void runReview(candidate, () =>
       reviewDiagnosisRegistryCandidate(client, candidate.id, {
-        action: 'merge_duplicate_candidate',
-        duplicateCandidateId: duplicateCandidateId.trim(),
-        note: note?.trim() || undefined,
+        action: 'mark_needs_review',
+        note: note.trim() || undefined,
       }),
     );
   }
@@ -186,6 +185,7 @@ export default function RegistryCandidatesPage() {
       setBusyId(candidate.id);
       setActionError(null);
       setCreationResult(null);
+      setPreferredDuplicateKeeperId(null);
       setMetadataSuggestion(null);
       setAiMetadataSuggestion(null);
       setMetadataDraft(null);
@@ -475,11 +475,15 @@ export default function RegistryCandidatesPage() {
     });
   }
 
-  function startActivationWorkflow(candidate: DiagnosisRegistryCandidate) {
+  function startActivationWorkflow(
+    candidate: DiagnosisRegistryCandidate,
+    preferredKeeperId?: string,
+  ) {
     if (!candidate.createdRegistry || !candidate.registryQueueState) {
       return;
     }
 
+    setPreferredDuplicateKeeperId(preferredKeeperId ?? null);
     setActionError(null);
     setActivationError(null);
     setActivationMessage(null);
@@ -588,6 +592,7 @@ export default function RegistryCandidatesPage() {
           activationMessage={activationMessage}
           activationError={activationError}
           duplicateSuggestions={getDuplicateSuggestions(creationResult.candidate)}
+          preferredDuplicateKeeperId={preferredDuplicateKeeperId}
           onMetadataDraftChange={setMetadataDraft}
           onGenerateAiMetadata={() => void generateAiMetadata()}
           onApplyMetadata={() => void applyMetadataDraft()}
@@ -624,9 +629,11 @@ export default function RegistryCandidatesPage() {
               canReview={access.canPublishEditorial}
               onMarkNeedsReview={() => markNeedsReview(candidate)}
               onReject={() => reject(candidate)}
-              onMergeDuplicate={() => mergeDuplicate(candidate)}
+              onMarkNotDuplicate={() => markNotDuplicate(candidate)}
               onCreateRegistry={() => setCandidateToCreate(candidate)}
-              onCompleteActivation={() => startActivationWorkflow(candidate)}
+              onCompleteActivation={(preferredKeeperId) =>
+                startActivationWorkflow(candidate, preferredKeeperId)
+              }
             />
           ))}
         </div>
@@ -654,7 +661,7 @@ function RegistryCandidateCard({
   canReview,
   onMarkNeedsReview,
   onReject,
-  onMergeDuplicate,
+  onMarkNotDuplicate,
   onCreateRegistry,
   onCompleteActivation,
 }: {
@@ -663,13 +670,16 @@ function RegistryCandidateCard({
   canReview: boolean;
   onMarkNeedsReview: () => void;
   onReject: () => void;
-  onMergeDuplicate: () => void;
+  onMarkNotDuplicate: () => void;
   onCreateRegistry: () => void;
-  onCompleteActivation: () => void;
+  onCompleteActivation: (preferredKeeperId?: string) => void;
 }) {
   const aliases = getStringArray(candidate.proposedAliases);
   const suggestions = getDuplicateSuggestions(candidate);
   const queueState = candidate.registryQueueState;
+  const duplicateKeepers = candidate.createdRegistry
+    ? getRegistryDuplicateKeepers(suggestions, candidate.createdRegistry.id)
+    : [];
   const canCreateRegistry =
     canReview && !['CREATED', 'REJECTED', 'MERGED'].includes(candidate.status);
 
@@ -699,14 +709,6 @@ function RegistryCandidateCard({
           </button>
           <button
             type="button"
-            onClick={onMergeDuplicate}
-            disabled={!canReview || busy}
-            className="rounded-md border border-amber-200 px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Merge duplicate
-          </button>
-          <button
-            type="button"
             onClick={onReject}
             disabled={!canReview || busy}
             className="rounded-md border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -725,7 +727,7 @@ function RegistryCandidateCard({
           {candidate.createdRegistry ? (
             <button
               type="button"
-              onClick={onCompleteActivation}
+              onClick={() => onCompleteActivation()}
               disabled={!canReview || busy || queueState?.dictionaryVisible}
               className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
               title={canReview ? undefined : 'Requires senior editor'}
@@ -765,6 +767,19 @@ function RegistryCandidateCard({
       </section>
 
       <DuplicateSuggestions suggestions={suggestions} />
+
+      {candidate.createdRegistry && duplicateKeepers.length ? (
+        <DuplicateResolutionPanel
+          sourceCandidate={candidate}
+          sourceRegistry={candidate.createdRegistry}
+          sourceQueueState={queueState}
+          keepers={duplicateKeepers}
+          canReview={canReview}
+          busy={busy}
+          onCompleteKeeper={(keeperId) => onCompleteActivation(keeperId)}
+          onMarkNotDuplicate={onMarkNotDuplicate}
+        />
+      ) : null}
 
       {candidate.reviewNote ? (
         <section className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
@@ -981,6 +996,190 @@ function RegistryQueueStateBadges({
   );
 }
 
+function DuplicateResolutionPanel({
+  sourceCandidate,
+  sourceRegistry,
+  sourceQueueState,
+  keepers,
+  canReview,
+  busy,
+  onCompleteKeeper,
+  onMarkNotDuplicate,
+}: {
+  sourceCandidate: DiagnosisRegistryCandidate;
+  sourceRegistry: NonNullable<DiagnosisRegistryCandidate['createdRegistry']>;
+  sourceQueueState: DiagnosisRegistryCandidate['registryQueueState'];
+  keepers: DiagnosisRegistryDuplicateSummary[];
+  canReview: boolean;
+  busy: boolean;
+  onCompleteKeeper: (keeperRegistryId: string) => void;
+  onMarkNotDuplicate: () => void;
+}) {
+  return (
+    <section className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-800">
+            Duplicate resolution
+          </p>
+          <h3 className="mt-1 text-base font-semibold text-amber-950">
+            {sourceRegistry.displayLabel}
+          </h3>
+          <p className="mt-1 text-sm text-amber-900">
+            This created draft overlaps with existing registry rows. Choose a
+            keeper by diagnosis name, complete its metadata, then activate only
+            after duplicate blockers clear.
+          </p>
+        </div>
+        <StatusBadge status="Duplicate risk" tone="danger" />
+      </div>
+
+      <div className="mt-3 grid gap-2 text-sm md:grid-cols-3">
+        <InfoItem
+          label="Source draft"
+          value={sourceRegistry.displayLabel}
+        />
+        <InfoItem
+          label="Draft lifecycle"
+          value={[
+            sourceQueueState?.status ?? 'Unknown',
+            sourceQueueState?.dictionaryVisible
+              ? 'Dictionary active'
+              : 'Not dictionary active',
+            `Aliases ${sourceQueueState?.aliasCount ?? 0}`,
+          ].join(' / ')}
+        />
+        <InfoItem
+          label="Candidate source text"
+          value={sourceCandidate.sourceRawText || 'Unknown'}
+        />
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        {keepers.map((keeper, index) => (
+          <article
+            key={keeper.id}
+            className="rounded-lg border border-amber-200 bg-white p-3 shadow-sm"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
+                  {index === 0 ? 'Recommended keeper' : 'Possible keeper'}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-950">
+                  {keeper.displayLabel}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {keeper.canonicalName}
+                </p>
+              </div>
+              <StatusBadge
+                status={keeper.dictionaryVisible ? 'Dictionary active' : keeper.status}
+                tone={keeper.dictionaryVisible ? 'success' : 'warning'}
+              />
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <StatusBadge
+                status={keeper.active ? 'Active' : 'Inactive'}
+                tone={keeper.active ? 'success' : 'warning'}
+              />
+              <StatusBadge
+                status={keeper.isPlayable ? 'Playable' : 'Not playable'}
+                tone={keeper.isPlayable ? 'success' : 'warning'}
+              />
+              <StatusBadge
+                status={keeper.isGeneratable ? 'Generatable' : 'Not generatable'}
+                tone={keeper.isGeneratable ? 'success' : 'warning'}
+              />
+              <StatusBadge
+                status={
+                  keeper.metadataComplete
+                    ? 'Metadata complete'
+                    : 'Missing metadata'
+                }
+                tone={keeper.metadataComplete ? 'success' : 'warning'}
+              />
+            </div>
+
+            <dl className="mt-3 grid gap-2 text-xs md:grid-cols-2">
+              <KeeperMeta label="Specialty" value={keeper.specialty} />
+              <KeeperMeta label="Body system" value={keeper.bodySystem} />
+              <KeeperMeta
+                label="Aliases"
+                value={String(keeper.aliasCount ?? 0)}
+              />
+              <KeeperMeta
+                label="Linked mappings"
+                value={String(keeper.linkedMappingCount ?? 0)}
+              />
+              <KeeperMeta label="Created" value={formatDate(keeper.createdAt)} />
+              <KeeperMeta
+                label="Missing fields"
+                value={
+                  keeper.missingMetadataFields?.length
+                    ? keeper.missingMetadataFields.join(', ')
+                    : 'None'
+                }
+              />
+            </dl>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onCompleteKeeper(keeper.id)}
+                disabled={!canReview || busy}
+                className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Complete this registry
+              </button>
+              <Link
+                to={`/editorial/registry-merge?source=${sourceRegistry.id}&target=${keeper.id}`}
+                className="rounded-md border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+              >
+                Merge draft into this registry
+              </Link>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-amber-200 pt-3">
+        <button
+          type="button"
+          onClick={onMarkNotDuplicate}
+          disabled={!canReview || busy}
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Mark as not duplicate
+        </button>
+        <span className="rounded-md border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700">
+          Keep separate requires senior override
+        </span>
+      </div>
+    </section>
+  );
+}
+
+function KeeperMeta({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | null;
+}) {
+  return (
+    <div className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5">
+      <dt className="font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </dt>
+      <dd className="mt-0.5 break-words font-medium text-slate-800">
+        {value || 'Unknown'}
+      </dd>
+    </div>
+  );
+}
+
 function RegistryCreationSuccess({
   result,
   suggestion,
@@ -996,6 +1195,7 @@ function RegistryCreationSuccess({
   activationMessage,
   activationError,
   duplicateSuggestions,
+  preferredDuplicateKeeperId,
   onMetadataDraftChange,
   onGenerateAiMetadata,
   onApplyMetadata,
@@ -1018,6 +1218,7 @@ function RegistryCreationSuccess({
   activationMessage: string | null;
   activationError: string | null;
   duplicateSuggestions: DiagnosisRegistryCandidateDuplicateSuggestions;
+  preferredDuplicateKeeperId: string | null;
   onMetadataDraftChange: (
     next: UpdateDiagnosisRegistryMetadataPayload | null,
   ) => void;
@@ -1033,6 +1234,7 @@ function RegistryCreationSuccess({
   const duplicateKeepers = getRegistryDuplicateKeepers(
     duplicateSuggestions,
     result.registry.id,
+    preferredDuplicateKeeperId,
   );
   const lowMetadataConfidence = Boolean(
     aiSuggestion && aiSuggestion.metadataConfidence < 0.7,
@@ -1435,27 +1637,37 @@ function getMergedAliasSuggestions(
 function getRegistryDuplicateKeepers(
   suggestions: DiagnosisRegistryCandidateDuplicateSuggestions,
   sourceRegistryId: string,
-): Array<{ id: string; displayLabel: string; status: string }> {
-  const keepers = new Map<string, { id: string; displayLabel: string; status: string }>();
+  preferredKeeperId?: string | null,
+): DiagnosisRegistryDuplicateSummary[] {
+  const keepers = new Map<string, DiagnosisRegistryDuplicateSummary>();
   for (const match of suggestions.registryCanonicalMatches ?? []) {
     if (match.id !== sourceRegistryId) {
-      keepers.set(match.id, {
-        id: match.id,
-        displayLabel: match.displayLabel,
-        status: match.status,
-      });
+      keepers.set(match.id, match);
     }
   }
   for (const match of suggestions.registryAliasMatches ?? []) {
     if (match.registry.id !== sourceRegistryId) {
-      keepers.set(match.registry.id, {
-        id: match.registry.id,
-        displayLabel: match.registry.displayLabel,
-        status: match.registry.status,
-      });
+      keepers.set(match.registry.id, match.registry);
     }
   }
-  return [...keepers.values()];
+  return [...keepers.values()].sort((left, right) => {
+    if (left.id === preferredKeeperId) return -1;
+    if (right.id === preferredKeeperId) return 1;
+    const leftScore = getDuplicateKeeperScore(left);
+    const rightScore = getDuplicateKeeperScore(right);
+    return rightScore - leftScore || left.displayLabel.localeCompare(right.displayLabel);
+  });
+}
+
+function getDuplicateKeeperScore(keeper: DiagnosisRegistryDuplicateSummary) {
+  let score = 0;
+  if (keeper.dictionaryVisible) score += 8;
+  if (keeper.status === 'ACTIVE') score += 6;
+  if (keeper.metadataComplete) score += 4;
+  score += Math.min(keeper.aliasCount ?? 0, 4);
+  score += Math.min(keeper.linkedMappingCount ?? 0, 4);
+  if (keeper.active) score += 1;
+  return score;
 }
 
 function DuplicateSuggestions({
@@ -1480,14 +1692,16 @@ function DuplicateSuggestions({
             <SuggestionItem
               key={`registry-${match.id}`}
               title={match.displayLabel}
-              meta={`Registry canonical / ${match.id}`}
+              meta={`Registry canonical / ${formatRegistrySummary(match)}`}
             />
           ))}
           {aliasMatches.map((match) => (
             <SuggestionItem
               key={`alias-${match.aliasId}`}
               title={match.aliasTerm}
-              meta={`Alias for ${match.registry.displayLabel} / ${match.registry.id}`}
+              meta={`Alias for ${match.registry.displayLabel} / ${formatRegistrySummary(
+                match.registry,
+              )}`}
             />
           ))}
           {candidateMatches.map((match) => (
@@ -1561,4 +1775,25 @@ function normalizeAlias(value: string): string {
 
 function formatLabel(value: string) {
   return value.replace(/_/g, ' ');
+}
+
+function formatDate(value?: string | null) {
+  if (!value) {
+    return 'Unknown';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(value));
+}
+
+function formatRegistrySummary(registry: DiagnosisRegistryDuplicateSummary) {
+  return [
+    registry.status,
+    registry.dictionaryVisible ? 'dictionary active' : 'not dictionary active',
+    registry.specialty ?? registry.bodySystem ?? 'metadata incomplete',
+    `${registry.aliasCount ?? 0} aliases`,
+  ].join(' / ');
 }

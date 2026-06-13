@@ -191,8 +191,18 @@ describe('DiagnosisRegistryCandidateService', () => {
       {
         id: 'registry-1',
         canonicalName: 'Rare Mimic Syndrome',
+        canonicalNormalized: 'rare mimic syndrome',
         displayLabel: 'Rare Mimic Syndrome',
         status: 'ACTIVE',
+        active: true,
+        isPlayable: true,
+        isGeneratable: true,
+        specialty: 'Rheumatology',
+        bodySystem: 'Musculoskeletal',
+        category: 'Inflammatory',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        createdRegistryCandidates: [{ id: 'candidate-keeper' }],
+        aliases: [{ id: 'alias-keeper' }],
       },
     ]);
     prisma.diagnosisAlias.findMany.mockResolvedValue([
@@ -203,8 +213,18 @@ describe('DiagnosisRegistryCandidateService', () => {
         diagnosis: {
           id: 'registry-2',
           canonicalName: 'Other Mimic',
+          canonicalNormalized: 'other mimic',
           displayLabel: 'Other Mimic',
-          status: 'ACTIVE',
+          status: 'DRAFT',
+          active: false,
+          isPlayable: false,
+          isGeneratable: false,
+          specialty: null,
+          bodySystem: null,
+          category: null,
+          createdAt: new Date('2026-02-01T00:00:00.000Z'),
+          createdRegistryCandidates: [],
+          aliases: [],
         },
       },
     ]);
@@ -216,10 +236,28 @@ describe('DiagnosisRegistryCandidateService', () => {
         data: expect.objectContaining({
           duplicateSuggestions: expect.objectContaining({
             registryCanonicalMatches: expect.arrayContaining([
-              expect.objectContaining({ id: 'registry-1' }),
+              expect.objectContaining({
+                id: 'registry-1',
+                dictionaryVisible: true,
+                aliasCount: 1,
+                metadataComplete: true,
+                linkedMappingCount: 1,
+                createdAt: '2026-01-01T00:00:00.000Z',
+              }),
             ]),
             registryAliasMatches: expect.arrayContaining([
-              expect.objectContaining({ aliasId: 'alias-1' }),
+              expect.objectContaining({
+                aliasId: 'alias-1',
+                registry: expect.objectContaining({
+                  id: 'registry-2',
+                  dictionaryVisible: false,
+                  metadataComplete: false,
+                  missingMetadataFields: [
+                    'specialty',
+                    'body system or category',
+                  ],
+                }),
+              }),
             ]),
           }),
         }),

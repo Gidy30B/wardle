@@ -401,23 +401,31 @@ export type DiagnosisRegistryCandidateStatus =
   | 'APPROVED_PENDING_CREATE'
   | 'CREATED';
 
+export type DiagnosisRegistryDuplicateSummary = {
+  id: string;
+  canonicalName: string;
+  displayLabel: string;
+  status: string;
+  active?: boolean;
+  dictionaryVisible?: boolean;
+  isPlayable?: boolean;
+  isGeneratable?: boolean;
+  specialty?: string | null;
+  bodySystem?: string | null;
+  aliasCount?: number;
+  metadataComplete?: boolean;
+  missingMetadataFields?: string[];
+  linkedMappingCount?: number;
+  createdAt?: string | null;
+};
+
 export type DiagnosisRegistryCandidateDuplicateSuggestions = {
-  registryCanonicalMatches?: Array<{
-    id: string;
-    canonicalName: string;
-    displayLabel: string;
-    status: string;
-  }>;
+  registryCanonicalMatches?: DiagnosisRegistryDuplicateSummary[];
   registryAliasMatches?: Array<{
     aliasId: string;
     aliasTerm: string;
     aliasKind: string;
-    registry: {
-      id: string;
-      canonicalName: string;
-      displayLabel: string;
-      status: string;
-    };
+    registry: DiagnosisRegistryDuplicateSummary;
   }>;
   candidateMatches?: Array<{
     id: string;

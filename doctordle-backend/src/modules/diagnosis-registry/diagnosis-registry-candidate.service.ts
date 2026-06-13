@@ -101,6 +101,23 @@ type RegistryQueueStateRow = {
   aliases: Array<{ id: string }>;
 };
 
+type DuplicateRegistrySummaryRow = {
+  id: string;
+  canonicalName: string;
+  canonicalNormalized: string;
+  displayLabel: string;
+  status: DiagnosisRegistryStatus;
+  active: boolean;
+  isPlayable: boolean;
+  isGeneratable: boolean;
+  specialty: string | null;
+  bodySystem: string | null;
+  category: string | null;
+  createdAt: Date;
+  createdRegistryCandidates: Array<{ id: string }>;
+  aliases: Array<{ id: string }>;
+};
+
 const PENDING_REGISTRY_CANDIDATE_STATUSES = [
   DiagnosisRegistryCandidateStatus.CANDIDATE,
   DiagnosisRegistryCandidateStatus.NEEDS_REVIEW,
@@ -602,8 +619,21 @@ export class DiagnosisRegistryCandidateService {
         select: {
           id: true,
           canonicalName: true,
+          canonicalNormalized: true,
           displayLabel: true,
           status: true,
+          active: true,
+          isPlayable: true,
+          isGeneratable: true,
+          specialty: true,
+          bodySystem: true,
+          category: true,
+          createdAt: true,
+          createdRegistryCandidates: { select: { id: true } },
+          aliases: {
+            where: { active: true },
+            select: { id: true },
+          },
         },
       }),
       client.diagnosisAlias.findMany({
@@ -620,8 +650,21 @@ export class DiagnosisRegistryCandidateService {
             select: {
               id: true,
               canonicalName: true,
+              canonicalNormalized: true,
               displayLabel: true,
               status: true,
+              active: true,
+              isPlayable: true,
+              isGeneratable: true,
+              specialty: true,
+              bodySystem: true,
+              category: true,
+              createdAt: true,
+              createdRegistryCandidates: { select: { id: true } },
+              aliases: {
+                where: { active: true },
+                select: { id: true },
+              },
             },
           },
         },
@@ -642,14 +685,39 @@ export class DiagnosisRegistryCandidateService {
     ]);
 
     return {
-      registryCanonicalMatches: registryRows,
+      registryCanonicalMatches: registryRows.map((row) =>
+        this.toDuplicateRegistrySummary(row),
+      ),
       registryAliasMatches: aliasRows.map((row) => ({
         aliasId: row.id,
         aliasTerm: row.term,
         aliasKind: row.kind,
-        registry: row.diagnosis,
+        registry: this.toDuplicateRegistrySummary(row.diagnosis),
       })),
       candidateMatches: candidateRows,
+    };
+  }
+
+  private toDuplicateRegistrySummary(row: DuplicateRegistrySummaryRow) {
+    const missingMetadataFields = this.getMissingMetadataFields(row);
+    return {
+      id: row.id,
+      canonicalName: row.canonicalName,
+      displayLabel: row.displayLabel,
+      status: row.status,
+      active: row.active,
+      dictionaryVisible:
+        row.status === DiagnosisRegistryStatus.ACTIVE && row.active,
+      isPlayable: row.isPlayable,
+      isGeneratable: row.isGeneratable,
+      specialty: row.specialty,
+      bodySystem: row.bodySystem,
+      aliasCount: row.aliases?.length ?? 0,
+      metadataComplete: missingMetadataFields.length === 0,
+      missingMetadataFields,
+      linkedMappingCount: row.createdRegistryCandidates?.length ?? 0,
+      createdAt:
+        row.createdAt instanceof Date ? row.createdAt.toISOString() : null,
     };
   }
 
