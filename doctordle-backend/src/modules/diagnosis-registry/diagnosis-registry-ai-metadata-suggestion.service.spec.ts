@@ -247,15 +247,102 @@ describe('DiagnosisRegistryAiMetadataSuggestionService', () => {
     expect(result.difficultyBand).toBe('INTERMEDIATE');
     expect(result.rarityBand).toBe('COMMON');
     expect(result.clinicalSetting).toBe('OUTPATIENT');
-    expect(result.ageGroup).toBe('ANY');
+    expect(result.ageGroup).toBe('PEDIATRIC');
     expect(result.urgencyLevel).toBe('ROUTINE');
-    expect(result.preferredClueTypes).toEqual(['history', 'lab']);
+    expect(result.preferredClueTypes).toEqual(
+      expect.arrayContaining(['history', 'lab', 'imaging']),
+    );
     expect(result.excludedClueTypes).toEqual([]);
-    expect(result.confidence).toBe(1);
+    expect(result.metadataConfidence).toBeLessThan(1);
     expect(result.warnings).toEqual(
       expect.arrayContaining([
-        expect.stringContaining('Invalid difficultyBand'),
-        expect.stringContaining('Invalid preferredClueTypes'),
+        expect.stringContaining('metadata_remapped:difficultyBand'),
+        expect.stringContaining('metadata_remapped:ageGroup'),
+        expect.stringContaining('metadata_unmapped:excludedClueTypes'),
+      ]),
+    );
+  });
+
+  it('uses condition-specific JIA metadata when AI identity is right but metadata is generic', async () => {
+    const service = new DiagnosisRegistryAiMetadataSuggestionService(
+      buildPrisma() as never,
+    );
+
+    const result = service.sanitizeSuggestion(
+      {
+        canonicalName: 'Juvenile Idiopathic Arthritis',
+        displayLabel: 'Juvenile Idiopathic Arthritis',
+        aliases: ['JIA'],
+        specialty: 'General Medicine',
+        category: 'General',
+        bodySystem: 'General',
+        organSystem: 'General',
+        clinicalSetting: 'Clinic',
+        ageGroup: 'Child',
+        urgencyLevel: 'Chronic',
+        confidence: 0.8,
+        rationale: 'Expanded abbreviation but omitted specific metadata.',
+        warnings: [],
+      },
+      { canonicalName: 'JIA', canonicalNormalized: 'jia', displayLabel: 'JIA' },
+    );
+
+    expect(result.specialty).toBe('Rheumatology');
+    expect(result.subspecialty).toBe('Pediatric Rheumatology');
+    expect(result.category).toBe('Inflammatory');
+    expect(result.bodySystem).toBe('Musculoskeletal');
+    expect(result.organSystem).toBe('Joints');
+    expect(result.rarityBand).toBe('COMMON');
+    expect(result.ageGroup).toBe('PEDIATRIC');
+    expect(result.aliases).toEqual(
+      expect.arrayContaining([
+        'JIA',
+        'juvenile idiopathic arthritis',
+        'juvenile rheumatoid arthritis',
+      ]),
+    );
+    expect(result.identityConfidence).toBeGreaterThanOrEqual(0.88);
+    expect(result.metadataConfidence).toBeGreaterThanOrEqual(0.7);
+  });
+
+  it('does not allow generic metadata to keep high confidence for unknown diagnoses', () => {
+    const service = new DiagnosisRegistryAiMetadataSuggestionService(
+      buildPrisma() as never,
+    );
+
+    const result = service.sanitizeSuggestion(
+      {
+        canonicalName: 'Mystery Syndrome',
+        displayLabel: 'Mystery Syndrome',
+        aliases: [],
+        specialty: 'General Medicine',
+        category: 'General',
+        bodySystem: 'General',
+        organSystem: 'General',
+        clinicalSetting: 'Unknown place',
+        ageGroup: 'Unknown age',
+        urgencyLevel: 'Unknown urgency',
+        confidence: 0.92,
+        rationale: 'High identity confidence but generic metadata.',
+        warnings: [],
+      },
+      {
+        canonicalName: 'Mystery Syndrome',
+        canonicalNormalized: 'mystery syndrome',
+        displayLabel: 'Mystery Syndrome',
+      },
+    );
+
+    expect(result.specialty).toBeNull();
+    expect(result.category).toBeNull();
+    expect(result.bodySystem).toBeNull();
+    expect(result.organSystem).toBeNull();
+    expect(result.metadataConfidence).toBeLessThan(0.7);
+    expect(result.confidence).toBe(result.metadataConfidence);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('generic_fallback_avoided:specialty'),
+        expect.stringContaining('metadata_unmapped:clinicalSetting'),
       ]),
     );
   });

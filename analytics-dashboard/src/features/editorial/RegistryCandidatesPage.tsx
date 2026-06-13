@@ -312,7 +312,10 @@ export default function RegistryCandidatesPage() {
       return;
     }
 
-    if ((aiMetadataSuggestion?.confidence ?? 1) < 0.6 && !aiManualConfirmed) {
+    if (
+      (aiMetadataSuggestion?.metadataConfidence ?? 1) < 0.7 &&
+      !aiManualConfirmed
+    ) {
       setActivationError(
         'Low-confidence AI metadata requires manual confirmation before applying.',
       );
@@ -348,7 +351,10 @@ export default function RegistryCandidatesPage() {
       return;
     }
 
-    if ((aiMetadataSuggestion?.confidence ?? 1) < 0.6 && !aiManualConfirmed) {
+    if (
+      (aiMetadataSuggestion?.metadataConfidence ?? 1) < 0.7 &&
+      !aiManualConfirmed
+    ) {
       setActivationError(
         'Low-confidence AI metadata requires manual confirmation before activation.',
       );
@@ -942,8 +948,8 @@ function RegistryCreationSuccess({
 }) {
   const workspacePath = `/editorial/diagnoses/${result.registry.id}`;
   const aliasSuggestions = getMergedAliasSuggestions(suggestion, aiSuggestion);
-  const lowConfidenceAi = Boolean(
-    aiSuggestion && aiSuggestion.confidence < 0.6,
+  const lowMetadataConfidence = Boolean(
+    aiSuggestion && aiSuggestion.metadataConfidence < 0.7,
   );
   return (
     <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
@@ -1037,8 +1043,10 @@ function RegistryCreationSuccess({
             )}
             {aiSuggestion ? (
               <StatusBadge
-                status={`AI ${Math.round(aiSuggestion.confidence * 100)}%`}
-                tone={lowConfidenceAi ? 'warning' : 'success'}
+                status={`AI metadata ${Math.round(
+                  aiSuggestion.metadataConfidence * 100,
+                )}%`}
+                tone={lowMetadataConfidence ? 'warning' : 'success'}
               />
             ) : null}
           </div>
@@ -1060,7 +1068,7 @@ function RegistryCreationSuccess({
               !metadataDraft ||
               metadataApplyBusy ||
               activationBusy ||
-              (lowConfidenceAi && !aiManualConfirmed)
+              (lowMetadataConfidence && !aiManualConfirmed)
             }
             className="rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -1080,9 +1088,25 @@ function RegistryCreationSuccess({
                 </p>
               </div>
               <StatusBadge
-                status={`${Math.round(aiSuggestion.confidence * 100)}% confidence`}
-                tone={lowConfidenceAi ? 'warning' : 'success'}
+                status={`Metadata ${Math.round(
+                  aiSuggestion.metadataConfidence * 100,
+                )}%`}
+                tone={lowMetadataConfidence ? 'warning' : 'success'}
               />
+            </div>
+            <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
+              <div className="rounded-md border border-indigo-200 bg-white/70 p-2 text-indigo-950">
+                Identity confidence:{' '}
+                <span className="font-semibold">
+                  {Math.round(aiSuggestion.identityConfidence * 100)}%
+                </span>
+              </div>
+              <div className="rounded-md border border-indigo-200 bg-white/70 p-2 text-indigo-950">
+                Metadata confidence:{' '}
+                <span className="font-semibold">
+                  {Math.round(aiSuggestion.metadataConfidence * 100)}%
+                </span>
+              </div>
             </div>
             <p className="mt-2 text-sm text-indigo-900">
               {aiSuggestion.rationale}
@@ -1094,7 +1118,7 @@ function RegistryCreationSuccess({
                 ))}
               </ul>
             ) : null}
-            {lowConfidenceAi ? (
+            {lowMetadataConfidence ? (
               <label className="mt-3 flex items-start gap-2 text-sm font-semibold text-amber-900">
                 <input
                   type="checkbox"
@@ -1223,7 +1247,7 @@ function RegistryCreationSuccess({
             disabled={
               !metadataDraft ||
               activationBusy ||
-              (lowConfidenceAi && !aiManualConfirmed)
+              (lowMetadataConfidence && !aiManualConfirmed)
             }
             className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
