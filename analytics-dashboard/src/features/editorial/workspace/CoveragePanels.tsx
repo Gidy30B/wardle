@@ -56,8 +56,8 @@ export function CoverageScoreCard({
 
 function CoverageCount({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-      <p className="text-sm font-semibold text-slate-900">{value}</p>
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 px-3 py-2">
+      <p className="text-sm font-semibold text-slate-100">{value}</p>
       <p className="mt-1 text-sm text-slate-500">{label}</p>
     </div>
   );
@@ -84,12 +84,12 @@ export function ReadinessBreakdownCard({
               type="button"
               onClick={() => onTabChange(item.targetTab)}
               className={[
-                'w-full rounded-lg border px-3 py-2 text-left text-sm transition hover:bg-slate-50',
+                'w-full rounded-lg border px-3 py-2 text-left text-sm transition hover:bg-white/10',
                 item.severity === 'blocker'
-                  ? 'border-rose-200 bg-rose-50 text-rose-900'
+                  ? 'border-[var(--color-rose)]/35 bg-[var(--color-rose)]/10 text-rose-100'
                   : item.severity === 'warning'
-                    ? 'border-amber-200 bg-amber-50 text-amber-900'
-                    : 'border-slate-200 bg-white text-slate-700',
+                    ? 'border-[var(--color-amber)]/35 bg-[var(--color-amber)]/10 text-amber-100'
+                    : 'border-[var(--color-navy-border)] bg-white/5 text-slate-300',
               ].join(' ')}
             >
               <span className="mr-2 inline-flex min-w-20 justify-center rounded-full border border-current/20 px-2 py-0.5 text-xs font-semibold uppercase">
@@ -178,7 +178,7 @@ export function CoverageMatrixCard({
                         onRowSelect(row);
                       }}
                     >
-                      <span className="block font-medium text-slate-900">
+                      <span className="block font-medium text-slate-100">
                         {row.title}
                       </span>
                       <span className="mt-1 block text-sm text-slate-500">

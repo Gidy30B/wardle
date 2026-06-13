@@ -12,6 +12,11 @@ import type {
   JsonValue,
   ReasoningDraftValidationRun,
 } from '../../../api/admin';
+import {
+  CompactMetricGrid,
+  EmptyGuidance,
+  PrototypeSectionHeader,
+} from '../../editorial/workspace/EditorialPrimitives';
 
 type Props = {
   rules: DiagnosisTeachingRulesResponse | null;
@@ -187,20 +192,18 @@ export default function TeachingRulesCard({
   }
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-slate-900">Teaching Rules</p>
-          <p className="mt-1 text-sm text-slate-500">
-            ACTIVE and APPROVED rules drive education and case generation.
-          </p>
-        </div>
+    <section className="editorial-panel rounded-lg p-4">
+      <PrototypeSectionHeader
+        eyebrow="Teaching distinctions"
+        title="Teaching Rules"
+        subtitle="ACTIVE and APPROVED rules drive education and case generation."
+        action={
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={onGenerateCandidates}
             disabled={isPending}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="editorial-action disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pendingAction === 'teaching-rule-generate'
               ? 'Generating...'
@@ -210,7 +213,7 @@ export default function TeachingRulesCard({
             type="button"
             onClick={onSeedLegacy}
             disabled={isPending}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="editorial-action disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pendingAction === 'teaching-rule-seed'
               ? 'Seeding...'
@@ -220,17 +223,22 @@ export default function TeachingRulesCard({
             type="button"
             onClick={beginCreate}
             disabled={isPending}
-            className="rounded-lg border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-lg border border-[var(--color-teal)]/40 bg-[var(--color-teal)]/15 px-3 py-2 text-sm font-semibold text-[var(--color-teal)] transition hover:bg-[var(--color-teal)]/20 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Create rule
           </button>
         </div>
-      </div>
+        }
+      />
 
-      <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
-        <Metric label="Generation-ready" value={usableCount} />
-        <Metric label="Needs review" value={candidateCount} />
-        <Metric label="Total rules" value={rules?.rules.length ?? 0} />
+      <div className="mt-4">
+        <CompactMetricGrid
+          items={[
+            { label: 'Generation-ready', value: usableCount, tone: usableCount ? 'success' : 'warning' },
+            { label: 'Needs review', value: candidateCount, tone: candidateCount ? 'warning' : 'success' },
+            { label: 'Total rules', value: rules?.rules.length ?? 0, tone: 'info' },
+          ]}
+        />
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -274,14 +282,16 @@ export default function TeachingRulesCard({
       {loading ? (
         <p className="mt-4 text-sm text-slate-500">Loading teaching rules...</p>
       ) : error ? (
-        <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          <div className="mt-4 rounded-lg border border-[var(--color-rose)]/35 bg-[var(--color-rose)]/10 p-3 text-sm text-rose-100">
           {error}
         </div>
       ) : !rules || rules.rules.length === 0 ? (
-        <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
-          No persisted teaching rules yet. Seed legacy rules or generate candidates
-          to start review.
-        </p>
+        <div className="mt-4">
+          <EmptyGuidance
+            title="No persisted teaching rules yet"
+            description="Seed legacy rules or generate candidates to start editorial review."
+          />
+        </div>
       ) : visibleRules.length === 0 ? (
         <p className="mt-4 text-sm text-slate-500">
           No rules match the selected filters.
@@ -324,11 +334,11 @@ function RuleRow({
   onReview: (action: DiagnosisTeachingRuleReviewAction) => void;
 }) {
   return (
-    <article className="rounded-lg border border-slate-200 p-3">
+    <article className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-semibold text-slate-900">{rule.title}</p>
+            <p className="font-semibold text-slate-100">{rule.title}</p>
             <Pill tone={statusTone(rule.status)}>{formatLabel(rule.status)}</Pill>
             <Pill tone={importanceTone(rule.importance)}>
               {formatLabel(rule.importance)}
@@ -339,7 +349,7 @@ function RuleRow({
             {rule.stableKey}
           </p>
           {rule.rationale ? (
-            <p className="mt-2 text-sm text-slate-700">{rule.rationale}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-300">{rule.rationale}</p>
           ) : null}
           <GeneratedBecauseBlock metadata={rule.generationMetadata} />
           <ValidationTrustBlock validationRun={validationRun} />
@@ -349,7 +359,7 @@ function RuleRow({
             type="button"
             onClick={onEdit}
             disabled={disabled}
-            className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="editorial-action px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
           >
             Edit
           </button>
@@ -391,11 +401,11 @@ function RuleRow({
         </div>
       </div>
 
-      <details className="mt-3">
-        <summary className="cursor-pointer text-xs font-semibold text-slate-500">
+      <details className="mt-3 rounded-lg border border-[var(--color-navy-border)] bg-slate-950/30">
+        <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-400">
           Details
         </summary>
-        <div className="mt-2 grid gap-3 text-sm md:grid-cols-2">
+        <div className="grid gap-3 border-t border-[var(--color-navy-border)] p-3 text-sm md:grid-cols-2">
           <DetailList
             label="Acceptable manifestations"
             values={jsonList(rule.acceptableManifestations)}
@@ -444,28 +454,28 @@ function RuleForm({
   }
 
   return (
-    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <div className="mt-4 rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-3">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-slate-900">
+        <p className="text-sm font-semibold text-slate-100">
           {editing ? 'Edit teaching rule' : 'Create manual teaching rule'}
         </p>
         <button
           type="button"
           onClick={onCancel}
-          className="text-sm font-semibold text-slate-500 hover:text-slate-700"
+          className="text-sm font-semibold text-slate-400 hover:text-slate-200"
         >
           Cancel
         </button>
       </div>
 
       {error ? (
-        <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">
+        <div className="mt-3 rounded-lg border border-[var(--color-rose)]/35 bg-[var(--color-rose)]/10 p-2 text-sm text-rose-100">
           {error}
         </div>
       ) : null}
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <label className="block text-sm font-medium text-slate-700">
+        <label className="block text-sm font-medium text-slate-300">
           Title
           <input
             value={form.title}
@@ -476,16 +486,16 @@ function RuleForm({
                 stableKey: form.stableKey || stableKeyFromTitle(title),
               });
             }}
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-lg border border-[var(--color-navy-border)] bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[var(--color-teal)]"
           />
         </label>
 
-        <label className="block text-sm font-medium text-slate-700">
+        <label className="block text-sm font-medium text-slate-300">
           Stable key
           <input
             value={form.stableKey}
             onChange={(event) => patch({ stableKey: event.target.value })}
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-lg border border-[var(--color-navy-border)] bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[var(--color-teal)]"
           />
         </label>
 
@@ -523,18 +533,18 @@ function RuleForm({
         />
       </div>
 
-      <label className="mt-3 block text-sm font-medium text-slate-700">
+      <label className="mt-3 block text-sm font-medium text-slate-300">
         Rationale
         <textarea
           value={form.rationale}
           onChange={(event) => patch({ rationale: event.target.value })}
           rows={2}
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-lg border border-[var(--color-navy-border)] bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[var(--color-teal)]"
         />
       </label>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <label className="block text-sm font-medium text-slate-700">
+        <label className="block text-sm font-medium text-slate-300">
           Acceptable manifestations
           <textarea
             value={form.acceptableManifestationsText}
@@ -542,11 +552,11 @@ function RuleForm({
               patch({ acceptableManifestationsText: event.target.value })
             }
             rows={3}
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-lg border border-[var(--color-navy-border)] bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[var(--color-teal)]"
             placeholder="One manifestation per line"
           />
         </label>
-        <label className="block text-sm font-medium text-slate-700">
+        <label className="block text-sm font-medium text-slate-300">
           Required differentials
           <textarea
             value={form.requiredDifferentialsText}
@@ -554,13 +564,13 @@ function RuleForm({
               patch({ requiredDifferentialsText: event.target.value })
             }
             rows={3}
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-lg border border-[var(--color-navy-border)] bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[var(--color-teal)]"
             placeholder="One differential per line"
           />
         </label>
       </div>
 
-      <div className="mt-3 grid gap-2 text-sm text-slate-700 md:grid-cols-2">
+      <div className="mt-3 grid gap-2 text-sm text-slate-300 md:grid-cols-2">
         <CheckboxField
           label="Applies to education"
           checked={form.appliesToEducation}
@@ -587,7 +597,7 @@ function RuleForm({
         <button
           type="button"
           onClick={() => void onSubmit()}
-          className="rounded-lg border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          className="rounded-lg border border-[var(--color-teal)]/40 bg-[var(--color-teal)]/15 px-4 py-2 text-sm font-semibold text-[var(--color-teal)] transition hover:bg-[var(--color-teal)]/20"
         >
           {editing ? 'Save rule' : 'Create rule'}
         </button>
@@ -604,9 +614,9 @@ function GeneratedBecauseBlock({ metadata }: { metadata?: JsonValue | null }) {
   const evidence = jsonList(record.discriminatorEvidenceUsed);
   const gaps = jsonList(record.coverageGapsAddressed);
   return (
-    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+    <div className="mt-3 rounded-lg border border-[var(--color-navy-border)] bg-slate-950/35 p-3 text-xs text-slate-300">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-semibold text-slate-900">Generated because</span>
+        <span className="font-semibold text-slate-100">Generated because</span>
         <Pill tone={constrained ? 'green' : 'amber'}>
           {constrained ? 'Constrained' : 'Unconstrained'}
         </Pill>
@@ -628,7 +638,7 @@ function GeneratedBecauseBlock({ metadata }: { metadata?: JsonValue | null }) {
       ) : null}
       {gaps.length ? <p className="mt-1">Coverage gaps: {gaps.join(', ')}</p> : null}
       {warnings.length ? (
-        <ul className="mt-2 list-disc space-y-1 pl-4 text-amber-800">
+        <ul className="mt-2 list-disc space-y-1 pl-4 text-[var(--color-amber)]">
           {warnings.slice(0, 4).map((warning) => (
             <li key={warning}>{formatLabel(warning)}</li>
           ))}
@@ -651,9 +661,9 @@ function ValidationTrustBlock({
     ...signalMessages(validationRun.unsupportedClaimSignals),
   ];
   return (
-    <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
+    <div className="mt-3 rounded-lg border border-[var(--color-navy-border)] bg-slate-950/35 p-3 text-xs text-slate-300">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-semibold text-slate-900">Validated against</span>
+        <span className="font-semibold text-slate-100">Validated against</span>
         <Pill tone={validationTone(validationRun.trustTier)}>
           {formatLabel(validationRun.trustTier)}
         </Pill>
@@ -667,9 +677,9 @@ function ValidationTrustBlock({
         />
         <CompactMeta label="Checked" value={new Date(validationRun.createdAt).toLocaleDateString()} />
       </div>
-      {blockers.length ? <p className="mt-2 text-rose-700">Blockers: {blockers.slice(0, 3).join(', ')}</p> : null}
-      {warnings.length ? <p className="mt-1 text-amber-800">Warnings: {warnings.slice(0, 3).join(', ')}</p> : null}
-      {risks.length ? <p className="mt-1 text-amber-800">Risk signals: {risks.slice(0, 3).join(', ')}</p> : null}
+      {blockers.length ? <p className="mt-2 text-[var(--color-rose)]">Blockers: {blockers.slice(0, 3).join(', ')}</p> : null}
+      {warnings.length ? <p className="mt-1 text-[var(--color-amber)]">Warnings: {warnings.slice(0, 3).join(', ')}</p> : null}
+      {risks.length ? <p className="mt-1 text-[var(--color-amber)]">Risk signals: {risks.slice(0, 3).join(', ')}</p> : null}
     </div>
   );
 }
@@ -679,17 +689,6 @@ function CompactMeta({ label, value }: { label: string; value?: string | null })
     <div>
       <span className="font-semibold text-slate-500">{label}: </span>
       <span>{value || 'None'}</span>
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -706,12 +705,12 @@ function FilterSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="block text-sm font-medium text-slate-700">
+    <label className="block text-sm font-medium text-slate-300">
       {label}
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        className="mt-1 w-full rounded-lg border border-[var(--color-navy-border)] bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[var(--color-teal)]"
       >
         <option value="all">All</option>
         {options.map((option) => (
@@ -736,12 +735,12 @@ function SelectField({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="block text-sm font-medium text-slate-700">
+    <label className="block text-sm font-medium text-slate-300">
       {label}
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        className="mt-1 w-full rounded-lg border border-[var(--color-navy-border)] bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[var(--color-teal)]"
       >
         {options.map((option) => (
           <option key={option} value={option}>
@@ -763,7 +762,7 @@ function CheckboxField({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+    <label className="flex items-center gap-2 rounded-lg border border-[var(--color-navy-border)] bg-white/4 px-3 py-2">
       <input
         type="checkbox"
         checked={checked}
@@ -793,7 +792,7 @@ function ReviewButton({
       onClick={() => onReview(action)}
       disabled={disabled}
       title={title}
-      className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+      className="editorial-action px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
     >
       {label}
     </button>
@@ -827,11 +826,11 @@ function Pill({
   children: ReactNode;
 }) {
   const classes = {
-    green: 'bg-emerald-50 text-emerald-700',
-    amber: 'bg-amber-50 text-amber-700',
-    rose: 'bg-rose-50 text-rose-700',
-    blue: 'bg-sky-50 text-sky-700',
-    muted: 'bg-slate-100 text-slate-600',
+    green: 'border border-[var(--color-green)]/30 bg-[var(--color-green)]/10 text-[var(--color-green)]',
+    amber: 'border border-[var(--color-amber)]/30 bg-[var(--color-amber)]/10 text-[var(--color-amber)]',
+    rose: 'border border-[var(--color-rose)]/30 bg-[var(--color-rose)]/10 text-[var(--color-rose)]',
+    blue: 'border border-[var(--color-teal)]/30 bg-[var(--color-teal)]/10 text-[var(--color-teal)]',
+    muted: 'border border-[var(--color-navy-border)] bg-white/5 text-slate-400',
   };
   return (
     <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${classes[tone]}`}>

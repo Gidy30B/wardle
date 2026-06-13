@@ -1,5 +1,9 @@
 import type { DiagnosisEducationRevisionAnalysis } from '../../../api/admin';
 import StatusBadge from '../../../components/ui/StatusBadge';
+import {
+  EmptyGuidance,
+  PrototypeSectionHeader,
+} from '../../editorial/workspace/EditorialPrimitives';
 import { formatDateLabel } from '../cases.helpers';
 
 type RevisionHistoryCardProps = {
@@ -14,33 +18,31 @@ export default function RevisionHistoryCard({
   error,
 }: RevisionHistoryCardProps) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-slate-900">
-            Revision history
-          </p>
-          <p className="mt-1 text-sm text-slate-500">
-            Quality trend across saved education versions.
-          </p>
-        </div>
-        {revisions.length > 0 ? (
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-            {revisions.length} versions
-          </span>
-        ) : null}
-      </div>
+    <section className="editorial-panel rounded-lg p-4">
+      <PrototypeSectionHeader
+        eyebrow="Editorial checkpoints"
+        title="Revision history"
+        subtitle="Quality trend across saved education versions."
+        action={
+          revisions.length > 0 ? (
+            <StatusBadge status={`${revisions.length} versions`} tone="info" />
+          ) : null
+        }
+      />
 
       {loading ? (
         <p className="mt-4 text-sm text-slate-500">Loading revision history...</p>
       ) : error ? (
-        <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <div className="mt-4 rounded-lg border border-[var(--color-rose)]/35 bg-[var(--color-rose)]/10 p-3 text-sm text-rose-100">
           {error}
         </div>
       ) : revisions.length === 0 ? (
-        <p className="mt-4 text-sm text-slate-500">
-          No saved education revisions yet.
-        </p>
+        <div className="mt-4">
+          <EmptyGuidance
+            title="No saved education revisions yet"
+            description="Saved drafts and review decisions will appear here as lightweight checkpoints."
+          />
+        </div>
       ) : (
         <div className="mt-4 space-y-2">
           {revisions.map((revision) => (
@@ -59,17 +61,17 @@ function RevisionRow({
 }) {
   const tone = getQualityTone(revision);
   const qualityClasses = {
-    good: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    warning: 'border-amber-200 bg-amber-50 text-amber-700',
-    danger: 'border-rose-200 bg-rose-50 text-rose-700',
+    good: 'border-[var(--color-green)]/30 bg-[var(--color-green)]/10 text-[var(--color-green)]',
+    warning: 'border-[var(--color-amber)]/30 bg-[var(--color-amber)]/10 text-[var(--color-amber)]',
+    danger: 'border-[var(--color-rose)]/30 bg-[var(--color-rose)]/10 text-[var(--color-rose)]',
   };
 
   return (
-    <article className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <article className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold text-slate-900">
+            <p className="text-sm font-semibold text-slate-100">
               v{revision.version} · {revisionActionLabel(revision)}
             </p>
             <StatusBadge status={revision.editorialStatus} />
@@ -101,7 +103,7 @@ function RevisionRow({
           {revision.changedSections.slice(0, 5).map((section) => (
             <span
               key={section}
-              className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-slate-600"
+              className="rounded-full border border-[var(--color-navy-border)] bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-300"
             >
               {formatSectionLabel(section)}
             </span>
@@ -119,11 +121,11 @@ function RevisionRow({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 px-3 py-2">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
         {label}
       </p>
-      <p className="mt-1 text-sm font-semibold text-slate-900">{value}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-100">{value}</p>
     </div>
   );
 }

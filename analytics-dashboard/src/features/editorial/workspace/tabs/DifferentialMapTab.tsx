@@ -33,6 +33,7 @@ import {
   CompactMetricGrid,
   CompactPanel,
   DraftAIActionsPanel,
+  EditorialRow,
   ExplainabilityMetric,
   InlineReviewBar,
   MetricGrid,
@@ -1486,7 +1487,7 @@ function TeachingRelationshipPanel({
       </div>
       {relationships.length ? (
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <table className="min-w-full divide-y divide-[var(--color-navy-border)] text-sm">
             <thead className="bg-white/5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3">Relationship</th>
@@ -1496,9 +1497,9 @@ function TeachingRelationshipPanel({
                 <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-[var(--color-navy-border)]">
               {relationships.slice(0, 30).map((relationship) => (
-                <tr key={relationship.id}>
+                <tr key={relationship.id} className="align-top transition hover:bg-white/6">
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-100">
                       {relationship.sourceDiagnosisRegistry.displayLabel}{' '}
@@ -1898,45 +1899,34 @@ function GraphCandidateList({
   }
 
   return (
-    <section className="overflow-hidden rounded-xl border border-[var(--color-navy-border)] bg-white/5">
-      <div className="border-b border-[var(--color-navy-border)] px-4 py-3">
-        <p className="text-sm font-semibold text-slate-100">Candidates</p>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-white/5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3">Text</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Source</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {candidates.slice(0, 20).map((candidate) => (
-              <tr key={candidate.id}>
-                <td className="px-4 py-3 font-medium text-slate-100">
-                  {formatLabel(candidate.type)}
-                </td>
-                <td className="max-w-lg px-4 py-3 text-slate-300">
-                  {candidate.rawText}
-                </td>
-                <td className="px-4 py-3 text-slate-300">
-                  {formatLabel(candidate.status)}
-                </td>
-                <td className="px-4 py-3 text-slate-300">
-                  {formatLabel(candidate.sourceType)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <CompactPanel
+      title="Unreviewed graph candidates"
+      subtitle="Generated graph objects waiting for editorial interpretation."
+    >
+      <div className="grid gap-2">
+        {candidates.slice(0, 20).map((candidate) => (
+          <EditorialRow
+            key={candidate.id}
+            title={formatLabel(candidate.type)}
+            subtitle={candidate.rawText}
+            tone={candidate.status === 'CANDIDATE' ? 'warning' : 'neutral'}
+            meta={
+              <>
+                <StatusBadge status={formatLabel(candidate.status)} tone="warning" />
+                <StatusBadge
+                  status={formatLabel(candidate.sourceType)}
+                  tone="neutral"
+                />
+              </>
+            }
+          />
+        ))}
       </div>
       {candidates.length > 20 ? (
-        <p className="border-t border-[var(--color-navy-border)] px-4 py-3 text-sm text-slate-500">
+        <p className="mt-3 text-sm text-slate-500">
           Showing 20 of {candidates.length} candidates.
         </p>
       ) : null}
-    </section>
+    </CompactPanel>
   );
 }

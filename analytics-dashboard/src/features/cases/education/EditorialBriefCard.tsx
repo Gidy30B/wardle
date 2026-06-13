@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import type { ReactNode } from 'react';
 import type {
   DiagnosisEditorialBrief,
   DiagnosisEditorialBriefResponse,
@@ -9,6 +8,13 @@ import type {
   DiagnosisTeachingRulesResponse,
   JsonValue,
 } from '../../../api/admin';
+import {
+  CompactMetricGrid,
+  EmptyGuidance,
+  InlineReviewBar,
+  PrototypeSectionHeader,
+} from '../../editorial/workspace/EditorialPrimitives';
+import StatusBadge from '../../../components/ui/StatusBadge';
 
 type Props = {
   briefResponse: DiagnosisEditorialBriefResponse | null;
@@ -108,23 +114,18 @@ export default function EditorialBriefCard({
   }
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-slate-900">
-            Editorial Brief
-          </p>
-          <p className="mt-1 text-sm text-slate-500">
-            Diagnosis-level teaching strategy across education, cases, graph, and
-            difficulty.
-          </p>
-        </div>
+    <section className="editorial-panel rounded-lg p-4">
+      <PrototypeSectionHeader
+        eyebrow="Editorial intent"
+        title="Editorial Brief"
+        subtitle="Diagnosis-level teaching strategy across education, cases, graph, and difficulty."
+        action={
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={onGenerate}
             disabled={isPending}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="editorial-action disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pendingAction === 'editorial-brief-generate'
               ? 'Generating...'
@@ -134,24 +135,27 @@ export default function EditorialBriefCard({
             type="button"
             onClick={beginEdit}
             disabled={isPending}
-            className="rounded-lg border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-lg border border-[var(--color-teal)]/40 bg-[var(--color-teal)]/15 px-3 py-2 text-sm font-semibold text-[var(--color-teal)] transition hover:bg-[var(--color-teal)]/20 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {brief ? 'Edit brief' : 'Create brief'}
           </button>
         </div>
-      </div>
+        }
+      />
 
       {loading ? (
         <p className="mt-4 text-sm text-slate-500">Loading editorial brief...</p>
       ) : error ? (
-        <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <div className="mt-4 rounded-lg border border-[var(--color-rose)]/35 bg-[var(--color-rose)]/10 p-3 text-sm text-rose-100">
           {error}
         </div>
       ) : !brief ? (
-        <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
-          No editorial brief yet. Generate a draft from approved teaching rules or
-          create one manually.
-        </p>
+        <div className="mt-4">
+          <EmptyGuidance
+            title="No editorial brief yet"
+            description="Generate a draft from approved teaching rules or create one manually so objectives, cases, and graph work share the same intent."
+          />
+        </div>
       ) : (
         <BriefSummary
           brief={brief}
@@ -193,18 +197,26 @@ function BriefSummary({
   return (
     <div className="mt-4 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Pill tone={statusTone(brief.status)}>{formatLabel(brief.status)}</Pill>
-        <Pill tone="muted">v{brief.version}</Pill>
-        <Pill tone={isGenerationActive(brief.status) ? 'green' : 'muted'}>
-          {isGenerationActive(brief.status)
-            ? 'Drives generation'
-            : 'Not used for generation'}
-        </Pill>
+        <StatusBadge
+          status={formatLabel(brief.status)}
+          tone={statusTone(brief.status)}
+        />
+        <StatusBadge status={`v${brief.version}`} tone="neutral" />
+        <StatusBadge
+          status={
+            isGenerationActive(brief.status)
+              ? 'Drives generation'
+              : 'Not used for generation'
+          }
+          tone={isGenerationActive(brief.status) ? 'success' : 'neutral'}
+        />
       </div>
 
-      <p className="text-sm text-slate-700">{brief.summary}</p>
+      <p className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 px-3 py-2 text-sm leading-6 text-slate-300">
+        {brief.summary}
+      </p>
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-2 md:grid-cols-2">
         <ListBlock label="Learning goals" values={jsonList(brief.learningGoals)} />
         <ListBlock
           label="Difficulty guidance"
@@ -220,14 +232,36 @@ function BriefSummary({
         />
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-        Required teaching rules:{' '}
-        <span className="font-semibold">
-          {jsonList(brief.requiredTeachingRuleIds).length}
-        </span>
-      </div>
+      <CompactMetricGrid
+        items={[
+          {
+            label: 'Required teaching rules',
+            value: jsonList(brief.requiredTeachingRuleIds).length,
+            tone: jsonList(brief.requiredTeachingRuleIds).length
+              ? 'success'
+              : 'warning',
+          },
+          {
+            label: 'Required mimics',
+            value: jsonList(brief.requiredMimicIds).length,
+            tone: jsonList(brief.requiredMimicIds).length ? 'info' : 'neutral',
+          },
+          {
+            label: 'Pitfalls',
+            value: jsonList(brief.requiredPitfalls).length,
+            tone: jsonList(brief.requiredPitfalls).length
+              ? 'warning'
+              : 'neutral',
+          },
+          {
+            label: 'Generation state',
+            value: isGenerationActive(brief.status) ? 'Active' : 'Draft',
+            tone: isGenerationActive(brief.status) ? 'success' : 'warning',
+          },
+        ]}
+      />
 
-      <div className="flex flex-wrap gap-2">
+      <InlineReviewBar note="Brief decisions shape draft generation only; publishing remains a separate editorial step.">
         <ReviewButton
           label="Approve"
           action="approve"
@@ -256,7 +290,7 @@ function BriefSummary({
           title={!canReview ? reviewDisabledReason : undefined}
           onReview={onReview}
         />
-      </div>
+      </InlineReviewBar>
     </div>
   );
 }
@@ -296,44 +330,44 @@ function BriefForm({
   }
 
   return (
-    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <div className="mt-4 rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-3">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-slate-900">
+        <p className="text-sm font-semibold text-slate-100">
           {editing ? 'Edit editorial brief' : 'Create editorial brief'}
         </p>
         <button
           type="button"
           onClick={onCancel}
-          className="text-sm font-semibold text-slate-500 hover:text-slate-700"
+          className="text-sm font-semibold text-slate-400 hover:text-slate-200"
         >
           Cancel
         </button>
       </div>
 
       {error ? (
-        <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">
+        <div className="mt-3 rounded-lg border border-[var(--color-rose)]/35 bg-[var(--color-rose)]/10 p-2 text-sm text-rose-100">
           {error}
         </div>
       ) : null}
 
-      <label className="mt-3 block text-sm font-medium text-slate-700">
+      <label className="mt-3 block text-sm font-medium text-slate-300">
         Summary
         <textarea
           value={form.summary}
           onChange={(event) => patch({ summary: event.target.value })}
           rows={3}
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-lg border border-[var(--color-navy-border)] bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[var(--color-teal)]"
         />
       </label>
 
-      <label className="mt-3 block text-sm font-medium text-slate-700">
+      <label className="mt-3 block text-sm font-medium text-slate-300">
         Status
         <select
           value={form.status}
           onChange={(event) =>
             patch({ status: event.target.value as DiagnosisEditorialBriefStatus })
           }
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm md:w-64"
+          className="mt-1 w-full rounded-lg border border-[var(--color-navy-border)] bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[var(--color-teal)] md:w-64"
         >
           {statuses.map((status) => (
             <option key={status} value={status}>
@@ -387,15 +421,15 @@ function BriefForm({
       </div>
 
       <div className="mt-3">
-        <p className="text-sm font-semibold text-slate-800">
+        <p className="text-sm font-semibold text-slate-100">
           Required teaching rules
         </p>
         {generationRules.length ? (
-          <div className="mt-2 max-h-48 space-y-2 overflow-auto rounded-lg border border-slate-200 bg-white p-2">
+          <div className="mt-2 max-h-48 space-y-2 overflow-auto rounded-lg border border-[var(--color-navy-border)] bg-slate-950/50 p-2">
             {generationRules.map((rule) => (
               <label
                 key={rule.id}
-                className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50"
+                className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm text-slate-300 hover:bg-white/6"
               >
                 <input
                   type="checkbox"
@@ -404,7 +438,7 @@ function BriefForm({
                   className="mt-1"
                 />
                 <span>
-                  <span className="font-medium text-slate-800">
+                  <span className="font-medium text-slate-100">
                     {rule.title}
                   </span>
                   <span className="block text-xs text-slate-500">
@@ -415,19 +449,19 @@ function BriefForm({
             ))}
           </div>
         ) : (
-          <p className="mt-2 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-500">
+          <p className="mt-2 rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3 text-sm text-slate-500">
             No ACTIVE or APPROVED teaching rules are available yet.
           </p>
         )}
       </div>
 
-      <label className="mt-3 block text-sm font-medium text-slate-700">
+      <label className="mt-3 block text-sm font-medium text-slate-300">
         Required mimic IDs
         <textarea
           value={form.requiredMimicIdsText}
           onChange={(event) => patch({ requiredMimicIdsText: event.target.value })}
           rows={2}
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-lg border border-[var(--color-navy-border)] bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[var(--color-teal)]"
           placeholder="One diagnosis registry ID per line"
         />
       </label>
@@ -436,7 +470,7 @@ function BriefForm({
         <button
           type="button"
           onClick={() => void onSubmit()}
-          className="rounded-lg border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          className="rounded-lg border border-[var(--color-teal)]/40 bg-[var(--color-teal)]/15 px-4 py-2 text-sm font-semibold text-[var(--color-teal)] transition hover:bg-[var(--color-teal)]/20"
         >
           {editing ? 'Save brief' : 'Create brief'}
         </button>
@@ -455,13 +489,13 @@ function TextareaField({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="block text-sm font-medium text-slate-700">
+    <label className="block text-sm font-medium text-slate-300">
       {label}
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
         rows={3}
-        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        className="mt-1 w-full rounded-lg border border-[var(--color-navy-border)] bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-[var(--color-teal)]"
         placeholder="One item per line"
       />
     </label>
@@ -470,12 +504,12 @@ function TextareaField({
 
 function ListBlock({ label, values }: { label: string; values: string[] }) {
   return (
-    <div className="rounded-lg border border-slate-200 p-3">
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
         {label}
       </p>
       {values.length ? (
-        <ul className="mt-2 space-y-1 text-sm text-slate-700">
+        <ul className="mt-2 space-y-1 text-sm leading-5 text-slate-300">
           {values.slice(0, 4).map((value) => (
             <li key={value}>{value}</li>
           ))}
@@ -506,30 +540,10 @@ function ReviewButton({
       onClick={() => onReview(action)}
       disabled={disabled}
       title={title}
-      className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+      className="editorial-action px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
     >
       {label}
     </button>
-  );
-}
-
-function Pill({
-  tone,
-  children,
-}: {
-  tone: 'green' | 'amber' | 'rose' | 'muted';
-  children: ReactNode;
-}) {
-  const classes = {
-    green: 'bg-emerald-50 text-emerald-700',
-    amber: 'bg-amber-50 text-amber-700',
-    rose: 'bg-rose-50 text-rose-700',
-    muted: 'bg-slate-100 text-slate-600',
-  };
-  return (
-    <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${classes[tone]}`}>
-      {children}
-    </span>
   );
 }
 
@@ -606,9 +620,9 @@ function isGenerationActive(status: DiagnosisEditorialBriefStatus) {
 }
 
 function statusTone(status: DiagnosisEditorialBriefStatus) {
-  if (status === 'ACTIVE' || status === 'APPROVED') return 'green';
-  if (status === 'NEEDS_REVIEW' || status === 'DRAFT') return 'amber';
-  return 'rose';
+  if (status === 'ACTIVE' || status === 'APPROVED') return 'success';
+  if (status === 'NEEDS_REVIEW' || status === 'DRAFT') return 'warning';
+  return 'danger';
 }
 
 function formatLabel(value: string) {
