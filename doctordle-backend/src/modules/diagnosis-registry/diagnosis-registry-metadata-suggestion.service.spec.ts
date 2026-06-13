@@ -71,4 +71,46 @@ describe('DiagnosisRegistryMetadataSuggestionService', () => {
       service.suggestRegistryMetadata('missing-registry'),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it('suggests specialty, aliases, and clue types for flagship clinical patterns', async () => {
+    const prisma = buildPrisma({
+      id: 'registry-2',
+      canonicalName: 'Ruptured Ectopic Pregnancy',
+      canonicalNormalized: 'ruptured ectopic pregnancy',
+      displayLabel: 'Ruptured Ectopic Pregnancy',
+      specialty: null,
+      subspecialty: null,
+      category: null,
+      bodySystem: null,
+      organSystem: null,
+      difficultyBand: null,
+      rarityBand: null,
+      clinicalSetting: null,
+      ageGroup: null,
+      urgencyLevel: null,
+      preferredClueTypes: null,
+      aliases: [],
+      createdRegistryCandidates: [
+        {
+          sourceRawText: 'ectopic pregnancy',
+          proposedAliases: [],
+        },
+      ],
+      cases: [],
+    });
+    const service = new DiagnosisRegistryMetadataSuggestionService(prisma as never);
+
+    const result = await service.suggestRegistryMetadata('registry-2');
+
+    expect(result.metadata.specialty).toBe('Obstetrics and Gynecology');
+    expect(result.metadata.bodySystem).toBe('Reproductive');
+    expect(result.metadata.preferredClueTypes).toEqual(
+      expect.arrayContaining(['history', 'vital', 'lab']),
+    );
+    expect(result.aliases).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ normalizedTerm: 'ectopic pregnancy' }),
+      ]),
+    );
+  });
 });

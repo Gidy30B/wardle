@@ -462,6 +462,7 @@ export type DiagnosisRegistryCandidate = {
     displayLabel: string;
     canonicalName: string;
   } | null;
+  registryQueueState: RegistryQueueActivationReadiness | null;
   approvedByUserId: string | null;
   approvedByUser: {
     id: string;
@@ -479,6 +480,24 @@ export type DiagnosisRegistryCandidate = {
   sourceMapping?: JsonValue | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type RegistryQueueActivationReadiness = {
+  status: DiagnosisRegistryStatus;
+  active: boolean;
+  isPlayable: boolean;
+  isGeneratable: boolean;
+  onboardingStatus: DiagnosisEditorialOnboardingStatus | null;
+  dictionaryVisible: boolean;
+  activationBlocked: boolean;
+  blockerReasons: string[];
+  missingMetadataFields: string[];
+  duplicateRisk: {
+    registryCanonicalMatches: number;
+    registryAliasMatches: number;
+  };
+  aliasCount: number;
+  suggestedMetadataAvailable: boolean;
 };
 
 export type CreateRegistryFromCandidateResult = {

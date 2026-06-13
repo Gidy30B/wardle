@@ -11,7 +11,7 @@ import {
 import { DiagnosisRegistryCandidateService } from './diagnosis-registry-candidate.service';
 
 function createFixture() {
-  const prisma = {
+  const prisma: any = {
     caseDifferentialMapping: {
       findUnique: jest.fn(),
       count: jest.fn().mockResolvedValue(0),
@@ -49,12 +49,14 @@ function createFixture() {
         displayLabel: 'Rare Mimic Syndrome',
         canonicalNormalized: 'rare mimic syndrome',
       }),
+      count: jest.fn().mockResolvedValue(0),
       create: jest.fn(async (args) => ({
         id: 'registry-created',
         ...args.data,
       })),
     },
     diagnosisAlias: {
+      count: jest.fn().mockResolvedValue(0),
       findMany: jest.fn().mockResolvedValue([]),
       upsert: jest.fn(async (args) => ({
         id: 'alias-created',
@@ -80,7 +82,7 @@ function createFixture() {
 }
 
 function unresolvedCaseMapping(
-  status = DifferentialResolutionStatus.UNRESOLVED,
+  status: DifferentialResolutionStatus = DifferentialResolutionStatus.UNRESOLVED,
 ) {
   return {
     id: 'map-1',
@@ -238,6 +240,48 @@ describe('DiagnosisRegistryCandidateService', () => {
       unresolvedDifferentialCount: 5,
       pendingRegistryCandidateCount: 4,
     });
+  });
+
+  it('adds activation readiness for created draft registry rows in the queue', async () => {
+    const { prisma, service } = createFixture();
+    prisma.diagnosisRegistryCandidate.findMany.mockResolvedValue([
+      {
+        id: 'candidate-1',
+        createdRegistryId: 'registry-created',
+        proposedDisplayLabel: 'Rare Mimic Syndrome',
+      },
+    ]);
+    prisma.diagnosisRegistry.findMany.mockResolvedValue([
+      {
+        id: 'registry-created',
+        displayLabel: 'Rare Mimic Syndrome',
+        canonicalName: 'Rare Mimic Syndrome',
+        canonicalNormalized: 'rare mimic syndrome',
+        status: 'DRAFT',
+        active: false,
+        isPlayable: false,
+        isGeneratable: false,
+        onboardingStatus: 'NEW',
+        specialty: null,
+        bodySystem: null,
+        category: null,
+        createdRegistryCandidates: [{ id: 'candidate-1' }],
+        aliases: [],
+      },
+    ]);
+
+    const result = await service.listCandidates();
+
+    expect(result[0].registryQueueState).toEqual(
+      expect.objectContaining({
+        status: 'DRAFT',
+        dictionaryVisible: false,
+        activationBlocked: true,
+        missingMetadataFields: ['specialty', 'body system or category'],
+        aliasCount: 0,
+        suggestedMetadataAvailable: true,
+      }),
+    );
   });
 
   it('reviews candidates without creating registry entries', async () => {

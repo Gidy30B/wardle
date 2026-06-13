@@ -66,6 +66,41 @@ type RejectedAliasResult = {
   reason: string;
 };
 
+export type RegistryQueueActivationReadiness = {
+  status: DiagnosisRegistryStatus;
+  active: boolean;
+  isPlayable: boolean;
+  isGeneratable: boolean;
+  onboardingStatus: DiagnosisEditorialOnboardingStatus | null;
+  dictionaryVisible: boolean;
+  activationBlocked: boolean;
+  blockerReasons: string[];
+  missingMetadataFields: string[];
+  duplicateRisk: {
+    registryCanonicalMatches: number;
+    registryAliasMatches: number;
+  };
+  aliasCount: number;
+  suggestedMetadataAvailable: boolean;
+};
+
+type RegistryQueueStateRow = {
+  id: string;
+  displayLabel: string;
+  canonicalName: string;
+  canonicalNormalized: string;
+  status: DiagnosisRegistryStatus;
+  active: boolean;
+  isPlayable: boolean;
+  isGeneratable: boolean;
+  onboardingStatus: DiagnosisEditorialOnboardingStatus | null;
+  specialty: string | null;
+  bodySystem: string | null;
+  category: string | null;
+  createdRegistryCandidates: Array<{ id: string }>;
+  aliases: Array<{ id: string }>;
+};
+
 const PENDING_REGISTRY_CANDIDATE_STATUSES = [
   DiagnosisRegistryCandidateStatus.CANDIDATE,
   DiagnosisRegistryCandidateStatus.NEEDS_REVIEW,
@@ -159,7 +194,7 @@ export class DiagnosisRegistryCandidateService {
         ? input.limit
         : 200;
 
-    return this.prisma.diagnosisRegistryCandidate.findMany({
+    const candidates = await this.prisma.diagnosisRegistryCandidate.findMany({
       where: {
         status: input.status,
       },
@@ -167,6 +202,8 @@ export class DiagnosisRegistryCandidateService {
       take: Math.max(1, Math.min(requestedLimit, 500)),
       include: this.candidateInclude(),
     });
+
+    return this.withRegistryQueueState(candidates);
   }
 
   async getCandidate(candidateId: string) {
@@ -179,8 +216,10 @@ export class DiagnosisRegistryCandidateService {
       throw new NotFoundException('Registry candidate not found');
     }
 
+    const [enriched] = await this.withRegistryQueueState([candidate]);
+
     return {
-      ...candidate,
+      ...enriched,
       sourceMapping: await this.getCandidateSourceMapping(
         candidate.sourceMappingId,
       ),
@@ -247,7 +286,7 @@ export class DiagnosisRegistryCandidateService {
         throw new NotFoundException('Duplicate registry candidate not found');
       }
 
-      return this.prisma.diagnosisRegistryCandidate.update({
+      const updated = await this.prisma.diagnosisRegistryCandidate.update({
         where: { id: candidateId },
         data: {
           status: DiagnosisRegistryCandidateStatus.MERGED,
@@ -260,9 +299,10 @@ export class DiagnosisRegistryCandidateService {
         },
         include: this.candidateInclude(),
       });
+      return (await this.withRegistryQueueState([updated]))[0];
     }
 
-    return this.prisma.diagnosisRegistryCandidate.update({
+    const updated = await this.prisma.diagnosisRegistryCandidate.update({
       where: { id: candidateId },
       data: {
         status:
@@ -275,6 +315,7 @@ export class DiagnosisRegistryCandidateService {
       },
       include: this.candidateInclude(),
     });
+    return (await this.withRegistryQueueState([updated]))[0];
   }
 
   async createRegistryFromCandidate(
@@ -474,6 +515,7 @@ export class DiagnosisRegistryCandidateService {
 
     return {
       ...result,
+      candidate: (await this.withRegistryQueueState([result.candidate]))[0],
       structuredLinksUpdatedCount,
     };
   }
@@ -633,6 +675,138 @@ export class DiagnosisRegistryCandidateService {
         },
       },
     } satisfies Prisma.DiagnosisRegistryCandidateInclude;
+  }
+
+  private async withRegistryQueueState<
+    T extends { createdRegistryId: string | null },
+  >(
+    candidates: T[],
+  ): Promise<Array<T & { registryQueueState: RegistryQueueActivationReadiness | null }>> {
+    const registryIds = [
+      ...new Set(
+        candidates
+          .map((candidate) => candidate.createdRegistryId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+
+    if (!registryIds.length) {
+      return candidates.map((candidate) => ({
+        ...candidate,
+        registryQueueState: null,
+      }));
+    }
+
+    const registries = (await this.prisma.diagnosisRegistry.findMany({
+      where: { id: { in: registryIds } },
+      select: {
+        id: true,
+        displayLabel: true,
+        canonicalName: true,
+        canonicalNormalized: true,
+        status: true,
+        active: true,
+        isPlayable: true,
+        isGeneratable: true,
+        onboardingStatus: true,
+        specialty: true,
+        bodySystem: true,
+        category: true,
+        createdRegistryCandidates: { select: { id: true } },
+        aliases: {
+          where: { active: true },
+          select: { id: true },
+        },
+      },
+    })) as RegistryQueueStateRow[];
+
+    const queueStateByRegistryId = new Map<
+      string,
+      RegistryQueueActivationReadiness
+    >();
+    for (const registry of registries) {
+      queueStateByRegistryId.set(
+        registry.id,
+        await this.buildRegistryQueueState(registry),
+      );
+    }
+
+    return candidates.map((candidate) => ({
+      ...candidate,
+      registryQueueState: candidate.createdRegistryId
+        ? (queueStateByRegistryId.get(candidate.createdRegistryId) ?? null)
+        : null,
+    }));
+  }
+
+  private async buildRegistryQueueState(
+    registry: RegistryQueueStateRow,
+  ): Promise<RegistryQueueActivationReadiness> {
+    const missingMetadataFields = this.getMissingMetadataFields(registry);
+    const [registryCanonicalMatches, registryAliasMatches] = await Promise.all([
+      this.prisma.diagnosisRegistry.count({
+        where: {
+          id: { not: registry.id },
+          canonicalNormalized: registry.canonicalNormalized,
+        },
+      }),
+      this.prisma.diagnosisAlias.count({
+        where: {
+          diagnosisRegistryId: { not: registry.id },
+          active: true,
+          normalizedTerm: registry.canonicalNormalized,
+        },
+      }),
+    ]);
+    const dictionaryVisible =
+      registry.status === DiagnosisRegistryStatus.ACTIVE && registry.active;
+    const blockerReasons = [
+      ...missingMetadataFields.map((field) => `Missing ${field}`),
+      registryCanonicalMatches || registryAliasMatches
+        ? 'Duplicate registry or alias risk'
+        : null,
+      registry.aliases.length === 0 ? 'No accepted aliases' : null,
+    ].filter((reason): reason is string => Boolean(reason));
+
+    return {
+      status: registry.status,
+      active: registry.active,
+      isPlayable: registry.isPlayable,
+      isGeneratable: registry.isGeneratable,
+      onboardingStatus: registry.onboardingStatus,
+      dictionaryVisible,
+      activationBlocked:
+        missingMetadataFields.length > 0 ||
+        registryCanonicalMatches > 0 ||
+        registryAliasMatches > 0,
+      blockerReasons,
+      missingMetadataFields,
+      duplicateRisk: {
+        registryCanonicalMatches,
+        registryAliasMatches,
+      },
+      aliasCount: registry.aliases.length,
+      suggestedMetadataAvailable: registry.createdRegistryCandidates.length > 0,
+    };
+  }
+
+  private getMissingMetadataFields(registry: {
+    displayLabel: string;
+    canonicalName: string;
+    canonicalNormalized: string;
+    specialty: string | null;
+    bodySystem: string | null;
+    category: string | null;
+  }): string[] {
+    const fields: string[] = [];
+    if (!registry.displayLabel) fields.push('display label');
+    if (!registry.canonicalName) fields.push('canonical name');
+    if (!registry.canonicalNormalized) fields.push('canonical normalized key');
+    if (!registry.specialty) fields.push('specialty');
+    if (!registry.bodySystem && !registry.category) {
+      fields.push('body system or category');
+    }
+    return fields;
   }
 
   private getCandidateAliases(value: Prisma.JsonValue | null): string[] {

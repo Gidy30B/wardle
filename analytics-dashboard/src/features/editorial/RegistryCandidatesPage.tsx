@@ -276,6 +276,37 @@ export default function RegistryCandidatesPage() {
     }
   }
 
+  function startActivationWorkflow(candidate: DiagnosisRegistryCandidate) {
+    if (!candidate.createdRegistry || !candidate.registryQueueState) {
+      return;
+    }
+
+    setActionError(null);
+    setActivationError(null);
+    setActivationMessage(null);
+    setMetadataSuggestion(null);
+    setMetadataDraft(null);
+    setSelectedAliases(new Set());
+    setCreationResult({
+      candidate,
+      registry: {
+        id: candidate.createdRegistry.id,
+        canonicalName: candidate.createdRegistry.canonicalName,
+        canonicalNormalized: candidate.proposedCanonicalNormalized,
+        displayLabel: candidate.createdRegistry.displayLabel,
+        status: candidate.registryQueueState.status,
+        active: candidate.registryQueueState.active,
+        onboardingStatus: candidate.registryQueueState.onboardingStatus,
+        isPlayable: candidate.registryQueueState.isPlayable,
+        isGeneratable: candidate.registryQueueState.isGeneratable,
+      },
+      createdAliases: [],
+      rejectedAliases: [],
+      mappingsResolvedCount: 0,
+      structuredLinksUpdatedCount: 0,
+    });
+  }
+
   if (access.status === 'loading') {
     return <LoadingState title="Checking editorial access" />;
   }
@@ -380,6 +411,7 @@ export default function RegistryCandidatesPage() {
               onReject={() => reject(candidate)}
               onMergeDuplicate={() => mergeDuplicate(candidate)}
               onCreateRegistry={() => setCandidateToCreate(candidate)}
+              onCompleteActivation={() => startActivationWorkflow(candidate)}
             />
           ))}
         </div>
@@ -409,6 +441,7 @@ function RegistryCandidateCard({
   onReject,
   onMergeDuplicate,
   onCreateRegistry,
+  onCompleteActivation,
 }: {
   candidate: DiagnosisRegistryCandidate;
   busy: boolean;
@@ -417,9 +450,11 @@ function RegistryCandidateCard({
   onReject: () => void;
   onMergeDuplicate: () => void;
   onCreateRegistry: () => void;
+  onCompleteActivation: () => void;
 }) {
   const aliases = getStringArray(candidate.proposedAliases);
   const suggestions = getDuplicateSuggestions(candidate);
+  const queueState = candidate.registryQueueState;
   const canCreateRegistry =
     canReview && !['CREATED', 'REJECTED', 'MERGED'].includes(candidate.status);
 
@@ -472,8 +507,21 @@ function RegistryCandidateCard({
           >
             Create registry entry
           </button>
+          {candidate.createdRegistry ? (
+            <button
+              type="button"
+              onClick={onCompleteActivation}
+              disabled={!canReview || busy || queueState?.dictionaryVisible}
+              className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title={canReview ? undefined : 'Requires senior editor'}
+            >
+              Complete activation
+            </button>
+          ) : null}
         </div>
       </div>
+
+      {queueState ? <RegistryQueueStateBadges state={queueState} /> : null}
 
       <dl className="mt-4 grid gap-3 text-sm md:grid-cols-3">
         <InfoItem
@@ -514,15 +562,32 @@ function RegistryCandidateCard({
 
       {candidate.createdRegistry ? (
         <section className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
-            Created registry
-          </p>
-          <Link
-            to={`/editorial/diagnoses/${candidate.createdRegistry.id}`}
-            className="mt-1 block text-sm font-semibold text-emerald-900 underline"
-          >
-            {candidate.createdRegistry.displayLabel}
-          </Link>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                Created registry
+              </p>
+              <Link
+                to={`/editorial/diagnoses/${candidate.createdRegistry.id}`}
+                className="mt-1 block text-sm font-semibold text-emerald-900 underline"
+              >
+                {candidate.createdRegistry.displayLabel}
+              </Link>
+            </div>
+            {queueState ? (
+              <div className="text-right text-xs font-semibold uppercase tracking-[0.16em] text-emerald-800">
+                <p>Status {queueState.status}</p>
+                <p>Aliases {queueState.aliasCount}</p>
+              </div>
+            ) : null}
+          </div>
+          {queueState?.blockerReasons.length ? (
+            <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-emerald-950">
+              {queueState.blockerReasons.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          ) : null}
         </section>
       ) : null}
 
@@ -618,6 +683,85 @@ function CreateRegistryConfirmationModal({
           </button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function RegistryQueueStateBadges({
+  state,
+}: {
+  state: NonNullable<DiagnosisRegistryCandidate['registryQueueState']>;
+}) {
+  const duplicateRisk =
+    state.duplicateRisk.registryCanonicalMatches +
+    state.duplicateRisk.registryAliasMatches;
+  const badges = [
+    {
+      label: state.status === 'DRAFT' ? 'Draft registry' : state.status,
+      tone: state.status === 'DRAFT' ? 'warning' : 'info',
+      show: true,
+    },
+    {
+      label: state.dictionaryVisible
+        ? 'Dictionary active'
+        : 'Not dictionary active',
+      tone: state.dictionaryVisible ? 'success' : 'warning',
+      show: true,
+    },
+    {
+      label: 'Missing metadata',
+      tone: 'warning',
+      show: state.missingMetadataFields.length > 0,
+    },
+    {
+      label: 'No aliases',
+      tone: 'warning',
+      show: state.aliasCount === 0,
+    },
+    {
+      label: 'Duplicate risk',
+      tone: 'danger',
+      show: duplicateRisk > 0,
+    },
+    {
+      label: 'Suggested metadata',
+      tone: 'info',
+      show: state.suggestedMetadataAvailable,
+    },
+    {
+      label: 'Ready to activate',
+      tone: 'success',
+      show: !state.activationBlocked && !state.dictionaryVisible,
+    },
+  ] as const;
+
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      {badges
+        .filter((badge) => badge.show)
+        .map((badge) => (
+          <StatusBadge
+            key={badge.label}
+            status={badge.label}
+            tone={badge.tone}
+          />
+        ))}
+      <StatusBadge
+        status={`Active ${String(state.active)}`}
+        tone={state.active ? 'success' : 'warning'}
+      />
+      <StatusBadge
+        status={`Playable ${String(state.isPlayable)}`}
+        tone={state.isPlayable ? 'success' : 'warning'}
+      />
+      <StatusBadge
+        status={`Generatable ${String(state.isGeneratable)}`}
+        tone={state.isGeneratable ? 'success' : 'warning'}
+      />
+      <StatusBadge
+        status={`Onboarding ${formatLabel(state.onboardingStatus ?? 'NEW')}`}
+        tone="info"
+      />
     </div>
   );
 }
