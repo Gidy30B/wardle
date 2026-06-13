@@ -23,6 +23,8 @@ function buildRegistry(overrides: Record<string, unknown> = {}) {
     category: 'Obstructive',
     bodySystem: 'Respiratory',
     difficultyBand: 'BASIC',
+    isDescriptive: false,
+    isCompositional: false,
     activationReviewedByUserId: null,
     activationReviewedAt: null,
     education: {
@@ -62,10 +64,12 @@ function buildPrisma(registry = buildRegistry(), counts: number[] = [0, 0, 0, 0,
         id: 'registry-1',
         status: DiagnosisRegistryStatus.ACTIVE,
         active: true,
-        isPlayable: false,
-        isGeneratable: false,
+        isPlayable: true,
+        isGeneratable: true,
+        onboardingStatus: DiagnosisEditorialOnboardingStatus.COMPLETE,
         activationReviewedByUserId: 'senior-1',
         activationReviewedAt: new Date('2026-01-02T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
       }),
       count: jest.fn().mockResolvedValue(counts[0]),
     },
@@ -92,6 +96,7 @@ describe('DiagnosisRegistryLifecyclePolicyService', () => {
     const result = await service.getLifecycle('registry-1');
 
     expect(result.readiness.activation.allowed).toBe(true);
+    expect(result.readiness.dictionaryActivation.allowed).toBe(true);
     expect(result.readiness.playability.allowed).toBe(false);
     expect(result.visibility.dictionaryVisible).toBe(false);
     expect(prisma.diagnosisRegistry.findUnique).toHaveBeenCalledWith(
@@ -184,6 +189,94 @@ describe('DiagnosisRegistryLifecyclePolicyService', () => {
           activationReviewedAt: expect.any(Date),
         }),
       }),
+    );
+  });
+
+  it('activates a metadata-ready draft for dictionary visibility without full governance readiness', async () => {
+    const prisma = buildPrisma(
+      buildRegistry({
+        onboardingStatus: DiagnosisEditorialOnboardingStatus.NEW,
+        education: null,
+        editorialBrief: null,
+        teachingRules: [],
+        cases: [],
+      }),
+    );
+    const service = new DiagnosisRegistryLifecyclePolicyService(prisma as never);
+
+    const result = await service.performAction({
+      diagnosisRegistryId: 'registry-1',
+      reviewerUserId: 'senior-1',
+      action: 'activate_for_dictionary',
+      isGeneratable: true,
+    });
+
+    expect(prisma.diagnosisRegistry.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: DiagnosisRegistryStatus.ACTIVE,
+          active: true,
+          isPlayable: true,
+          isGeneratable: true,
+          onboardingStatus: DiagnosisEditorialOnboardingStatus.READY_FOR_REVIEW,
+          activationReviewedByUser: { connect: { id: 'senior-1' } },
+          activationReviewedAt: expect.any(Date),
+        }),
+      }),
+    );
+    expect(result.activationTelemetry).toMatchObject({
+      before: {
+        status: DiagnosisRegistryStatus.DRAFT,
+        active: false,
+        isPlayable: false,
+        isGeneratable: false,
+      },
+      after: {
+        status: DiagnosisRegistryStatus.ACTIVE,
+        active: true,
+      },
+      dictionaryVisible: true,
+      playable: true,
+      cacheInvalidated: true,
+      activatedByUserId: 'senior-1',
+      activatedAt: '2026-01-02T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    });
+  });
+
+  it('blocks dictionary activation when required metadata is missing', async () => {
+    const prisma = buildPrisma(
+      buildRegistry({
+        specialty: null,
+        category: null,
+        bodySystem: null,
+      }),
+    );
+    const service = new DiagnosisRegistryLifecyclePolicyService(prisma as never);
+
+    await expect(
+      service.performAction({
+        diagnosisRegistryId: 'registry-1',
+        reviewerUserId: 'senior-1',
+        action: 'activate_for_dictionary',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.diagnosisRegistry.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks dictionary activation for descriptive or compositional rows', async () => {
+    const prisma = buildPrisma(
+      buildRegistry({
+        isCompositional: true,
+      }),
+    );
+    const service = new DiagnosisRegistryLifecyclePolicyService(prisma as never);
+
+    const result = await service.getLifecycle('registry-1');
+
+    expect(result.readiness.dictionaryActivation.allowed).toBe(false);
+    expect(result.readiness.dictionaryActivation.blockers).toContain(
+      'Descriptive or compositional entries require manual safety review before dictionary activation',
     );
   });
 

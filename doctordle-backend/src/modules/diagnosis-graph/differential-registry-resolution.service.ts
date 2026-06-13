@@ -5,6 +5,7 @@ import {
   getDiagnosisTermNormalizedCandidates,
   normalizeDiagnosisTerm,
 } from '../diagnosis-registry/diagnosis-term-normalizer';
+import { getDictionaryVisibleDiagnosisRegistryWhere } from '../diagnosis-registry/diagnosis-registry-status';
 
 export type DifferentialResolutionMatchType =
   | 'canonical'
@@ -73,7 +74,7 @@ export class DifferentialRegistryResolutionService {
 
     const rows = (await this.prisma.diagnosisRegistry.findMany({
       where: {
-        active: true,
+        ...getDictionaryVisibleDiagnosisRegistryWhere(),
         ...(input.contextDiagnosisRegistryId
           ? { id: { not: input.contextDiagnosisRegistryId } }
           : {}),

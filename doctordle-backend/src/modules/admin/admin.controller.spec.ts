@@ -95,6 +95,16 @@ describe('AdminController generateCases', () => {
       getLifecycle: jest.fn().mockResolvedValue({ diagnosisRegistryId: 'registry-1' }),
       performAction: jest.fn().mockResolvedValue({ registry: { id: 'registry-1' } }),
     };
+    const diagnosisRegistryLifecycleTelemetryService = {
+      getTelemetry: jest.fn().mockResolvedValue({ summary: {} }),
+      normalizeAll: jest.fn().mockResolvedValue({ repaired: [] }),
+      normalizeOne: jest.fn().mockResolvedValue({ repaired: [] }),
+    };
+    const diagnosisRegistryMetadataSuggestionService = {
+      suggestRegistryMetadata: jest
+        .fn()
+        .mockResolvedValue({ diagnosisRegistryId: 'registry-1' }),
+    };
     const diagnosisRegistryMergeAnalysisService = {
       analyzeMerge: jest.fn().mockResolvedValue({ allowed: true }),
       getMergeRelated: jest.fn().mockResolvedValue({ diagnosisRegistryId: 'registry-1' }),
@@ -126,6 +136,8 @@ describe('AdminController generateCases', () => {
         diagnosisRegistryCandidateService as never,
         diagnosisEditorialOnboardingService as never,
         diagnosisRegistryLifecyclePolicyService as never,
+        diagnosisRegistryLifecycleTelemetryService as never,
+        diagnosisRegistryMetadataSuggestionService as never,
         diagnosisRegistryMergeAnalysisService as never,
         diagnosisRegistryMergeExecutionService as never,
       ),

@@ -16,7 +16,7 @@ describe('DifferentialRegistryResolutionService', () => {
   }
 
   it('resolves an exact canonical differential', async () => {
-    const { service } = buildService([
+    const { prisma, service } = buildService([
       {
         id: 'registry-2',
         displayLabel: 'COPD',
@@ -36,6 +36,15 @@ describe('DifferentialRegistryResolutionService', () => {
       resolvedRegistryId: 'registry-2',
       matchType: 'canonical',
     });
+
+    expect(prisma.diagnosisRegistry.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: 'ACTIVE',
+          active: true,
+        }),
+      }),
+    );
   });
 
   it('resolves an alias differential', async () => {
@@ -132,5 +141,20 @@ describe('DifferentialRegistryResolutionService', () => {
       status: 'unresolved',
       suggestions: [],
     });
+  });
+
+  it('only queries dictionary-visible registry entries', async () => {
+    const { prisma, service } = buildService([]);
+
+    await service.resolve({ rawText: 'Draft mimic text' });
+
+    expect(prisma.diagnosisRegistry.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: 'ACTIVE',
+          active: true,
+        }),
+      }),
+    );
   });
 });

@@ -201,6 +201,30 @@ export type CreateDiagnosisAliasInput = {
   acceptedForMatch?: boolean;
 };
 
+export type UpdateDiagnosisRegistryMetadataInput = Partial<
+  Pick<
+    CreateEditorialDiagnosisInput,
+    | 'category'
+    | 'specialty'
+    | 'subspecialty'
+    | 'bodySystem'
+    | 'organSystem'
+    | 'difficultyBand'
+    | 'rarityBand'
+    | 'clinicalSetting'
+    | 'ageGroup'
+    | 'urgencyLevel'
+    | 'preferredClueTypes'
+    | 'excludedClueTypes'
+    | 'isPlayable'
+    | 'isGeneratable'
+    | 'isDescriptive'
+    | 'isCompositional'
+    | 'notes'
+    | 'searchPriority'
+  >
+>;
+
 export type DiagnosisRegistryLinkableResult = {
   diagnosisId: string | null;
   diagnosisRegistryId: string;
@@ -487,6 +511,47 @@ export class DiagnosisRegistryEditorialService {
     diagnosisRegistryId: string,
     client: DiagnosisRegistryEditorialClient = this.prisma,
   ): Promise<AdminDiagnosisRegistrySummary> {
+    return this.toRegistrySummary(
+      await this.getRegistryById(diagnosisRegistryId, client),
+    );
+  }
+
+  async updateMetadata(
+    diagnosisRegistryId: string,
+    input: UpdateDiagnosisRegistryMetadataInput,
+    client: DiagnosisRegistryEditorialClient = this.prisma,
+  ): Promise<AdminDiagnosisRegistrySummary> {
+    await this.getRegistryById(diagnosisRegistryId, client);
+    const data: Prisma.DiagnosisRegistryUpdateInput = {};
+
+    this.assignUpdateString(data, 'category', input.category);
+    this.assignUpdateString(data, 'specialty', input.specialty);
+    this.assignUpdateString(data, 'subspecialty', input.subspecialty);
+    this.assignUpdateString(data, 'bodySystem', input.bodySystem);
+    this.assignUpdateString(data, 'organSystem', input.organSystem);
+    this.assignUpdateValue(data, 'difficultyBand', input.difficultyBand);
+    this.assignUpdateValue(data, 'rarityBand', input.rarityBand);
+    this.assignUpdateValue(data, 'clinicalSetting', input.clinicalSetting);
+    this.assignUpdateValue(data, 'ageGroup', input.ageGroup);
+    this.assignUpdateValue(data, 'urgencyLevel', input.urgencyLevel);
+    this.assignJsonUpdateValue(data, 'preferredClueTypes', input.preferredClueTypes);
+    this.assignJsonUpdateValue(data, 'excludedClueTypes', input.excludedClueTypes);
+    this.assignUpdateValue(data, 'isPlayable', input.isPlayable);
+    this.assignUpdateValue(data, 'isGeneratable', input.isGeneratable);
+    this.assignUpdateValue(data, 'isDescriptive', input.isDescriptive);
+    this.assignUpdateValue(data, 'isCompositional', input.isCompositional);
+    this.assignUpdateString(data, 'notes', input.notes);
+    this.assignUpdateValue(
+      data,
+      'searchPriority',
+      this.normalizeSearchPriority(input.searchPriority),
+    );
+
+    await (client as PrismaService).diagnosisRegistry.update({
+      where: { id: diagnosisRegistryId },
+      data,
+    });
+
     return this.toRegistrySummary(
       await this.getRegistryById(diagnosisRegistryId, client),
     );
@@ -911,6 +976,36 @@ export class DiagnosisRegistryEditorialService {
   ): void {
     if (value !== undefined) {
       record[key] = value;
+    }
+  }
+
+  private assignUpdateString<K extends keyof Prisma.DiagnosisRegistryUpdateInput>(
+    record: Prisma.DiagnosisRegistryUpdateInput,
+    key: K,
+    value?: string | null,
+  ): void {
+    if (value !== undefined) {
+      record[key] = (this.normalizeOptionalString(value) ?? null) as never;
+    }
+  }
+
+  private assignUpdateValue<K extends keyof Prisma.DiagnosisRegistryUpdateInput>(
+    record: Prisma.DiagnosisRegistryUpdateInput,
+    key: K,
+    value: Prisma.DiagnosisRegistryUpdateInput[K] | undefined,
+  ): void {
+    if (value !== undefined) {
+      record[key] = value;
+    }
+  }
+
+  private assignJsonUpdateValue(
+    record: Prisma.DiagnosisRegistryUpdateInput,
+    key: 'preferredClueTypes' | 'excludedClueTypes',
+    value: Prisma.InputJsonValue | null | undefined,
+  ): void {
+    if (value !== undefined) {
+      record[key] = value === null ? Prisma.JsonNull : value;
     }
   }
 

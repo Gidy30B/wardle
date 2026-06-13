@@ -1,6 +1,7 @@
 import type { ApiClient } from './client';
 import type {
   AdminViewer,
+  AddDiagnosisAliasPayload,
   AdminDiagnosisEducationResponse,
   DiagnosisGraphCandidate,
   DiagnosisGraphCandidateFilters,
@@ -30,6 +31,7 @@ import type {
   DiagnosisRegistryLifecycleAction,
   DiagnosisRegistryLifecycleActionResult,
   DiagnosisRegistryLifecycleReport,
+  DiagnosisRegistryMetadataSuggestion,
   DiagnosisEditorialBriefResponse,
   DiagnosisEditorialBriefReviewAction,
   DiagnosisEditorialBriefWritePayload,
@@ -65,6 +67,8 @@ import type {
   RegistryMergeAnalysisPayload,
   RegistryMergeExecutePayload,
   RegistryMergeExecutionResult,
+  RegistryLifecycleNormalizeResult,
+  RegistryLifecycleTelemetry,
   RegistryMergeRelated,
   DiagnosisRegistrySearchItem,
   EditorialInboxQuery,
@@ -103,6 +107,7 @@ import type {
   ReviewRegistryCandidatePayload,
   UnresolvedMimicCandidate,
   UpdateCaseDiagnosisPayload,
+  UpdateDiagnosisRegistryMetadataPayload,
   UpsertDiagnosisEducationPayload,
   ValidationOutcomeSummary,
 } from './admin.types';
@@ -227,14 +232,67 @@ export function getDiagnosisRegistryLifecycle(
   );
 }
 
+export function getDiagnosisRegistryLifecycleTelemetry(client: ApiClient) {
+  return client.get<RegistryLifecycleTelemetry>(
+    '/admin/diagnosis-registry/lifecycle/telemetry',
+  );
+}
+
+export function normalizeDiagnosisRegistryLifecycle(client: ApiClient) {
+  return client.post<RegistryLifecycleNormalizeResult>(
+    '/admin/diagnosis-registry/lifecycle/normalize',
+  );
+}
+
+export function normalizeDiagnosisRegistryLifecycleRow(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.post<RegistryLifecycleNormalizeResult>(
+    `/admin/diagnosis-registry/${diagnosisRegistryId}/lifecycle/normalize`,
+  );
+}
+
 export function updateDiagnosisRegistryLifecycle(
   client: ApiClient,
   diagnosisRegistryId: string,
   action: DiagnosisRegistryLifecycleAction,
+  payload: { isGeneratable?: boolean } = {},
 ) {
   return client.post<DiagnosisRegistryLifecycleActionResult>(
     `/admin/diagnosis-registry/${diagnosisRegistryId}/lifecycle/action`,
-    { action },
+    { action, ...payload },
+  );
+}
+
+export function getDiagnosisRegistryMetadataSuggestions(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.get<DiagnosisRegistryMetadataSuggestion>(
+    `/admin/diagnosis-registry/${diagnosisRegistryId}/metadata-suggestions`,
+  );
+}
+
+export function updateDiagnosisRegistryMetadata(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  payload: UpdateDiagnosisRegistryMetadataPayload,
+) {
+  return client.patch(
+    `/admin/diagnosis-registry/${diagnosisRegistryId}/metadata`,
+    payload,
+  );
+}
+
+export function addDiagnosisAlias(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  payload: AddDiagnosisAliasPayload,
+) {
+  return client.post(
+    `/admin/diagnosis-registry/${diagnosisRegistryId}/aliases`,
+    payload,
   );
 }
 

@@ -43,6 +43,7 @@ import type { ListEditorialCasesDto } from './dto/list-editorial-cases.dto.js';
 import type { SearchDiagnosisRegistryDto } from './dto/search-diagnosis-registry.dto.js';
 import type { SubmitCaseReviewDto } from './dto/submit-case-review.dto.js';
 import type { UpdateCaseDiagnosisDto } from './dto/update-case-diagnosis.dto.js';
+import type { UpdateDiagnosisRegistryMetadataDto } from './dto/update-diagnosis-registry-metadata.dto.js';
 import { CaseQualityProjectionService } from './case-quality-projection.service.js';
 
 type ReviewTransactionClient = Prisma.TransactionClient | PrismaClient;
@@ -356,6 +357,25 @@ export class CaseReviewService {
       this.prisma.$transaction(
         (tx) =>
           this.diagnosisRegistryEditorialService.addAlias(
+            diagnosisRegistryId,
+            input,
+            tx,
+          ),
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      ),
+    );
+  }
+
+  async updateDiagnosisRegistryMetadata(
+    diagnosisRegistryId: string,
+    input: UpdateDiagnosisRegistryMetadataDto,
+  ) {
+    return this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        (tx) =>
+          this.diagnosisRegistryEditorialService.updateMetadata(
             diagnosisRegistryId,
             input,
             tx,

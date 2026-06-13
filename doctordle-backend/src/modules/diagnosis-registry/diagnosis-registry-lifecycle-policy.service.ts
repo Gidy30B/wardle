@@ -18,6 +18,7 @@ import { PrismaService } from '../../core/db/prisma.service';
 
 export type DiagnosisRegistryLifecycleAction =
   | 'activate'
+  | 'activate_for_dictionary'
   | 'deactivate'
   | 'mark_playable'
   | 'unmark_playable'
@@ -38,6 +39,8 @@ type RegistryLifecycleRow = {
   category: string | null;
   bodySystem: string | null;
   difficultyBand: string | null;
+  isDescriptive: boolean;
+  isCompositional: boolean;
   activationReviewedByUserId?: string | null;
   activationReviewedAt?: Date | null;
   education: {
@@ -72,6 +75,14 @@ type LifecycleCounts = {
   unresolvedDifferentialCount: number;
 };
 
+type LifecycleStateSnapshot = {
+  status: DiagnosisRegistryStatus;
+  active: boolean;
+  isPlayable: boolean;
+  isGeneratable: boolean;
+  onboardingStatus: DiagnosisEditorialOnboardingStatus | null;
+};
+
 export type LifecycleEvaluation = {
   allowed: boolean;
   blockers: string[];
@@ -92,6 +103,7 @@ export type DiagnosisRegistryLifecycleReport = {
   };
   readiness: {
     activation: LifecycleEvaluation;
+    dictionaryActivation: LifecycleEvaluation;
     playability: LifecycleEvaluation;
     generatability: LifecycleEvaluation;
     merge: LifecycleEvaluation;
@@ -153,6 +165,7 @@ export class DiagnosisRegistryLifecyclePolicyService {
     diagnosisRegistryId: string;
     reviewerUserId: string;
     action: DiagnosisRegistryLifecycleAction;
+    isGeneratable?: boolean;
   }) {
     const report = await this.getLifecycle(input.diagnosisRegistryId);
     const evaluation = this.getEvaluationForAction(report, input.action);
@@ -166,7 +179,13 @@ export class DiagnosisRegistryLifecyclePolicyService {
     }
 
     const now = new Date();
-    const data = this.getActionUpdate(input.action, input.reviewerUserId, now);
+    const data = this.getActionUpdate({
+      action: input.action,
+      reviewerUserId: input.reviewerUserId,
+      now,
+      isGeneratable: input.isGeneratable,
+      onboardingStatus: report.lifecycle.onboardingStatus,
+    });
 
     const registry = await this.prisma.diagnosisRegistry.update({
       where: { id: input.diagnosisRegistryId },
@@ -177,8 +196,10 @@ export class DiagnosisRegistryLifecyclePolicyService {
         active: true,
         isPlayable: true,
         isGeneratable: true,
+        onboardingStatus: true,
         activationReviewedByUserId: true,
         activationReviewedAt: true,
+        updatedAt: true,
       },
     });
 
@@ -191,6 +212,37 @@ export class DiagnosisRegistryLifecyclePolicyService {
     return {
       registry,
       lifecycle: await this.getLifecycle(input.diagnosisRegistryId),
+      activationTelemetry:
+        input.action === 'activate_for_dictionary'
+          ? {
+              before: this.toLifecycleStateSnapshot(report.lifecycle),
+              after: this.toLifecycleStateSnapshot(registry),
+              dictionaryVisible:
+                registry.status === DiagnosisRegistryStatus.ACTIVE &&
+                registry.active,
+              playable:
+                registry.status === DiagnosisRegistryStatus.ACTIVE &&
+                registry.active &&
+                registry.isPlayable,
+              generatable:
+                registry.status === DiagnosisRegistryStatus.ACTIVE &&
+                registry.active &&
+                registry.isPlayable &&
+                registry.isGeneratable,
+              cacheInvalidated: true,
+              cacheInvalidationReason:
+                'Registry activation updates updatedAt; dictionary, snapshot, and autocomplete version projections are based on registry updatedAt.',
+              activatedByUserId: input.reviewerUserId,
+              activatedAt: registry.activationReviewedAt
+                ? registry.activationReviewedAt.toISOString()
+                : now.toISOString(),
+              updatedAt: registry.updatedAt.toISOString(),
+            }
+          : null,
+      cacheInvalidation: {
+        dictionaryVersionBumped: true,
+        reason: 'diagnosis_registry_updated_at_changed',
+      },
     };
   }
 
@@ -199,6 +251,13 @@ export class DiagnosisRegistryLifecyclePolicyService {
     counts: LifecycleCounts,
   ): LifecycleEvaluation {
     return this.getActivationReadiness(registry, counts);
+  }
+
+  canActivateForDictionary(
+    registry: RegistryLifecycleRow,
+    counts: LifecycleCounts,
+  ): LifecycleEvaluation {
+    return this.getDictionaryActivationReadiness(registry, counts);
   }
 
   canMarkPlayable(
@@ -292,6 +351,61 @@ export class DiagnosisRegistryLifecyclePolicyService {
 
     if (!this.hasUsableCase(registry)) {
       warnings.push('No ready or published playable case exists yet');
+      score -= 5;
+    }
+
+    return this.evaluation(blockers, warnings, score);
+  }
+
+  getDictionaryActivationReadiness(
+    registry: RegistryLifecycleRow,
+    counts: LifecycleCounts,
+  ): LifecycleEvaluation {
+    const blockers: string[] = [];
+    const warnings: string[] = [];
+    let score = 100;
+
+    if (registry.status === DiagnosisRegistryStatus.ACTIVE && registry.active) {
+      warnings.push('Diagnosis is already dictionary-active');
+    }
+
+    if (!registry.displayLabel || !registry.canonicalName || !registry.canonicalNormalized) {
+      blockers.push('Display label, canonical name, and normalized canonical key are required');
+      score -= 25;
+    }
+
+    if (!registry.specialty) {
+      blockers.push('Specialty must be assigned before dictionary activation');
+      score -= 15;
+    }
+
+    if (!registry.category && !registry.bodySystem) {
+      blockers.push('Category or body system must be assigned before dictionary activation');
+      score -= 15;
+    }
+
+    if (counts.duplicateCanonicalCount > 0 || counts.duplicateAliasCount > 0) {
+      blockers.push('Duplicate registry risk is unresolved');
+      score -= 25;
+    }
+
+    if (counts.pendingDuplicateCandidateCount > 0) {
+      blockers.push('Pending registry candidate conflict is unresolved');
+      score -= 15;
+    }
+
+    if (registry.isDescriptive || registry.isCompositional) {
+      blockers.push('Descriptive or compositional entries require manual safety review before dictionary activation');
+      score -= 15;
+    }
+
+    if (!this.hasUsableCase(registry)) {
+      warnings.push('No ready or published playable case exists yet');
+      score -= 5;
+    }
+
+    if (!this.hasApprovedEducation(registry)) {
+      warnings.push('Education is not approved or published yet');
       score -= 5;
     }
 
@@ -433,6 +547,8 @@ export class DiagnosisRegistryLifecyclePolicyService {
         category: true,
         bodySystem: true,
         difficultyBand: true,
+        isDescriptive: true,
+        isCompositional: true,
         activationReviewedByUserId: true,
         activationReviewedAt: true,
         education: {
@@ -539,16 +655,22 @@ export class DiagnosisRegistryLifecyclePolicyService {
     counts: LifecycleCounts,
   ): DiagnosisRegistryLifecycleReport {
     const activation = this.getActivationReadiness(registry, counts);
+    const dictionaryActivation = this.getDictionaryActivationReadiness(
+      registry,
+      counts,
+    );
     const playability = this.getPlayabilityReadiness(registry, counts);
     const generatability = this.getGeneratabilityReadiness(registry, counts);
     const merge = this.canMerge(registry, counts);
     const blockers = this.unique([
       ...activation.blockers,
+      ...dictionaryActivation.blockers,
       ...playability.blockers,
       ...generatability.blockers,
     ]);
     const warnings = this.unique([
       ...activation.warnings,
+      ...dictionaryActivation.warnings,
       ...playability.warnings,
       ...generatability.warnings,
       ...merge.warnings,
@@ -570,6 +692,7 @@ export class DiagnosisRegistryLifecyclePolicyService {
       },
       readiness: {
         activation,
+        dictionaryActivation,
         playability,
         generatability,
         merge,
@@ -590,6 +713,7 @@ export class DiagnosisRegistryLifecyclePolicyService {
       },
       recommendations: this.buildRecommendations({
         activation,
+        dictionaryActivation,
         playability,
         generatability,
         registry,
@@ -604,6 +728,8 @@ export class DiagnosisRegistryLifecyclePolicyService {
     switch (action) {
       case 'activate':
         return report.readiness.activation;
+      case 'activate_for_dictionary':
+        return report.readiness.dictionaryActivation;
       case 'mark_playable':
         return report.readiness.playability;
       case 'mark_generatable':
@@ -613,18 +739,33 @@ export class DiagnosisRegistryLifecyclePolicyService {
     }
   }
 
-  private getActionUpdate(
-    action: DiagnosisRegistryLifecycleAction,
-    reviewerUserId: string,
-    now: Date,
-  ): Prisma.DiagnosisRegistryUpdateInput {
-    switch (action) {
+  private getActionUpdate(input: {
+    action: DiagnosisRegistryLifecycleAction;
+    reviewerUserId: string;
+    now: Date;
+    isGeneratable?: boolean;
+    onboardingStatus?: DiagnosisEditorialOnboardingStatus | null;
+  }): Prisma.DiagnosisRegistryUpdateInput {
+    switch (input.action) {
       case 'activate':
         return {
           status: DiagnosisRegistryStatus.ACTIVE,
           active: true,
-          activationReviewedByUser: { connect: { id: reviewerUserId } },
-          activationReviewedAt: now,
+          activationReviewedByUser: { connect: { id: input.reviewerUserId } },
+          activationReviewedAt: input.now,
+        };
+      case 'activate_for_dictionary':
+        return {
+          status: DiagnosisRegistryStatus.ACTIVE,
+          active: true,
+          isPlayable: true,
+          isGeneratable: input.isGeneratable ?? false,
+          onboardingStatus:
+            input.onboardingStatus === DiagnosisEditorialOnboardingStatus.COMPLETE
+              ? DiagnosisEditorialOnboardingStatus.COMPLETE
+              : DiagnosisEditorialOnboardingStatus.READY_FOR_REVIEW,
+          activationReviewedByUser: { connect: { id: input.reviewerUserId } },
+          activationReviewedAt: input.now,
         };
       case 'deactivate':
         return {
@@ -650,6 +791,8 @@ export class DiagnosisRegistryLifecyclePolicyService {
     switch (action) {
       case 'activate':
         return 'diagnosis.lifecycle.activated';
+      case 'activate_for_dictionary':
+        return 'diagnosis.lifecycle.dictionary_activated';
       case 'deactivate':
         return 'diagnosis.lifecycle.deactivated';
       case 'mark_playable':
@@ -725,6 +868,7 @@ export class DiagnosisRegistryLifecyclePolicyService {
 
   private buildRecommendations(input: {
     activation: LifecycleEvaluation;
+    dictionaryActivation: LifecycleEvaluation;
     playability: LifecycleEvaluation;
     generatability: LifecycleEvaluation;
     registry: RegistryLifecycleRow;
@@ -733,6 +877,10 @@ export class DiagnosisRegistryLifecyclePolicyService {
 
     if (!input.activation.allowed) {
       recommendations.push('Resolve activation blockers before enabling registry visibility');
+    }
+
+    if (!input.dictionaryActivation.allowed && !this.isDictionaryVisible(input.registry)) {
+      recommendations.push('Complete dictionary activation metadata before gameplay visibility');
     }
 
     if (!input.playability.allowed) {
@@ -756,5 +904,17 @@ export class DiagnosisRegistryLifecyclePolicyService {
 
   private unique(values: string[]): string[] {
     return Array.from(new Set(values.filter((value) => value.trim())));
+  }
+
+  private toLifecycleStateSnapshot(
+    row: LifecycleStateSnapshot,
+  ): LifecycleStateSnapshot {
+    return {
+      status: row.status,
+      active: row.active,
+      isPlayable: row.isPlayable,
+      isGeneratable: row.isGeneratable,
+      onboardingStatus: row.onboardingStatus,
+    };
   }
 }

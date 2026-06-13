@@ -15,6 +15,7 @@ import {
   generateDiagnosisTeachingRuleCandidates,
   getDiagnosisEditorialBrief,
   getDiagnosisEditorialWorkspace,
+  normalizeDiagnosisRegistryLifecycleRow,
   regenerateDiagnosisEducationSection,
   repairUnsupportedClaimDraft,
   reviewDiagnosisEditorialBrief,
@@ -434,6 +435,19 @@ export default function EditorialDiagnosisWorkspacePage() {
     });
   }
 
+  function handleNormalizeLifecycleFlags() {
+    if (!diagnosisRegistryId) {
+      return;
+    }
+    void runWorkspaceAction({
+      id: 'lifecycle-normalize',
+      pending: 'Normalizing lifecycle flags...',
+      success: 'Lifecycle flags normalized safely.',
+      action: () =>
+        normalizeDiagnosisRegistryLifecycleRow(client, diagnosisRegistryId),
+    });
+  }
+
   function handleSeedLegacyTeachingRules() {
     if (!diagnosisRegistryId) {
       return;
@@ -844,6 +858,7 @@ export default function EditorialDiagnosisWorkspacePage() {
               seniorDisabledReason={seniorDisabledReason}
               pendingAction={pendingAction}
               onLifecycleAction={handleLifecycleAction}
+              onNormalizeLifecycleFlags={handleNormalizeLifecycleFlags}
             />
           ) : null}
           {activeTab === 'teaching-rules' ? (

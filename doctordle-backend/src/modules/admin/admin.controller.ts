@@ -76,6 +76,8 @@ import {
   DiagnosisRegistryLifecyclePolicyService,
   type DiagnosisRegistryLifecycleAction,
 } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
+import { DiagnosisRegistryLifecycleTelemetryService } from '../diagnosis-registry/diagnosis-registry-lifecycle-telemetry.service';
+import { DiagnosisRegistryMetadataSuggestionService } from '../diagnosis-registry/diagnosis-registry-metadata-suggestion.service';
 import { DiagnosisRegistryMergeAnalysisService } from '../diagnosis-registry/diagnosis-registry-merge-analysis.service';
 import { DiagnosisRegistryMergeExecutionService } from '../diagnosis-registry/diagnosis-registry-merge-execution.service';
 import { CreateAndLinkDiagnosisDto } from './dto/create-and-link-diagnosis.dto';
@@ -86,6 +88,7 @@ import { ListEditorialCasesDto } from './dto/list-editorial-cases.dto';
 import { SearchDiagnosisRegistryDto } from './dto/search-diagnosis-registry.dto';
 import { SubmitCaseReviewDto } from './dto/submit-case-review.dto';
 import { UpdateCaseDiagnosisDto } from './dto/update-case-diagnosis.dto';
+import { UpdateDiagnosisRegistryMetadataDto } from './dto/update-diagnosis-registry-metadata.dto';
 
 type GenerateCasesBody = {
   count?: number;
@@ -127,6 +130,11 @@ type CaseEscalationAnnotationBody = {
   notes?: string | null;
 };
 
+type DiagnosisRegistryLifecycleActionBody = {
+  action?: DiagnosisRegistryLifecycleAction | 'ACTIVATE_FOR_DICTIONARY';
+  isGeneratable?: boolean;
+};
+
 @Controller('admin')
 @UseGuards(AdminGuard)
 export class AdminController {
@@ -151,6 +159,8 @@ export class AdminController {
     private readonly diagnosisRegistryCandidateService: DiagnosisRegistryCandidateService,
     private readonly diagnosisEditorialOnboardingService: DiagnosisEditorialOnboardingService,
     private readonly diagnosisRegistryLifecyclePolicyService: DiagnosisRegistryLifecyclePolicyService,
+    private readonly diagnosisRegistryLifecycleTelemetryService: DiagnosisRegistryLifecycleTelemetryService,
+    private readonly diagnosisRegistryMetadataSuggestionService: DiagnosisRegistryMetadataSuggestionService,
     private readonly diagnosisRegistryMergeAnalysisService: DiagnosisRegistryMergeAnalysisService,
     private readonly diagnosisRegistryMergeExecutionService: DiagnosisRegistryMergeExecutionService,
     private readonly reasoningDraftValidationService?: ReasoningDraftValidationService,
@@ -770,18 +780,66 @@ export class AdminController {
     );
   }
 
+  @Get('diagnosis-registry/lifecycle/telemetry')
+  @SeniorEditorialAccess()
+  async getDiagnosisRegistryLifecycleTelemetry() {
+    return this.diagnosisRegistryLifecycleTelemetryService.getTelemetry();
+  }
+
+  @Post('diagnosis-registry/lifecycle/normalize')
+  @SeniorEditorialAccess()
+  async normalizeDiagnosisRegistryLifecycleFlags() {
+    return this.diagnosisRegistryLifecycleTelemetryService.normalizeAll();
+  }
+
+  @Post('diagnosis-registry/:diagnosisRegistryId/lifecycle/normalize')
+  @SeniorEditorialAccess()
+  async normalizeDiagnosisRegistryLifecycleFlagsForRow(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+  ) {
+    return this.diagnosisRegistryLifecycleTelemetryService.normalizeOne(
+      diagnosisRegistryId,
+    );
+  }
+
+  @Get('diagnosis-registry/:diagnosisRegistryId/metadata-suggestions')
+  @EditorialAccess()
+  async getDiagnosisRegistryMetadataSuggestions(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+  ) {
+    return this.diagnosisRegistryMetadataSuggestionService.suggestRegistryMetadata(
+      diagnosisRegistryId,
+    );
+  }
+
+  @Patch('diagnosis-registry/:diagnosisRegistryId/metadata')
+  @SeniorEditorialAccess()
+  async updateDiagnosisRegistryMetadata(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Body() body: UpdateDiagnosisRegistryMetadataDto,
+  ) {
+    return this.caseReviewService.updateDiagnosisRegistryMetadata(
+      diagnosisRegistryId,
+      body,
+    );
+  }
+
   @Post('diagnosis-registry/:diagnosisRegistryId/lifecycle/action')
   @SeniorEditorialAccess()
   async updateDiagnosisRegistryLifecycle(
     @Param('diagnosisRegistryId', new ParseUUIDPipe())
     diagnosisRegistryId: string,
     @Req() request: AuthenticatedRequest,
-    @Body() body: { action?: DiagnosisRegistryLifecycleAction },
+    @Body() body: DiagnosisRegistryLifecycleActionBody,
   ) {
     return this.diagnosisRegistryLifecyclePolicyService.performAction({
       diagnosisRegistryId,
       reviewerUserId: request.user.id,
       action: this.parseLifecycleAction(body.action),
+      isGeneratable: body.isGeneratable,
     });
   }
 
@@ -1614,10 +1672,14 @@ export class AdminController {
   }
 
   private parseLifecycleAction(
-    value: DiagnosisRegistryLifecycleAction | undefined,
+    value:
+      | DiagnosisRegistryLifecycleAction
+      | 'ACTIVATE_FOR_DICTIONARY'
+      | undefined,
   ): DiagnosisRegistryLifecycleAction {
     const allowedActions: DiagnosisRegistryLifecycleAction[] = [
       'activate',
+      'activate_for_dictionary',
       'deactivate',
       'mark_playable',
       'unmark_playable',
@@ -1625,8 +1687,16 @@ export class AdminController {
       'unmark_generatable',
     ];
 
-    if (value && allowedActions.includes(value)) {
-      return value;
+    const normalizedValue =
+      value === 'ACTIVATE_FOR_DICTIONARY'
+        ? 'activate_for_dictionary'
+        : value;
+
+    if (
+      normalizedValue &&
+      allowedActions.includes(normalizedValue as DiagnosisRegistryLifecycleAction)
+    ) {
+      return normalizedValue as DiagnosisRegistryLifecycleAction;
     }
 
     throw new BadRequestException('Invalid diagnosis registry lifecycle action');

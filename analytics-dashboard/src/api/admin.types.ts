@@ -1792,6 +1792,7 @@ export type DiagnosisEditorialWorkspace = {
 
 export type DiagnosisRegistryLifecycleAction =
   | 'activate'
+  | 'activate_for_dictionary'
   | 'deactivate'
   | 'mark_playable'
   | 'unmark_playable'
@@ -1818,6 +1819,7 @@ export type DiagnosisRegistryLifecycleReport = {
   };
   readiness: {
     activation: DiagnosisRegistryLifecycleEvaluation;
+    dictionaryActivation: DiagnosisRegistryLifecycleEvaluation;
     playability: DiagnosisRegistryLifecycleEvaluation;
     generatability: DiagnosisRegistryLifecycleEvaluation;
     merge: DiagnosisRegistryLifecycleEvaluation;
@@ -1850,6 +1852,85 @@ export type DiagnosisRegistryLifecycleActionResult = {
     activationReviewedAt: string | null;
   };
   lifecycle: DiagnosisRegistryLifecycleReport;
+  activationTelemetry?: {
+    before: RegistryLifecycleStateSnapshot;
+    after: RegistryLifecycleStateSnapshot;
+    dictionaryVisible: boolean;
+    playable: boolean;
+    generatable: boolean;
+    cacheInvalidated: boolean;
+    cacheInvalidationReason: string;
+    activatedByUserId: string;
+    activatedAt: string;
+    updatedAt: string;
+  } | null;
+  cacheInvalidation?: {
+    dictionaryVersionBumped: boolean;
+    reason: string;
+  };
+};
+
+export type RegistryLifecycleStateSnapshot = {
+  status: DiagnosisRegistryStatus;
+  active: boolean;
+  isPlayable: boolean;
+  isGeneratable: boolean;
+  onboardingStatus: DiagnosisEditorialOnboardingStatus | null;
+};
+
+export type RegistryLifecycleRowSummary = {
+  id: string;
+  displayLabel: string;
+  canonicalName: string;
+  canonicalNormalized: string;
+  status: DiagnosisRegistryStatus;
+  active: boolean;
+  isPlayable: boolean;
+  isGeneratable: boolean;
+  onboardingStatus: DiagnosisEditorialOnboardingStatus | null;
+  specialty: string | null;
+  bodySystem: string | null;
+  category: string | null;
+  createdAt: string;
+  updatedAt: string;
+  notes: string | null;
+};
+
+export type RegistryLifecycleTelemetry = {
+  summary: {
+    totalRegistryRows: number;
+    draftRows: number;
+    activeRows: number;
+    dictionaryVisibleRows: number;
+    playableRows: number;
+    generatableRows: number;
+    candidateCreatedDraftRows: number;
+    driftCount: number;
+    activationBlockedCount: number;
+    missingMetadataCount: number;
+    duplicateRiskCount: number;
+    descriptiveOrCompositionalCount: number;
+  };
+  drift: {
+    draftButActive: RegistryLifecycleRowSummary[];
+    draftButPlayable: RegistryLifecycleRowSummary[];
+    draftButGeneratable: RegistryLifecycleRowSummary[];
+    activeButInactive: RegistryLifecycleRowSummary[];
+    generatableButNotPlayable: RegistryLifecycleRowSummary[];
+    playableButNotDictionaryVisible: RegistryLifecycleRowSummary[];
+  };
+  blockers: {
+    missingMetadata: RegistryLifecycleRowSummary[];
+    duplicateRisk: RegistryLifecycleRowSummary[];
+    descriptiveOrCompositional: RegistryLifecycleRowSummary[];
+    activationBlocked: RegistryLifecycleRowSummary[];
+  };
+};
+
+export type RegistryLifecycleNormalizeResult = {
+  repaired: RegistryLifecycleRowSummary[];
+  skipped: RegistryLifecycleRowSummary[];
+  blockers: RegistryLifecycleRowSummary[];
 };
 
 export type RegistryMergeSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'BLOCKED';
@@ -3013,6 +3094,59 @@ export type CreateDiagnosisRegistryPayload = {
   isCompositional?: boolean;
   notes?: string;
   searchPriority?: number;
+};
+
+export type UpdateDiagnosisRegistryMetadataPayload = {
+  category?: string | null;
+  specialty?: string | null;
+  subspecialty?: string | null;
+  bodySystem?: string | null;
+  organSystem?: string | null;
+  difficultyBand?: DiagnosisDifficultyBand | null;
+  rarityBand?: string | null;
+  clinicalSetting?: string | null;
+  ageGroup?: string | null;
+  urgencyLevel?: string | null;
+  preferredClueTypes?: string[] | null;
+  excludedClueTypes?: string[] | null;
+  isPlayable?: boolean;
+  isGeneratable?: boolean;
+  isDescriptive?: boolean;
+  isCompositional?: boolean;
+  notes?: string | null;
+  searchPriority?: number;
+};
+
+export type DiagnosisRegistryMetadataSuggestion = {
+  diagnosisRegistryId: string;
+  source: 'heuristic';
+  aliases: Array<{
+    term: string;
+    normalizedTerm: string;
+    acceptedForMatch: boolean;
+    confidence: number;
+    rationale: string;
+  }>;
+  metadata: {
+    specialty: string | null;
+    subspecialty: string | null;
+    category: string | null;
+    bodySystem: string | null;
+    organSystem: string | null;
+    difficultyBand: DiagnosisDifficultyBand | null;
+    rarityBand: string | null;
+    clinicalSetting: string | null;
+    ageGroup: string | null;
+    urgencyLevel: string | null;
+    preferredClueTypes: string[];
+  };
+  duplicateRisk: {
+    canonicalMatches: number;
+    aliasMatches: number;
+    pendingCandidateMatches: number;
+  };
+  confidence: number;
+  rationale: string[];
 };
 
 export type CreateDiagnosisAndLinkPayload = CreateDiagnosisRegistryPayload & {

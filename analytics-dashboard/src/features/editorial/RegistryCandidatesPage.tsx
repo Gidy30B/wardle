@@ -2,14 +2,20 @@ import { useAuth } from '@clerk/clerk-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  addDiagnosisAlias,
   createRegistryFromCandidate,
+  getDiagnosisRegistryMetadataSuggestions,
   getDiagnosisRegistryCandidates,
   reviewDiagnosisRegistryCandidate,
+  updateDiagnosisRegistryLifecycle,
+  updateDiagnosisRegistryMetadata,
   type CreateRegistryFromCandidateResult,
+  type DiagnosisRegistryMetadataSuggestion,
   type DiagnosisRegistryCandidate,
   type DiagnosisRegistryCandidateDuplicateSuggestions,
   type DiagnosisRegistryCandidateStatus,
   type JsonValue,
+  type UpdateDiagnosisRegistryMetadataPayload,
 } from '../../api/admin';
 import { createApiClient } from '../../api/client';
 import ErrorState from '../../components/ui/ErrorState';
@@ -45,6 +51,18 @@ export default function RegistryCandidatesPage() {
     useState<DiagnosisRegistryCandidate | null>(null);
   const [creationResult, setCreationResult] =
     useState<CreateRegistryFromCandidateResult | null>(null);
+  const [metadataSuggestion, setMetadataSuggestion] =
+    useState<DiagnosisRegistryMetadataSuggestion | null>(null);
+  const [metadataDraft, setMetadataDraft] =
+    useState<UpdateDiagnosisRegistryMetadataPayload | null>(null);
+  const [selectedAliases, setSelectedAliases] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [activationBusy, setActivationBusy] = useState(false);
+  const [activationMessage, setActivationMessage] = useState<string | null>(
+    null,
+  );
+  const [activationError, setActivationError] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -84,6 +102,9 @@ export default function RegistryCandidatesPage() {
       setBusyId(candidate.id);
       setActionError(null);
       setCreationResult(null);
+      setMetadataSuggestion(null);
+      setMetadataDraft(null);
+      setSelectedAliases(new Set());
       await action();
       await load();
     } catch (reviewError) {
@@ -149,6 +170,9 @@ export default function RegistryCandidatesPage() {
       setBusyId(candidate.id);
       setActionError(null);
       setCreationResult(null);
+      setMetadataSuggestion(null);
+      setMetadataDraft(null);
+      setSelectedAliases(new Set());
       const result = await createRegistryFromCandidate(client, candidate.id);
       setCreationResult(result);
       setCandidateToCreate(null);
@@ -161,6 +185,94 @@ export default function RegistryCandidatesPage() {
       );
     } finally {
       setBusyId(null);
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+    async function loadMetadataSuggestion() {
+      if (!creationResult) {
+        return;
+      }
+
+      try {
+        setActivationError(null);
+        setActivationMessage(null);
+        const suggestion = await getDiagnosisRegistryMetadataSuggestions(
+          client,
+          creationResult.registry.id,
+        );
+        if (!active) return;
+        setMetadataSuggestion(suggestion);
+        setMetadataDraft({
+          ...suggestion.metadata,
+          isPlayable: true,
+          isGeneratable: creationResult.registry.isGeneratable,
+        });
+        setSelectedAliases(
+          new Set(suggestion.aliases.map((alias) => alias.normalizedTerm)),
+        );
+      } catch (suggestionError) {
+        if (!active) return;
+        setActivationError(
+          suggestionError instanceof Error
+            ? suggestionError.message
+            : 'Metadata suggestions could not be loaded.',
+        );
+      }
+    }
+
+    void loadMetadataSuggestion();
+    return () => {
+      active = false;
+    };
+  }, [client, creationResult]);
+
+  async function activateCreatedRegistry() {
+    if (!creationResult || !metadataDraft) {
+      return;
+    }
+
+    try {
+      setActivationBusy(true);
+      setActivationError(null);
+      setActivationMessage(null);
+      await updateDiagnosisRegistryMetadata(
+        client,
+        creationResult.registry.id,
+        metadataDraft,
+      );
+      const aliasesToCreate =
+        metadataSuggestion?.aliases.filter((alias) =>
+          selectedAliases.has(alias.normalizedTerm),
+        ) ?? [];
+      for (const alias of aliasesToCreate) {
+        await addDiagnosisAlias(client, creationResult.registry.id, {
+          alias: alias.term,
+          kind: alias.term.length <= 6 && alias.term === alias.term.toUpperCase()
+            ? 'ABBREVIATION'
+            : 'ACCEPTED',
+          acceptedForMatch: alias.acceptedForMatch,
+        });
+      }
+      await updateDiagnosisRegistryLifecycle(
+        client,
+        creationResult.registry.id,
+        'activate_for_dictionary',
+        { isGeneratable: Boolean(metadataDraft.isGeneratable) },
+      );
+      setActivationMessage(
+        'Activated for dictionary. The next dictionary version will include this diagnosis.',
+      );
+      await load();
+    } catch (activationFailure) {
+      setActivationError(
+        activationFailure instanceof Error
+          ? activationFailure.message
+          : 'Dictionary activation failed.',
+      );
+    } finally {
+      setActivationBusy(false);
     }
   }
 
@@ -228,7 +340,28 @@ export default function RegistryCandidatesPage() {
       ) : null}
 
       {creationResult ? (
-        <RegistryCreationSuccess result={creationResult} />
+        <RegistryCreationSuccess
+          result={creationResult}
+          suggestion={metadataSuggestion}
+          metadataDraft={metadataDraft}
+          selectedAliases={selectedAliases}
+          activationBusy={activationBusy}
+          activationMessage={activationMessage}
+          activationError={activationError}
+          onMetadataDraftChange={setMetadataDraft}
+          onToggleAlias={(normalizedTerm) => {
+            setSelectedAliases((current) => {
+              const next = new Set(current);
+              if (next.has(normalizedTerm)) {
+                next.delete(normalizedTerm);
+              } else {
+                next.add(normalizedTerm);
+              }
+              return next;
+            });
+          }}
+          onActivate={() => void activateCreatedRegistry()}
+        />
       ) : null}
 
       {loading ? (
@@ -491,8 +624,28 @@ function CreateRegistryConfirmationModal({
 
 function RegistryCreationSuccess({
   result,
+  suggestion,
+  metadataDraft,
+  selectedAliases,
+  activationBusy,
+  activationMessage,
+  activationError,
+  onMetadataDraftChange,
+  onToggleAlias,
+  onActivate,
 }: {
   result: CreateRegistryFromCandidateResult;
+  suggestion: DiagnosisRegistryMetadataSuggestion | null;
+  metadataDraft: UpdateDiagnosisRegistryMetadataPayload | null;
+  selectedAliases: Set<string>;
+  activationBusy: boolean;
+  activationMessage: string | null;
+  activationError: string | null;
+  onMetadataDraftChange: (
+    next: UpdateDiagnosisRegistryMetadataPayload | null,
+  ) => void;
+  onToggleAlias: (normalizedTerm: string) => void;
+  onActivate: () => void;
 }) {
   const workspacePath = `/editorial/diagnoses/${result.registry.id}`;
   return (
@@ -517,6 +670,16 @@ function RegistryCreationSuccess({
           status={`${result.structuredLinksUpdatedCount} links synced`}
           tone="info"
         />
+      </div>
+      <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-800">
+          Dictionary activation required
+        </p>
+        <p className="mt-1 text-sm text-amber-900">
+          This created a draft registry entry and resolved mappings. It is not
+          visible to gameplay, autocomplete, or the guess dictionary until a
+          senior editor activates it for dictionary use.
+        </p>
       </div>
       {result.rejectedAliases.length ? (
         <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
@@ -552,6 +715,133 @@ function RegistryCreationSuccess({
               {label}
             </Link>
           ))}
+        </div>
+      </div>
+      <div className="mt-4 rounded-lg border border-slate-200 bg-white/80 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Step 1 - Review metadata
+            </p>
+            <p className="mt-1 text-sm text-slate-700">
+              Suggestions are heuristic and should be checked before activation.
+            </p>
+          </div>
+          {suggestion ? (
+            <StatusBadge
+              status={`${Math.round(suggestion.confidence * 100)}% confidence`}
+              tone="info"
+            />
+          ) : (
+            <StatusBadge status="Loading suggestions" tone="warning" />
+          )}
+        </div>
+
+        {metadataDraft ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {[
+              ['specialty', 'Specialty'],
+              ['category', 'Category'],
+              ['bodySystem', 'Body system'],
+              ['organSystem', 'Organ system'],
+              ['clinicalSetting', 'Clinical setting'],
+              ['urgencyLevel', 'Urgency'],
+            ].map(([field, label]) => (
+              <label
+                key={field}
+                className="space-y-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500"
+              >
+                {label}
+                <input
+                  value={String(
+                    metadataDraft[field as keyof UpdateDiagnosisRegistryMetadataPayload] ??
+                      '',
+                  )}
+                  onChange={(event) =>
+                    onMetadataDraftChange({
+                      ...metadataDraft,
+                      [field]: event.target.value || null,
+                    })
+                  }
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-900"
+                />
+              </label>
+            ))}
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <input
+                type="checkbox"
+                checked={Boolean(metadataDraft.isGeneratable)}
+                onChange={(event) =>
+                  onMetadataDraftChange({
+                    ...metadataDraft,
+                    isGeneratable: event.target.checked,
+                  })
+                }
+              />
+              Enable generation after dictionary activation
+            </label>
+          </div>
+        ) : null}
+
+        <div className="mt-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Step 2 - Review aliases
+          </p>
+          {suggestion?.aliases.length ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {suggestion.aliases.map((alias) => (
+                <label
+                  key={alias.normalizedTerm}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                  title={alias.rationale}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedAliases.has(alias.normalizedTerm)}
+                    onChange={() => onToggleAlias(alias.normalizedTerm)}
+                  />
+                  {alias.term}
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-slate-500">
+              No extra aliases were suggested.
+            </p>
+          )}
+        </div>
+
+        {suggestion?.rationale.length ? (
+          <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-slate-600">
+            {suggestion.rationale.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        ) : null}
+
+        {activationError ? (
+          <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+            {activationError}
+          </div>
+        ) : null}
+        {activationMessage ? (
+          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+            {activationMessage}
+          </div>
+        ) : null}
+
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+          <p className="text-sm text-slate-600">
+            Step 3 - Activate for dictionary when metadata and aliases are safe.
+          </p>
+          <button
+            type="button"
+            onClick={onActivate}
+            disabled={!metadataDraft || activationBusy}
+            className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {activationBusy ? 'Activating...' : 'Activate for dictionary'}
+          </button>
         </div>
       </div>
     </section>

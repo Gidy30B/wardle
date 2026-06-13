@@ -44,6 +44,8 @@ import { DiagnosisEditorialBriefService } from '../education/diagnosis-editorial
 import { AliasValidationService } from '../diagnosis-registry/alias-validation.service';
 import { DiagnosisRegistryCandidateService } from '../diagnosis-registry/diagnosis-registry-candidate.service';
 import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
+import { DiagnosisRegistryLifecycleTelemetryService } from '../diagnosis-registry/diagnosis-registry-lifecycle-telemetry.service';
+import { DiagnosisRegistryMetadataSuggestionService } from '../diagnosis-registry/diagnosis-registry-metadata-suggestion.service';
 import { DiagnosisRegistryMergeAnalysisService } from '../diagnosis-registry/diagnosis-registry-merge-analysis.service';
 import { DiagnosisRegistryMergeExecutionService } from '../diagnosis-registry/diagnosis-registry-merge-execution.service';
 
@@ -93,6 +95,8 @@ import { DiagnosisRegistryMergeExecutionService } from '../diagnosis-registry/di
     DiagnosisRegistryEditorialService,
     DiagnosisRegistryCandidateService,
     DiagnosisRegistryLifecyclePolicyService,
+    DiagnosisRegistryLifecycleTelemetryService,
+    DiagnosisRegistryMetadataSuggestionService,
     DiagnosisRegistryMergeAnalysisService,
     DiagnosisRegistryMergeExecutionService,
     AliasValidationService,

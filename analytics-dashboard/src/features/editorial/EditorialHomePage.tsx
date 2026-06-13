@@ -3,9 +3,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   getDiagnosisRegistryOnboardingSummary,
+  getDiagnosisRegistryLifecycleTelemetry,
   getEditorialInbox,
+  normalizeDiagnosisRegistryLifecycle,
   searchDiagnosisRegistry,
   type DiagnosisEditorialOnboardingSummary,
+  type RegistryLifecycleTelemetry,
   type DiagnosisRegistrySearchItem,
   type EditorialInboxItem,
   type EditorialInboxSummary,
@@ -33,6 +36,8 @@ export default function EditorialHomePage() {
   const client = useMemo(() => createApiClient(getToken), [getToken]);
 
   const [query, setQuery] = useState('');
+  const [registryStatus, setRegistryStatus] =
+    useState<DiagnosisRegistrySearchItem['status']>('ACTIVE');
   const [results, setResults] = useState<DiagnosisRegistrySearchItem[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -42,7 +47,13 @@ export default function EditorialHomePage() {
   const [priorityItems, setPriorityItems] = useState<EditorialInboxItem[]>([]);
   const [onboardingSummary, setOnboardingSummary] =
     useState<DiagnosisEditorialOnboardingSummary | null>(null);
+  const [lifecycleTelemetry, setLifecycleTelemetry] =
+    useState<RegistryLifecycleTelemetry | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [normalizingLifecycle, setNormalizingLifecycle] = useState(false);
+  const [normalizationMessage, setNormalizationMessage] = useState<string | null>(
+    null,
+  );
 
   // Debounced diagnosis search
   useEffect(() => {
@@ -64,7 +75,7 @@ export default function EditorialHomePage() {
         const response = await searchDiagnosisRegistry(client, {
           q: trimmed,
           limit: 12,
-          status: 'ACTIVE',
+          status: registryStatus,
         });
         if (!active) return;
         setResults(response);
@@ -86,7 +97,7 @@ export default function EditorialHomePage() {
       active = false;
       window.clearTimeout(id);
     };
-  }, [client, query]);
+  }, [client, query, registryStatus]);
 
   // Load inbox summary + priority items + onboarding
   useEffect(() => {
@@ -96,14 +107,16 @@ export default function EditorialHomePage() {
     async function loadSummary() {
       try {
         setSummaryError(null);
-        const [inboxResponse, onboarding] = await Promise.all([
+        const [inboxResponse, onboarding, lifecycle] = await Promise.all([
           getEditorialInbox(client, { severity: 'blocker', limit: 5 }),
           getDiagnosisRegistryOnboardingSummary(client),
+          getDiagnosisRegistryLifecycleTelemetry(client),
         ]);
         if (!active) return;
         setInboxSummary(inboxResponse.summary);
         setPriorityItems(inboxResponse.items.slice(0, 4));
         setOnboardingSummary(onboarding);
+        setLifecycleTelemetry(lifecycle);
       } catch (err) {
         if (!active) return;
         setSummaryError(
@@ -117,6 +130,28 @@ export default function EditorialHomePage() {
       active = false;
     };
   }, [access.canAccessEditorial, client]);
+
+  async function runSafeLifecycleNormalization() {
+    try {
+      setNormalizingLifecycle(true);
+      setNormalizationMessage(null);
+      setSummaryError(null);
+      const result = await normalizeDiagnosisRegistryLifecycle(client);
+      const lifecycle = await getDiagnosisRegistryLifecycleTelemetry(client);
+      setLifecycleTelemetry(lifecycle);
+      setNormalizationMessage(
+        `Safe normalization repaired ${result.repaired.length} row${result.repaired.length === 1 ? '' : 's'} and reported ${result.blockers.length} blocker${result.blockers.length === 1 ? '' : 's'}.`,
+      );
+    } catch (err) {
+      setSummaryError(
+        err instanceof Error
+          ? err.message
+          : 'Lifecycle normalization failed.',
+      );
+    } finally {
+      setNormalizingLifecycle(false);
+    }
+  }
 
   if (!access.canAccessEditorial) {
     return <AccessDenied access={access} />;
@@ -213,18 +248,40 @@ export default function EditorialHomePage() {
               ) : null}
             </div>
 
-            <label className="mt-4 block">
-              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Diagnosis finder
-              </span>
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search appendicitis, asthma, pulmonary embolism..."
-                className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-              />
-            </label>
+            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_180px]">
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Diagnosis finder
+                </span>
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search appendicitis, asthma, pulmonary embolism..."
+                  className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Registry status
+                </span>
+                <select
+                  value={registryStatus}
+                  onChange={(event) =>
+                    setRegistryStatus(
+                      event.target.value as DiagnosisRegistrySearchItem['status'],
+                    )
+                  }
+                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                >
+                  {['ACTIVE', 'DRAFT', 'HIDDEN', 'DEPRECATED'].map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
             {searchError ? (
               <div className="mt-4">
@@ -271,6 +328,14 @@ export default function EditorialHomePage() {
               />
             </div>
           </section>
+
+          <RegistryLifecycleHealthCard
+            telemetry={lifecycleTelemetry}
+            busy={normalizingLifecycle}
+            message={normalizationMessage}
+            onViewDraftRows={() => setRegistryStatus('DRAFT')}
+            onNormalize={() => void runSafeLifecycleNormalization()}
+          />
         </main>
 
         {/* Sidebar: quick links */}
@@ -417,6 +482,19 @@ function DiagnosisSearchResults({
             </div>
             <StatusBadge status={result.status} />
           </div>
+          {result.status !== 'ACTIVE' || !result.isPlayable ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {result.status === 'DRAFT' ? (
+                <StatusBadge status="Candidate-created / draft" tone="warning" />
+              ) : null}
+              {result.status !== 'ACTIVE' ? (
+                <StatusBadge status="Not dictionary active" tone="warning" />
+              ) : null}
+              {result.status === 'ACTIVE' && !result.isPlayable ? (
+                <StatusBadge status="Dictionary active, not playable" tone="warning" />
+              ) : null}
+            </div>
+          ) : null}
           {result.aliasPreview.length ? (
             <p className="mt-2 text-sm text-slate-500">
               Aliases: {result.aliasPreview.join(', ')}
@@ -472,6 +550,204 @@ function OnboardingMetric({
         {value ?? '…'}
       </p>
       <p className="mt-1 text-sm text-slate-500">{helper}</p>
+    </div>
+  );
+}
+
+function RegistryLifecycleHealthCard({
+  telemetry,
+  busy,
+  message,
+  onViewDraftRows,
+  onNormalize,
+}: {
+  telemetry: RegistryLifecycleTelemetry | null;
+  busy: boolean;
+  message: string | null;
+  onViewDraftRows: () => void;
+  onNormalize: () => void;
+}) {
+  const summary = telemetry?.summary;
+  const warningActive = Boolean(
+    summary &&
+      (summary.driftCount > 0 ||
+        summary.missingMetadataCount > 0 ||
+        (telemetry?.drift.playableButNotDictionaryVisible.length ?? 0) > 0 ||
+        (telemetry?.drift.generatableButNotPlayable.length ?? 0) > 0),
+  );
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-base font-semibold text-slate-900">
+            Registry Lifecycle Health
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            Detect flag drift before it reaches dictionary, autocomplete, or gameplay.
+          </p>
+        </div>
+        <StatusBadge
+          status={warningActive ? 'Needs attention' : 'Healthy'}
+          tone={warningActive ? 'warning' : 'success'}
+        />
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-4">
+        <OnboardingMetric
+          label="Total diagnoses"
+          value={summary?.totalRegistryRows}
+          helper="Registry rows"
+        />
+        <OnboardingMetric
+          label="Dictionary visible"
+          value={summary?.dictionaryVisibleRows}
+          helper="ACTIVE + active"
+        />
+        <OnboardingMetric
+          label="Playable"
+          value={summary?.playableRows}
+          helper="Visible + playable"
+        />
+        <OnboardingMetric
+          label="Generatable"
+          value={summary?.generatableRows}
+          helper="Playable + generation"
+        />
+        <OnboardingMetric
+          label="Draft"
+          value={summary?.draftRows}
+          helper="Not dictionary active"
+        />
+        <OnboardingMetric
+          label="Drift"
+          value={summary?.driftCount}
+          helper="Invalid flag states"
+        />
+        <OnboardingMetric
+          label="Blocked"
+          value={summary?.activationBlockedCount}
+          helper="Need editor review"
+        />
+        <OnboardingMetric
+          label="Missing metadata"
+          value={summary?.missingMetadataCount}
+          helper="Activation blocker"
+        />
+      </div>
+
+      {message ? (
+        <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+          {message}
+        </div>
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onViewDraftRows}
+          className="rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          View draft registry rows
+        </button>
+        <details className="rounded-md border border-amber-200 px-3 py-2 text-sm font-semibold text-amber-700">
+          <summary className="cursor-pointer">View lifecycle drift</summary>
+          <LifecycleRowList
+            rows={[
+              ...(telemetry?.drift.draftButActive ?? []),
+              ...(telemetry?.drift.draftButPlayable ?? []),
+              ...(telemetry?.drift.draftButGeneratable ?? []),
+              ...(telemetry?.drift.activeButInactive ?? []),
+              ...(telemetry?.drift.generatableButNotPlayable ?? []),
+              ...(telemetry?.drift.playableButNotDictionaryVisible ?? []),
+            ]}
+          />
+        </details>
+        <details className="rounded-md border border-amber-200 px-3 py-2 text-sm font-semibold text-amber-700">
+          <summary className="cursor-pointer">View activation blockers</summary>
+          <LifecycleRowList
+            rows={telemetry?.blockers.activationBlocked ?? []}
+          />
+        </details>
+        <Link
+          to="/editorial/registry-candidates"
+          className="rounded-md border border-amber-200 px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-50"
+        >
+          Registry candidates
+        </Link>
+        <button
+          type="button"
+          onClick={onNormalize}
+          disabled={busy || !telemetry}
+          className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {busy ? 'Normalizing...' : 'Run safe normalization'}
+        </button>
+      </div>
+
+      {telemetry && summary?.driftCount ? (
+        <div className="mt-4 grid gap-2 text-sm md:grid-cols-2">
+          <LifecycleWarning
+            label="Playable but not dictionary-visible"
+            count={telemetry.drift.playableButNotDictionaryVisible.length}
+          />
+          <LifecycleWarning
+            label="Generatable but not playable"
+            count={telemetry.drift.generatableButNotPlayable.length}
+          />
+          <LifecycleWarning
+            label="Draft but active"
+            count={telemetry.drift.draftButActive.length}
+          />
+          <LifecycleWarning
+            label="Active but inactive"
+            count={telemetry.drift.activeButInactive.length}
+          />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function LifecycleRowList({
+  rows,
+}: {
+  rows: RegistryLifecycleTelemetry['drift']['draftButActive'];
+}) {
+  const uniqueRows = Array.from(new Map(rows.map((row) => [row.id, row])).values());
+
+  if (!uniqueRows.length) {
+    return <p className="mt-2 text-sm font-normal text-slate-500">No rows.</p>;
+  }
+
+  return (
+    <ul className="mt-2 max-h-56 space-y-2 overflow-y-auto text-sm font-normal text-slate-700">
+      {uniqueRows.slice(0, 20).map((row) => (
+        <li key={row.id}>
+          <Link
+            to={`/editorial/diagnoses/${row.id}`}
+            className="underline hover:text-slate-950"
+          >
+            {row.displayLabel || row.canonicalName}
+          </Link>{' '}
+          <span className="text-slate-500">
+            {row.status} / active {String(row.active)} / playable{' '}
+            {String(row.isPlayable)}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function LifecycleWarning({ label, count }: { label: string; count: number }) {
+  if (!count) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+      <span className="font-semibold">{count}</span> {label}
     </div>
   );
 }

@@ -48,6 +48,7 @@ export function OverviewTab({
   seniorDisabledReason,
   pendingAction,
   onLifecycleAction,
+  onNormalizeLifecycleFlags,
 }: {
   workspace: DiagnosisEditorialWorkspace;
   selectedRow: WorkspaceCoverageMatrixRow | null;
@@ -58,6 +59,7 @@ export function OverviewTab({
   seniorDisabledReason: string;
   pendingAction: string | null;
   onLifecycleAction: (action: DiagnosisRegistryLifecycleAction) => void;
+  onNormalizeLifecycleFlags: () => void;
 }) {
   const blockers = workspace.workspaceSummary.blockers;
   const warnings = workspace.workspaceSummary.warnings;
@@ -159,6 +161,7 @@ export function OverviewTab({
         seniorDisabledReason={seniorDisabledReason}
         pendingAction={pendingAction}
         onAction={onLifecycleAction}
+        onNormalizeLifecycleFlags={onNormalizeLifecycleFlags}
       />
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <WorkspaceSummaryCard workspace={workspace} />
@@ -260,12 +263,14 @@ function LifecycleGovernanceCard({
   seniorDisabledReason,
   pendingAction,
   onAction,
+  onNormalizeLifecycleFlags,
 }: {
   lifecycle?: DiagnosisRegistryLifecycleReport | null;
   canRunSeniorActions: boolean;
   seniorDisabledReason: string;
   pendingAction: string | null;
   onAction: (action: DiagnosisRegistryLifecycleAction) => void;
+  onNormalizeLifecycleFlags: () => void;
 }) {
   if (!lifecycle) {
     return null;
@@ -407,6 +412,15 @@ function LifecycleGovernanceCard({
               </button>
             );
           })}
+          <button
+            type="button"
+            disabled={pendingAction !== null || !canRunSeniorActions}
+            title={!canRunSeniorActions ? seniorDisabledReason : undefined}
+            onClick={onNormalizeLifecycleFlags}
+            className="rounded-md border border-[var(--color-amber)]/30 bg-[var(--color-amber)]/10 px-3 py-1.5 text-sm font-semibold text-[var(--color-amber)] transition hover:bg-[var(--color-amber)]/15 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Normalize lifecycle flags
+          </button>
         </div>
       </div>
     </CompactPanel>
