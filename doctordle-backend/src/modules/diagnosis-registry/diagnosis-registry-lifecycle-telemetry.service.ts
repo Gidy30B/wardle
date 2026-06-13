@@ -314,9 +314,13 @@ export class DiagnosisRegistryLifecycleTelemetryService {
   }
 
   private isDictionaryVisible(
-    row: Pick<RegistryLifecycleTelemetryRow, 'status' | 'active'>,
+    row: Pick<RegistryLifecycleTelemetryRow, 'status' | 'active' | 'isPlayable'>,
   ) {
-    return row.status === DiagnosisRegistryStatus.ACTIVE && row.active;
+    return (
+      row.status === DiagnosisRegistryStatus.ACTIVE &&
+      row.active &&
+      row.isPlayable
+    );
   }
 
   private isPlayable(

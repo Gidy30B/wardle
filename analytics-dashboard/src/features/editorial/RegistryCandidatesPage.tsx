@@ -48,6 +48,7 @@ export default function RegistryCandidatesPage() {
   const [status, setStatus] = useState<DiagnosisRegistryCandidateStatus | ''>(
     '',
   );
+  const [showResolved, setShowResolved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -87,6 +88,7 @@ export default function RegistryCandidatesPage() {
       setError(null);
       const data = await getDiagnosisRegistryCandidates(client, {
         status: status || undefined,
+        showResolved,
         limit: 200,
       });
       setCandidates(data);
@@ -104,7 +106,7 @@ export default function RegistryCandidatesPage() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client]);
+  }, [client, status, showResolved]);
 
   async function runReview(
     candidate: DiagnosisRegistryCandidate,
@@ -542,7 +544,7 @@ export default function RegistryCandidatesPage() {
           <StatusBadge status={`${candidates.length} candidates`} tone="info" />
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-[220px_auto]">
+        <div className="mt-4 grid gap-3 md:grid-cols-[220px_220px_auto]">
           <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
             Status
             <select
@@ -560,6 +562,15 @@ export default function RegistryCandidatesPage() {
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className="flex items-end gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              checked={showResolved}
+              onChange={(event) => setShowResolved(event.target.checked)}
+            />
+            Show resolved rows
           </label>
 
           <button

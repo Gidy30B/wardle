@@ -204,6 +204,7 @@ export class DiagnosisRegistryCandidateService {
     input: {
       status?: DiagnosisRegistryCandidateStatus;
       limit?: number;
+      showResolved?: boolean;
     } = {},
   ) {
     const requestedLimit =
@@ -212,15 +213,44 @@ export class DiagnosisRegistryCandidateService {
         : 200;
 
     const candidates = await this.prisma.diagnosisRegistryCandidate.findMany({
-      where: {
-        status: input.status,
-      },
+      where: this.getCandidateQueueWhere(input),
       orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
       take: Math.max(1, Math.min(requestedLimit, 500)),
       include: this.candidateInclude(),
     });
 
     return this.withRegistryQueueState(candidates);
+  }
+
+  private getCandidateQueueWhere(input: {
+    status?: DiagnosisRegistryCandidateStatus;
+    showResolved?: boolean;
+  }): Prisma.DiagnosisRegistryCandidateWhereInput {
+    if (input.status) {
+      return { status: input.status };
+    }
+
+    if (input.showResolved) {
+      return {};
+    }
+
+    return {
+      OR: [
+        { status: { in: PENDING_REGISTRY_CANDIDATE_STATUSES } },
+        {
+          status: DiagnosisRegistryCandidateStatus.CREATED,
+          createdRegistry: {
+            OR: [
+              { status: DiagnosisRegistryStatus.DRAFT },
+              {
+                status: DiagnosisRegistryStatus.ACTIVE,
+                OR: [{ active: false }, { isPlayable: false }],
+              },
+            ],
+          },
+        },
+      ],
+    };
   }
 
   async getCandidate(candidateId: string) {

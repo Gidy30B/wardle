@@ -302,8 +302,21 @@ describe('DiagnosisRegistryLifecyclePolicyService', () => {
       service.isDictionaryVisible({
         status: DiagnosisRegistryStatus.DRAFT,
         active: true,
+        isPlayable: true,
       }),
     ).toBe(false);
+    expect(
+      service.isDictionaryVisible({
+        status: DiagnosisRegistryStatus.ACTIVE,
+        active: true,
+        isPlayable: false,
+      }),
+    ).toBe(false);
+    expect(service.getDictionaryVisibleRegistryWhere()).toEqual({
+      active: true,
+      status: DiagnosisRegistryStatus.ACTIVE,
+      isPlayable: true,
+    });
     expect(DiagnosisGraphFactStatus.ACTIVE).toBe('ACTIVE');
   });
 });

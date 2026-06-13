@@ -538,6 +538,7 @@ export type CreateRegistryFromCandidateResult = {
 export type RegistryCandidateFilters = {
   status?: DiagnosisRegistryCandidateStatus;
   limit?: number;
+  showResolved?: boolean;
 };
 
 export type DiagnosisRegistryCandidateQueueSummary = {

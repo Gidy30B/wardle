@@ -66,6 +66,8 @@ describe('DiagnosisAutocompleteService', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           status: 'ACTIVE',
+          active: true,
+          isPlayable: true,
         }),
       }),
     );

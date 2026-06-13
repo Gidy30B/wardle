@@ -219,7 +219,8 @@ export class DiagnosisRegistryLifecyclePolicyService {
               after: this.toLifecycleStateSnapshot(registry),
               dictionaryVisible:
                 registry.status === DiagnosisRegistryStatus.ACTIVE &&
-                registry.active,
+                registry.active &&
+                registry.isPlayable,
               playable:
                 registry.status === DiagnosisRegistryStatus.ACTIVE &&
                 registry.active &&
@@ -483,8 +484,13 @@ export class DiagnosisRegistryLifecyclePolicyService {
   isDictionaryVisible(registry: {
     status: DiagnosisRegistryStatus;
     active: boolean;
+    isPlayable: boolean;
   }): boolean {
-    return registry.status === DiagnosisRegistryStatus.ACTIVE && registry.active;
+    return (
+      registry.status === DiagnosisRegistryStatus.ACTIVE &&
+      registry.active &&
+      registry.isPlayable
+    );
   }
 
   isPlayable(registry: {
@@ -525,6 +531,7 @@ export class DiagnosisRegistryLifecyclePolicyService {
     return {
       active: true,
       status: DiagnosisRegistryStatus.ACTIVE,
+      isPlayable: true,
     };
   }
 

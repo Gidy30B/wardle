@@ -58,6 +58,7 @@ describe('DiagnosisRegistrySnapshotService', () => {
       where: {
         status: 'ACTIVE',
         active: true,
+        isPlayable: true,
       },
     });
     expect(fixture.prisma.diagnosisRegistry.findFirst).toHaveBeenCalledWith(
@@ -65,6 +66,7 @@ describe('DiagnosisRegistrySnapshotService', () => {
         where: {
           status: 'ACTIVE',
           active: true,
+          isPlayable: true,
         },
       }),
     );
@@ -74,6 +76,7 @@ describe('DiagnosisRegistrySnapshotService', () => {
         diagnosis: {
           status: 'ACTIVE',
           active: true,
+          isPlayable: true,
         },
       },
     });
@@ -158,6 +161,7 @@ describe('DiagnosisRegistrySnapshotService', () => {
         where: {
           status: 'ACTIVE',
           active: true,
+          isPlayable: true,
         },
       }),
     );

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DiagnosisAliasKind, DiagnosisRegistryStatus } from '@prisma/client';
+import { DiagnosisAliasKind } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service.js';
 import { getDictionaryVisibleDiagnosisRegistryWhere } from './diagnosis-registry-status.js';
 
@@ -67,10 +67,7 @@ export class DiagnosisRegistryDictionaryService {
             kind: {
               in: [...PUBLIC_DICTIONARY_ALIAS_KINDS],
             },
-            diagnosis: {
-              status: DiagnosisRegistryStatus.ACTIVE,
-              active: true,
-            },
+            diagnosis: getDictionaryVisibleDiagnosisRegistryWhere(),
           },
         }),
         this.prisma.diagnosisRegistry.findFirst({
@@ -88,10 +85,7 @@ export class DiagnosisRegistryDictionaryService {
             kind: {
               in: [...PUBLIC_DICTIONARY_ALIAS_KINDS],
             },
-            diagnosis: {
-              status: DiagnosisRegistryStatus.ACTIVE,
-              active: true,
-            },
+            diagnosis: getDictionaryVisibleDiagnosisRegistryWhere(),
           },
           orderBy: {
             updatedAt: 'desc',

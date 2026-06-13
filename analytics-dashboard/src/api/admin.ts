@@ -196,6 +196,7 @@ export function getDiagnosisRegistryCandidates(
     withQuery('/admin/diagnosis-registry/candidates', {
       status: filters.status,
       limit: filters.limit,
+      showResolved: filters.showResolved ? 'true' : undefined,
     }),
   );
 }

@@ -6,6 +6,7 @@ import {
 import {
   DiagnosisAliasKind,
   DiagnosisEditorialOnboardingStatus,
+  DiagnosisRegistryCandidateStatus,
   DiagnosisRegistryStatus,
   DiagnosisTeachingRelationshipStatus,
   Prisma,
@@ -223,6 +224,7 @@ export class DiagnosisRegistryMergeExecutionService {
         select: { id: true },
       });
       await this.createReviewedAliases(tx, analysis, input.aliases ?? [], summary);
+      await this.resolveSourceCreatedCandidates(tx, analysis, input, summary);
       await this.reassignAliases(tx, analysis, summary);
       await this.reassignOneToOneModels(tx, analysis, summary);
       await this.reassignSimpleReferences(tx, analysis, summary);
@@ -599,6 +601,29 @@ export class DiagnosisRegistryMergeExecutionService {
       const result = await operation;
       this.record(summary, key, result.count);
     }
+  }
+
+  private async resolveSourceCreatedCandidates(
+    tx: Prisma.TransactionClient,
+    analysis: RegistryMergeAnalysis,
+    input: CompleteDuplicateKeeperInput,
+    summary: ReassignmentSummary,
+  ) {
+    const result = await tx.diagnosisRegistryCandidate.updateMany({
+      where: {
+        createdRegistryId: analysis.source.id,
+        status: DiagnosisRegistryCandidateStatus.CREATED,
+      },
+      data: {
+        status: DiagnosisRegistryCandidateStatus.MERGED,
+        reviewerUserId: input.performedByUserId,
+        reviewedAt: new Date(),
+        reviewNote:
+          input.reason?.trim() ||
+          `Completed duplicate keeper ${analysis.target.displayLabel}; source draft ${analysis.source.displayLabel} was deprecated.`,
+      },
+    });
+    this.record(summary, 'registryCandidateCompletedDuplicateKeeper', result.count);
   }
 
   private async reassignDifferentialLinks(

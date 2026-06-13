@@ -402,6 +402,16 @@ describe('DiagnosisRegistryMergeExecutionService', () => {
       }),
       select: { id: true },
     });
+    expect(transactionClient.diagnosisRegistryCandidate.updateMany).toHaveBeenCalledWith({
+      where: {
+        createdRegistryId: 'source-draft',
+        status: 'CREATED',
+      },
+      data: expect.objectContaining({
+        status: 'MERGED',
+        reviewerUserId: 'senior-1',
+      }),
+    });
     expect(
       transactionClient.caseDifferentialMapping.updateMany,
     ).toHaveBeenCalledWith({

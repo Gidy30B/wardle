@@ -322,6 +322,48 @@ describe('DiagnosisRegistryCandidateService', () => {
     );
   });
 
+  it('defaults the registry queue to actionable candidates only', async () => {
+    const { prisma, service } = createFixture();
+    prisma.diagnosisRegistryCandidate.findMany.mockResolvedValue([]);
+
+    await service.listCandidates();
+
+    expect(prisma.diagnosisRegistryCandidate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          OR: [
+            { status: { in: ['CANDIDATE', 'NEEDS_REVIEW', 'APPROVED_PENDING_CREATE'] } },
+            {
+              status: 'CREATED',
+              createdRegistry: {
+                OR: [
+                  { status: 'DRAFT' },
+                  {
+                    status: 'ACTIVE',
+                    OR: [{ active: false }, { isPlayable: false }],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('can include resolved candidates explicitly for audit views', async () => {
+    const { prisma, service } = createFixture();
+    prisma.diagnosisRegistryCandidate.findMany.mockResolvedValue([]);
+
+    await service.listCandidates({ showResolved: true });
+
+    expect(prisma.diagnosisRegistryCandidate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {},
+      }),
+    );
+  });
+
   it('reviews candidates without creating registry entries', async () => {
     const { prisma, service } = createFixture();
     prisma.diagnosisRegistryCandidate.findUnique.mockResolvedValue({

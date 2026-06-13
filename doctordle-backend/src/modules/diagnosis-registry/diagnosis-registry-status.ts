@@ -52,5 +52,6 @@ export function getDictionaryVisibleDiagnosisRegistryWhere() {
   return {
     status: DiagnosisRegistryStatus.ACTIVE,
     active: true,
+    isPlayable: true,
   } as const;
 }

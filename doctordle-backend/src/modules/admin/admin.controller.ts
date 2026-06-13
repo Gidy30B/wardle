@@ -648,10 +648,12 @@ export class AdminController {
   async listDiagnosisRegistryCandidates(
     @Query('status') status?: string,
     @Query('limit') limit?: string,
+    @Query('showResolved') showResolved?: string,
   ) {
     return this.diagnosisRegistryCandidateService.listCandidates({
       status: this.parseRegistryCandidateStatus(status),
       limit: limit ? Number(limit) : undefined,
+      showResolved: showResolved === 'true',
     });
   }
 

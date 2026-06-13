@@ -90,6 +90,7 @@ describe('DiagnosisRegistryDictionaryService', () => {
         where: {
           status: 'ACTIVE',
           active: true,
+          isPlayable: true,
         },
         orderBy: [{ searchPriority: 'desc' }, { displayLabel: 'asc' }],
       }),
@@ -103,6 +104,7 @@ describe('DiagnosisRegistryDictionaryService', () => {
         diagnosis: {
           status: 'ACTIVE',
           active: true,
+          isPlayable: true,
         },
       },
     });
