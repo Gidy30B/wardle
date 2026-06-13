@@ -13,9 +13,15 @@ import type {
 import StatusBadge from '../../../../components/ui/StatusBadge';
 import type { StatusBadgeTone } from '../../../../components/ui/statusBadgeMeta';
 import {
+  CollapsibleDetail,
   CompactPanel,
+  EditorialRow,
+  IssueSummaryStrip,
   MessageList,
   MetricGrid,
+  PrototypeSectionHeader,
+  SectionActionGroup,
+  StatusStrip,
 } from '../EditorialPrimitives';
 import {
   CoverageGapsCard,
@@ -28,29 +34,10 @@ import {
   formatLabel,
   formatScore,
   formatSummaryValue,
+  scoreTone,
   severityRank,
 } from '../workspaceTransforms';
 import type { WorkspaceTab } from '../workspaceTypes';
-function SummaryStatCard({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-}) {
-  return (
-    <div className="editorial-panel rounded-lg p-4 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
-      <p className="mt-1 text-sm text-slate-500">{sub}</p>
-    </div>
-  );
-}
-
 export function OverviewTab({
   workspace,
   selectedRow,
@@ -78,50 +65,51 @@ export function OverviewTab({
 
   return (
     <div className="space-y-4">
-      {/* ① Action queue — prototype's first card */}
+      {/* Action queue */}
       {hasIssues ? (
-        <CompactPanel title="Action queue">
-          {blockers.map((msg, i) => (
-            <div
-              key={i}
-              className="mb-2 flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5"
-            >
-              <span className="mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-rose-500" />
-              <p className="text-sm text-rose-800">{msg}</p>
-            </div>
-          ))}
-          {warnings.map((msg, i) => (
-            <div
-              key={i}
-              className="mb-2 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5"
-            >
-              <span className="mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-amber-500" />
-              <p className="text-sm text-amber-800">{msg}</p>
-            </div>
-          ))}
-        </CompactPanel>
+        <section className="editorial-panel rounded-lg p-4">
+          <PrototypeSectionHeader
+            eyebrow="Action queue"
+            title="Resolve editorial blockers before maturity review"
+            subtitle="Highest-impact blockers and warnings from the workspace read model."
+          />
+          <div className="mt-3">
+            <IssueSummaryStrip blockers={blockers} warnings={warnings} />
+          </div>
+        </section>
       ) : null}
 
-      {/* ② Summary metrics strip */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <SummaryStatCard
-          label="Coverage"
-          value={formatScore(workspace.workspaceSummary.overallScore)}
-          sub={`${workspace.coverageMatrix.filter((r) => r.fullCoverageStatus === 'covered').length}/${workspace.coverageMatrix.length} teaching rules`}
-        />
-        <SummaryStatCard
-          label="Usable cases"
-          value={`${workspace.cases.summary.usable}/${workspace.cases.summary.total}`}
-          sub="case inventory"
-        />
-        <SummaryStatCard
-          label="Education"
-          value={formatLabel(workspace.education.status)}
-          sub={`score ${formatScore(workspace.workspaceSummary.educationScore)}`}
-        />
-      </div>
+      {/* Summary metrics strip */}
+      <StatusStrip
+        items={[
+          {
+            label: 'Coverage',
+            value: formatScore(workspace.workspaceSummary.overallScore),
+            detail: `${workspace.coverageMatrix.filter((r) => r.fullCoverageStatus === 'covered').length}/${workspace.coverageMatrix.length} teaching rules covered`,
+            tone: scoreTone(workspace.workspaceSummary.overallScore),
+          },
+          {
+            label: 'Usable cases',
+            value: `${workspace.cases.summary.usable}/${workspace.cases.summary.total}`,
+            detail: 'Case inventory',
+            tone: workspace.cases.summary.usable ? 'success' : 'warning',
+          },
+          {
+            label: 'Clinical picture',
+            value: formatLabel(workspace.education.status),
+            detail: `Quality ${formatScore(workspace.workspaceSummary.educationScore)}`,
+            tone: scoreTone(workspace.workspaceSummary.educationScore),
+          },
+          {
+            label: 'Open actions',
+            value: workspace.recommendedActions.length,
+            detail: 'Recommended next moves',
+            tone: workspace.recommendedActions.length ? 'warning' : 'success',
+          },
+        ]}
+      />
 
-      {/* ③ Recommended actions + coverage gaps side by side */}
+      {/* Recommended actions and coverage gaps */}
       <div className="grid gap-4 lg:grid-cols-2">
         <RecommendedActionsCard
           actions={workspace.recommendedActions}
@@ -130,25 +118,41 @@ export function OverviewTab({
         <CoverageGapsCard gaps={workspace.coverageGaps} onGapSelect={onGapSelect} />
       </div>
 
-      <ExplainabilityPanel
-        workspace={workspace}
-        onTabChange={onTabChange}
-        onGapSelect={onGapSelect}
-      />
+      <CollapsibleDetail
+        title="Why this is not ready"
+        summary="Blockers, weak sections, coverage gaps, and lifecycle failures"
+        defaultOpen={hasIssues}
+      >
+        <ExplainabilityPanel
+          workspace={workspace}
+          onTabChange={onTabChange}
+          onGapSelect={onGapSelect}
+        />
+      </CollapsibleDetail>
 
-      {/* ④ Coverage matrix */}
+      {/* Coverage matrix */}
       <CoverageMatrixCard
         rows={workspace.coverageMatrix}
         selectedRow={selectedRow}
         onRowSelect={onRowSelect}
       />
 
-      {/* ⑤ Detail cards (governance, onboarding, readiness) */}
-      <OnboardingCard workspace={workspace} onTabChange={onTabChange} />
-      <ReadinessBreakdownCard
-        items={workspace.readinessBreakdown}
-        onTabChange={onTabChange}
-      />
+      {/* Detail cards: governance, onboarding, readiness */}
+      <CollapsibleDetail
+        title="Registry onboarding"
+        summary="Progress, missing components, and setup recommendations"
+      >
+        <OnboardingCard workspace={workspace} onTabChange={onTabChange} />
+      </CollapsibleDetail>
+      <CollapsibleDetail
+        title="Readiness breakdown"
+        summary={`${workspace.readinessBreakdown.length} readiness signals`}
+      >
+        <ReadinessBreakdownCard
+          items={workspace.readinessBreakdown}
+          onTabChange={onTabChange}
+        />
+      </CollapsibleDetail>
       <LifecycleGovernanceCard
         lifecycle={workspace.lifecycleGovernance}
         canRunSeniorActions={canRunSeniorActions}
@@ -179,16 +183,16 @@ function OnboardingCard({
   return (
     <CompactPanel title="Registry onboarding">
       <div className="grid gap-3 lg:grid-cols-[240px_1fr]">
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-3">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
             Progress
           </p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">
+          <p className="mt-2 text-2xl font-semibold text-slate-100">
             {onboarding.progress.percent}%
           </p>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
             <div
-              className="h-full rounded-full bg-emerald-600"
+              className="h-full rounded-full bg-[var(--color-green)]"
               style={{ width: `${onboarding.progress.percent}%` }}
             />
           </div>
@@ -214,7 +218,7 @@ function OnboardingCard({
                 ))}
               </div>
             ) : (
-              <p className="mt-2 text-sm text-slate-600">
+              <p className="mt-2 text-sm text-slate-400">
                 Core editorial assets are present.
               </p>
             )}
@@ -225,21 +229,21 @@ function OnboardingCard({
               Recommended actions
             </p>
             {onboarding.recommendedActions.length ? (
-              <div className="mt-2 flex flex-wrap gap-2">
+              <SectionActionGroup>
                 {onboarding.recommendedActions.slice(0, 6).map((action) => (
                   <button
                     key={action.id}
                     type="button"
                     onClick={() => onTabChange(action.targetTab)}
-                    className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    className="editorial-action"
                     title={action.reason}
                   >
                     {action.label}
                   </button>
                 ))}
-              </div>
+              </SectionActionGroup>
             ) : (
-              <p className="mt-2 text-sm text-slate-600">
+              <p className="mt-2 text-sm text-slate-400">
                 No onboarding recommendations remain.
               </p>
             )}
@@ -372,7 +376,7 @@ function LifecycleGovernanceCard({
           {hasDuplicateRisk(lifecycle) ? (
             <Link
               to={`/editorial/registry-merge?source=${lifecycle.diagnosisRegistryId}`}
-              className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
+              className="rounded-md border border-[var(--color-amber)]/30 bg-[var(--color-amber)]/10 px-3 py-1.5 text-sm font-semibold text-[var(--color-amber)] transition hover:bg-[var(--color-amber)]/15"
             >
               Potential duplicate
             </Link>
@@ -397,7 +401,7 @@ function LifecycleGovernanceCard({
                 disabled={disabled}
                 title={title}
                 onClick={() => onAction(button.action)}
-                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="editorial-action disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {button.label}
               </button>
@@ -419,7 +423,7 @@ function LifecycleMetric({
   tone: StatusBadgeTone;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-3">
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
         {label}
       </p>
@@ -449,29 +453,29 @@ function ReadinessMeter({
 }) {
   const tone: StatusBadgeTone = evaluation.allowed ? 'success' : 'warning';
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-3">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-slate-800">{title}</p>
+        <p className="text-sm font-semibold text-slate-100">{title}</p>
         <StatusBadge
           status={`${evaluation.readinessScore}%`}
           tone={tone}
         />
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
         <div
           className={[
             'h-full rounded-full',
-            evaluation.allowed ? 'bg-emerald-600' : 'bg-amber-500',
+            evaluation.allowed ? 'bg-[var(--color-green)]' : 'bg-[var(--color-amber)]',
           ].join(' ')}
           style={{ width: `${evaluation.readinessScore}%` }}
         />
       </div>
       {evaluation.blockers.length || evaluation.warnings.length ? (
-        <div className="mt-3 space-y-1 text-xs text-slate-600">
+        <div className="mt-3 space-y-1 text-xs text-slate-400">
           {[...evaluation.blockers, ...evaluation.warnings].slice(0, 3).map((item) => (
             <p key={item}>{item}</p>
           ))}
-          {fix ? <p className="font-semibold text-slate-700">{fix}</p> : null}
+          {fix ? <p className="font-semibold text-slate-300">{fix}</p> : null}
         </div>
       ) : null}
     </div>
@@ -652,7 +656,7 @@ function LifecycleList({
           ))}
         </div>
       ) : (
-        <p className="mt-2 text-sm text-slate-600">{emptyText}</p>
+        <p className="mt-2 text-sm text-slate-400">{emptyText}</p>
       )}
     </div>
   );
@@ -704,20 +708,37 @@ function RecommendedActionsCard({
       {actions.length ? (
         <div className="space-y-2">
           {actions.map((action) => (
-            <button
+            <EditorialRow
               key={action.id}
-              type="button"
-              disabled={!action.enabled}
-              onClick={() => onTabChange(action.targetTab)}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm transition enabled:hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <span className="font-semibold text-slate-900">{action.label}</span>
-              {action.disabledReason ? (
-                <span className="mt-1 block text-xs text-slate-500">
-                  {action.disabledReason}
-                </span>
-              ) : null}
-            </button>
+              title={action.label}
+              subtitle={
+                action.disabledReason ??
+                `Open ${formatLabel(action.targetTab)} to continue.`
+              }
+              tone={
+                action.severity === 'blocker'
+                  ? 'danger'
+                  : action.severity === 'warning'
+                    ? 'warning'
+                    : 'info'
+              }
+              meta={
+                <StatusBadge
+                  status={formatLabel(action.source ?? action.targetTab)}
+                  tone="neutral"
+                />
+              }
+              action={
+                <button
+                  type="button"
+                  disabled={!action.enabled}
+                  onClick={() => onTabChange(action.targetTab)}
+                  className="editorial-action disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Open
+                </button>
+              }
+            />
           ))}
         </div>
       ) : (

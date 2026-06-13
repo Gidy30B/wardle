@@ -13,8 +13,13 @@ import { createApiClient } from '../../api/client';
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 import StatusBadge from '../../components/ui/StatusBadge';
+import type { StatusBadgeTone } from '../../components/ui/statusBadgeMeta';
 import { SpecialtyIcon } from '../specialties/specialty-icons';
-import { buildEditorialQueues, diagnosisQueueIds } from './coverageQueues';
+import {
+  buildEditorialQueues,
+  diagnosisQueueIds,
+  sortDiagnosesByEditorialPriority,
+} from './coverageQueues';
 import { buildUnsupportedClaimDeepLink } from './workspace/workspaceDeepLinks';
 
 const weaknessOptions: Array<{
@@ -108,22 +113,30 @@ export default function EditorialCoverageDashboardPage() {
     return null;
   }
 
-  const queues = buildEditorialQueues(overview.weakDiagnoses);
+  const sortedWeakDiagnoses = sortDiagnosesByEditorialPriority(
+    overview.weakDiagnoses,
+  );
+  const queues = buildEditorialQueues(sortedWeakDiagnoses);
   const filteredWeakDiagnoses =
     activeQueue === 'all'
-      ? overview.weakDiagnoses
-      : overview.weakDiagnoses.filter((diagnosis) =>
+      ? sortedWeakDiagnoses
+      : sortedWeakDiagnoses.filter((diagnosis) =>
           diagnosisQueueIds(diagnosis).includes(activeQueue),
         );
+  const operationsSummary = buildOperationsSummary(
+    overview,
+    inventoryHealth,
+    sortedWeakDiagnoses,
+  );
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 text-slate-100">
       {error ? <ErrorState title="Refresh failed" message={error} /> : null}
 
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="editorial-panel rounded-lg p-4 shadow-sm">
         <div className="flex flex-wrap items-end gap-3">
           <label className="min-w-[180px] flex-1">
-            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
               Specialty
             </span>
             <input
@@ -134,13 +147,13 @@ export default function EditorialCoverageDashboardPage() {
                   specialty: event.target.value,
                 }))
               }
-              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+              className="mt-2 w-full rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-[var(--color-teal)] focus:ring-2 focus:ring-[var(--color-teal)]/20"
               placeholder="All specialties"
             />
           </label>
 
           <label className="min-w-[180px]">
-            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
               Weakness
             </span>
             <select
@@ -152,7 +165,7 @@ export default function EditorialCoverageDashboardPage() {
                     .value as EditorialCoverageWeakness,
                 }))
               }
-              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+              className="mt-2 w-full rounded-lg border border-[var(--color-navy-border)] bg-[var(--color-navy-mid)] px-3 py-2 text-sm text-slate-100 outline-none focus:border-[var(--color-teal)] focus:ring-2 focus:ring-[var(--color-teal)]/20"
             >
               {weaknessOptions.map((option) => (
                 <option key={option.value || 'all'} value={option.value}>
@@ -162,7 +175,7 @@ export default function EditorialCoverageDashboardPage() {
             </select>
           </label>
 
-          <label className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700">
+          <label className="flex h-10 items-center gap-2 rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 text-sm font-semibold text-slate-300">
             <input
               type="checkbox"
               checked={filters.playableOnly ?? false}
@@ -172,41 +185,49 @@ export default function EditorialCoverageDashboardPage() {
                   playableOnly: event.target.checked,
                 }))
               }
-              className="h-4 w-4 rounded border-slate-300"
+              className="h-4 w-4 rounded border-[var(--color-navy-border)] bg-[var(--color-navy-mid)] accent-[var(--color-teal)]"
             />
             Playable only
           </label>
         </div>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-4 xl:grid-cols-8">
-        <Metric label="Playable diagnoses" value={overview.globalSummary.playableDiagnoses} />
-        <Metric label="Playable cases" value={overview.globalSummary.playableCases} />
-        <Metric label="Unresolved diffs" value={overview.globalSummary.unresolvedDifferentials} />
-        <Metric label="Onboarding backlog" value={overview.globalSummary.onboardingBacklog} />
-        <Metric label="Graph backlog" value={overview.globalSummary.graphBacklog} />
-        <Metric label="Inventory days" value={overview.globalSummary.inventoryDaysRemaining} />
-        <Metric
-          label="Evidence score"
-          value={overview.evidenceCoverageReadiness.averageCoverageScore}
-        />
-        <Metric
-          label="Readiness score"
-          value={overview.evidenceCoverageReadiness.averageGenerationReadinessScore}
-        />
+      <section className="editorial-panel rounded-lg p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="editorial-eyebrow">Coverage operations</p>
+            <h1 className="mt-1 text-xl font-semibold text-slate-100">
+              Editorial coverage cockpit
+            </h1>
+            <p className="mt-1 text-sm text-slate-400">
+              Queue health, publication risk, unsupported claims, and inventory
+              readiness.
+            </p>
+          </div>
+          <StatusBadge
+            status={operationsSummary.inventoryRiskLabel}
+            tone={operationsSummary.inventoryRisk ? 'warning' : 'success'}
+          />
+        </div>
+        <div className="mt-4 grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          {operationsSummary.items.map((item) => (
+            <OperationsMetric key={item.label} {...item} />
+          ))}
+        </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="editorial-panel rounded-lg p-4 shadow-sm">
         <SectionHeader
           title="Editorial Queues"
           subtitle="Risk-focused slices for operational triage"
         />
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <QueueButton
             active={activeQueue === 'all'}
             label="All weak diagnoses"
             count={overview.weakDiagnoses.length}
             tone="neutral"
+            description="Everything currently in the editorial worklist."
             onClick={() => setActiveQueue('all')}
           />
           {queues.map((queue) => (
@@ -216,69 +237,40 @@ export default function EditorialCoverageDashboardPage() {
               label={queue.label}
               count={queue.count}
               tone={queue.tone}
+              description={queue.description}
               onClick={() => setActiveQueue(queue.id)}
             />
           ))}
         </div>
       </section>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.8fr)]">
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <details className="group editorial-panel rounded-lg p-4 shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
           <SectionHeader
             title="Specialty Coverage"
             subtitle={`${overview.specialties.length} specialty groups`}
           />
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="border-b border-slate-200 text-xs uppercase tracking-[0.16em] text-slate-500">
-                <tr>
-                  <th className="py-2 pr-4">Specialty</th>
-                  <th className="py-2 pr-4">Diagnoses</th>
-                  <th className="py-2 pr-4">Playable</th>
-                  <th className="py-2 pr-4">Cases</th>
-                  <th className="py-2 pr-4">Education</th>
-                  <th className="py-2 pr-4">Graph</th>
-                  <th className="py-2">Unresolved</th>
-                </tr>
-              </thead>
-              <tbody>
-                {overview.specialties.map((item) => (
-                  <tr key={item.specialty} className="border-b border-slate-100">
-                    <td className="py-3 pr-4 font-semibold text-slate-900">
-                      <span className="inline-flex items-center gap-2">
-                        <SpecialtyIcon
-                          specialty={item.specialty}
-                          className="h-4 w-4 text-slate-500"
-                        />
-                        {item.specialty}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-4 text-slate-700">
-                      {item.diagnosisCount}
-                    </td>
-                    <td className="py-3 pr-4 text-slate-700">
-                      {item.playableDiagnosisCount}
-                    </td>
-                    <td className="py-3 pr-4 text-slate-700">{item.caseCount}</td>
-                    <td className="py-3 pr-4 text-slate-700">
-                      {item.educationCoveragePercent}%
-                    </td>
-                    <td className="py-3 pr-4 text-slate-700">
-                      {item.graphCoveragePercent}%
-                    </td>
-                    <td className="py-3 text-slate-700">
-                      {item.unresolvedDifferentialCount}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+          <span className="text-xs font-semibold text-slate-500 group-open:hidden">
+            Open
+          </span>
+        </summary>
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {overview.specialties.map((item) => (
+            <SpecialtyCoverageRow key={item.specialty} item={item} />
+          ))}
+        </div>
+      </details>
 
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <details className="group editorial-panel rounded-lg p-4 shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
           <SectionHeader title="Inventory Forecast" subtitle="Daily queue depth" />
-          <div className="mt-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+          <span className="text-xs font-semibold text-slate-500 group-open:hidden">
+            Open
+          </span>
+        </summary>
+        <div className="mt-4">
+          <InventoryRiskBanner overview={overview} inventoryHealth={inventoryHealth} />
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
             <Metric
               label="Scheduled days"
               value={overview.inventory.inventoryExhaustionForecast.scheduledDays}
@@ -296,8 +288,8 @@ export default function EditorialCoverageDashboardPage() {
             />
           </div>
           {inventoryHealth ? (
-            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+            <div className="mt-4 rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
                 Inventory health
               </p>
               <div className="mt-3 grid gap-2 text-sm">
@@ -319,16 +311,16 @@ export default function EditorialCoverageDashboardPage() {
                 />
               </div>
               {inventoryHealth.schedulerEligibleCount < 7 ? (
-                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+                <p className="mt-3 rounded-lg border border-[var(--color-amber)]/30 bg-[var(--color-amber)]/10 px-3 py-2 text-sm font-medium text-[var(--color-amber)]">
                   Inventory exhaustion risk: fewer than seven assignable cases.
                 </p>
               ) : null}
             </div>
           ) : null}
-        </section>
-      </div>
+        </div>
+      </details>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="editorial-panel rounded-lg p-4 shadow-sm">
         <SectionHeader
           title="Weak Diagnoses"
           subtitle={`${filteredWeakDiagnoses.length} shown`}
@@ -341,21 +333,32 @@ export default function EditorialCoverageDashboardPage() {
               diagnosis.targetUrl,
               triage?.targetTab,
             );
+            const firstUnsupportedClaim =
+              diagnosis.unsupportedClaims?.unsupportedClaimSignalsPreview[0] ??
+              null;
+            const firstClaimUrl = firstUnsupportedClaim
+              ? buildUnsupportedClaimDeepLink({
+                  targetUrl: diagnosis.targetUrl,
+                  claimId: firstUnsupportedClaim.claimId,
+                  sectionId: firstUnsupportedClaim.sectionId,
+                  targetTab: firstUnsupportedClaim.targetTab,
+                })
+              : null;
 
             return (
               <article
                 key={diagnosis.diagnosisRegistryId}
-                className="rounded-lg border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-white"
+                className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-4 transition hover:border-[var(--color-teal)]/40 hover:bg-white/10"
               >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <Link
-                    to={targetUrl}
-                    className="font-semibold text-slate-900 hover:text-slate-700"
+                    to={diagnosis.targetUrl}
+                    className="font-semibold text-slate-100 hover:text-[var(--color-teal)]"
                   >
                     {diagnosis.diagnosisName}
                   </Link>
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-slate-500">
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-slate-400">
                     {diagnosis.specialty ? (
                       <span className="inline-flex items-center gap-1.5">
                         <SpecialtyIcon
@@ -372,13 +375,29 @@ export default function EditorialCoverageDashboardPage() {
                     ) : null}
                   </div>
                 </div>
-                <StatusBadge status={diagnosis.lifecycleState} />
+                <div className="flex flex-wrap justify-end gap-2">
+                  {triage?.editorialPriority ? (
+                    <StatusBadge
+                      status={`${triage.editorialPriority.score} ${formatLabel(
+                        triage.editorialPriority.tier,
+                      )}`}
+                      tone={riskTone(triage.editorialPriority.tier)}
+                    />
+                  ) : null}
+                  {triage?.publicationRisk ? (
+                    <StatusBadge
+                      status={`Pub ${formatLabel(triage.publicationRisk.tier)}`}
+                      tone={riskTone(triage.publicationRisk.tier)}
+                    />
+                  ) : null}
+                  <StatusBadge status={diagnosis.lifecycleState} />
+                </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                {diagnosisQueueIds(diagnosis).slice(0, 3).map((queueId) => (
+                {diagnosisQueueIds(diagnosis).slice(0, 4).map((queueId) => (
                   <span
                     key={queueId}
-                    className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800"
+                    className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${queueChipClass(queueId)}`}
                   >
                     {formatLabel(queueId)}
                   </span>
@@ -386,22 +405,22 @@ export default function EditorialCoverageDashboardPage() {
                 {diagnosis.weaknesses.slice(0, 5).map((weakness) => (
                   <span
                     key={weakness}
-                    className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600"
+                    className="rounded-full border border-[var(--color-navy-border)] bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-300"
                   >
                     {formatLabel(weakness)}
                   </span>
                 ))}
               </div>
               {triage?.recommendedNextAction ? (
-                <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                <div className="mt-3 rounded-lg border border-[var(--color-navy-border)] bg-[var(--color-navy-mid)]/70 px-3 py-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                     Next action
                   </p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                  <p className="mt-1 text-sm font-semibold text-slate-100">
                     {triage.recommendedNextAction}
                   </p>
                   {triage.triageReasons?.length ? (
-                    <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
+                    <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-400">
                       {triage.triageReasons.slice(0, 2).map((reason) => (
                         <li key={reason}>{reason}</li>
                       ))}
@@ -410,9 +429,9 @@ export default function EditorialCoverageDashboardPage() {
                 </div>
               ) : null}
               {diagnosis.unsupportedClaims?.unsupportedClaimCount ? (
-                <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
+                <div className="mt-3 rounded-lg border border-[var(--color-rose)]/30 bg-[var(--color-rose)]/10 px-3 py-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-rose-950">
+                    <p className="text-sm font-semibold text-rose-100">
                       Unsupported claims
                     </p>
                     <StatusBadge
@@ -428,7 +447,7 @@ export default function EditorialCoverageDashboardPage() {
                       }
                     />
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-rose-800">
+                  <p className="mt-1 text-xs leading-5 text-rose-200">
                     {diagnosis.unsupportedClaims.blockingUnsupportedClaimCount
                       ? `${diagnosis.unsupportedClaims.blockingUnsupportedClaimCount} block publication.`
                       : 'Needs editor verification before readiness review.'}
@@ -453,7 +472,7 @@ export default function EditorialCoverageDashboardPage() {
                               sectionId: claim.sectionId,
                               targetTab: claim.targetTab,
                             })}
-                            className="block rounded-md border border-rose-200 bg-white/70 px-2 py-1.5 text-xs leading-5 text-rose-800 transition hover:border-rose-300 hover:bg-white"
+                            className="block rounded-md border border-[var(--color-rose)]/25 bg-white/5 px-2 py-1.5 text-xs leading-5 text-rose-100 transition hover:border-[var(--color-rose)]/50 hover:bg-white/10"
                           >
                             <span className="font-semibold">
                               {formatLabel(claim.sectionType)}
@@ -466,7 +485,29 @@ export default function EditorialCoverageDashboardPage() {
                   ) : null}
                 </div>
               ) : null}
-              <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link
+                  to={diagnosis.targetUrl}
+                  className="rounded-md border border-[var(--color-navy-border)] bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-[var(--color-teal)]/40 hover:bg-[var(--color-teal)]/10"
+                >
+                  Open workspace
+                </Link>
+                <Link
+                  to={targetUrl}
+                  className="rounded-md border border-[var(--color-teal)]/30 bg-[var(--color-teal)]/10 px-3 py-1.5 text-xs font-semibold text-[var(--color-teal)] transition hover:bg-[var(--color-teal)]/15"
+                >
+                  Open target tab
+                </Link>
+                {firstClaimUrl ? (
+                  <Link
+                    to={firstClaimUrl}
+                    className="rounded-md border border-[var(--color-rose)]/30 bg-[var(--color-rose)]/10 px-3 py-1.5 text-xs font-semibold text-[var(--color-rose)] transition hover:bg-[var(--color-rose)]/15"
+                  >
+                    Repair claim
+                  </Link>
+                ) : null}
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
                 <TinyMetric label="Rules" value={diagnosis.teaching.activeRuleCount} />
                 <TinyMetric label="Cases" value={diagnosis.inventory.playableCaseCount} />
                 <TinyMetric label="Diffs" value={diagnosis.differentials.linkedDifferentialCount} />
@@ -478,7 +519,7 @@ export default function EditorialCoverageDashboardPage() {
         </div>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-4">
+      <section className="grid min-w-0 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         <CoveragePanel
           title="Differential Coverage"
           rows={[
@@ -527,12 +568,12 @@ export default function EditorialCoverageDashboardPage() {
         />
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="editorial-panel rounded-lg p-4 shadow-sm">
         <SectionHeader
           title="Evidence Readiness"
           subtitle="Reasoning coverage and generation prerequisites"
         />
-        <div className="mt-4 grid gap-3 md:grid-cols-5">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Metric
             label="Ready"
             value={overview.evidenceCoverageReadiness.readyDiagnoses}
@@ -561,9 +602,9 @@ export default function EditorialCoverageDashboardPage() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="editorial-panel rounded-lg p-4 shadow-sm">
         <SectionHeader title="Planning Hooks" subtitle="Advisory metadata only" />
-        <div className="mt-4 grid gap-3 md:grid-cols-6">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
           <Metric
             label="Teaching suggestions"
             value={overview.recommendations.recommendedTeachingRuleGeneration}
@@ -600,11 +641,200 @@ export default function EditorialCoverageDashboardPage() {
   );
 }
 
+function buildOperationsSummary(
+  overview: EditorialCoverageOverview,
+  inventoryHealth: CaseInventoryHealth | null,
+  diagnoses: EditorialCoverageOverview['weakDiagnoses'],
+) {
+  const highPublicationRisk = diagnoses.filter((diagnosis) =>
+    diagnosisQueueIds(diagnosis).includes('high_publication_risk'),
+  ).length;
+  const sparseDiagnoses = diagnoses.filter((diagnosis) =>
+    diagnosisQueueIds(diagnosis).includes('sparse_diagnosis'),
+  ).length;
+  const unsupportedClaims = diagnoses.reduce(
+    (total, diagnosis) =>
+      total + (diagnosis.unsupportedClaims?.unsupportedClaimCount ?? 0),
+    0,
+  );
+  const assignableCases =
+    inventoryHealth?.schedulerEligibleCount ??
+    overview.inventory.inventoryExhaustionForecast.assignableCases;
+  const exhaustionDays =
+    overview.inventory.inventoryExhaustionForecast.estimatedExhaustionDays;
+  const inventoryRisk = assignableCases < 7 || exhaustionDays < 7;
+
+  return {
+    inventoryRisk,
+    inventoryRiskLabel: inventoryRisk ? 'Inventory risk' : 'Inventory stable',
+    items: [
+      {
+        label: 'Weak diagnoses',
+        value: diagnoses.length,
+        detail: 'Need editorial attention',
+        tone: diagnoses.length ? 'warning' : 'success',
+      },
+      {
+        label: 'High pub risk',
+        value: highPublicationRisk,
+        detail: 'Blockers or readiness failures',
+        tone: highPublicationRisk ? 'danger' : 'success',
+      },
+      {
+        label: 'Unsupported claims',
+        value: unsupportedClaims,
+        detail: 'Claim repair candidates',
+        tone: unsupportedClaims ? 'danger' : 'success',
+      },
+      {
+        label: 'Sparse diagnoses',
+        value: sparseDiagnoses,
+        detail: 'Low editorial coverage',
+        tone: sparseDiagnoses ? 'warning' : 'success',
+      },
+      {
+        label: 'Assignable cases',
+        value: assignableCases,
+        detail: `${exhaustionDays} day${exhaustionDays === 1 ? '' : 's'} to exhaustion`,
+        tone: inventoryRisk ? 'warning' : 'success',
+      },
+    ] satisfies Array<{
+      label: string;
+      value: number;
+      detail: string;
+      tone: StatusBadgeTone;
+    }>,
+  };
+}
+
+function OperationsMetric({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value: number;
+  detail: string;
+  tone: StatusBadgeTone;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-2">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+          {label}
+        </p>
+        <StatusBadge status={String(value)} tone={tone} />
+      </div>
+      <p className="mt-2 text-xs leading-5 text-slate-500">{detail}</p>
+    </div>
+  );
+}
+
+function InventoryRiskBanner({
+  overview,
+  inventoryHealth,
+}: {
+  overview: EditorialCoverageOverview;
+  inventoryHealth: CaseInventoryHealth | null;
+}) {
+  const assignableCases =
+    inventoryHealth?.schedulerEligibleCount ??
+    overview.inventory.inventoryExhaustionForecast.assignableCases;
+  const exhaustionDays =
+    overview.inventory.inventoryExhaustionForecast.estimatedExhaustionDays;
+  const risk = assignableCases < 7 || exhaustionDays < 7;
+
+  return (
+    <div
+      className={[
+        'rounded-lg border px-3 py-2',
+        risk
+          ? 'border-[var(--color-amber)]/30 bg-[var(--color-amber)]/10'
+          : 'border-[var(--color-green)]/25 bg-[var(--color-green)]/10',
+      ].join(' ')}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-slate-100">
+          {risk ? 'Inventory needs attention' : 'Inventory coverage is stable'}
+        </p>
+        <StatusBadge
+          status={`${assignableCases} assignable`}
+          tone={risk ? 'warning' : 'success'}
+        />
+      </div>
+      <p className="mt-1 text-xs leading-5 text-slate-400">
+        {exhaustionDays} estimated exhaustion day
+        {exhaustionDays === 1 ? '' : 's'} with{' '}
+        {overview.inventory.inventoryExhaustionForecast.scheduledDays} scheduled
+        day{overview.inventory.inventoryExhaustionForecast.scheduledDays === 1 ? '' : 's'}.
+      </p>
+    </div>
+  );
+}
+
+function SpecialtyCoverageRow({
+  item,
+}: {
+  item: EditorialCoverageOverview['specialties'][number];
+}) {
+  return (
+    <article className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-100">
+            <SpecialtyIcon
+              specialty={item.specialty}
+              className="h-4 w-4 text-[var(--color-teal)]"
+            />
+            {item.specialty}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            {item.playableDiagnosisCount}/{item.diagnosisCount} playable
+            diagnoses
+          </p>
+        </div>
+        <StatusBadge
+          status={`${item.unresolvedDifferentialCount} unresolved`}
+          tone={item.unresolvedDifferentialCount ? 'warning' : 'success'}
+        />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <TinyMetric label="Cases" value={item.caseCount} />
+        <TinyMetric label="Education" value={item.educationCoveragePercent} />
+        <TinyMetric label="Graph" value={item.graphCoveragePercent} />
+        <TinyMetric label="Diffs" value={item.unresolvedDifferentialCount} />
+      </div>
+    </article>
+  );
+}
+
+function riskTone(tier: string): StatusBadgeTone {
+  if (tier === 'critical' || tier === 'high') return 'danger';
+  if (tier === 'medium') return 'warning';
+  if (tier === 'low') return 'success';
+  return 'neutral';
+}
+
+function queueChipClass(queueId: string) {
+  if (
+    queueId === 'high_publication_risk' ||
+    queueId === 'unsupported_claims' ||
+    queueId === 'escalation_coverage_gaps'
+  ) {
+    return 'border-[var(--color-rose)]/30 bg-[var(--color-rose)]/10 text-[var(--color-rose)]';
+  }
+  if (queueId === 'needs_review') {
+    return 'border-[var(--color-teal)]/30 bg-[var(--color-teal)]/10 text-[var(--color-teal)]';
+  }
+  return 'border-[var(--color-amber)]/30 bg-[var(--color-amber)]/10 text-[var(--color-amber)]';
+}
+
 function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-      <span className="text-sm text-slate-500">{subtitle}</span>
+      <h2 className="text-base font-semibold text-slate-100">{title}</h2>
+      <span className="text-sm text-slate-400">{subtitle}</span>
     </div>
   );
 }
@@ -619,12 +849,12 @@ function Metric({
   compact?: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-4 py-3 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
         {label}
       </p>
       <p
-        className={`mt-2 font-semibold text-slate-900 ${
+        className={`mt-2 font-semibold text-slate-100 ${
           compact ? 'text-2xl' : 'text-3xl'
         }`}
       >
@@ -636,11 +866,11 @@ function Metric({
 
 function TinyMetric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-2 py-2">
-      <p className="text-[11px] font-semibold uppercase text-slate-500">
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-2 py-2">
+      <p className="text-[11px] font-semibold uppercase text-slate-400">
         {label}
       </p>
-      <p className="mt-1 text-sm font-semibold text-slate-900">{value}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-100">{value}</p>
     </div>
   );
 }
@@ -650,33 +880,44 @@ function QueueButton({
   label,
   count,
   tone,
+  description,
   onClick,
 }: {
   active: boolean;
   label: string;
   count: number;
   tone: 'danger' | 'warning' | 'neutral';
+  description?: string;
   onClick: () => void;
 }) {
   const toneClass =
     tone === 'danger'
-      ? 'border-rose-200 bg-rose-50 text-rose-900'
+      ? 'border-[var(--color-rose)]/35 bg-[var(--color-rose)]/10 text-rose-100'
       : tone === 'warning'
-        ? 'border-amber-200 bg-amber-50 text-amber-900'
-        : 'border-slate-200 bg-slate-50 text-slate-900';
+        ? 'border-[var(--color-amber)]/35 bg-[var(--color-amber)]/10 text-amber-100'
+        : 'border-[var(--color-navy-border)] bg-white/5 text-slate-100';
 
   return (
     <button
       type="button"
       onClick={onClick}
       className={[
-        'rounded-lg border px-4 py-3 text-left transition hover:bg-white',
+        'rounded-lg border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:bg-white/10',
         toneClass,
-        active ? 'ring-2 ring-slate-900/15' : '',
+        active ? 'ring-2 ring-[var(--color-teal)]/35' : '',
       ].join(' ')}
     >
-      <span className="block text-sm font-semibold">{label}</span>
-      <span className="mt-1 block text-2xl font-semibold">{count}</span>
+      <span className="flex items-start justify-between gap-3">
+        <span className="text-sm font-semibold">{label}</span>
+        <span className="rounded-full border border-current/20 px-2 py-0.5 text-xs font-semibold">
+          {count}
+        </span>
+      </span>
+      {description ? (
+        <span className="mt-2 block text-xs leading-5 opacity-75">
+          {description}
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -684,8 +925,8 @@ function QueueButton({
 function HealthRow({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="text-slate-600">{label}</span>
-      <span className="font-semibold text-slate-900">{value}</span>
+      <span className="text-slate-400">{label}</span>
+      <span className="font-semibold text-slate-100">{value}</span>
     </div>
   );
 }
@@ -700,22 +941,22 @@ function CoveragePanel({
   link: string;
 }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="editorial-panel rounded-lg p-4 shadow-sm">
       <SectionHeader title={title} subtitle="" />
       <div className="mt-4 space-y-3">
         {rows.map(([label, value]) => (
           <div
             key={label}
-            className="flex items-center justify-between border-b border-slate-100 pb-2 text-sm"
+            className="flex items-center justify-between border-b border-[var(--color-navy-border)] pb-2 text-sm"
           >
-            <span className="text-slate-600">{label}</span>
-            <span className="font-semibold text-slate-900">{value}</span>
+            <span className="text-slate-400">{label}</span>
+            <span className="font-semibold text-slate-100">{value}</span>
           </div>
         ))}
       </div>
       <Link
         to={link}
-        className="mt-4 inline-flex text-sm font-semibold text-slate-700 hover:text-slate-950"
+        className="mt-4 inline-flex text-sm font-semibold text-[var(--color-teal)] hover:text-slate-100"
       >
         Open related queue
       </Link>

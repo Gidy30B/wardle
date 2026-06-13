@@ -235,14 +235,14 @@ export function CoverageGapsCard({
               type="button"
               onClick={() => onGapSelect(gap)}
               className={[
-                'rounded-lg px-3 py-2 text-left ring-1 transition hover:bg-white/8',
+                'rounded-lg px-3 py-2 text-left ring-1 transition hover:bg-white/10',
                 gap.severity === 'blocker'
                   ? 'bg-[var(--color-rose)]/10 ring-[var(--color-rose)]/35'
                   : 'bg-[var(--color-amber)]/10 ring-[var(--color-amber)]/35',
               ].join(' ')}
             >
-              <p className="text-sm font-semibold text-slate-900">{gap.title}</p>
-              <p className="mt-1 text-xs text-slate-600">
+              <p className="text-sm font-semibold text-slate-100">{gap.title}</p>
+              <p className="mt-1 text-xs text-slate-400">
                 {gap.recommendedAction}
               </p>
               <p className="mt-2 text-xs text-slate-500">
@@ -254,7 +254,7 @@ export function CoverageGapsCard({
                   .filter(Boolean)
                   .join(', ')}
               </p>
-              <span className="mt-2 inline-flex text-xs font-semibold text-slate-700">
+              <span className="mt-2 inline-flex text-xs font-semibold text-[var(--color-teal)]">
                 Open {formatLabel(gap.targetTab)}
               </span>
             </button>

@@ -5,21 +5,57 @@ export type EditorialCoverageQueue = {
   label: string;
   tone: 'danger' | 'warning' | 'neutral';
   count: number;
+  description?: string;
 };
 
 const queueDefinitions: Array<Omit<EditorialCoverageQueue, 'count'>> = [
-  { id: 'needs_review', label: 'Needs review', tone: 'warning' },
-  { id: 'high_publication_risk', label: 'High publication risk', tone: 'danger' },
+  {
+    id: 'needs_review',
+    label: 'Needs review',
+    tone: 'warning',
+    description: 'Pending editorial or graph review work.',
+  },
+  {
+    id: 'high_publication_risk',
+    label: 'High publication risk',
+    tone: 'danger',
+    description: 'Publication blockers or readiness failures.',
+  },
   {
     id: 'weak_discriminator_coverage',
     label: 'Weak discriminator coverage',
     tone: 'warning',
+    description: 'Missing mimic or distinction support.',
   },
-  { id: 'unsupported_claims', label: 'Unsupported claims', tone: 'danger' },
-  { id: 'sparse_diagnosis', label: 'Sparse diagnoses', tone: 'warning' },
-  { id: 'draft_heavy', label: 'Draft-heavy diagnoses', tone: 'warning' },
-  { id: 'escalation_coverage_gaps', label: 'Escalation coverage gaps', tone: 'danger' },
+  {
+    id: 'unsupported_claims',
+    label: 'Unsupported claims',
+    tone: 'danger',
+    description: 'Claims that need evidence-backed repair.',
+  },
+  {
+    id: 'sparse_diagnosis',
+    label: 'Sparse diagnoses',
+    tone: 'warning',
+    description: 'Not enough brief, teaching, case, or graph data.',
+  },
+  {
+    id: 'draft_heavy',
+    label: 'Draft-heavy diagnoses',
+    tone: 'warning',
+    description: 'Generated drafts waiting for trust review.',
+  },
+  {
+    id: 'escalation_coverage_gaps',
+    label: 'Escalation coverage gaps',
+    tone: 'danger',
+    description: 'Must-not-miss or escalation paths need coverage.',
+  },
 ];
+
+const queueDescriptionById = new Map(
+  queueDefinitions.map((queue) => [queue.id, queue.description]),
+);
 
 export function buildEditorialQueues(
   diagnoses: EditorialCoverageOverview['weakDiagnoses'],
@@ -32,6 +68,7 @@ export function buildEditorialQueues(
         id: queue.id,
         label: queue.label,
         tone: queue.severity === 'blocker' ? 'danger' : 'warning',
+        description: queueDescriptionById.get(queue.id),
         count: (existing?.count ?? 0) + 1,
       });
     }
@@ -116,4 +153,37 @@ export function diagnosisWorkflowQueues(
     diagnosis.editorialPrioritization?.queues ??
     []
   );
+}
+
+export function sortDiagnosesByEditorialPriority(
+  diagnoses: EditorialCoverageOverview['weakDiagnoses'],
+): EditorialCoverageOverview['weakDiagnoses'] {
+  return diagnoses
+    .map((diagnosis, index) => ({ diagnosis, index }))
+    .sort((left, right) => {
+      const leftPriority = editorialPriorityScore(left.diagnosis);
+      const rightPriority = editorialPriorityScore(right.diagnosis);
+      if (rightPriority !== leftPriority) {
+        return rightPriority - leftPriority;
+      }
+      return left.index - right.index;
+    })
+    .map((item) => item.diagnosis);
+}
+
+function editorialPriorityScore(
+  diagnosis: EditorialCoverageOverview['weakDiagnoses'][number],
+) {
+  const triage =
+    diagnosis.editorialTriage ?? diagnosis.editorialPrioritization ?? null;
+  const priority = triage?.editorialPriority;
+  if (typeof priority?.score === 'number') {
+    return priority.score;
+  }
+  const tier = priority?.tier;
+  if (tier === 'critical') return 100;
+  if (tier === 'high') return 80;
+  if (tier === 'medium') return 50;
+  if (tier === 'low') return 20;
+  return 0;
 }

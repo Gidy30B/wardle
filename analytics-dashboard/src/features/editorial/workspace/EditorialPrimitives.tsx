@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ArrowRight, WandSparkles } from 'lucide-react';
+import { ArrowRight, ChevronDown, WandSparkles } from 'lucide-react';
 
 import type { WorkspaceCoverageMatrixRow } from '../../../api/admin';
 import StatusBadge from '../../../components/ui/StatusBadge';
@@ -34,6 +34,395 @@ export function CompactPanel({
       </div>
       <div className="editorial-panel-body">{children}</div>
     </section>
+  );
+}
+
+export function PrototypeSectionHeader({
+  eyebrow,
+  title,
+  subtitle,
+  action,
+}: {
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        {eyebrow ? <p className="editorial-eyebrow">{eyebrow}</p> : null}
+        <h3 className="mt-1 text-base font-semibold text-slate-100">{title}</h3>
+        {subtitle ? (
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+            {subtitle}
+          </p>
+        ) : null}
+      </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
+    </div>
+  );
+}
+
+export function EditorialRow({
+  title,
+  subtitle,
+  meta,
+  tone = 'neutral',
+  action,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  meta?: ReactNode;
+  tone?: StatusBadgeTone;
+  action?: ReactNode;
+  children?: ReactNode;
+}) {
+  const toneBar =
+    tone === 'danger'
+      ? 'bg-[var(--color-rose)]'
+      : tone === 'warning'
+        ? 'bg-[var(--color-amber)]'
+        : tone === 'success'
+          ? 'bg-[var(--color-green)]'
+          : tone === 'info'
+            ? 'bg-[var(--color-teal)]'
+            : 'bg-[var(--color-navy-border)]';
+
+  return (
+    <div className="group relative overflow-hidden rounded-lg border border-[var(--color-navy-border)] bg-white/4 transition hover:bg-white/10">
+      <div className={`absolute inset-y-0 left-0 w-0.5 ${toneBar}`} />
+      <div className="flex flex-wrap items-start justify-between gap-3 px-3 py-2.5 pl-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold leading-5 text-slate-100">
+              {title}
+            </p>
+            {meta}
+          </div>
+          {subtitle ? (
+            <p className="mt-1 text-xs leading-5 text-slate-400">{subtitle}</p>
+          ) : null}
+          {children ? <div className="mt-2">{children}</div> : null}
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+export function StatusStrip({
+  items,
+}: {
+  items: Array<{
+    label: string;
+    value: string | number;
+    tone: StatusBadgeTone;
+    detail?: string;
+  }>;
+}) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      {items.map((item) => (
+        <div
+          key={item.label}
+          className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 px-3 py-2"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              {item.label}
+            </p>
+            <StatusBadge status={String(item.value)} tone={item.tone} />
+          </div>
+          {item.detail ? (
+            <p className="mt-2 text-xs leading-5 text-slate-400">
+              {item.detail}
+            </p>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ReasoningCard({
+  eyebrow,
+  title,
+  subtitle,
+  tone = 'info',
+  action,
+  children,
+}: {
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  tone?: StatusBadgeTone;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  const toneClass =
+    tone === 'danger'
+      ? 'border-[var(--color-rose)]/35 bg-[var(--color-rose)]/10'
+      : tone === 'warning'
+        ? 'border-[var(--color-amber)]/35 bg-[var(--color-amber)]/10'
+        : tone === 'success'
+          ? 'border-[var(--color-green)]/30 bg-[var(--color-green)]/10'
+          : 'border-[var(--color-teal)]/30 bg-[var(--color-teal)]/10';
+
+  return (
+    <section className={`rounded-lg border p-3 ${toneClass}`}>
+      <PrototypeSectionHeader
+        eyebrow={eyebrow}
+        title={title}
+        subtitle={subtitle}
+        action={action}
+      />
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
+export function InlineReviewBar({
+  note,
+  children,
+}: {
+  note?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--color-navy-border)] pt-3">
+      {note ? (
+        <p className="min-w-[12rem] flex-1 text-xs italic leading-5 text-slate-500">
+          {note}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </div>
+  );
+}
+
+export function CompactMetricGrid({
+  items,
+}: {
+  items: Array<{
+    label: string;
+    value: string | number | null | undefined;
+    tone?: StatusBadgeTone;
+  }>;
+}) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      {items.map((item) => (
+        <div key={item.label} className="rounded-md bg-white/4 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            {item.label}
+          </p>
+          <p
+            className={[
+              'mt-1 text-sm font-semibold',
+              item.tone === 'danger'
+                ? 'text-[var(--color-rose)]'
+                : item.tone === 'warning'
+                  ? 'text-[var(--color-amber)]'
+                  : item.tone === 'success'
+                    ? 'text-[var(--color-green)]'
+                    : item.tone === 'info'
+                      ? 'text-[var(--color-teal)]'
+                      : 'text-slate-100',
+            ].join(' ')}
+          >
+            {item.value === null || item.value === undefined
+              ? 'Unknown'
+              : item.value}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ClinicalSignalList({
+  title,
+  items,
+  empty,
+  tone = 'warning',
+}: {
+  title: string;
+  items: string[];
+  empty: string;
+  tone?: StatusBadgeTone;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {title}
+        </p>
+        <StatusBadge status={String(items.length)} tone={items.length ? tone : 'success'} />
+      </div>
+      {items.length ? (
+        <div className="space-y-1">
+          {items.slice(0, 5).map((item) => (
+            <p key={item} className="text-xs leading-5 text-slate-300">
+              {item}
+            </p>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs leading-5 text-slate-500">{empty}</p>
+      )}
+    </div>
+  );
+}
+
+export function CompactSection({
+  title,
+  subtitle,
+  action,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-3">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-100">{title}</p>
+          {subtitle ? (
+            <p className="mt-1 text-xs leading-5 text-slate-500">{subtitle}</p>
+          ) : null}
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export function CollapsibleDetail({
+  title,
+  summary,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  summary?: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <details
+      className="group rounded-lg border border-[var(--color-navy-border)] bg-white/4"
+      open={defaultOpen}
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
+        <span>
+          <span className="block text-sm font-semibold text-slate-100">
+            {title}
+          </span>
+          {summary ? (
+            <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+              {summary}
+            </span>
+          ) : null}
+        </span>
+        <ChevronDown
+          className="h-4 w-4 shrink-0 text-slate-500 transition group-open:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      <div className="border-t border-[var(--color-navy-border)] p-3">
+        {children}
+      </div>
+    </details>
+  );
+}
+
+export function IssueSummaryStrip({
+  blockers,
+  warnings,
+}: {
+  blockers: string[];
+  warnings: string[];
+}) {
+  if (!blockers.length && !warnings.length) {
+    return (
+      <div className="rounded-lg border border-[var(--color-green)]/25 bg-[var(--color-green)]/10 px-3 py-2 text-sm font-semibold text-[var(--color-green)]">
+        No blockers or warnings reported.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {blockers.length ? (
+        <IssueBucket title="Blockers" tone="blocker" items={blockers} />
+      ) : null}
+      {warnings.length ? (
+        <IssueBucket title="Warnings" tone="warning" items={warnings} />
+      ) : null}
+    </div>
+  );
+}
+
+export function SectionActionGroup({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return <div className="flex flex-wrap gap-2">{children}</div>;
+}
+
+export function EmptyGuidance({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-dashed border-[var(--color-navy-border)] bg-white/4 p-3">
+      <p className="text-sm font-semibold text-slate-100">{title}</p>
+      <p className="mt-1 text-sm leading-6 text-slate-400">{description}</p>
+      {action ? <div className="mt-3">{action}</div> : null}
+    </div>
+  );
+}
+
+function IssueBucket({
+  title,
+  tone,
+  items,
+}: {
+  title: string;
+  tone: 'blocker' | 'warning';
+  items: string[];
+}) {
+  const toneClass =
+    tone === 'blocker'
+      ? 'border-[var(--color-rose)]/30 bg-[var(--color-rose)]/10 text-rose-100'
+      : 'border-[var(--color-amber)]/30 bg-[var(--color-amber)]/10 text-amber-100';
+
+  return (
+    <div className={`rounded-lg border px-3 py-2 ${toneClass}`}>
+      <p className="text-xs font-semibold uppercase tracking-[0.14em]">
+        {title}
+      </p>
+      <ul className="mt-2 space-y-1 text-sm leading-5">
+        {items.slice(0, 3).map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+      {items.length > 3 ? (
+        <p className="mt-2 text-xs opacity-75">+{items.length - 3} more</p>
+      ) : null}
+    </div>
   );
 }
 
@@ -114,7 +503,7 @@ export function MetricGrid({
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
             {item.label}
           </p>
-          <p className="mt-1 text-sm font-semibold text-slate-900">
+          <p className="mt-1 text-sm font-semibold text-slate-100">
             {item.value === null || item.value === undefined
               ? 'Unknown'
               : item.value}
@@ -139,15 +528,15 @@ export function MessageList({
       className={[
         'rounded-lg border px-3 py-2',
         tone === 'blocker'
-          ? 'border-rose-200 bg-rose-50'
-          : 'border-amber-200 bg-amber-50',
+          ? 'border-[var(--color-rose)]/30 bg-[var(--color-rose)]/10'
+          : 'border-[var(--color-amber)]/30 bg-[var(--color-amber)]/10',
       ].join(' ')}
     >
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
         {title}
       </p>
       {messages.length ? (
-        <ul className="mt-2 space-y-1 text-sm text-slate-700">
+        <ul className="mt-2 space-y-1 text-sm text-slate-300">
           {messages.slice(0, 5).map((message) => (
             <li key={message}>{message}</li>
           ))}
@@ -167,8 +556,8 @@ export function CoverageStatusBlock({
   status: WorkspaceCoverageMatrixRow['educationCoverage'];
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-3 py-3">
-      <p className="text-sm font-semibold text-slate-900">{label}</p>
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-3">
+      <p className="text-sm font-semibold text-slate-100">{label}</p>
       <div className="mt-2">
         <CoverageStatusPill status={status} />
       </div>

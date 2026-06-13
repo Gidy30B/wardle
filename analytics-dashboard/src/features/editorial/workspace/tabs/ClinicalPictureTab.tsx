@@ -11,10 +11,13 @@ import RevisionHistoryCard from '../../../cases/education/RevisionHistoryCard';
 import StatusBadge from '../../../../components/ui/StatusBadge';
 import { ClaimRepairPanel } from '../ClaimRepairPanel';
 import {
-  CompactPanel,
+  ClinicalSignalList,
+  CollapsibleDetail,
+  CompactMetricGrid,
+  EditorialRow,
+  EmptyGuidance,
   DraftAIActionsPanel,
-  MessageList,
-  MetricGrid,
+  ReasoningCard,
   TabNextStepCard,
 } from '../EditorialPrimitives';
 import { formatDate, formatLabel, formatScore } from '../workspaceTransforms';
@@ -118,17 +121,27 @@ export function ClinicalPictureTab({
         }))}
         empty="No weak regenerable sections are currently reported."
       />
-      <RevisionHistoryCard revisions={revisions} loading={false} error={null} />
-      <RevisionCompareCard
-        revisions={revisions}
-        selectedFromVersion={compareFromVersion}
-        selectedToVersion={compareToVersion}
-        comparison={revisionCompare}
-        loading={revisionCompareLoading}
-        error={revisionCompareError}
-        onFromVersionChange={onFromVersionChange}
-        onToVersionChange={onToVersionChange}
-      />
+      <CollapsibleDetail
+        title="Revision history"
+        summary={`${revisions.length} revision${revisions.length === 1 ? '' : 's'} available`}
+      >
+        <RevisionHistoryCard revisions={revisions} loading={false} error={null} />
+      </CollapsibleDetail>
+      <CollapsibleDetail
+        title="Compare education revisions"
+        summary="Open when checking drift between draft versions"
+      >
+        <RevisionCompareCard
+          revisions={revisions}
+          selectedFromVersion={compareFromVersion}
+          selectedToVersion={compareToVersion}
+          comparison={revisionCompare}
+          loading={revisionCompareLoading}
+          error={revisionCompareError}
+          onFromVersionChange={onFromVersionChange}
+          onToVersionChange={onToVersionChange}
+        />
+      </CollapsibleDetail>
     </div>
   );
 }
@@ -145,9 +158,11 @@ function AcceptedRepairsPanel({
   const groups = repairsBySection(repairs);
 
   return (
-    <CompactPanel
+    <ReasoningCard
+      eyebrow="Reviewed claim support"
       title="Accepted repairs"
       subtitle="Draft education content now includes these reviewed claim repairs."
+      tone="success"
     >
       <div className="space-y-3">
         {Object.entries(groups).map(([section, sectionRepairs]) => (
@@ -164,21 +179,16 @@ function AcceptedRepairsPanel({
             </div>
             <div className="mt-3 space-y-2">
               {sectionRepairs.map((repair) => (
-                <div
+                <EditorialRow
                   key={`${repair.section}-${repair.sourceAuditId ?? repair.acceptedClaim}`}
-                  className="rounded-md border border-[var(--color-teal)]/25 bg-[var(--color-teal)]/10 px-3 py-2"
+                  title="Accepted repair"
+                  subtitle={repair.originalClaim ? `Replaced: ${repair.originalClaim}` : undefined}
+                  tone="success"
+                  meta={<StatusBadge status="Evidence-supported" tone="success" />}
                 >
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                    Accepted repair
-                  </p>
                   <p className="mt-1 text-sm leading-6 text-slate-100">
                     {repair.acceptedClaim}
                   </p>
-                  {repair.originalClaim ? (
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
-                      Replaced: {repair.originalClaim}
-                    </p>
-                  ) : null}
                   <details className="mt-2">
                     <summary className="cursor-pointer text-xs font-semibold text-slate-300">
                       Evidence-supported details
@@ -197,13 +207,13 @@ function AcceptedRepairsPanel({
                       Source audit: {repair.sourceAuditId ?? 'unknown'}
                     </p>
                   </details>
-                </div>
+                </EditorialRow>
               ))}
             </div>
           </div>
         ))}
       </div>
-    </CompactPanel>
+    </ReasoningCard>
   );
 }
 
@@ -222,14 +232,31 @@ function EducationQualityCard({
     'examPearls',
     'management',
   ];
+  const qualityScore = workspace.education.qualityScore;
 
   return (
-    <CompactPanel title="Education quality">
-      <MetricGrid
+    <ReasoningCard
+      eyebrow="Clinical signal health"
+      title="Education quality"
+      subtitle="Section quality, blockers, and regeneration points for draft-only clinical content."
+      tone={workspace.education.blockers.length ? 'danger' : workspace.education.warnings.length ? 'warning' : 'success'}
+    >
+      <CompactMetricGrid
         items={[
           { label: 'Status', value: formatLabel(workspace.education.status) },
           { label: 'Version', value: workspace.education.version ?? 'None' },
-          { label: 'Quality', value: formatScore(workspace.education.qualityScore) },
+          {
+            label: 'Quality',
+            value: formatScore(qualityScore),
+            tone:
+              qualityScore === null || qualityScore === undefined
+                ? 'neutral'
+                : qualityScore >= 0.75
+                ? 'success'
+                : qualityScore >= 0.5
+                  ? 'warning'
+                  : 'danger',
+          },
           {
             label: 'Updated',
             value: workspace.education.updatedAt
@@ -239,26 +266,36 @@ function EducationQualityCard({
         ]}
       />
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <MessageList title="Blockers" tone="blocker" messages={workspace.education.blockers} />
-        <MessageList title="Warnings" tone="warning" messages={workspace.education.warnings} />
+        <ClinicalSignalList
+          title="Blockers"
+          items={workspace.education.blockers}
+          empty="No clinical-picture blockers reported."
+          tone="danger"
+        />
+        <ClinicalSignalList
+          title="Warnings"
+          items={workspace.education.warnings}
+          empty="No clinical-picture warnings reported."
+          tone="warning"
+        />
       </div>
       {workspace.education.sectionHealth.length ? (
-        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="mt-4 overflow-x-auto rounded-lg border border-[var(--color-navy-border)]">
+          <table className="min-w-full divide-y divide-[var(--color-navy-border)] text-sm">
+            <thead className="bg-white/5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-3 py-2">Section</th>
                 <th className="px-3 py-2">Score</th>
                 <th className="px-3 py-2">Regenerate</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-[var(--color-navy-border)]">
               {workspace.education.sectionHealth.map((section) => (
                 <tr key={section.section}>
-                  <td className="px-3 py-2 font-medium text-slate-900">
+                  <td className="px-3 py-2 font-medium text-slate-100">
                     {formatLabel(section.section)}
                   </td>
-                  <td className="px-3 py-2 text-slate-700">
+                  <td className="px-3 py-2 text-slate-300">
                     {formatScore(section.score)}
                   </td>
                   <td className="px-3 py-2">
@@ -273,7 +310,7 @@ function EducationQualityCard({
                             section.section as EducationRegenerableSection,
                           )
                         }
-                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="editorial-action px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Regenerate
                       </button>
@@ -287,11 +324,12 @@ function EducationQualityCard({
           </table>
         </div>
       ) : (
-        <p className="mt-3 text-sm text-slate-500">
-          Section health will appear after education quality analysis runs.
-        </p>
+        <EmptyGuidance
+          title="No section health yet"
+          description="Section health will appear after education quality analysis runs."
+        />
       )}
-    </CompactPanel>
+    </ReasoningCard>
   );
 }
 

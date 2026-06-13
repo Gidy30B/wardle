@@ -25,8 +25,8 @@ export function WorkspaceHeader({
   ].filter(Boolean);
 
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950 text-white shadow-sm">
-      <div className="p-5">
+    <section className="overflow-hidden rounded-xl border border-[var(--color-navy-border)] bg-[var(--color-navy-mid)] text-white shadow-sm">
+      <div className="p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <Link
@@ -35,10 +35,10 @@ export function WorkspaceHeader({
             >
               â€¹ Queue
             </Link>
-            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300">
+            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.24em] text-[var(--color-teal)]">
               Editorial Diagnosis Workspace
             </p>
-            <h2 className="mt-2 text-[26px] font-semibold leading-tight">
+            <h2 className="mt-2 text-xl font-semibold leading-tight sm:text-[26px]">
               {workspace.diagnosis.displayLabel}
             </h2>
             {canonicalDifferent ? (
@@ -76,7 +76,7 @@ export function WorkspaceHeader({
             <HeaderPill label={formatLabel(workspace.lifecycle.ready)} />
           </div>
         </div>
-        <div className="mt-5 grid gap-3 md:grid-cols-4">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <HeaderMetric label="Education" value={workspace.education.status} />
           <HeaderMetric
             label="Usable cases"
@@ -91,7 +91,7 @@ export function WorkspaceHeader({
       </div>
 
       {/* Lifecycle stage track - prototype-style maturity bar */}
-      <div className="flex overflow-x-auto border-t border-white/10">
+      <div className="flex overflow-x-auto border-t border-[var(--color-navy-border)]">
         {lifecycleSteps.map((step, i) => {
           const state = workspace.lifecycle[step.key];
           const isDone = state === 'complete';
@@ -100,11 +100,11 @@ export function WorkspaceHeader({
             <div
               key={step.key}
               className={[
-                'flex min-w-fit items-center gap-2 border-r border-white/10 px-4 py-2.5 text-xs font-medium',
+                'flex min-w-fit items-center gap-2 border-r border-[var(--color-navy-border)] px-3 py-2.5 text-xs font-medium sm:px-4',
                 isDone
-                  ? 'text-emerald-400'
+                  ? 'text-[var(--color-green)]'
                   : isBlocked
-                    ? 'text-rose-400'
+                    ? 'text-[var(--color-rose)]'
                     : i === 0
                       ? 'font-semibold text-white'
                       : 'text-slate-500',
@@ -114,9 +114,9 @@ export function WorkspaceHeader({
                 className={[
                   'inline-block h-1.5 w-1.5 rounded-full',
                   isDone
-                    ? 'bg-emerald-400'
+                    ? 'bg-[var(--color-green)]'
                     : isBlocked
-                      ? 'bg-rose-400'
+                      ? 'bg-[var(--color-rose)]'
                       : 'bg-current',
                 ].join(' ')}
               />
@@ -143,7 +143,7 @@ const lifecycleSteps: Array<{
 
 function HeaderPill({ label }: { label: string }) {
   return (
-    <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-100">
+    <span className="rounded-full border border-[var(--color-navy-border)] bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-100">
       {label}
     </span>
   );
@@ -157,7 +157,7 @@ function HeaderMetric({
   value: string | number | null | undefined;
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-3">
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
         {label}
       </p>
@@ -178,7 +178,7 @@ export function TabBar({
   onChange: (tab: WorkspaceTab) => void;
 }) {
   return (
-    <div className="overflow-x-auto border-b border-white/10 bg-slate-950">
+    <div className="overflow-x-auto border-b border-[var(--color-navy-border)] bg-[var(--color-navy-mid)]">
       <div className="flex min-w-max">
         {WORKSPACE_TABS.map((tab) => (
           <button
@@ -186,9 +186,9 @@ export function TabBar({
             type="button"
             onClick={() => onChange(tab.id)}
             className={[
-              'border-b-2 px-5 py-3 text-sm font-medium whitespace-nowrap transition-colors',
+              'border-b-2 px-3 py-3 text-sm font-medium whitespace-nowrap transition-colors sm:px-5',
               activeTab === tab.id
-                ? 'border-cyan-400 text-cyan-300 font-semibold'
+                ? 'border-[var(--color-teal)] text-[var(--color-teal)] font-semibold'
                 : 'border-transparent text-slate-400 hover:border-slate-500 hover:text-slate-200',
             ].join(' ')}
           >

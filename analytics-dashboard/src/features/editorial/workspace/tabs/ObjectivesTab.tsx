@@ -6,7 +6,11 @@ import type {
   DiagnosisTeachingRulesResponse,
 } from '../../../../api/admin';
 import EditorialBriefCard from '../../../cases/education/EditorialBriefCard';
-import { CompactPanel, MetricGrid, TabNextStepCard } from '../EditorialPrimitives';
+import {
+  CompactMetricGrid,
+  ReasoningCard,
+  TabNextStepCard,
+} from '../EditorialPrimitives';
 import { formatDate } from '../workspaceTransforms';
 export function ObjectivesTab({
   workspace,
@@ -68,17 +72,23 @@ function EditorialBriefSummaryCard({
 }: {
   workspace: DiagnosisEditorialWorkspace;
 }) {
+  const generationActive = workspace.editorialBrief.activeForGeneration;
+
   return (
-    <CompactPanel title="Unified brief summary">
-      <MetricGrid
+    <ReasoningCard
+      eyebrow="Intent sheet"
+      title="Unified brief summary"
+      subtitle="Learning goals, mimics, pitfalls, and generation guidance should point in the same editorial direction."
+      tone={generationActive ? 'success' : 'warning'}
+    >
+      <CompactMetricGrid
         items={[
           { label: 'Status', value: workspace.editorialBrief.status ?? 'Missing' },
           { label: 'Version', value: workspace.editorialBrief.version ?? 'None' },
           {
             label: 'Generation',
-            value: workspace.editorialBrief.activeForGeneration
-              ? 'Active'
-              : 'Inactive',
+            value: generationActive ? 'Active' : 'Inactive',
+            tone: generationActive ? 'success' : 'warning',
           },
           {
             label: 'Updated',
@@ -89,7 +99,7 @@ function EditorialBriefSummaryCard({
         ]}
       />
       {workspace.editorialBrief.summary ? (
-        <p className="mt-3 text-sm leading-6 text-slate-700">
+        <p className="mt-3 text-sm leading-6 text-slate-300">
           {workspace.editorialBrief.summary}
         </p>
       ) : (
@@ -97,6 +107,6 @@ function EditorialBriefSummaryCard({
           No editorial brief summary exists yet.
         </p>
       )}
-    </CompactPanel>
+    </ReasoningCard>
   );
 }

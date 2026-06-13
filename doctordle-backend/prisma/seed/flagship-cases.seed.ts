@@ -1,3 +1,4 @@
+
 import {
   PrismaClient,
   CaseEditorialStatus,
@@ -12,7 +13,7 @@ import { Pool } from 'pg';
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error('DATABASE_URL is required to run the COPD flagship seed.');
+  throw new Error('DATABASE_URL is required to run the Sickle Cell Disease flagship seed.');
 }
 
 const pool = new Pool({ connectionString: databaseUrl });
@@ -28,8 +29,8 @@ function normalizeClinicalText(value: string): string {
 }
 
 const now = new Date();
-const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 8, 12, 0, 0));
-const seedVersion = 'flagship-copd-v1';
+const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 12, 12, 0, 0));
+const seedVersion = 'flagship-sickle-cell-disease-v1';
 
 function addUtcDays(date: Date, days: number): Date {
   const next = new Date(date);
@@ -46,47 +47,27 @@ async function findAvailableInventoryPlaceholderDate(params: {
 
   for (let offset = 0; offset < maxAttempts; offset += 1) {
     const candidateDate = addUtcDays(params.preferredDate, offset);
+
     const owner = await prisma.case.findUnique({
       where: { date: candidateDate },
       select: {
         id: true,
         title: true,
-        diagnosisRegistryId: true,
-        currentRevisionId: true,
         dailyCases: { select: { id: true }, take: 1 },
       },
     });
 
     if (!owner) {
-      if (offset > 0) {
-        console.warn(
-          'Preferred inventory placeholder date was occupied; using next free date.',
-          {
-            displayLabel: params.displayLabel,
-            preferredDate: params.preferredDate.toISOString(),
-            assignedDate: candidateDate.toISOString(),
-            offsetDays: offset,
-          },
-        );
-      }
       return candidateDate;
     }
 
     if (params.reusableCaseId && owner.id === params.reusableCaseId) {
       return candidateDate;
     }
-
-    console.warn('Inventory placeholder date occupied; trying next day.', {
-      displayLabel: params.displayLabel,
-      candidateDate: candidateDate.toISOString(),
-      occupiedByCaseId: owner.id,
-      occupiedByTitle: owner.title,
-      occupiedCaseIsScheduled: owner.dailyCases.length > 0,
-    });
   }
 
   throw new Error(
-    `Cannot seed ${params.displayLabel}: no free inventory placeholder date found within ${maxAttempts} days after ${params.preferredDate.toISOString()}.`,
+    `Cannot seed ${params.displayLabel}: no free inventory placeholder date found.`,
   );
 }
 
@@ -107,231 +88,252 @@ const clues = [
     order: 0,
     type: 'history',
     value:
-      'A 68-year-old man presents with gradually worsening shortness of breath over several years, now occurring even with mild activity.',
+      'An 8-year-old child is brought to the emergency department with severe pain in both legs and the lower back that began suddenly overnight.',
   },
   {
     order: 1,
-    type: 'symptom',
+    type: 'history',
     value:
-      'He reports a long history of chronic cough productive of sputum, especially in the mornings.',
+      'The mother reports multiple similar episodes since early childhood, often triggered by dehydration or infection. She also notes occasional yellowing of the eyes.',
   },
   {
     order: 2,
-    type: 'hx',
+    type: 'vital',
     value:
-      'He has a 40-pack-year smoking history and continues to smoke.',
+      'Temperature is 38.2°C, heart rate is 118/min, respiratory rate is 24/min, and blood pressure is 100/65 mmHg.',
   },
   {
     order: 3,
     type: 'exam',
     value:
-      'On examination, he has a barrel-shaped chest and a prolonged expiratory phase with wheeze on auscultation.',
+      'The child appears pale and mildly jaundiced with diffuse tenderness over the long bones, but there is no joint swelling or redness.',
   },
   {
     order: 4,
-    type: 'vital',
+    type: 'lab',
     value:
-      'His oxygen saturation is 90% on room air, and he uses accessory muscles when breathing.',
+      'Full blood count reveals hemoglobin of 7.0 g/dL with reticulocytosis. Blood film demonstrates sickle-shaped red blood cells and target cells.',
   },
   {
     order: 5,
-    type: 'lab',
+    type: 'investigation',
     value:
-      'Spirometry shows a post-bronchodilator FEV1/FVC ratio of 0.58 with minimal reversibility after bronchodilator administration.',
-  },
-  {
-    order: 6,
-    type: 'lab',
-    value:
-      'Arterial blood gas reveals chronic compensated respiratory acidosis with an elevated CO₂.',
+      'Hemoglobin electrophoresis shows predominantly HbS with absent HbA, confirming the underlying hemoglobin abnormality.',
   },
 ] as const;
 
 const differentials = [
-  'Asthma',
-  'Congestive heart failure',
-  'Bronchiectasis',
-  'Lung cancer',
-  'Interstitial lung disease',
+  'Acute osteomyelitis',
+  'Septic arthritis',
+  'Acute leukemia',
+  'Juvenile idiopathic arthritis',
+  'Hemolytic anemia',
 ];
 
 // ─── Explanation ─────────────────────────────────────────────────────────────
 
 const explanation = {
-  diagnosis: 'COPD',
+  diagnosis: 'Sickle Cell Disease presenting with vaso-occlusive pain crisis',
+
   summary:
-    'This is chronic obstructive pulmonary disease: progressive, largely irreversible airflow limitation in a heavy smoker, confirmed by a post-bronchodilator FEV1/FVC of 0.58 with minimal reversibility, alongside chronic productive cough, hyperinflation, hypoxaemia, and chronic compensated hypercapnic (type 2) respiratory failure.',
+    'This is sickle cell disease presenting with a vaso-occlusive pain crisis: recurrent severe bone pain triggered by dehydration or infection, chronic hemolysis with jaundice, anemia with reticulocytosis, sickled red cells on blood film, and hemoglobin electrophoresis showing predominantly HbS with absent HbA.',
+
   keyEvidence: [
-    'Gradually progressive exertional dyspnoea over several years',
-    'Chronic cough productive of sputum, worse in the mornings',
-    '40-pack-year smoking history with ongoing smoking',
-    'Barrel-shaped chest with prolonged expiratory phase and wheeze',
-    'Accessory muscle use with oxygen saturation 90% on room air',
-    'Post-bronchodilator FEV1/FVC 0.58 with minimal reversibility',
-    'Chronic compensated respiratory acidosis with elevated CO₂',
+    'Severe sudden pain in both legs and lower back',
+    'Multiple similar episodes since early childhood',
+    'Episodes triggered by dehydration or infection',
+    'Occasional yellowing of the eyes',
+    'Pallor and mild jaundice',
+    'Diffuse long-bone tenderness without joint swelling',
+    'Hemoglobin 7.0 g/dL with reticulocytosis',
+    'Sickle-shaped red cells and target cells on blood film',
+    'Predominantly HbS with absent HbA on hemoglobin electrophoresis',
   ],
+
   reasoning: [
-    'Years of slowly progressive exertional dyspnoea with a chronic productive cough point to a chronic, progressive airway disease rather than an acute cardiorespiratory illness.',
-    'A 40-pack-year ongoing smoking history is the dominant risk factor and frames the differential around smoking-related airway and parenchymal disease.',
-    'A barrel chest, prolonged expiration, wheeze, and accessory muscle use are bedside signs of hyperinflation, air trapping, and increased work of breathing.',
-    'Oxygen saturation of 90% on room air with accessory muscle use indicates clinically significant gas-exchange impairment, not just deconditioning.',
-    'A post-bronchodilator FEV1/FVC of 0.58 confirms airflow obstruction (ratio below 0.70), and the minimal reversibility separates fixed COPD obstruction from reversible asthma.',
-    'Arterial blood gas showing chronic compensated respiratory acidosis with a raised CO₂ indicates long-standing type 2 respiratory failure with renal (metabolic) compensation, consistent with established COPD.',
-    'Together these features confirm COPD and argue against reversible/variable asthma, restrictive interstitial lung disease, and primarily cardiac dyspnoea.',
+    'Sudden severe pain in the limbs and lower back suggests vaso-occlusion in bone and marrow rather than isolated joint disease.',
+    'Recurrent similar painful episodes since early childhood strongly suggest an inherited chronic disorder rather than a first episode of trauma or infection.',
+    'Dehydration and infection are classic triggers for sickling and vaso-occlusive crises.',
+    'Intermittent jaundice indicates chronic hemolysis, supporting sickle cell disease over isolated orthopedic causes of limb pain.',
+    'Pallor and jaundice on examination support chronic hemolytic anemia.',
+    'Diffuse long-bone tenderness without focal joint swelling makes septic arthritis less likely and supports vaso-occlusive bone pain.',
+    'Anemia with reticulocytosis shows marrow response to ongoing hemolysis.',
+    'Sickle-shaped red cells and target cells on blood film provide strong morphologic evidence of sickle hemoglobinopathy.',
+    'Hemoglobin electrophoresis with predominantly HbS and absent HbA confirms sickle cell disease rather than sickle trait.',
   ],
+
   keyFindings: [
-    'Progressive exertional dyspnoea',
-    'Chronic productive cough',
-    '40-pack-year smoking history',
-    'Hyperinflation (barrel chest, prolonged expiration)',
-    'Wheeze and accessory muscle use',
-    'Oxygen saturation 90% on room air',
-    'Post-bronchodilator FEV1/FVC 0.58 with minimal reversibility',
-    'Chronic compensated respiratory acidosis with raised CO₂',
+    'Recurrent painful crises',
+    'Bone and back pain',
+    'Triggering by infection or dehydration',
+    'Pallor',
+    'Jaundice',
+    'Anemia',
+    'Reticulocytosis',
+    'Sickled red cells',
+    'HbS predominance',
+    'Absent HbA',
   ],
+
   differentials,
+
   whyNotOthers: [
     {
-      diagnosis: 'Asthma',
+      diagnosis: 'Acute osteomyelitis',
       reason:
-        'Asthma typically shows variable, reversible airflow obstruction, often with earlier onset and atopy; here obstruction is fixed with minimal bronchodilator reversibility in a lifelong heavy smoker.',
+        'Osteomyelitis can cause fever and bone pain, but this child has recurrent similar episodes, chronic hemolysis, sickled cells, and confirmatory Hb electrophoresis.',
     },
     {
-      diagnosis: 'Congestive heart failure',
+      diagnosis: 'Septic arthritis',
       reason:
-        'Heart failure causes dyspnoea with orthopnoea, raised JVP, oedema, and basal crepitations; the obstructive spirometry and hyperinflation point to airway disease instead.',
+        'Septic arthritis usually causes a hot swollen painful joint with restricted movement; this case has diffuse long-bone tenderness without joint swelling.',
     },
     {
-      diagnosis: 'Bronchiectasis',
+      diagnosis: 'Acute leukemia',
       reason:
-        'Bronchiectasis also causes chronic productive cough, but usually with large-volume purulent sputum, recurrent infections, and haemoptysis; the unifying driver here is smoking-related fixed obstruction.',
+        'Leukemia can cause bone pain and anemia, but the blood film and electrophoresis confirm sickle hemoglobinopathy rather than marrow malignancy.',
     },
     {
-      diagnosis: 'Lung cancer',
+      diagnosis: 'Juvenile idiopathic arthritis',
       reason:
-        'A heavy smoker is at risk, but the picture is diffuse slowly progressive airflow limitation rather than a focal mass, haemoptysis, or weight loss; imaging is still warranted to exclude it.',
+        'Juvenile idiopathic arthritis causes chronic inflammatory joint disease, not recurrent hemolytic painful crises with HbS predominance.',
     },
     {
-      diagnosis: 'Interstitial lung disease',
+      diagnosis: 'Hemolytic anemia',
       reason:
-        'ILD causes progressive dyspnoea but with a restrictive pattern (preserved or raised FEV1/FVC) and fine inspiratory crackles, not the obstructive ratio of 0.58 with wheeze seen here.',
+        'Hemolysis is present, but the pain pattern and hemoglobin electrophoresis specify sickle cell disease as the underlying cause.',
     },
   ],
+
   managementPearl:
-    'Smoking cessation is the single most effective intervention to slow FEV1 decline and improve survival. Build care around inhaled bronchodilators (LAMA/LABA, adding ICS for eosinophilic or frequently exacerbating phenotypes), pulmonary rehabilitation, vaccination, and assessment for long-term oxygen therapy when chronically hypoxaemic. In acute hypercapnic exacerbations, give controlled oxygen targeting 88–92% to avoid worsening CO₂ retention.',
+    'In vaso-occlusive crisis, treat pain promptly, assess for infection and acute chest syndrome, maintain hydration carefully, give oxygen only if hypoxic, and avoid delaying analgesia while awaiting confirmatory tests.',
+
   differentialAnalysis: [
     {
-      diagnosis: 'Asthma',
+      diagnosis: 'Acute osteomyelitis',
       whyPlausibleEarly:
-        'Wheeze, dyspnoea, and expiratory airflow obstruction occur in asthma, and asthma–COPD overlap is common in older smokers.',
-      ruledOutByClues: [
-        {
-          clueOrder: 2,
-          evidence: '40-pack-year smoking history with ongoing smoking',
-          reason:
-            'Heavy cumulative smoking is the dominant COPD risk factor, whereas asthma is less tied to smoking dose.',
-        },
-        {
-          clueOrder: 5,
-          evidence: 'minimal reversibility after bronchodilator',
-          reason:
-            'Asthma characteristically shows significant bronchodilator reversibility and variability; fixed obstruction favours COPD.',
-        },
-        {
-          clueOrder: 0,
-          evidence: 'gradual worsening over several years in later life',
-          reason:
-            'Asthma usually has earlier onset with an episodic, variable course rather than steady multi-year progression.',
-        },
-      ],
-      finalReasonLessLikely:
-        'Fixed airflow obstruction with minimal reversibility in a lifelong heavy smoker fits COPD; asthma would show reversibility and symptom variability.',
-    },
-    {
-      diagnosis: 'Congestive heart failure',
-      whyPlausibleEarly:
-        'Older patients develop progressive exertional dyspnoea from heart failure, and pulmonary congestion can cause a "cardiac asthma" wheeze.',
-      ruledOutByClues: [
-        {
-          clueOrder: 3,
-          evidence: 'barrel chest with prolonged expiration and wheeze',
-          reason:
-            'Hyperinflation and expiratory airflow obstruction indicate airway disease rather than the congestion and gallop of heart failure.',
-        },
-        {
-          clueOrder: 5,
-          evidence: 'obstructive spirometry (FEV1/FVC 0.58)',
-          reason:
-            'An obstructive ventilatory defect points to intrinsic airway disease rather than a primarily cardiac cause of dyspnoea.',
-        },
-      ],
-      finalReasonLessLikely:
-        'There is no orthopnoea, paroxysmal nocturnal dyspnoea, oedema, or raised JVP, and the spirometry is obstructive, making heart failure an unlikely primary cause.',
-    },
-    {
-      diagnosis: 'Bronchiectasis',
-      whyPlausibleEarly:
-        'Chronic cough productive of sputum overlaps with the chronic bronchitis phenotype of COPD.',
+        'Fever and long-bone pain in a child can suggest osteomyelitis, especially because sickle cell disease also increases infection risk.',
       ruledOutByClues: [
         {
           clueOrder: 1,
-          evidence: 'morning sputum without copious purulent volumes',
+          evidence: 'multiple similar episodes since early childhood',
           reason:
-            'Bronchiectasis usually produces large-volume purulent sputum with recurrent infections and haemoptysis, which are not described here.',
+            'Recurrent self-similar painful episodes are more typical of vaso-occlusive crises than repeated acute osteomyelitis.',
         },
         {
-          clueOrder: 2,
-          evidence: '40-pack-year smoking history',
+          clueOrder: 3,
+          evidence: 'diffuse tenderness over the long bones without focal swelling',
           reason:
-            'Heavy smoking makes smoking-related COPD the most parsimonious unifying explanation for the obstruction.',
-        },
-      ],
-      finalReasonLessLikely:
-        'Smoking-driven fixed obstruction without large-volume purulent sputum, recurrent infection, or haemoptysis favours COPD; HRCT would confirm bronchiectasis if clinically suspected.',
-    },
-    {
-      diagnosis: 'Lung cancer',
-      whyPlausibleEarly:
-        'A heavy smoker with chronic cough is at high risk of lung malignancy, which must always be considered.',
-      ruledOutByClues: [
-        {
-          clueOrder: 0,
-          evidence: 'gradual progression over several years',
-          reason:
-            'A diffuse, slowly progressive airflow problem is more typical of COPD than the recent change, weight loss, or haemoptysis that flag malignancy.',
+            'Osteomyelitis more often produces localized bone tenderness and inflammatory signs.',
         },
         {
           clueOrder: 5,
-          evidence: 'generalised obstructive spirometry',
+          evidence: 'predominantly HbS with absent HbA',
           reason:
-            'Diffuse airflow obstruction explains the symptoms, whereas a tumour tends to cause focal signs or localised obstruction.',
+            'Electrophoresis confirms sickle cell disease as the underlying disorder explaining recurrent crises.',
         },
       ],
       finalReasonLessLikely:
-        'The presentation is diffuse airflow obstruction rather than focal disease, but as a heavy smoker he still warrants chest imaging and ongoing vigilance for malignancy.',
+        'Osteomyelitis remains an important complication to screen for, but it does not best explain the recurrent triggered pain and hemolytic evidence.',
     },
     {
-      diagnosis: 'Interstitial lung disease',
+      diagnosis: 'Septic arthritis',
       whyPlausibleEarly:
-        'ILD also causes progressive exertional dyspnoea and reduced exercise tolerance.',
+        'Fever and limb pain can raise concern for joint infection.',
       ruledOutByClues: [
         {
           clueOrder: 3,
-          evidence: 'wheeze and prolonged expiratory phase',
+          evidence: 'no joint swelling or redness',
           reason:
-            'ILD classically produces fine end-inspiratory ("velcro") crackles, not expiratory wheeze and prolonged expiration.',
+            'Septic arthritis usually presents with a hot swollen joint and marked pain on movement.',
         },
         {
-          clueOrder: 5,
-          evidence: 'FEV1/FVC 0.58 (obstructive)',
+          clueOrder: 4,
+          evidence: 'sickle-shaped red blood cells and target cells',
           reason:
-            'ILD causes a restrictive pattern with preserved or raised FEV1/FVC, the opposite of the obstructive ratio seen here.',
+            'The blood film points toward sickle cell disease rather than primary joint infection.',
         },
       ],
       finalReasonLessLikely:
-        'Obstructive spirometry and hyperinflation are the opposite of the restrictive physiology of interstitial lung disease.',
+        'The pain is diffuse and bony rather than localized to an inflamed joint.',
+    },
+    {
+      diagnosis: 'Acute leukemia',
+      whyPlausibleEarly:
+        'Bone pain, pallor, and anemia in a child can occur in leukemia.',
+      ruledOutByClues: [
+        {
+          clueOrder: 1,
+          evidence: 'recurrent similar episodes triggered by dehydration or infection',
+          reason:
+            'This pattern is classic for vaso-occlusive crisis rather than progressive marrow failure.',
+        },
+        {
+          clueOrder: 4,
+          evidence: 'reticulocytosis',
+          reason:
+            'Reticulocytosis suggests marrow compensation for hemolysis, not marrow replacement.',
+        },
+        {
+          clueOrder: 5,
+          evidence: 'hemoglobin electrophoresis shows predominantly HbS with absent HbA',
+          reason:
+            'Electrophoresis confirms sickle cell disease.',
+        },
+      ],
+      finalReasonLessLikely:
+        'There is no blast-based blood film pattern or marrow failure profile; the hemoglobinopathy explains the presentation.',
+    },
+    {
+      diagnosis: 'Juvenile idiopathic arthritis',
+      whyPlausibleEarly:
+        'Limb pain in a child can be mistaken for inflammatory joint disease.',
+      ruledOutByClues: [
+        {
+          clueOrder: 0,
+          evidence: 'sudden severe pain overnight',
+          reason:
+            'Vaso-occlusive pain crisis is often acute and severe, while JIA is usually chronic inflammatory joint pain.',
+        },
+        {
+          clueOrder: 3,
+          evidence: 'no joint swelling or redness',
+          reason:
+            'JIA typically involves joint swelling, stiffness, or restricted movement.',
+        },
+      ],
+      finalReasonLessLikely:
+        'The absence of inflammatory joint signs and the presence of hemolytic sickle features make JIA unlikely.',
+    },
+    {
+      diagnosis: 'Hemolytic anemia',
+      whyPlausibleEarly:
+        'Pallor, jaundice, anemia, and reticulocytosis indicate hemolysis.',
+      ruledOutByClues: [
+        {
+          clueOrder: 0,
+          evidence: 'severe pain in both legs and lower back',
+          reason:
+            'Pain crisis is not explained by generic hemolytic anemia alone.',
+        },
+        {
+          clueOrder: 4,
+          evidence: 'sickle-shaped red blood cells',
+          reason:
+            'The smear identifies a sickling disorder.',
+        },
+        {
+          clueOrder: 5,
+          evidence: 'predominantly HbS with absent HbA',
+          reason:
+            'This confirms sickle cell disease rather than an unspecified hemolytic anemia.',
+        },
+      ],
+      finalReasonLessLikely:
+        'Hemolysis is part of the disease, but sickle cell disease is the specific diagnosis.',
     },
   ],
+
   generationQuality: {
     contentTier: 'FLAGSHIP',
     humanReviewed: true,
@@ -342,151 +344,142 @@ const explanation = {
 // ─── Education ────────────────────────────────────────────────────────────────
 
 const educationForFrontend = {
-  title: 'COPD',
+  title: 'Sickle Cell Disease',
 
   summary: {
     definition:
-      'Chronic obstructive pulmonary disease is a common, preventable, and treatable condition characterised by persistent respiratory symptoms and largely irreversible airflow limitation due to airway and/or alveolar abnormalities, usually caused by significant exposure to noxious particles or gases, most often tobacco smoke.',
+      'Sickle cell disease is an inherited hemoglobinopathy caused by abnormal hemoglobin S, leading to red cell sickling, chronic hemolytic anemia, vaso-occlusion, and recurrent painful crises.',
     highYieldTakeaway:
-      'Diagnose COPD with post-bronchodilator spirometry showing FEV1/FVC below 0.70 and limited reversibility in a patient with a compatible exposure history and symptoms, after considering asthma, heart failure, bronchiectasis, malignancy, and interstitial lung disease.',
+      'Think sickle cell disease when a child has recurrent severe bone pain, anemia, jaundice, reticulocytosis, sickled red cells, and hemoglobin electrophoresis showing predominantly HbS with absent HbA.',
   },
 
   recognitionPattern: [
     {
-      pattern: 'Fixed airflow obstruction in a smoker',
+      pattern: 'Recurrent painful vaso-occlusive crises',
       whyItMatters:
-        'A post-bronchodilator FEV1/FVC below 0.70 with minimal reversibility defines COPD and is the key feature that separates it from asthma.',
+        'Vaso-occlusion causes severe pain in bones, back, chest, abdomen, or limbs and is the most common acute presentation.',
       progression:
-        'Smoking exposure → airway inflammation and parenchymal destruction → progressive fixed airflow limitation → exertional dyspnoea and chronic cough → hypoxaemia and eventual hypercapnia.',
+        'Trigger such as dehydration or infection → red cell sickling → microvascular obstruction → ischemic pain → inflammatory amplification.',
       discriminator:
-        'Minimal bronchodilator reversibility plus a heavy smoking history points to COPD; marked reversibility and symptom variability point to asthma.',
+        'Recurrent severe bone pain with hemolysis strongly separates sickle cell crisis from isolated trauma or arthritis.',
       commonTrap:
-        'Do not anchor on wheeze alone. Wheeze occurs in both asthma and COPD, so spirometry is needed to confirm and characterise the obstruction.',
+        'Do not delay analgesia while waiting for confirmatory tests in a known or strongly suspected vaso-occlusive crisis.',
     },
     {
-      pattern: 'Chronic productive cough with progressive dyspnoea',
+      pattern: 'Chronic hemolysis',
       whyItMatters:
-        'A cough productive of sputum on most days for at least 3 months over 2 consecutive years defines the chronic bronchitis phenotype.',
+        'Sickled red cells are fragile and hemolyze, causing chronic anemia, jaundice, gallstones, and reticulocytosis.',
       discriminator:
-        'Morning sputum in a smoker points to COPD; copious purulent sputum with recurrent infections and haemoptysis points to bronchiectasis.',
+        'Anemia with reticulocytosis and jaundice points toward hemolysis rather than marrow failure.',
       commonTrap:
-        'Dismissing a chronic "smoker\'s cough" as benign delays diagnosis and the chance to intervene early with cessation.',
+        'A low hemoglobin in sickle cell disease must be compared with baseline; a sudden drop suggests aplastic crisis, splenic sequestration, or acute hemolysis.',
     },
     {
-      pattern: 'Signs of hyperinflation and increased work of breathing',
+      pattern: 'HbS predominance with absent HbA',
       whyItMatters:
-        'Barrel chest, prolonged expiration, accessory muscle use, and pursed-lip breathing indicate air trapping and more advanced disease.',
+        'Hemoglobin electrophoresis confirms the diagnosis and distinguishes sickle cell disease from sickle trait.',
       discriminator:
-        'Hyperinflation and obstruction contrast with the basal crepitations, raised JVP, and oedema of heart failure.',
+        'Sickle trait usually has substantial HbA, while sickle cell disease has absent or very low HbA depending on genotype.',
       commonTrap:
-        'In a patient at risk of chronic CO₂ retention, hypoxaemia should be corrected with controlled oxygen, not reflexive high-flow oxygen.',
+        'A sickling screen alone is not enough for complete characterization; electrophoresis or HPLC is needed.',
     },
   ],
 
   keySymptoms: [
     {
-      symptom: 'Progressive exertional dyspnoea',
+      symptom: 'Severe limb or back pain',
       significance:
-        'The hallmark symptom of COPD; breathlessness that steadily worsens and limits activity reflects advancing airflow limitation and gas-exchange impairment.',
+        'Typical of vaso-occlusive crisis due to microvascular obstruction in bone and marrow.',
     },
     {
-      symptom: 'Chronic productive cough',
+      symptom: 'Recurrent painful episodes',
       significance:
-        'A persistent cough with sputum, often worse in the mornings, reflects mucus hypersecretion and chronic airway inflammation.',
+        'Suggests a chronic inherited sickling disorder rather than a single acute orthopedic or infectious event.',
     },
     {
-      symptom: 'Wheeze and chest tightness',
+      symptom: 'Yellow eyes',
       significance:
-        'Expiratory wheeze indicates airflow obstruction; tightness can fluctuate and may worsen during exacerbations.',
+        'Suggests jaundice from chronic hemolysis.',
     },
     {
-      symptom: 'Reduced exercise tolerance and fatigue',
+      symptom: 'Fever',
       significance:
-        'Declining functional capacity is common and contributes to deconditioning, weight loss, and reduced quality of life.',
-    },
-    {
-      symptom: 'Frequent winter chest infections or exacerbations',
-      significance:
-        'Recurrent acute deteriorations with increased dyspnoea, cough, or sputum purulence drive hospitalisation and accelerate decline.',
+        'May be a trigger for crisis or a sign of serious infection; children with sickle cell disease are functionally asplenic and high risk.',
     },
   ],
 
   keySigns: [
     {
-      finding: 'Barrel chest and hyperinflation',
+      finding: 'Pallor',
       significance:
-        'An increased anteroposterior chest diameter and hyper-resonance reflect air trapping and loss of elastic recoil.',
+        'Reflects chronic anemia from hemolysis.',
       discriminator:
-        'Hyperinflation supports obstructive airway disease; basal crepitations with oedema suggest heart failure instead.',
+        'Anemia with reticulocytosis supports hemolysis rather than isolated inflammatory pain.',
     },
     {
-      finding: 'Prolonged expiratory phase with wheeze',
+      finding: 'Jaundice',
       significance:
-        'A lengthened expiratory phase and polyphonic wheeze indicate expiratory airflow limitation.',
-    },
-    {
-      finding: 'Accessory muscle use and pursed-lip breathing',
-      significance:
-        'These signs reflect increased work of breathing and attempts to maintain airway patency during expiration.',
-    },
-    {
-      finding: 'Hypoxaemia, with possible central cyanosis',
-      significance:
-        'A low oxygen saturation indicates impaired gas exchange; persistent hypoxaemia raises the question of long-term oxygen therapy.',
-    },
-    {
-      finding: 'Signs of cor pulmonale in advanced disease',
-      significance:
-        'Raised JVP, peripheral oedema, and a parasternal heave can appear late from pulmonary hypertension and right heart strain.',
+        'Reflects bilirubin production from chronic red cell breakdown.',
       discriminator:
-        'These overlap with left heart failure, so interpret them alongside spirometry, imaging, and echocardiography.',
+        'Jaundice plus bone pain suggests sickle cell disease over uncomplicated arthritis.',
+    },
+    {
+      finding: 'Diffuse long-bone tenderness',
+      significance:
+        'Supports vaso-occlusive bone pain.',
+      discriminator:
+        'Absence of joint swelling or redness makes septic arthritis less likely.',
     },
   ],
 
   examPearls: [
     {
       type: 'physical',
-      title: 'Hyperinflation tells you the chest is obstructed, not congested',
+      title: 'Pain without joint inflammation points to bone vaso-occlusion',
       content:
-        'Look for an increased AP diameter, hyper-resonant percussion, reduced cricosternal distance, prolonged expiration, accessory muscle use, and pursed-lip breathing.',
+        'Severe limb pain with diffuse long-bone tenderness but no swollen red joint supports vaso-occlusive crisis rather than septic arthritis.',
       whyItMatters:
-        'These bedside signs steer you toward obstructive airway disease and away from cardiac or restrictive causes of dyspnoea before any investigation returns.',
+        'It helps localize the process to bone and marrow ischemia rather than primary joint infection.',
       discriminator:
-        'Hyperinflation supports COPD; bibasal fine crackles with raised JVP and oedema support heart failure; fine velcro crackles support interstitial lung disease.',
+        'Joint swelling, refusal to move a single joint, or marked focal warmth should trigger septic arthritis evaluation.',
       trapAvoided:
-        'Do not assume every breathless older smoker is in heart failure; confirm the physiology with spirometry.',
+        'Do not dismiss fever in sickle cell disease; infection can coexist with vaso-occlusive crisis.',
     },
     {
       type: 'lab_reasoning',
-      title: 'Post-bronchodilator spirometry is the diagnostic anchor',
+      title: 'Reticulocytosis shows marrow response to hemolysis',
       content:
-        'COPD requires a post-bronchodilator FEV1/FVC below 0.70. FEV1 percent predicted then grades airflow limitation, and reversibility testing helps separate COPD from asthma.',
+        'A low hemoglobin with reticulocytosis suggests the marrow is responding to red cell destruction.',
       whyItMatters:
-        'A fixed ratio with minimal reversibility confirms COPD; significant reversibility or variability suggests asthma or asthma–COPD overlap.',
-      managementImplication:
-        'Severity grading and exacerbation history guide inhaler choice, pulmonary rehabilitation, and decisions about oxygen and escalation.',
+        'This supports chronic hemolytic anemia and helps separate uncomplicated vaso-occlusive crisis from aplastic crisis.',
+      discriminator:
+        'A low reticulocyte count in sickle cell disease is dangerous and suggests aplastic crisis, often from parvovirus B19.',
+      trapAvoided:
+        'Do not treat all anemia in sickle cell disease the same; reticulocyte count changes the differential.',
     },
     {
       type: 'lab_reasoning',
-      title: 'Read the blood gas for chronicity, not just numbers',
+      title: 'Electrophoresis separates disease from trait',
       content:
-        'A raised CO₂ with a near-normal pH and a compensatory rise in bicarbonate indicates chronic, compensated type 2 respiratory failure rather than an acute decompensation.',
+        'Predominantly HbS with absent HbA confirms sickle cell disease rather than sickle trait.',
       whyItMatters:
-        'Chronic CO₂ retention changes oxygen targets and raises the threshold for non-invasive ventilation in acute deterioration.',
-      managementImplication:
-        'Target oxygen saturations of 88–92% in patients at risk of CO₂ retention, and consider NIV for persistent hypercapnic acidosis during exacerbations.',
+        'This determines lifelong risk, counseling, follow-up, and preventive care.',
+      discriminator:
+        'Sickle trait usually has both HbA and HbS, with HbA predominating.',
+      trapAvoided:
+        'Do not call someone sickle cell disease based only on a positive sickling screen.',
     },
     {
       type: 'MNEMONIC',
-      title: 'COPD diagnostic checklist',
+      title: 'VOC trigger checklist',
       content:
-        'C — Chronic symptoms (cough, sputum, progressive dyspnoea); O — Obstruction confirmed on post-bronchodilator spirometry (FEV1/FVC < 0.70); P — Poorly reversible airflow limitation; D — Driver of damage identified (smoking, biomass, occupational exposure, or alpha-1 antitrypsin deficiency).',
+        'SICKLE — Stress or infection; Inadequate hydration; Cold exposure; Low oxygen; Exertion; missed prevention.',
       whyItMatters:
-        'Keeps the diagnosis operational: COPD is confirmed by symptoms plus objective fixed obstruction plus a plausible exposure, not by clinical impression alone.',
+        'These triggers help identify why a vaso-occlusive crisis occurred and how to prevent recurrence.',
       discriminator:
-        'The checklist prompts you to test reversibility (asthma), consider alpha-1 antitrypsin in young or non-smoking patients, and exclude cardiac and restrictive causes.',
+        'Trigger recognition supports crisis physiology when paired with recurrent severe bone pain and hemolysis.',
       trapAvoided:
-        'Mnemonic content belongs here; scoringSystems is intentionally left empty to avoid duplicate frontend rendering.',
+        'Mnemonic content belongs here only; scoringSystems is intentionally reserved for formal tools.',
     },
   ],
 
@@ -494,250 +487,227 @@ const educationForFrontend = {
 
   investigations: [
     {
-      test: 'Post-bronchodilator spirometry',
-      interpretation:
-        'FEV1/FVC below 0.70 after bronchodilator confirms airflow obstruction; FEV1 percent predicted grades severity from mild to very severe.',
-      whyItMatters:
-        'This is the diagnostic gate for COPD and is required before committing to the diagnosis.',
-    },
-    {
-      test: 'Bronchodilator reversibility testing',
-      interpretation:
-        'Minimal reversibility supports fixed COPD obstruction; large reversibility or variability suggests asthma or an asthmatic component.',
-      whyItMatters:
-        'Distinguishing COPD from asthma changes treatment, particularly the role of inhaled corticosteroids.',
-    },
-    {
-      test: 'Arterial blood gas',
-      interpretation:
-        'Identifies hypoxaemia and type 2 respiratory failure, and distinguishes chronic compensated from acute uncompensated CO₂ retention.',
-      whyItMatters:
-        'Guides oxygen targets, the need for non-invasive ventilation, and assessment for long-term oxygen therapy.',
-    },
-    {
-      test: 'Chest radiograph',
-      interpretation:
-        'May show hyperinflation, flattened diaphragms, and bullae; importantly helps exclude malignancy, pneumonia, pneumothorax, and heart failure.',
-      whyItMatters:
-        'Excludes alternative or coexisting diagnoses, especially lung cancer in a heavy smoker.',
-    },
-    {
       test: 'Full blood count',
       interpretation:
-        'May reveal secondary polycythaemia from chronic hypoxia or anaemia contributing to dyspnoea; eosinophil count can inform inhaled corticosteroid decisions.',
+        'Typically shows chronic anemia; compare hemoglobin with the patient’s baseline.',
       whyItMatters:
-        'Supports prognostication and personalises inhaler therapy.',
+        'A sudden fall may indicate aplastic crisis, splenic sequestration, acute hemolysis, or bleeding.',
     },
     {
-      test: 'BNP and echocardiography when heart failure is suspected',
+      test: 'Reticulocyte count',
       interpretation:
-        'Helps separate or identify coexisting cardiac dysfunction and assess for pulmonary hypertension and cor pulmonale.',
+        'Usually elevated in chronic hemolysis. Low reticulocytes suggest aplastic crisis.',
       whyItMatters:
-        'Breathlessness in older smokers is often multifactorial, and cardiac disease frequently coexists.',
+        'Separates compensated hemolysis from marrow suppression.',
     },
     {
-      test: 'Alpha-1 antitrypsin level',
+      test: 'Peripheral blood film',
       interpretation:
-        'A low level suggests alpha-1 antitrypsin deficiency, particularly with early-onset or basal-predominant emphysema.',
+        'May show sickled red cells, target cells, polychromasia, and features of hemolysis.',
       whyItMatters:
-        'Indicated in young patients, non- or light-smokers, or those with a family history, as it changes counselling and surveillance.',
+        'Provides rapid morphologic support for sickle cell disease.',
     },
     {
-      test: 'Sputum culture during exacerbations',
+      test: 'Hemoglobin electrophoresis or HPLC',
       interpretation:
-        'Identifies bacterial pathogens in infective exacerbations and guides antibiotic choice in non-responders.',
+        'Shows HbS pattern and distinguishes sickle cell disease from sickle trait and other hemoglobinopathies.',
       whyItMatters:
-        'Targets therapy and flags resistant or unusual organisms.',
+        'This is the diagnostic confirmation test.',
+    },
+    {
+      test: 'Infection screen when febrile',
+      interpretation:
+        'Blood cultures, urine testing, chest assessment, malaria testing where relevant, and targeted imaging may be needed.',
+      whyItMatters:
+        'Children with sickle cell disease are at increased risk of serious bacterial infection.',
+    },
+    {
+      test: 'Chest assessment',
+      interpretation:
+        'Assess for chest pain, cough, hypoxia, infiltrates, or respiratory distress.',
+      whyItMatters:
+        'Acute chest syndrome is a major life-threatening complication and may initially resemble pneumonia.',
     },
   ],
 
   pitfalls: [
     {
-      pitfall: 'Diagnosing COPD without spirometry',
+      pitfall: 'Delaying analgesia during vaso-occlusive crisis',
       consequence:
-        'Clinical impression alone overlaps with asthma, heart failure, and other conditions, leading to mislabelling and inappropriate therapy.',
+        'Uncontrolled pain worsens distress, sympathetic stress, and care experience; analgesia should be prompt and adequate.',
     },
     {
-      pitfall: 'Skipping reversibility testing and missing asthma or overlap',
+      pitfall: 'Ignoring fever',
       consequence:
-        'Patients with a significant reversible component may be under-treated or denied appropriate inhaled corticosteroids.',
+        'Serious bacterial infection can progress rapidly because of functional asplenia.',
     },
     {
-      pitfall: 'Giving uncontrolled high-flow oxygen in a CO₂ retainer',
+      pitfall: 'Missing acute chest syndrome',
       consequence:
-        'In patients at risk of chronic hypercapnia, excessive oxygen can worsen CO₂ retention and precipitate respiratory acidosis and narcosis; target 88–92%.',
+        'Respiratory symptoms or hypoxia during crisis can deteriorate quickly and require urgent escalation.',
     },
     {
-      pitfall: 'Attributing all symptoms to COPD and missing lung cancer',
+      pitfall: 'Assuming all anemia is baseline',
       consequence:
-        'New or changing symptoms, haemoptysis, or weight loss in a heavy smoker require imaging to exclude malignancy.',
+        'Aplastic crisis, splenic sequestration, or acute hemolysis may be missed.',
     },
     {
-      pitfall: 'Relying on antibiotics and steroids while ignoring smoking cessation',
+      pitfall: 'Overhydrating aggressively',
       consequence:
-        'Without cessation, disease progression continues; smoking cessation is the only intervention proven to slow FEV1 decline meaningfully.',
-    },
-    {
-      pitfall: 'Not assessing for long-term oxygen therapy or cor pulmonale',
-      consequence:
-        'Chronically hypoxaemic patients who would benefit from LTOT may be missed, and right heart strain can go unrecognised.',
+        'Excess fluids may worsen pulmonary complications; hydration should be careful and clinically guided.',
     },
   ],
 
   managementOverview: [
     {
-      step: 'Smoking cessation and exposure reduction',
+      step: 'Assess severity and complications',
       rationale:
-        'Stopping smoking is the single most effective intervention to slow disease progression and improve survival; offer behavioural support and pharmacotherapy.',
+        'Check pain severity, oxygen saturation, fever, respiratory symptoms, hydration status, neurological symptoms, and baseline hemoglobin if known.',
     },
     {
-      step: 'Stepwise inhaled therapy',
+      step: 'Give prompt analgesia',
       rationale:
-        'Short-acting bronchodilators for relief, then long-acting bronchodilators (LAMA/LABA); add inhaled corticosteroids for eosinophilic or frequently exacerbating, asthmatic-feature phenotypes.',
+        'Vaso-occlusive crisis is painful and should be treated early with appropriate stepwise analgesia, including opioids when indicated.',
     },
     {
-      step: 'Pulmonary rehabilitation',
+      step: 'Maintain careful hydration',
       rationale:
-        'Structured exercise and education improve exercise capacity, dyspnoea, and quality of life, and reduce hospitalisations.',
+        'Dehydration promotes sickling, but excessive fluids can worsen respiratory complications.',
     },
     {
-      step: 'Vaccination and preventive care',
+      step: 'Treat infection risk',
       rationale:
-        'Influenza, pneumococcal, and COVID vaccinations reduce infective exacerbations and complications.',
+        'Fever in sickle cell disease needs urgent assessment and empiric antibiotics depending on severity and local protocols.',
     },
     {
-      step: 'Manage exacerbations promptly',
+      step: 'Give oxygen only if hypoxic',
       rationale:
-        'Use controlled oxygen targeting 88–92%, nebulised bronchodilators, oral corticosteroids, antibiotics for infective exacerbations, and non-invasive ventilation for persistent hypercapnic acidosis.',
+        'Hypoxia worsens sickling; oxygen is indicated when saturation is low or acute chest syndrome is suspected.',
     },
     {
-      step: 'Assess for long-term oxygen therapy',
+      step: 'Consider transfusion for severe complications',
       rationale:
-        'In chronically hypoxaemic, stable, non-smoking patients meeting blood-gas criteria, LTOT improves survival; assess and treat cor pulmonale and comorbidities.',
+        'Simple or exchange transfusion may be needed for severe acute chest syndrome, stroke, severe anemia, or selected high-risk complications.',
     },
     {
-      step: 'Escalate and consider advanced options in selected patients',
+      step: 'Long-term prevention',
       rationale:
-        'Severe, refractory, or rapidly declining disease warrants specialist input and consideration of lung volume reduction or transplantation in suitable candidates.',
+        'Hydroxyurea, vaccination, penicillin prophylaxis in children, folate support where indicated, malaria prevention where relevant, and specialist follow-up reduce morbidity.',
     },
   ],
 
   differentialDistinguishers: [
     {
-      diagnosis: 'Asthma',
+      diagnosis: 'Acute osteomyelitis',
       whyConfused:
-        'Both cause expiratory wheeze and airflow obstruction, and asthma–COPD overlap is common in older smokers.',
+        'Both can cause fever and bone pain, and osteomyelitis is more common in sickle cell disease.',
       distinguishingPoint:
-        'Asthma usually has earlier onset, atopy, symptom variability, and significant bronchodilator reversibility.',
+        'Osteomyelitis is more focal and infective; vaso-occlusive crisis is often recurrent, multifocal, and triggered by dehydration or infection.',
       keySeparator:
-        'Minimal post-bronchodilator reversibility with a heavy smoking history supports COPD over asthma.',
+        'Recurrent crises plus HbS-confirmed disease support vaso-occlusion.',
       classicTrap:
-        'Treating fixed COPD obstruction as asthma can lead to inappropriate reliance on inhaled corticosteroids and missed cessation opportunities.',
+        'Do not assume it is only crisis if fever, focal tenderness, or persistent inflammatory markers suggest osteomyelitis.',
     },
     {
-      diagnosis: 'Congestive heart failure',
+      diagnosis: 'Septic arthritis',
       whyConfused:
-        'Heart failure causes progressive dyspnoea and can produce a "cardiac asthma" wheeze.',
+        'Fever and limb pain can mimic joint infection.',
       distinguishingPoint:
-        'Heart failure features orthopnoea, paroxysmal nocturnal dyspnoea, raised JVP, oedema, and basal crepitations, with a restrictive or normal spirometry pattern.',
+        'Septic arthritis usually causes a hot swollen joint with severe pain on movement.',
       keySeparator:
-        'Obstructive spirometry and hyperinflation point to airway disease, even though the two frequently coexist.',
+        'Diffuse bone tenderness without joint swelling supports vaso-occlusive pain.',
       classicTrap:
-        'Do not interpret breathlessness and wheeze alone as heart failure; confirm with spirometry, imaging, and natriuretic peptides.',
+        'Missing septic arthritis can destroy a joint, so focal joint findings need urgent workup.',
     },
     {
-      diagnosis: 'Bronchiectasis',
+      diagnosis: 'Acute leukemia',
       whyConfused:
-        'Both produce chronic productive cough and can show obstructive spirometry.',
+        'Bone pain, pallor, and anemia occur in leukemia.',
       distinguishingPoint:
-        'Bronchiectasis typically has copious purulent sputum, recurrent infections, haemoptysis, and coarse crackles, with characteristic HRCT changes.',
+        'Leukemia often shows marrow failure, bruising, infections, lymphadenopathy, hepatosplenomegaly, or blasts.',
       keySeparator:
-        'Smoking-driven fixed obstruction without large-volume purulent sputum or recurrent infection favours COPD.',
+        'Reticulocytosis, sickled cells, and HbS predominance point to sickle cell disease.',
       classicTrap:
-        'Missing coexisting bronchiectasis in a frequent exacerbator can lead to under-treatment of suppurative disease.',
+        'Do not ignore atypical blood film features or pancytopenia.',
     },
     {
-      diagnosis: 'Lung cancer',
+      diagnosis: 'Juvenile idiopathic arthritis',
       whyConfused:
-        'Heavy smokers with chronic cough are at high risk, and symptoms overlap.',
+        'A child with limb pain may be mislabelled as inflammatory joint disease.',
       distinguishingPoint:
-        'Suspect malignancy with new or changing symptoms, haemoptysis, weight loss, or a focal abnormality on imaging.',
+        'JIA causes chronic joint swelling, stiffness, and restricted movement.',
       keySeparator:
-        'Diffuse airflow obstruction explains COPD symptoms, but malignancy must still be actively excluded with imaging.',
-      classicTrap:
-        'Attributing red-flag symptoms to COPD and delaying a chest X-ray or CT.',
+        'Acute severe bone pain with hemolysis and HbS pattern supports sickle cell crisis.',
     },
     {
-      diagnosis: 'Interstitial lung disease',
+      diagnosis: 'Generic hemolytic anemia',
       whyConfused:
-        'ILD also causes progressive exertional dyspnoea and reduced exercise tolerance.',
+        'Jaundice, anemia, and reticulocytosis indicate hemolysis.',
       distinguishingPoint:
-        'ILD shows a restrictive pattern with preserved or raised FEV1/FVC and fine end-inspiratory crackles.',
+        'Sickle cell disease adds vaso-occlusive pain and HbS predominance.',
       keySeparator:
-        'An obstructive ratio of 0.58 with wheeze and hyperinflation is the opposite of restrictive ILD physiology.',
-      classicTrap:
-        'Overlooking a mixed obstructive–restrictive picture in patients with combined emphysema and fibrosis.',
+        'Electrophoresis confirms the specific hemoglobinopathy.',
     },
   ],
 
   complications: [
     {
-      complication: 'Acute exacerbations',
+      complication: 'Acute chest syndrome',
       whyItMatters:
-        'Exacerbations, often infective, drive hospitalisation, accelerate lung function decline, and increase mortality.',
+        'A major cause of morbidity and mortality; suspect with chest pain, cough, fever, hypoxia, or new infiltrate.',
     },
     {
-      complication: 'Type 2 respiratory failure and CO₂ narcosis',
+      complication: 'Stroke',
       whyItMatters:
-        'Worsening hypercapnia can cause confusion, drowsiness, and acidosis requiring non-invasive ventilation; uncontrolled oxygen can precipitate it.',
+        'Children with sickle cell disease are at increased risk of ischemic stroke and need urgent evaluation of neurological symptoms.',
     },
     {
-      complication: 'Cor pulmonale and pulmonary hypertension',
+      complication: 'Splenic sequestration',
       whyItMatters:
-        'Chronic hypoxia and lung destruction raise pulmonary pressures, leading to right heart strain, oedema, and reduced survival.',
+        'Can cause sudden severe anemia and shock, especially in young children.',
     },
     {
-      complication: 'Secondary polycythaemia',
+      complication: 'Aplastic crisis',
       whyItMatters:
-        'Chronic hypoxaemia drives erythropoiesis, increasing blood viscosity and thrombotic risk.',
+        'Often triggered by parvovirus B19 and presents with sudden anemia and low reticulocyte count.',
     },
     {
-      complication: 'Pneumothorax from bullae rupture',
+      complication: 'Severe infection',
       whyItMatters:
-        'Rupture of emphysematous bullae can cause sudden deterioration and requires prompt recognition and drainage.',
+        'Functional asplenia increases risk of encapsulated bacterial infection.',
     },
     {
-      complication: 'Increased risk of lung cancer and systemic effects',
+      complication: 'Chronic organ damage',
       whyItMatters:
-        'Shared smoking exposure raises malignancy risk, and systemic effects include weight loss, cachexia, osteoporosis, and depression.',
+        'Repeated vaso-occlusion can damage kidneys, lungs, brain, bones, and eyes over time.',
     },
   ],
 
   recallPrompts: [
     {
-      prompt: 'What spirometry result defines COPD?',
+      prompt: 'What confirms sickle cell disease rather than sickle trait?',
       answer:
-        'A post-bronchodilator FEV1/FVC ratio below 0.70 with limited reversibility, confirming fixed airflow obstruction.',
+        'Hemoglobin electrophoresis or HPLC showing predominantly HbS with absent or very low HbA supports sickle cell disease rather than trait.',
     },
     {
-      prompt: 'What is the single most effective intervention to slow disease progression?',
+      prompt: 'What causes pain in vaso-occlusive crisis?',
       answer:
-        'Smoking cessation, which is the only measure shown to meaningfully slow the rate of FEV1 decline and improve survival.',
+        'Sickled red cells obstruct small blood vessels, causing tissue ischemia and inflammatory pain, especially in bone and marrow.',
     },
     {
-      prompt: 'Why target oxygen saturations of 88–92% in patients at risk of CO₂ retention?',
+      prompt: 'Why is reticulocytosis expected in sickle cell disease?',
       answer:
-        'Excessive oxygen can worsen CO₂ retention and precipitate respiratory acidosis and narcosis, so controlled oxygen is used.',
+        'Chronic hemolysis stimulates the marrow to increase red cell production, raising the reticulocyte count.',
     },
     {
-      prompt: 'When should alpha-1 antitrypsin deficiency be considered?',
+      prompt: 'What complications must be screened for during a painful crisis?',
       answer:
-        'In young or non- or light-smoking patients, those with basal-predominant emphysema, or a positive family history.',
+        'Acute chest syndrome, infection, severe anemia, splenic sequestration, stroke symptoms, and dehydration should be assessed.',
     },
     {
-      prompt: 'What blood-gas picture suggests chronic rather than acute type 2 respiratory failure?',
+      prompt: 'Name common triggers for vaso-occlusive crisis.',
       answer:
-        'A raised CO₂ with a near-normal pH and a compensatory rise in bicarbonate, indicating chronic compensated hypercapnia.',
+        'Dehydration, infection, cold exposure, hypoxia, physical stress, and sometimes missed preventive care can trigger crises.',
     },
   ],
 
@@ -747,19 +717,22 @@ const educationForFrontend = {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const canonicalName = 'copd';
-  const displayLabel = 'COPD';
+  const canonicalName = 'sickle cell disease';
+  const displayLabel = 'Sickle Cell Disease';
+
   const normalizedTerms = [
     canonicalName,
     displayLabel,
-    'chronic obstructive pulmonary disease',
-    'chronic obstructive airways disease',
-    'chronic obstructive lung disease',
+    'sickle cell anaemia',
+    'sickle cell anemia',
+    'sickle cell disease vaso occlusive crisis',
+    'vaso occlusive crisis',
+    'sickle cell crisis',
+    'hbss disease',
   ].map(normalizeClinicalText);
 
-  const registry = await prisma.diagnosisRegistry.findFirst({
+  let registry = await prisma.diagnosisRegistry.findFirst({
     where: {
-      active: true,
       OR: [
         { canonicalNormalized: { in: normalizedTerms } },
         {
@@ -777,13 +750,51 @@ async function main() {
       canonicalName: true,
       canonicalNormalized: true,
       displayLabel: true,
+      active: true,
     },
   });
 
   if (!registry) {
-    throw new Error(
-      `Cannot seed ${displayLabel}: active DiagnosisRegistry entry not found for any of ${normalizedTerms.join(', ')}. Create/review the registry separately before running this seed.`,
-    );
+    registry = await prisma.diagnosisRegistry.create({
+      data: {
+        canonicalName,
+        canonicalNormalized: normalizeClinicalText(canonicalName),
+        displayLabel,
+        active: true,
+        status: 'ACTIVE',
+        isDescriptive: false,
+        isCompositional: false,
+        searchPriority: 0,
+        category: 'Hematology',
+        specialty: 'Hematology',
+        subspecialty: 'Hemoglobinopathy',
+        bodySystem: 'Hematologic',
+        organSystem: 'Blood',
+        difficultyBand: 'BASIC',
+        rarityBand: 'COMMON',
+        clinicalSetting: 'EMERGENCY',
+        ageGroup: 'PEDIATRIC',
+        urgencyLevel: 'URGENT',
+        isPlayable: true,
+        isGeneratable: true,
+        preferredClueTypes: ['history', 'vital', 'exam', 'lab', 'investigation'],
+        onboardingStatus: 'READY_FOR_REVIEW',
+        activationReviewedAt: now,
+        notes:
+          'Seeded from flagship Sickle Cell Disease vaso-occlusive crisis case. Registry was created because no existing active diagnosis was found.',
+      },
+      select: {
+        id: true,
+        canonicalName: true,
+        canonicalNormalized: true,
+        displayLabel: true,
+        active: true,
+      },
+    });
+
+    console.log('Created DiagnosisRegistry entry for Sickle Cell Disease', {
+      registryId: registry.id,
+    });
   }
 
   const education = await prisma.diagnosisEducation.upsert({
@@ -852,6 +863,7 @@ async function main() {
 
   const history =
     clues.find((clue) => clue.type === 'history')?.value ?? displayLabel;
+
   const symptoms = clues
     .filter((clue) => clue.type === 'symptom')
     .map((clue) => clue.value);
@@ -871,8 +883,13 @@ async function main() {
     },
   });
 
-  const reusableCase = existingCases.find((caseRecord) => caseRecord.dailyCases.length === 0);
-  const scheduledDuplicate = existingCases.find((caseRecord) => caseRecord.dailyCases.length > 0);
+  const reusableCase = existingCases.find(
+    (caseRecord) => caseRecord.dailyCases.length === 0,
+  );
+
+  const scheduledDuplicate = existingCases.find(
+    (caseRecord) => caseRecord.dailyCases.length > 0,
+  );
 
   if (!reusableCase && scheduledDuplicate) {
     throw new Error(
@@ -882,12 +899,6 @@ async function main() {
 
   const publicNumber =
     reusableCase?.publicNumber ?? (await getNextCasePublicNumber());
-
-  console.log('Assigned public case number', {
-    displayLabel,
-    publicNumber,
-    reusedExistingCase: Boolean(reusableCase),
-  });
 
   const assignedInventoryPlaceholderDate =
     await findAvailableInventoryPlaceholderDate({
@@ -915,7 +926,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Seeded frontend-aligned flagship COPD inventory case using existing registry lookup only. DailyCase scheduler should assign the actual daily slot.',
+      'Seeded flagship Sickle Cell Disease vaso-occlusive crisis inventory case. Registry was looked up first and created only if missing.',
   };
 
   const seededCase = reusableCase
@@ -924,7 +935,10 @@ async function main() {
         data: caseData,
         select: { id: true },
       })
-    : await prisma.case.create({ data: caseData, select: { id: true } });
+    : await prisma.case.create({
+        data: caseData,
+        select: { id: true },
+      });
 
   const revisionData = {
     source: 'MANUAL' as const,
@@ -944,7 +958,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Frontend-aligned flagship COPD inventory revision using registry lookup and duplicate-safe case reuse.',
+      'Frontend-aligned flagship Sickle Cell Disease inventory revision using registry lookup/create-if-missing and duplicate-safe case reuse.',
   };
 
   const revision = reusableCase?.currentRevisionId
@@ -982,19 +996,20 @@ async function main() {
       source: 'MANUAL',
       publishTrack: 'DAILY',
       outcome: 'PASSED',
-      validatorVersion: 'flagship-human-review:copd-v1',
+      validatorVersion: 'flagship-human-review:sickle-cell-disease-v1',
       summary: {
         contentTier: 'FLAGSHIP',
         seedVersion,
         humanReviewed: true,
-        note: 'Manual frontend-aligned COPD inventory case seeded with registry lookup only, supported clue types (history, symptom, hx, exam, vital, lab), mnemonic in examPearls, and duplicate-safe case reuse.',
+        note:
+          'Manual frontend-aligned Sickle Cell Disease vaso-occlusive crisis inventory case seeded with registry lookup/create-if-missing, supported clue types, mnemonic in examPearls, and duplicate-safe case reuse.',
       },
       findings: [],
       completedAt: now,
     },
   });
 
-  console.log('Seeded frontend-aligned COPD:', {
+  console.log('Seeded frontend-aligned Sickle Cell Disease:', {
     registryId: registry.id,
     registryDisplayLabel: registry.displayLabel,
     caseId: seededCase.id,

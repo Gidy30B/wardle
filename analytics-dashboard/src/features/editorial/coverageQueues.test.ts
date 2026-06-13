@@ -3,7 +3,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { EditorialCoverageOverview } from '../../api/admin';
-import { buildEditorialQueues, diagnosisQueueIds } from './coverageQueues.ts';
+import {
+  buildEditorialQueues,
+  diagnosisQueueIds,
+  sortDiagnosesByEditorialPriority,
+} from './coverageQueues.ts';
 
 type WeakDiagnosis = EditorialCoverageOverview['weakDiagnoses'][number];
 
@@ -269,6 +273,7 @@ describe('editorial coverage queues', () => {
         id: 'high_publication_risk',
         label: 'High publication risk',
         tone: 'danger',
+        description: 'Publication blockers or readiness failures.',
         count: 1,
       },
     ]);
@@ -294,6 +299,46 @@ describe('editorial coverage queues', () => {
         ['needs_review', 1],
         ['high_publication_risk', 1],
       ],
+    );
+  });
+
+  it('sorts diagnoses by backend editorial priority when available', () => {
+    const low = makeDiagnosis({
+      diagnosisRegistryId: 'low',
+      diagnosisName: 'Low priority',
+      editorialTriage: {
+        editorialPriority: { score: 20, tier: 'low', reasons: [] },
+        publicationRisk: { score: 20, tier: 'low' },
+        learnerRisk: { score: 20, tier: 'low' },
+        reasoningRisk: { score: 20, tier: 'low' },
+        highestImpactFixes: [],
+        workflowQueues: [],
+        queues: [],
+      },
+    });
+    const high = makeDiagnosis({
+      diagnosisRegistryId: 'high',
+      diagnosisName: 'High priority',
+      editorialTriage: {
+        editorialPriority: { score: 90, tier: 'critical', reasons: [] },
+        publicationRisk: { score: 90, tier: 'critical' },
+        learnerRisk: { score: 60, tier: 'medium' },
+        reasoningRisk: { score: 70, tier: 'high' },
+        highestImpactFixes: [],
+        workflowQueues: [],
+        queues: [],
+      },
+    });
+    const unscored = makeDiagnosis({
+      diagnosisRegistryId: 'unscored',
+      diagnosisName: 'Unscored',
+    });
+
+    assert.deepEqual(
+      sortDiagnosesByEditorialPriority([low, unscored, high]).map(
+        (diagnosis) => diagnosis.diagnosisRegistryId,
+      ),
+      ['high', 'low', 'unscored'],
     );
   });
 });

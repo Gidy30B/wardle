@@ -10,7 +10,7 @@ import type {
   WorkspaceReadinessItem,
 } from '../../../api/admin';
 import type { StatusBadgeTone } from '../../../components/ui/statusBadgeMeta';
-import type { CopilotSuggestion } from './workspaceTypes';
+import type { CopilotSuggestion, WorkspaceTab } from './workspaceTypes';
 
 export function toTeachingRulesResponse(
   workspace: DiagnosisEditorialWorkspace | null,
@@ -237,6 +237,7 @@ function uniqueText(values: string[]) {
 
 export function buildCopilotSuggestions(
   workspace: DiagnosisEditorialWorkspace,
+  activeTab?: WorkspaceTab,
 ): CopilotSuggestion[] {
   const suggestions: CopilotSuggestion[] = [];
 
@@ -548,7 +549,8 @@ export function buildCopilotSuggestions(
   });
 
   return suggestions.sort(
-    (left, right) => suggestionRank(left) - suggestionRank(right),
+    (left, right) =>
+      suggestionRank(left, activeTab) - suggestionRank(right, activeTab),
   );
 }
 
@@ -561,11 +563,12 @@ export function coverageGapSource(gap: WorkspaceCoverageGap) {
   return missing.length ? missing.join(' + ') : 'coverage';
 }
 
-function suggestionRank(suggestion: CopilotSuggestion) {
-  if (suggestion.tone === 'danger') return 0;
-  if (suggestion.tone === 'warning') return 1;
-  if (suggestion.tone === 'info') return 2;
-  return 3;
+function suggestionRank(suggestion: CopilotSuggestion, activeTab?: WorkspaceTab) {
+  const tabBias = activeTab && suggestion.targetTab === activeTab ? -0.35 : 0;
+  if (suggestion.tone === 'danger') return 0 + tabBias;
+  if (suggestion.tone === 'warning') return 1 + tabBias;
+  if (suggestion.tone === 'info') return 2 + tabBias;
+  return 3 + tabBias;
 }
 
 export function scoreTone(score: number | null | undefined): StatusBadgeTone {

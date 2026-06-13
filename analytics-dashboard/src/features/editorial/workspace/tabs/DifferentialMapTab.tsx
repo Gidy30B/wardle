@@ -29,11 +29,15 @@ import type { StatusBadgeTone } from '../../../../components/ui/statusBadgeMeta'
 import type { ConsoleAccessState } from '../../../../hooks/useConsoleAccess';
 import { CoverageMatrixCard } from '../CoveragePanels';
 import {
+  CollapsibleDetail,
+  CompactMetricGrid,
   CompactPanel,
   DraftAIActionsPanel,
   ExplainabilityMetric,
+  InlineReviewBar,
   MetricGrid,
   RelationshipActionButton,
+  StatusStrip,
   TabNextStepCard,
 } from '../EditorialPrimitives';
 import {
@@ -96,17 +100,37 @@ export function DifferentialMapTab({
         />
       ) : null}
       <CompactPanel title="Graph readiness">
-        <MetricGrid
+        <StatusStrip
           items={[
-            { label: 'Status', value: formatLabel(workspace.graph.readiness) },
-            { label: 'Facts', value: workspace.graph.factCount },
-            { label: 'Candidates', value: workspace.graph.candidateCount },
-            { label: 'Reviewable', value: workspace.graph.reviewableCandidateCount },
+            {
+              label: 'Status',
+              value: formatLabel(workspace.graph.readiness),
+              detail: 'Graph maturity',
+              tone: workspace.graph.readiness === 'ready' ? 'success' : 'warning',
+            },
+            {
+              label: 'Facts',
+              value: workspace.graph.factCount,
+              detail: 'Reviewed graph facts',
+              tone: workspace.graph.factCount ? 'success' : 'warning',
+            },
+            {
+              label: 'Candidates',
+              value: workspace.graph.candidateCount,
+              detail: 'Generated graph objects',
+              tone: workspace.graph.candidateCount ? 'info' : 'neutral',
+            },
+            {
+              label: 'Reviewable',
+              value: workspace.graph.reviewableCandidateCount,
+              detail: 'Awaiting editorial action',
+              tone: workspace.graph.reviewableCandidateCount ? 'warning' : 'success',
+            },
           ]}
         />
         <Link
           to="/diagnosis-graph/candidates"
-          className="mt-3 inline-flex text-sm font-semibold text-slate-900 underline"
+          className="mt-3 inline-flex text-sm font-semibold text-[var(--color-teal)] underline"
         >
           Open graph candidate queue
         </Link>
@@ -136,48 +160,75 @@ export function DifferentialMapTab({
         }
         onGenerateTargetedCase={onGenerateTargetedCase}
       />
-      <TeachingRelationshipPanel
-        diagnosisRegistryId={workspace.diagnosis.id}
-        relationships={workspace.graph.teachingRelationships ?? []}
-        access={access}
-        client={client}
-        onRefresh={onRefresh}
-        showError={showError}
-        showPending={showPending}
-        showSuccess={showSuccess}
-      />
-      <ReasoningPathsPanel
-        diagnosisRegistryId={workspace.diagnosis.id}
-        paths={workspace.reasoningPaths ?? []}
-        access={access}
-        client={client}
-        onRefresh={onRefresh}
-        onGenerateTargetedCase={onGenerateTargetedCase}
-        showError={showError}
-        showPending={showPending}
-        showSuccess={showSuccess}
-      />
-      <EvidenceGraphPanel
-        diagnosisRegistryId={workspace.diagnosis.id}
-        relationships={workspace.evidenceGraph?.relationships ?? []}
-        summary={workspace.evidenceGraph?.summary}
-        access={access}
-        client={client}
-        onRefresh={onRefresh}
-        showError={showError}
-        showPending={showPending}
-        showSuccess={showSuccess}
-      />
-      <EvidenceCoveragePanel coverage={workspace.evidenceCoverage} />
-      <CoverageMatrixCard
-        rows={workspace.coverageMatrix.filter(
-          (row) => row.graphCoverage !== 'covered',
-        )}
-        selectedRow={selectedRow}
-        onRowSelect={onRowSelect}
-      />
+      <CollapsibleDetail
+        title="Teaching relationship details"
+        summary={`${workspace.graph.teachingRelationships?.length ?? 0} relationship${(workspace.graph.teachingRelationships?.length ?? 0) === 1 ? '' : 's'}`}
+      >
+        <TeachingRelationshipPanel
+          diagnosisRegistryId={workspace.diagnosis.id}
+          relationships={workspace.graph.teachingRelationships ?? []}
+          access={access}
+          client={client}
+          onRefresh={onRefresh}
+          showError={showError}
+          showPending={showPending}
+          showSuccess={showSuccess}
+        />
+      </CollapsibleDetail>
+      <CollapsibleDetail
+        title="Reasoning paths"
+        summary={`${workspace.reasoningPaths?.length ?? 0} draft or active path${(workspace.reasoningPaths?.length ?? 0) === 1 ? '' : 's'}`}
+      >
+        <ReasoningPathsPanel
+          diagnosisRegistryId={workspace.diagnosis.id}
+          paths={workspace.reasoningPaths ?? []}
+          access={access}
+          client={client}
+          onRefresh={onRefresh}
+          onGenerateTargetedCase={onGenerateTargetedCase}
+          showError={showError}
+          showPending={showPending}
+          showSuccess={showSuccess}
+        />
+      </CollapsibleDetail>
+      <CollapsibleDetail
+        title="Evidence supporting this distinction"
+        summary={`${workspace.evidenceGraph?.relationships?.length ?? 0} evidence relationship${(workspace.evidenceGraph?.relationships?.length ?? 0) === 1 ? '' : 's'}`}
+      >
+        <EvidenceGraphPanel
+          diagnosisRegistryId={workspace.diagnosis.id}
+          relationships={workspace.evidenceGraph?.relationships ?? []}
+          summary={workspace.evidenceGraph?.summary}
+          access={access}
+          client={client}
+          onRefresh={onRefresh}
+          showError={showError}
+          showPending={showPending}
+          showSuccess={showSuccess}
+        />
+      </CollapsibleDetail>
+      <CollapsibleDetail title="Evidence coverage details" summary="Scores, readiness, gaps, and draft trust signals">
+        <EvidenceCoveragePanel coverage={workspace.evidenceCoverage} />
+      </CollapsibleDetail>
+      <CollapsibleDetail
+        title="Coverage matrix"
+        summary={`${workspace.coverageMatrix.filter((row) => row.graphCoverage !== 'covered').length} uncovered or partial rows`}
+      >
+        <CoverageMatrixCard
+          rows={workspace.coverageMatrix.filter(
+            (row) => row.graphCoverage !== 'covered',
+          )}
+          selectedRow={selectedRow}
+          onRowSelect={onRowSelect}
+        />
+      </CollapsibleDetail>
       <LinkedDifferentialsList links={workspace.linkedDifferentials ?? []} />
-      <GraphCandidateList candidates={workspace.graph.candidates} />
+      <CollapsibleDetail
+        title="Unreviewed graph candidates"
+        summary={`${workspace.graph.candidates.length} candidate${workspace.graph.candidates.length === 1 ? '' : 's'}`}
+      >
+        <GraphCandidateList candidates={workspace.graph.candidates} />
+      </CollapsibleDetail>
     </div>
   );
 }
@@ -260,14 +311,33 @@ function DifferentialMapExplainabilityCard({
     tone: StatusBadgeTone;
     detail: string;
   }>;
+  const mimicGroups = buildMimicReasoningGroups(workspace, activeRelationships);
+  const reasoningSummary = buildReasoningSummary(
+    workspace,
+    mimicGroups.flatMap((group) => group.items),
+    discriminatorRelationships,
+  );
 
   return (
     <CompactPanel
       title="Differential map"
-      subtitle="Lightweight relationship view for mimic, discriminator, escalation, and case support."
+      subtitle="Clinical reasoning view for mimics, discriminators, support state, and next editorial action."
     >
-      <RelationshipStrip nodes={relationshipNodes} />
-      <SignalLegend />
+      <RelationshipSummaryStrip summary={reasoningSummary} />
+      <MimicReasoningGroups
+        groups={mimicGroups}
+        pendingAction={pendingAction}
+        onSuggestTeachingDistinction={onSuggestTeachingDistinction}
+        onStrengthenDifferential={onStrengthenDifferential}
+        onGenerateTargetedCase={onGenerateTargetedCase}
+      />
+      <CollapsibleDetail
+        title="Support legend"
+        summary="Explicit, inferred, and missing support tokens"
+      >
+        <SignalLegend />
+        <RelationshipStrip nodes={relationshipNodes} />
+      </CollapsibleDetail>
       <div className="grid gap-3 lg:grid-cols-2">
         <ExplainabilityMetric
           label="Discriminator coverage"
@@ -371,6 +441,570 @@ function DifferentialMapExplainabilityCard({
       />
     </CompactPanel>
   );
+}
+
+type MimicGroupId =
+  | 'primary'
+  | 'common'
+  | 'must_not_miss'
+  | 'escalation'
+  | 'related'
+  | 'other';
+
+type SupportState = 'explicit' | 'inferred' | 'missing';
+
+type MimicReasoningItem = {
+  id: string;
+  label: string;
+  targetDiagnosisId: string | null;
+  relationshipType: string;
+  learnerRisk: string | null;
+  discriminators: string[];
+  evidenceSupport: SupportState;
+  teachingSupport: SupportState;
+  caseSupport: SupportState;
+  escalationSupport: SupportState;
+  caseNeeded: boolean;
+  relationship?: DiagnosisTeachingRelationship;
+  link?: StructuredDifferentialLink;
+};
+
+type MimicReasoningGroup = {
+  id: MimicGroupId;
+  label: string;
+  detail: string;
+  items: MimicReasoningItem[];
+};
+
+function RelationshipSummaryStrip({
+  summary,
+}: {
+  summary: Array<{
+    label: string;
+    value: number;
+    detail: string;
+    tone: StatusBadgeTone;
+  }>;
+}) {
+  return (
+    <div className="mb-4 grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+      {summary.map((item) => (
+        <div
+          key={item.label}
+          className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-2"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+              {item.label}
+            </p>
+            <StatusBadge status={String(item.value)} tone={item.tone} />
+          </div>
+          <p className="mt-2 text-xs leading-5 text-slate-500">{item.detail}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MimicReasoningGroups({
+  groups,
+  pendingAction,
+  onSuggestTeachingDistinction,
+  onStrengthenDifferential,
+  onGenerateTargetedCase,
+}: {
+  groups: MimicReasoningGroup[];
+  pendingAction: string | null;
+  onSuggestTeachingDistinction: () => void;
+  onStrengthenDifferential: () => void;
+  onGenerateTargetedCase: (payload: GenerateTargetedCasePayload) => void;
+}) {
+  if (!groups.some((group) => group.items.length)) {
+    return (
+      <div className="mb-4 rounded-lg border border-dashed border-[var(--color-navy-border)] bg-white/4 p-4">
+        <p className="text-sm font-semibold text-slate-100">
+          No mimic relationships yet
+        </p>
+        <p className="mt-1 text-sm leading-6 text-slate-400">
+          Generate or review teaching relationships so the map can show learner
+          confusion, discriminators, and support state by mimic.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4 space-y-3">
+      {groups
+        .filter((group) => group.items.length)
+        .map((group) => (
+          <section
+            key={group.id}
+            className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3"
+          >
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-slate-100">
+                  {group.label}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  {group.detail}
+                </p>
+              </div>
+              <StatusBadge
+                status={`${group.items.length} mimic${
+                  group.items.length === 1 ? '' : 's'
+                }`}
+                tone={groupTone(group.id)}
+              />
+            </div>
+            <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+              {group.items.map((item) => (
+                <MimicReasoningCard
+                  key={item.id}
+                  item={item}
+                  pendingAction={pendingAction}
+                  onSuggestTeachingDistinction={onSuggestTeachingDistinction}
+                  onStrengthenDifferential={onStrengthenDifferential}
+                  onGenerateTargetedCase={onGenerateTargetedCase}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+    </div>
+  );
+}
+
+function MimicReasoningCard({
+  item,
+  pendingAction,
+  onSuggestTeachingDistinction,
+  onStrengthenDifferential,
+  onGenerateTargetedCase,
+}: {
+  item: MimicReasoningItem;
+  pendingAction: string | null;
+  onSuggestTeachingDistinction: () => void;
+  onStrengthenDifferential: () => void;
+  onGenerateTargetedCase: (payload: GenerateTargetedCasePayload) => void;
+}) {
+  const primaryAction = mimicPrimaryAction(item);
+
+  return (
+    <article className="rounded-lg border border-[var(--color-navy-border)] bg-[var(--color-navy-mid)]/60 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-100">{item.label}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {formatLabel(item.relationshipType)}
+          </p>
+        </div>
+        {item.caseNeeded ? (
+          <StatusBadge status="Case needed" tone="warning" />
+        ) : (
+          <StatusBadge status="Case support" tone={supportTone(item.caseSupport)} />
+        )}
+      </div>
+
+      {item.learnerRisk ? (
+        <p className="mt-2 text-xs leading-5 text-slate-400">
+          {item.learnerRisk}
+        </p>
+      ) : null}
+
+      <div className="mt-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+          Top discriminator
+        </p>
+        <p className="mt-1 text-sm leading-6 text-slate-200">
+          {item.discriminators[0] ?? 'No discriminator summary attached yet.'}
+        </p>
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <SupportPill label="Evidence" state={item.evidenceSupport} />
+        <SupportPill label="Teaching" state={item.teachingSupport} />
+        <SupportPill label="Case" state={item.caseSupport} />
+        <SupportPill label="Escalation" state={item.escalationSupport} />
+      </div>
+
+      <InlineReviewBar
+        note={
+          item.caseNeeded
+            ? 'Case support is missing for this mimic.'
+            : 'Review support before changing graph state.'
+        }
+      >
+        <button
+          type="button"
+          disabled={
+            pendingAction !== null ||
+            (primaryAction.kind === 'generate-case' && !item.targetDiagnosisId)
+          }
+          onClick={() => {
+            if (primaryAction.kind === 'generate-case' && item.targetDiagnosisId) {
+              onGenerateTargetedCase({
+                difficulty: 'MEDIUM',
+                teachingUnitIds: [],
+                mimicDiagnosisIds: [item.targetDiagnosisId],
+                clueRevealStrategy: 'late_discriminator',
+              });
+            } else if (primaryAction.kind === 'strengthen-differential') {
+              onStrengthenDifferential();
+            } else if (primaryAction.kind === 'suggest-distinction') {
+              onSuggestTeachingDistinction();
+            }
+          }}
+          className="editorial-action editorial-action-primary disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {primaryAction.label}
+        </button>
+      </InlineReviewBar>
+
+      <details className="mt-3">
+        <summary className="cursor-pointer text-xs font-semibold text-slate-400">
+          Support details
+        </summary>
+        <div className="mt-2 space-y-1 text-xs leading-5 text-slate-500">
+          {item.discriminators.slice(1, 4).map((discriminator) => (
+            <p key={discriminator}>{discriminator}</p>
+          ))}
+          {item.relationship?.supportingTeachingRule ? (
+            <p>Teaching rule: {item.relationship.supportingTeachingRule.title}</p>
+          ) : null}
+          {item.relationship?.supportingGraphFact ? (
+            <p>Graph fact: {item.relationship.supportingGraphFact.label}</p>
+          ) : null}
+          {item.link ? <p>Structured link: {item.link.sourceText}</p> : null}
+        </div>
+      </details>
+    </article>
+  );
+}
+
+function SupportPill({ label, state }: { label: string; state: SupportState }) {
+  return (
+    <div className="rounded-md border border-[var(--color-navy-border)] bg-white/5 px-2 py-1.5">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+        {label}
+      </p>
+      <StatusBadge
+        status={formatLabel(state)}
+        tone={supportTone(state)}
+        className="mt-1"
+      />
+    </div>
+  );
+}
+
+function buildMimicReasoningGroups(
+  workspace: DiagnosisEditorialWorkspace,
+  activeRelationships: DiagnosisTeachingRelationship[],
+): MimicReasoningGroup[] {
+  const linkedByRegistryId = new Map(
+    (workspace.linkedDifferentials ?? []).map((link) => [
+      link.diagnosisRegistryId,
+      link,
+    ]),
+  );
+  const items = new Map<string, MimicReasoningItem>();
+
+  for (const relationship of activeRelationships) {
+    if (!isReasoningMimicRelationship(relationship)) {
+      continue;
+    }
+    const link = linkedByRegistryId.get(relationship.targetDiagnosisRegistryId);
+    const item = buildMimicReasoningItem(workspace, relationship, link);
+    items.set(item.id, item);
+  }
+
+  for (const link of workspace.linkedDifferentials ?? []) {
+    if (items.has(link.diagnosisRegistryId)) {
+      continue;
+    }
+    const item = buildMimicReasoningItem(workspace, undefined, link);
+    items.set(item.id, item);
+  }
+
+  return mimicGroupDefinitions.map((group) => ({
+    ...group,
+    items: [...items.values()]
+      .filter((item) => groupMimicItem(item) === group.id)
+      .sort((left, right) => mimicSortRank(left) - mimicSortRank(right)),
+  }));
+}
+
+function buildMimicReasoningItem(
+  workspace: DiagnosisEditorialWorkspace,
+  relationship?: DiagnosisTeachingRelationship,
+  link?: StructuredDifferentialLink,
+): MimicReasoningItem {
+  const label =
+    relationship?.targetDiagnosisRegistry.displayLabel ??
+    link?.displayLabel ??
+    'Unresolved mimic';
+  const targetDiagnosisId =
+    relationship?.targetDiagnosisRegistryId ?? link?.diagnosisRegistryId ?? null;
+  const matchedCaseCoverage = (workspace.caseLearningGoalCoverage ?? []).some(
+    (coverage) => textListMatchesTarget(coverage.coveredMimics, label, targetDiagnosisId),
+  );
+  const caseMissing = (workspace.caseLearningGoalCoverage ?? []).some((coverage) =>
+    textListMatchesTarget(coverage.missingMimics, label, targetDiagnosisId),
+  );
+  const explicitEscalation = (workspace.caseEscalationCoverage ?? []).some(
+    (coverage) => coverage.coverageSource === 'explicit' && coverage.covered,
+  );
+  const inferredEscalation = (workspace.caseEscalationCoverage ?? []).some(
+    (coverage) => coverage.coverageSource === 'inferred' && coverage.covered,
+  );
+
+  return {
+    id: targetDiagnosisId ?? relationship?.id ?? link?.sourceText ?? label,
+    label,
+    targetDiagnosisId,
+    relationshipType: relationship?.relationshipType ?? link?.role ?? 'OTHER',
+    learnerRisk:
+      relationship?.commonConfusionReason ??
+      relationship?.learnerPitfall ??
+      null,
+    discriminators: [
+      relationship?.discriminatorSummary ?? null,
+      relationship?.commonConfusionReason ?? null,
+      relationship?.learnerPitfall ?? null,
+      link?.sourceText ?? null,
+    ].filter((item): item is string => Boolean(item)),
+    evidenceSupport: relationship?.supportingGraphFact
+      ? 'explicit'
+      : relationship?.supportingGraphFactId
+        ? 'inferred'
+        : 'missing',
+    teachingSupport: relationship?.supportingTeachingRule
+      ? 'explicit'
+      : relationship
+        ? 'inferred'
+        : 'missing',
+    caseSupport: matchedCaseCoverage
+      ? 'explicit'
+      : workspace.cases.summary.usable > 0 && !caseMissing
+        ? 'inferred'
+        : 'missing',
+    escalationSupport: explicitEscalation
+      ? 'explicit'
+      : inferredEscalation
+        ? 'inferred'
+        : 'missing',
+    caseNeeded: !matchedCaseCoverage && (caseMissing || workspace.cases.summary.usable === 0),
+    relationship,
+    link,
+  };
+}
+
+function buildReasoningSummary(
+  workspace: DiagnosisEditorialWorkspace,
+  items: MimicReasoningItem[],
+  discriminatorRelationships: DiagnosisTeachingRelationship[],
+) {
+  const mustNotMissCount = items.filter(
+    (item) => groupMimicItem(item) === 'must_not_miss',
+  ).length;
+  const mimicsWithoutCases = items.filter(
+    (item) => item.caseSupport === 'missing',
+  ).length;
+  const weakDiscriminatorCount = items.filter(
+    (item) => !item.discriminators.length || item.evidenceSupport === 'missing',
+  ).length;
+  const escalationGaps = workspace.escalationCoverage?.coversEscalation
+    ? 0
+    : [
+        workspace.escalationCoverage?.missingEscalationTeaching,
+        workspace.escalationCoverage?.weakEscalationEvidence,
+        workspace.escalationCoverage?.noPlayableEscalationCase,
+      ].filter(Boolean).length;
+
+  return [
+    {
+      label: 'Mimics',
+      value: items.length,
+      detail: 'Visible mimic relationships',
+      tone: items.length ? 'success' : 'warning',
+    },
+    {
+      label: 'Must not miss',
+      value: mustNotMissCount,
+      detail: 'Dangerous exclusions',
+      tone: mustNotMissCount ? 'danger' : 'success',
+    },
+    {
+      label: 'No cases',
+      value: mimicsWithoutCases,
+      detail: 'Mimics lacking case support',
+      tone: mimicsWithoutCases ? 'warning' : 'success',
+    },
+    {
+      label: 'Weak discrim.',
+      value: weakDiscriminatorCount,
+      detail: 'Needs clearer separation',
+      tone: weakDiscriminatorCount ? 'warning' : 'success',
+    },
+    {
+      label: 'Escalation gaps',
+      value: escalationGaps,
+      detail: 'Must-not-miss coverage gaps',
+      tone: escalationGaps ? 'danger' : 'success',
+    },
+    {
+      label: 'Evidence links',
+      value:
+        workspace.evidenceGraph.summary.active ||
+        discriminatorRelationships.length,
+      detail: 'Active evidence relationships',
+      tone: workspace.evidenceGraph.summary.active ? 'success' : 'warning',
+    },
+  ] satisfies Array<{
+    label: string;
+    value: number;
+    detail: string;
+    tone: StatusBadgeTone;
+  }>;
+}
+
+const mimicGroupDefinitions: Array<Omit<MimicReasoningGroup, 'items'>> = [
+  {
+    id: 'primary',
+    label: 'Primary mimic',
+    detail: 'Closest differential or primary mimic from structured links.',
+  },
+  {
+    id: 'common',
+    label: 'Common confusion',
+    detail: 'Likely learner mix-ups and common diagnostic traps.',
+  },
+  {
+    id: 'must_not_miss',
+    label: 'Must-not-miss',
+    detail: 'Dangerous exclusions, complications, or important misses.',
+  },
+  {
+    id: 'escalation',
+    label: 'Escalation mimic',
+    detail: 'Mimics tied to worsening, complication, or escalation decisions.',
+  },
+  {
+    id: 'related',
+    label: 'Related entity',
+    detail: 'Adjacent conditions with shared presentations or teaching links.',
+  },
+  {
+    id: 'other',
+    label: 'Other / uncategorized',
+    detail: 'Available relationships without enough metadata for a stronger bucket.',
+  },
+];
+
+function isReasoningMimicRelationship(relationship: DiagnosisTeachingRelationship) {
+  return [
+    'MIMIC_CONFUSION',
+    'SHARED_PRESENTATION',
+    'ESCALATION_CONTRAST',
+    'COMPLICATION_RELATIONSHIP',
+    'DIFFERENTIAL_DISCRIMINATOR',
+    'MANAGEMENT_CONTRAST',
+    'INVESTIGATION_CONTRAST',
+  ].includes(relationship.relationshipType);
+}
+
+function groupMimicItem(item: MimicReasoningItem): MimicGroupId {
+  const role = item.link?.role;
+  const relationshipType = item.relationship?.relationshipType;
+  const text = [
+    item.label,
+    item.learnerRisk,
+    ...item.discriminators,
+    role,
+    relationshipType,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  if (role === 'PRIMARY_MIMIC') return 'primary';
+  if (relationshipType === 'ESCALATION_CONTRAST' || text.includes('escalat')) {
+    return 'escalation';
+  }
+  if (
+    role === 'IMPORTANT_EXCLUSION' ||
+    relationshipType === 'COMPLICATION_RELATIONSHIP' ||
+    text.includes('must') ||
+    text.includes('danger') ||
+    text.includes('fatal') ||
+    text.includes('miss')
+  ) {
+    return 'must_not_miss';
+  }
+  if (
+    relationshipType === 'MIMIC_CONFUSION' ||
+    item.relationship?.teachingPurpose === 'PREVENT_COMMON_ERROR' ||
+    Boolean(item.learnerRisk)
+  ) {
+    return 'common';
+  }
+  if (relationshipType || role) return 'related';
+  return 'other';
+}
+
+function mimicSortRank(item: MimicReasoningItem) {
+  if (item.caseNeeded) return 0;
+  if (item.evidenceSupport === 'missing') return 1;
+  if (item.teachingSupport === 'missing') return 2;
+  return 3;
+}
+
+function textListMatchesTarget(
+  values: string[],
+  label: string,
+  targetDiagnosisId: string | null,
+) {
+  const needle = normalizeMimicText(label);
+  return values.some((value) => {
+    const normalized = normalizeMimicText(value);
+    return (
+      normalized === needle ||
+      normalized.includes(needle) ||
+      needle.includes(normalized) ||
+      (targetDiagnosisId ? value === targetDiagnosisId : false)
+    );
+  });
+}
+
+function normalizeMimicText(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function supportTone(state: SupportState): StatusBadgeTone {
+  if (state === 'explicit') return 'success';
+  if (state === 'inferred') return 'info';
+  return 'warning';
+}
+
+function groupTone(groupId: MimicGroupId): StatusBadgeTone {
+  if (groupId === 'must_not_miss' || groupId === 'escalation') return 'danger';
+  if (groupId === 'common') return 'warning';
+  if (groupId === 'primary') return 'info';
+  return 'neutral';
+}
+
+function mimicPrimaryAction(item: MimicReasoningItem):
+  | { kind: 'generate-case'; label: string }
+  | { kind: 'strengthen-differential'; label: string }
+  | { kind: 'suggest-distinction'; label: string } {
+  if (item.caseNeeded) {
+    return { kind: 'generate-case', label: 'Generate case for this mimic' };
+  }
+  if (item.evidenceSupport === 'missing') {
+    return { kind: 'strengthen-differential', label: 'Strengthen evidence path' };
+  }
+  return { kind: 'suggest-distinction', label: 'Suggest teaching distinction' };
 }
 
 function SignalLegend() {
@@ -517,21 +1151,21 @@ function EvidenceCoveragePanel({
         />
       </div>
       {coverage.generationHooks.suggestedGenerationPrerequisites.length ? (
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+        <div className="mt-4 rounded-lg border border-[var(--color-amber)]/30 bg-[var(--color-amber)]/10 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-amber)]">
             Generation prerequisites
           </p>
-          <p className="mt-2 text-sm text-amber-900">
+          <p className="mt-2 text-sm text-amber-100">
             {coverage.generationHooks.suggestedGenerationPrerequisites.join(', ')}
           </p>
         </div>
       ) : null}
       {coverage.generationHooks.suggestedDraftValidationReview ? (
-        <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-orange-800">
+        <div className="mt-4 rounded-lg border border-[var(--color-amber)]/30 bg-[var(--color-amber)]/10 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-amber)]">
             Draft trust review
           </p>
-          <p className="mt-2 text-sm text-orange-900">
+          <p className="mt-2 text-sm text-amber-100">
             Low-trust, blocked, or hallucination-risk generated drafts need
             senior review or regeneration before publication decisions.
           </p>
@@ -553,15 +1187,15 @@ function ReadinessIndicator({
   };
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-3">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-slate-900">{label}</p>
+        <p className="text-sm font-semibold text-slate-100">{label}</p>
         <StatusBadge
           status={`${readiness.score}% ${readiness.tier}`}
           tone={readiness.tier === 'weak' ? 'warning' : 'info'}
         />
       </div>
-      <p className="mt-2 text-xs text-slate-600">
+      <p className="mt-2 text-xs text-slate-400">
         {readiness.reasons.slice(0, 2).join(', ') || 'Ready prerequisites met'}
       </p>
     </div>
@@ -578,7 +1212,7 @@ function EvidenceList({
   empty: string;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
         {title}
       </p>
@@ -587,7 +1221,7 @@ function EvidenceList({
           {items.slice(0, 8).map((item) => (
             <span
               key={item}
-              className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600"
+              className="rounded-full border border-[var(--color-navy-border)] bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-300"
             >
               {item}
             </span>
@@ -659,10 +1293,10 @@ function EvidenceGraphPanel({
   }
 
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+    <section className="overflow-hidden rounded-xl border border-[var(--color-navy-border)] bg-white/5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-navy-border)] px-4 py-3">
         <div>
-          <p className="text-sm font-semibold text-slate-900">Evidence graph</p>
+          <p className="text-sm font-semibold text-slate-100">Evidence graph</p>
           <p className="text-xs text-slate-500">
             Findings, clues, labs, imaging, and reasoning evidence linked to this diagnosis.
           </p>
@@ -671,7 +1305,7 @@ function EvidenceGraphPanel({
           type="button"
           onClick={generateCandidates}
           disabled={busyAction !== null}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="editorial-action px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
         >
           Generate candidates
         </button>
@@ -685,7 +1319,7 @@ function EvidenceGraphPanel({
         ]}
       />
       {relationships.length ? (
-        <div className="space-y-4 border-t border-slate-200 px-4 py-4">
+        <div className="space-y-4 border-t border-[var(--color-navy-border)] px-4 py-4">
           {grouped.map(([type, items]) => (
             <div key={type}>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -695,31 +1329,31 @@ function EvidenceGraphPanel({
                 {items.slice(0, 12).map((relationship) => (
                   <div
                     key={relationship.id}
-                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                    className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-2"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">
+                        <p className="text-sm font-semibold text-slate-100">
                           {relationship.evidenceNode.displayLabel}
                         </p>
-                        <p className="mt-1 text-xs text-slate-600">
+                        <p className="mt-1 text-xs text-slate-400">
                           {formatLabel(relationship.relationshipType)} · strength{' '}
                           {relationship.strength} · discriminator{' '}
                           {relationship.discriminatorWeight}
                         </p>
                       </div>
-                      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      <span className="rounded-full border border-[var(--color-navy-border)] bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                         {formatLabel(relationship.status)}
                       </span>
                     </div>
-                    <p className="mt-2 text-xs text-slate-600">
+                    <p className="mt-2 text-xs text-slate-400">
                       {relationship.reasoningSummary || 'No reasoning summary yet.'}
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                       {relationship.supportingCase ? (
                         <Link
                           to={`/cases/${relationship.supportingCase.id}`}
-                          className="font-semibold text-slate-800 underline"
+                          className="font-semibold text-[var(--color-teal)] underline"
                         >
                           Open case
                         </Link>
@@ -727,7 +1361,7 @@ function EvidenceGraphPanel({
                       {relationship.supportingTeachingRule ? (
                         <Link
                           to={`/editorial/diagnoses/${diagnosisRegistryId}?tab=teaching-rules`}
-                          className="font-semibold text-slate-800 underline"
+                          className="font-semibold text-[var(--color-teal)] underline"
                         >
                           Open rule
                         </Link>
@@ -766,7 +1400,7 @@ function EvidenceGraphPanel({
           ))}
         </div>
       ) : (
-        <div className="border-t border-slate-200 px-4 py-6 text-sm text-slate-500">
+        <div className="border-t border-[var(--color-navy-border)] px-4 py-6 text-sm text-slate-500">
           No evidence relationships have been created for this diagnosis yet.
         </div>
       )}
@@ -833,10 +1467,10 @@ function TeachingRelationshipPanel({
   }
 
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+    <section className="overflow-hidden rounded-xl border border-[var(--color-navy-border)] bg-white/5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-navy-border)] px-4 py-3">
         <div>
-          <p className="text-sm font-semibold text-slate-900">Teaching graph</p>
+          <p className="text-sm font-semibold text-slate-100">Teaching graph</p>
           <p className="text-xs text-slate-500">
             Reviewed teaching relationships layered over graph and differential evidence.
           </p>
@@ -845,7 +1479,7 @@ function TeachingRelationshipPanel({
           type="button"
           onClick={generateCandidates}
           disabled={busyAction !== null}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="editorial-action px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
         >
           Generate candidates
         </button>
@@ -853,7 +1487,7 @@ function TeachingRelationshipPanel({
       {relationships.length ? (
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <thead className="bg-white/5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3">Relationship</th>
                 <th className="px-4 py-3">Teaching intent</th>
@@ -866,7 +1500,7 @@ function TeachingRelationshipPanel({
               {relationships.slice(0, 30).map((relationship) => (
                 <tr key={relationship.id}>
                   <td className="px-4 py-3">
-                    <div className="font-medium text-slate-900">
+                    <div className="font-medium text-slate-100">
                       {relationship.sourceDiagnosisRegistry.displayLabel}{' '}
                       {'->'}{' '}
                       <Link
@@ -881,18 +1515,18 @@ function TeachingRelationshipPanel({
                       {relationship.strength}
                     </p>
                   </td>
-                  <td className="max-w-md px-4 py-3 text-slate-700">
+                  <td className="max-w-md px-4 py-3 text-slate-300">
                     <p className="font-medium">
                       {formatLabel(relationship.teachingPurpose)}
                     </p>
-                    <p className="mt-1 text-xs text-slate-600">
+                    <p className="mt-1 text-xs text-slate-400">
                       {relationship.discriminatorSummary ||
                         relationship.commonConfusionReason ||
                         relationship.learnerPitfall ||
                         'No teaching summary yet.'}
                     </p>
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-600">
+                  <td className="px-4 py-3 text-xs text-slate-400">
                     {relationship.supportingGraphFact ? (
                       <span>
                         Graph: {formatLabel(relationship.supportingGraphFact.type)}
@@ -913,7 +1547,7 @@ function TeachingRelationshipPanel({
                       <span>No linked evidence</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-700">
+                  <td className="px-4 py-3 text-slate-300">
                     {formatLabel(relationship.status)}
                   </td>
                   <td className="px-4 py-3">
@@ -1019,10 +1653,10 @@ function ReasoningPathsPanel({
   }
 
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+    <section className="overflow-hidden rounded-xl border border-[var(--color-navy-border)] bg-white/5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-navy-border)] px-4 py-3">
         <div>
-          <p className="text-sm font-semibold text-slate-900">Reasoning paths</p>
+          <p className="text-sm font-semibold text-slate-100">Reasoning paths</p>
           <p className="text-xs text-slate-500">
             Constrained draft contexts grounded in reviewed relationships and evidence.
           </p>
@@ -1031,7 +1665,7 @@ function ReasoningPathsPanel({
           type="button"
           onClick={generateCandidates}
           disabled={busyAction !== null}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="editorial-action px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
         >
           Generate paths
         </button>
@@ -1063,8 +1697,8 @@ function ReasoningPathsPanel({
             </div>
           ))}
           {inactivePaths.length ? (
-            <details className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+            <details className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-100">
                 Deprecated and rejected paths ({inactivePaths.length})
               </summary>
               <div className="mt-3 grid gap-3 lg:grid-cols-2">
@@ -1109,15 +1743,15 @@ function ReasoningPathCard({
       className={[
         'rounded-lg border p-3',
         path.status === 'ACTIVE'
-          ? 'border-emerald-200 bg-emerald-50'
+          ? 'border-[var(--color-green)]/30 bg-[var(--color-green)]/10'
           : path.status === 'CANDIDATE'
-            ? 'border-slate-200 bg-slate-50'
-            : 'border-slate-200 bg-white opacity-75',
+            ? 'border-[var(--color-navy-border)] bg-white/5'
+            : 'border-[var(--color-navy-border)] bg-white/5 opacity-75',
       ].join(' ')}
     >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="font-semibold text-slate-900">{path.title}</p>
+                  <p className="font-semibold text-slate-100">{path.title}</p>
                   <p className="mt-1 text-xs text-slate-500">
                     {formatLabel(path.reasoningGoal)} ·{' '}
                     {formatLabel(path.generationPurpose)}
@@ -1128,7 +1762,7 @@ function ReasoningPathCard({
                   tone={path.readinessTier === 'weak' ? 'warning' : 'info'}
                 />
               </div>
-              <MetricGrid
+              <CompactMetricGrid
                 items={[
                   {
                     label: 'Differentials',
@@ -1149,7 +1783,7 @@ function ReasoningPathCard({
                 ]}
               />
               {path.readinessReasons?.length ? (
-                <p className="mt-2 text-xs text-slate-600">
+                <p className="mt-2 text-xs text-slate-400">
                   {path.readinessReasons.slice(0, 3).join(' · ')}
                 </p>
               ) : null}
@@ -1230,17 +1864,17 @@ function LinkedDifferentialsList({
         {links.map((link) => (
           <div
             key={`${link.diagnosisRegistryId}-${link.sourceText}`}
-            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+            className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-2"
           >
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-semibold text-slate-900">
+              <p className="text-sm font-semibold text-slate-100">
                 {link.displayLabel}
               </p>
-              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              <span className="rounded-full border border-[var(--color-navy-border)] bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                 {formatLabel(link.role)}
               </span>
             </div>
-            <p className="mt-1 text-xs text-slate-600">Source: {link.sourceText}</p>
+            <p className="mt-1 text-xs text-slate-400">Source: {link.sourceText}</p>
           </div>
         ))}
       </div>
@@ -1264,13 +1898,13 @@ function GraphCandidateList({
   }
 
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="border-b border-slate-200 px-4 py-3">
-        <p className="text-sm font-semibold text-slate-900">Candidates</p>
+    <section className="overflow-hidden rounded-xl border border-[var(--color-navy-border)] bg-white/5">
+      <div className="border-b border-[var(--color-navy-border)] px-4 py-3">
+        <p className="text-sm font-semibold text-slate-100">Candidates</p>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <thead className="bg-white/5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">Type</th>
               <th className="px-4 py-3">Text</th>
@@ -1281,16 +1915,16 @@ function GraphCandidateList({
           <tbody className="divide-y divide-slate-100">
             {candidates.slice(0, 20).map((candidate) => (
               <tr key={candidate.id}>
-                <td className="px-4 py-3 font-medium text-slate-900">
+                <td className="px-4 py-3 font-medium text-slate-100">
                   {formatLabel(candidate.type)}
                 </td>
-                <td className="max-w-lg px-4 py-3 text-slate-700">
+                <td className="max-w-lg px-4 py-3 text-slate-300">
                   {candidate.rawText}
                 </td>
-                <td className="px-4 py-3 text-slate-700">
+                <td className="px-4 py-3 text-slate-300">
                   {formatLabel(candidate.status)}
                 </td>
-                <td className="px-4 py-3 text-slate-700">
+                <td className="px-4 py-3 text-slate-300">
                   {formatLabel(candidate.sourceType)}
                 </td>
               </tr>
@@ -1299,7 +1933,7 @@ function GraphCandidateList({
         </table>
       </div>
       {candidates.length > 20 ? (
-        <p className="border-t border-slate-200 px-4 py-3 text-sm text-slate-500">
+        <p className="border-t border-[var(--color-navy-border)] px-4 py-3 text-sm text-slate-500">
           Showing 20 of {candidates.length} candidates.
         </p>
       ) : null}

@@ -56,9 +56,9 @@ function NavigationGroup({
   }
 
   return (
-    <div className="space-y-1">
+    <div className="flex shrink-0 gap-1 md:block md:space-y-0.5">
       {!collapsed ? (
-        <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+        <p className="hidden px-3 pt-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400 md:block">
           {title}
         </p>
       ) : null}
@@ -69,8 +69,8 @@ function NavigationGroup({
           end={item.end}
           className={({ isActive }) =>
             [
-              'flex items-center rounded-lg px-3 py-2 text-sm font-medium transition',
-              collapsed ? 'justify-center' : 'gap-3',
+              'flex min-w-fit items-center rounded-lg px-3 py-2 text-sm font-medium transition md:py-1.5',
+              collapsed ? 'justify-center' : 'gap-2 md:gap-3',
               isActive
                 ? 'bg-[var(--color-teal)]/12 text-[var(--color-teal)] ring-1 ring-[var(--color-teal)]/30'
                 : 'text-slate-400 hover:bg-white/5 hover:text-slate-100',
@@ -78,14 +78,14 @@ function NavigationGroup({
           }
         >
           <item.icon
-            className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs font-semibold ${
+            className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-xs font-semibold ${
               collapsed
                 ? 'border-[var(--color-navy-border)] bg-white/5 p-1.5'
                 : 'border-[var(--color-navy-border)] bg-white/5 p-1.5'
             }`}
             aria-hidden="true"
           />
-          {!collapsed && <span>{item.label}</span>}
+          {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
         </NavLink>
       ))}
     </div>
@@ -105,22 +105,22 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`shrink-0 border-r border-[var(--color-navy-border)] bg-[var(--color-navy-mid)] transition-all duration-200 ${
-        collapsed ? 'w-20' : 'w-64'
+      className={`shrink-0 border-b border-[var(--color-navy-border)] bg-[var(--color-navy-mid)] transition-all duration-200 md:border-b-0 md:border-r ${
+        collapsed ? 'md:w-20' : 'md:w-64'
       }`}
     >
       <div
-        className={`border-b border-[var(--color-navy-border)] ${collapsed ? 'px-3 py-4' : 'px-5 py-4'}`}
+        className={`border-b border-[var(--color-navy-border)] ${collapsed ? 'px-3 py-2 md:py-3' : 'px-3 py-2 md:px-4 md:py-3'}`}
       >
         <div className="flex items-center justify-between gap-2">
           {collapsed ? (
             <h1 className="text-sm font-semibold text-[var(--color-teal)]">WD</h1>
           ) : (
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
                 Editorial Console
               </p>
-              <h1 className="mt-2 text-lg font-semibold text-slate-100">
+              <h1 className="mt-1 text-lg font-semibold text-slate-100">
                 Wardle
               </h1>
             </div>
@@ -130,14 +130,14 @@ export default function Sidebar({
             type="button"
             onClick={onToggle}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-2 py-1 text-xs font-semibold text-slate-300 transition hover:bg-white/10"
+            className="hidden rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-2 py-1 text-xs font-semibold text-slate-300 transition hover:bg-white/10 md:inline-flex"
           >
             {collapsed ? '>>' : '<<'}
           </button>
         </div>
       </div>
 
-      <nav className="space-y-4 px-3 py-4">
+      <nav className="flex gap-2 overflow-x-auto px-2 py-2 md:block md:space-y-3 md:px-3 md:py-3">
         <NavigationGroup
           title="Editorial"
           collapsed={collapsed}

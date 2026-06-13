@@ -831,7 +831,7 @@ export default function EditorialDiagnosisWorkspacePage() {
           </div>
         ) : null}
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
           <main className="min-w-0 space-y-4">
           {activeTab === 'overview' ? (
             <OverviewTab
@@ -934,6 +934,7 @@ export default function EditorialDiagnosisWorkspacePage() {
 
           <EditorialRightRail
             workspace={workspace}
+            activeTab={activeTab}
             onGapSelect={openCoverageGap}
             onTabChange={setActiveTab}
             onAiDraftDecision={handleAiDraftDecision}
@@ -984,11 +985,11 @@ function TeachingRuleDrawer({
   const graphSupportCount = row.graphCoverage === 'covered' ? workspace.graph.factCount : 0;
 
   return (
-      <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-slate-200 bg-white shadow-2xl">
-        <div className="border-b border-slate-200 bg-slate-950 px-5 py-4 text-white">
+      <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-[var(--color-navy-border)] bg-[var(--color-navy)] text-slate-100 shadow-2xl">
+        <div className="border-b border-[var(--color-navy-border)] bg-[var(--color-navy-mid)] px-5 py-4 text-slate-100">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--color-teal)]">
                 Teaching Rule Detail
               </p>
               <h3 className="mt-2 text-xl font-semibold">{row.title}</h3>
@@ -999,7 +1000,7 @@ function TeachingRuleDrawer({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-white/15 px-3 py-1.5 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
+              className="rounded-md border border-[var(--color-navy-border)] bg-white/5 px-3 py-1.5 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
             >
               Close
             </button>
@@ -1020,13 +1021,13 @@ function TeachingRuleDrawer({
           <CoverageStatusBlock label="Graph" status={row.graphCoverage} />
         </div>
 
-        <section className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <p className="text-sm font-semibold text-slate-900">Recommended action</p>
-          <p className="mt-1 text-sm text-slate-700">{row.recommendedAction}</p>
+        <section className="mt-5 rounded-lg border border-[var(--color-amber)]/25 bg-[var(--color-amber)]/10 p-4">
+          <p className="text-sm font-semibold text-amber-100">Recommended action</p>
+          <p className="mt-1 text-sm text-amber-100/80">{row.recommendedAction}</p>
         </section>
 
-        <section className="mt-5 rounded-lg border border-slate-200 p-4">
-          <p className="text-sm font-semibold text-slate-900">Related signals</p>
+        <section className="mt-5 rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-4">
+          <p className="text-sm font-semibold text-slate-100">Related signals</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
             <DrawerFact
               label="Education sections"
@@ -1050,7 +1051,7 @@ function TeachingRuleDrawer({
             />
           </div>
           {relatedRule?.rationale ? (
-            <p className="mt-3 text-sm leading-6 text-slate-700">
+            <p className="mt-3 text-sm leading-6 text-slate-300">
               {relatedRule.rationale}
             </p>
           ) : null}
@@ -1059,7 +1060,7 @@ function TeachingRuleDrawer({
               {relatedGaps.map((gap) => (
                 <div
                   key={`${gap.title}-${gap.targetTab}`}
-                  className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                  className="rounded-md border border-[var(--color-amber)]/30 bg-[var(--color-amber)]/10 px-3 py-2 text-sm text-amber-100"
                 >
                   {gap.recommendedAction}
                 </div>
@@ -1068,8 +1069,8 @@ function TeachingRuleDrawer({
           ) : null}
         </section>
 
-        <section className="mt-5 rounded-lg border border-slate-200 p-4">
-          <p className="text-sm font-semibold text-slate-900">Actions</p>
+        <section className="mt-5 rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-4">
+          <p className="text-sm font-semibold text-slate-100">Actions</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <DrawerActionButton
               label="Go to Education"
@@ -1096,9 +1097,9 @@ function TeachingRuleDrawer({
 
 function DrawerFact({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-      <p className="text-sm font-semibold text-slate-900">{value}</p>
-      <p className="mt-1 text-sm text-slate-500">{label}</p>
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-2">
+      <p className="text-sm font-semibold text-slate-100">{value}</p>
+      <p className="mt-1 text-sm text-slate-400">{label}</p>
     </div>
   );
 }
@@ -1110,14 +1111,14 @@ function claimRepairKey(sectionId: string, claimId: string) {
 function AccessDenied({ access }: { access: ConsoleAccessState }) {
   return (
     <div className="flex min-h-[50vh] items-center justify-center">
-      <section className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+      <section className="editorial-panel w-full max-w-lg rounded-xl p-6 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--color-teal)]">
           Access Restricted
         </p>
-        <h2 className="mt-2 text-xl font-semibold text-slate-900">
+        <h2 className="mt-2 text-xl font-semibold text-slate-100">
           Editorial access required
         </h2>
-        <p className="mt-2 text-sm text-slate-600">
+        <p className="mt-2 text-sm text-slate-400">
           Current role: <span className="font-semibold">{access.role}</span>.
           Editorial workspaces are available to editor, senior_editor, and admin
           roles.
