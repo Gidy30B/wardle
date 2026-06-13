@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import {
   DiagnosisAliasKind,
+  DiagnosisEditorialOnboardingStatus,
   DiagnosisRegistryStatus,
   DiagnosisTeachingRelationshipStatus,
   Prisma,
@@ -15,6 +16,10 @@ import {
   DiagnosisRegistryMergeAnalysisService,
   type RegistryMergeAnalysis,
 } from './diagnosis-registry-merge-analysis.service';
+import {
+  DiagnosisRegistryLifecyclePolicyService,
+  type DiagnosisRegistryLifecycleReport,
+} from './diagnosis-registry-lifecycle-policy.service';
 import { validateAliasWithClient } from './alias-validation.service';
 
 export type ExecuteRegistryMergeInput = {
@@ -32,6 +37,42 @@ export type RegistryMergeExecutionResult = {
   targetDiagnosisRegistryId: string;
   sourceStatus: DiagnosisRegistryStatus;
   reassignmentSummary: ReassignmentSummary;
+};
+
+export type CompleteDuplicateKeeperInput = {
+  keeperRegistryId: string;
+  sourceDraftRegistryId: string;
+  performedByUserId: string;
+  metadata: DuplicateKeeperMetadataInput;
+  aliases?: Array<{
+    term: string;
+    acceptedForMatch?: boolean;
+    kind?: DiagnosisAliasKind;
+  }>;
+  reason?: string;
+};
+
+export type DuplicateKeeperMetadataInput = {
+  category?: string | null;
+  specialty?: string | null;
+  subspecialty?: string | null;
+  bodySystem?: string | null;
+  organSystem?: string | null;
+  difficultyBand?: string | null;
+  rarityBand?: string | null;
+  clinicalSetting?: string | null;
+  ageGroup?: string | null;
+  urgencyLevel?: string | null;
+  preferredClueTypes?: string[] | null;
+  excludedClueTypes?: string[] | null;
+  isPlayable?: boolean;
+  isGeneratable?: boolean;
+};
+
+export type CompleteDuplicateKeeperResult = RegistryMergeExecutionResult & {
+  action: 'COMPLETE_DUPLICATE_KEEPER';
+  keeperRegistryId: string;
+  lifecycle: DiagnosisRegistryLifecycleReport;
 };
 
 type ReassignmentSummary = {
@@ -59,6 +100,7 @@ export class DiagnosisRegistryMergeExecutionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mergeAnalysis: DiagnosisRegistryMergeAnalysisService,
+    private readonly lifecyclePolicy: DiagnosisRegistryLifecyclePolicyService,
   ) {}
 
   async executeMerge(
@@ -145,6 +187,246 @@ export class DiagnosisRegistryMergeExecutionService {
     });
 
     return result;
+  }
+
+  async completeDuplicateKeeper(
+    input: CompleteDuplicateKeeperInput,
+  ): Promise<CompleteDuplicateKeeperResult> {
+    if (input.keeperRegistryId === input.sourceDraftRegistryId) {
+      throw new BadRequestException('Keeper and source draft must differ');
+    }
+
+    const analysis = await this.mergeAnalysis.analyzeMerge(
+      input.sourceDraftRegistryId,
+      input.keeperRegistryId,
+    );
+    if (analysis.severity === 'BLOCKED' && analysis.blockers.length) {
+      throw new BadRequestException({
+        message: 'Duplicate keeper completion is blocked by merge analysis',
+        blockers: analysis.blockers,
+        warnings: analysis.warnings,
+      });
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const summary: ReassignmentSummary = {
+        aliasesMoved: 0,
+        aliasesSkipped: [],
+        aliasesCreated: 0,
+        referencesReassigned: {},
+        referencesSkipped: {},
+      };
+
+      await tx.diagnosisRegistry.update({
+        where: { id: analysis.target.id },
+        data: this.buildKeeperMetadataUpdate(input.metadata),
+        select: { id: true },
+      });
+      await this.createReviewedAliases(tx, analysis, input.aliases ?? [], summary);
+      await this.reassignAliases(tx, analysis, summary);
+      await this.reassignOneToOneModels(tx, analysis, summary);
+      await this.reassignSimpleReferences(tx, analysis, summary);
+      await this.reassignDifferentialLinks(tx, analysis, summary);
+      await this.reassignGraphRows(tx, analysis, summary);
+      await this.reassignTeachingRelationships(tx, analysis, summary);
+      await this.reassignAttempts(tx, analysis, summary);
+
+      await tx.diagnosisRegistry.update({
+        where: { id: analysis.source.id },
+        data: {
+          status: DiagnosisRegistryStatus.DEPRECATED,
+          active: false,
+          isPlayable: false,
+          isGeneratable: false,
+          notes: this.buildDeprecatedSourceNote(input),
+        },
+        select: { id: true },
+      });
+
+      const log = await tx.diagnosisRegistryMergeLog.create({
+        data: {
+          sourceDiagnosisRegistryId: analysis.source.id,
+          targetDiagnosisRegistryId: analysis.target.id,
+          reason:
+            input.reason?.trim() ||
+            'COMPLETE_DUPLICATE_KEEPER: completed existing duplicate registry and deprecated source draft',
+          analysisSnapshot: analysis as unknown as Prisma.InputJsonValue,
+          reassignmentSummary: summary as unknown as Prisma.InputJsonValue,
+          performedByUserId: input.performedByUserId,
+        },
+        select: { id: true },
+      });
+
+      return {
+        mergeLogId: log.id,
+        analysisHash: analysis.analysisHash,
+        sourceDiagnosisRegistryId: analysis.source.id,
+        targetDiagnosisRegistryId: analysis.target.id,
+        sourceStatus: DiagnosisRegistryStatus.DEPRECATED,
+        reassignmentSummary: summary,
+      };
+    });
+
+    const lifecycle = await this.lifecyclePolicy.getLifecycle(input.keeperRegistryId);
+    if (
+      lifecycle.duplicateRisk.registryAliasMatches > 0 ||
+      lifecycle.duplicateRisk.registryCanonicalMatches > 0
+    ) {
+      this.logger.warn({
+        event: 'diagnosis.merge.complete_duplicate_keeper.duplicate_risk_remaining',
+        keeperRegistryId: input.keeperRegistryId,
+        sourceDraftRegistryId: input.sourceDraftRegistryId,
+        duplicateRisk: lifecycle.duplicateRisk,
+      });
+    }
+
+    this.logger.log({
+      event: 'diagnosis.merge.complete_duplicate_keeper.completed',
+      keeperRegistryId: input.keeperRegistryId,
+      sourceDraftRegistryId: input.sourceDraftRegistryId,
+      performedByUserId: input.performedByUserId,
+      mergeLogId: result.mergeLogId,
+    });
+
+    return {
+      action: 'COMPLETE_DUPLICATE_KEEPER',
+      keeperRegistryId: input.keeperRegistryId,
+      lifecycle,
+      ...result,
+    };
+  }
+
+  private buildKeeperMetadataUpdate(
+    metadata: DuplicateKeeperMetadataInput,
+  ): Prisma.DiagnosisRegistryUpdateInput {
+    const data: Prisma.DiagnosisRegistryUpdateInput = {};
+    this.assignString(data, 'category', metadata.category);
+    this.assignString(data, 'specialty', metadata.specialty);
+    this.assignString(data, 'subspecialty', metadata.subspecialty);
+    this.assignString(data, 'bodySystem', metadata.bodySystem);
+    this.assignString(data, 'organSystem', metadata.organSystem);
+    this.assignValue(data, 'difficultyBand', metadata.difficultyBand);
+    this.assignValue(data, 'rarityBand', metadata.rarityBand);
+    this.assignValue(data, 'clinicalSetting', metadata.clinicalSetting);
+    this.assignValue(data, 'ageGroup', metadata.ageGroup);
+    this.assignValue(data, 'urgencyLevel', metadata.urgencyLevel);
+    this.assignJson(data, 'preferredClueTypes', metadata.preferredClueTypes);
+    this.assignJson(data, 'excludedClueTypes', metadata.excludedClueTypes);
+    this.assignValue(data, 'isPlayable', metadata.isPlayable);
+    this.assignValue(data, 'isGeneratable', metadata.isGeneratable);
+    if (
+      metadata.specialty ||
+      metadata.category ||
+      metadata.bodySystem ||
+      metadata.organSystem
+    ) {
+      data.onboardingStatus = DiagnosisEditorialOnboardingStatus.READY_FOR_REVIEW;
+    }
+    return data;
+  }
+
+  private async createReviewedAliases(
+    tx: Prisma.TransactionClient,
+    analysis: RegistryMergeAnalysis,
+    aliases: NonNullable<CompleteDuplicateKeeperInput['aliases']>,
+    summary: ReassignmentSummary,
+  ) {
+    for (const alias of aliases) {
+      const term = alias.term.trim();
+      const normalizedTerm = normalizeDiagnosisTerm(term);
+      if (!term || !normalizedTerm) {
+        continue;
+      }
+      if (normalizedTerm === analysis.target.canonicalNormalized) {
+        this.skipAlias(term, 'target already represents alias canonical', summary);
+        continue;
+      }
+      const existing = await tx.diagnosisAlias.findUnique({
+        where: {
+          diagnosisRegistryId_normalizedTerm: {
+            diagnosisRegistryId: analysis.target.id,
+            normalizedTerm,
+          },
+        },
+        select: { id: true },
+      });
+      if (existing) {
+        this.skipAlias(term, 'target already has this alias', summary);
+        continue;
+      }
+      const validation = await validateAliasWithClient(tx, {
+        aliasText: term,
+        targetDiagnosisRegistryId: analysis.target.id,
+        acceptedForMatch: alias.acceptedForMatch ?? true,
+        ignoredDiagnosisRegistryIds: [analysis.source.id],
+        allowTargetCanonicalAlias: false,
+      });
+      if (!validation.valid) {
+        this.skipAlias(term, 'alias validation failed', summary);
+        continue;
+      }
+      await tx.diagnosisAlias.create({
+        data: {
+          diagnosisRegistryId: analysis.target.id,
+          term,
+          normalizedTerm,
+          kind: alias.kind ?? this.aliasKindFor(term),
+          acceptedForMatch: alias.acceptedForMatch ?? true,
+          active: true,
+          rank: 900,
+          source: 'complete-duplicate-keeper',
+        },
+        select: { id: true },
+      });
+      summary.aliasesCreated += 1;
+    }
+  }
+
+  private buildDeprecatedSourceNote(input: CompleteDuplicateKeeperInput): string {
+    const reason = input.reason?.trim();
+    return [
+      'Deprecated by COMPLETE_DUPLICATE_KEEPER workflow.',
+      `Merged into keeper registry ${input.keeperRegistryId}.`,
+      reason ? `Reason: ${reason}` : null,
+    ]
+      .filter((item): item is string => Boolean(item))
+      .join(' ');
+  }
+
+  private aliasKindFor(term: string): DiagnosisAliasKind {
+    return term.length <= 8 && term === term.toUpperCase()
+      ? DiagnosisAliasKind.ABBREVIATION
+      : DiagnosisAliasKind.ACCEPTED;
+  }
+
+  private assignString(
+    data: Prisma.DiagnosisRegistryUpdateInput,
+    field: keyof Prisma.DiagnosisRegistryUpdateInput,
+    value: string | null | undefined,
+  ) {
+    if (value !== undefined) {
+      (data as Record<string, unknown>)[String(field)] = value?.trim() || null;
+    }
+  }
+
+  private assignValue(
+    data: Prisma.DiagnosisRegistryUpdateInput,
+    field: keyof Prisma.DiagnosisRegistryUpdateInput,
+    value: unknown,
+  ) {
+    if (value !== undefined) {
+      data[field] = value as never;
+    }
+  }
+
+  private assignJson(
+    data: Prisma.DiagnosisRegistryUpdateInput,
+    field: keyof Prisma.DiagnosisRegistryUpdateInput,
+    value: string[] | null | undefined,
+  ) {
+    if (value !== undefined) {
+      data[field] = value as never;
+    }
   }
 
   private async reassignAliases(

@@ -116,6 +116,9 @@ describe('AdminController generateCases', () => {
     };
     const diagnosisRegistryMergeExecutionService = {
       executeMerge: jest.fn().mockResolvedValue({ mergeLogId: 'merge-log-1' }),
+      completeDuplicateKeeper: jest
+        .fn()
+        .mockResolvedValue({ action: 'COMPLETE_DUPLICATE_KEEPER' }),
     };
 
     return {
@@ -625,6 +628,33 @@ describe('AdminController generateCases', () => {
       performedByUserId: 'senior-1',
       reason: 'Duplicate diagnosis',
       expectedAnalysisHash: 'hash-1',
+    });
+  });
+
+  it('completes duplicate keeper through merge execution service', async () => {
+    const { controller, diagnosisRegistryMergeExecutionService } =
+      buildController();
+
+    await controller.completeDuplicateKeeper(
+      { user: { id: 'senior-1' } } as never,
+      {
+        keeperRegistryId: '22222222-2222-4222-8222-222222222222',
+        sourceDraftRegistryId: '11111111-1111-4111-8111-111111111111',
+        metadata: { specialty: 'Rheumatology' },
+        aliases: [{ term: 'JIA', acceptedForMatch: true }],
+        reason: 'Duplicate draft completion',
+      },
+    );
+
+    expect(
+      diagnosisRegistryMergeExecutionService.completeDuplicateKeeper,
+    ).toHaveBeenCalledWith({
+      keeperRegistryId: '22222222-2222-4222-8222-222222222222',
+      sourceDraftRegistryId: '11111111-1111-4111-8111-111111111111',
+      performedByUserId: 'senior-1',
+      metadata: { specialty: 'Rheumatology' },
+      aliases: [{ term: 'JIA', acceptedForMatch: true, kind: undefined }],
+      reason: 'Duplicate draft completion',
     });
   });
 

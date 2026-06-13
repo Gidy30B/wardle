@@ -161,6 +161,16 @@ function serviceFor(mergeAnalysis = analysis()) {
     service: new DiagnosisRegistryMergeExecutionService(
       prisma as never,
       analyzer as never,
+      {
+        getLifecycle: jest.fn().mockResolvedValue({
+          duplicateRisk: {
+            registryAliasMatches: 0,
+            registryCanonicalMatches: 0,
+            pendingCandidateConflicts: 0,
+          },
+          lifecycle: { status: DiagnosisRegistryStatus.DRAFT },
+        }),
+      } as never,
     ),
     prisma,
     analyzer,
@@ -327,5 +337,86 @@ describe('DiagnosisRegistryMergeExecutionService', () => {
         expect.objectContaining({ term: 'Existing alias' }),
       ]),
     );
+  });
+
+  it('completes duplicate keeper with metadata, aliases, moved mappings, and deprecated source', async () => {
+    const { service, tx: transactionClient } = serviceFor(
+      analysis({
+        source: {
+          ...analysis().source,
+          id: 'source-draft',
+          canonicalName: 'JIA',
+          canonicalNormalized: 'jia',
+          status: DiagnosisRegistryStatus.DRAFT,
+        },
+        target: {
+          ...analysis().target,
+          id: 'keeper',
+          canonicalName: 'Juvenile Idiopathic Arthritis',
+          canonicalNormalized: 'juvenile idiopathic arthritis',
+          status: DiagnosisRegistryStatus.DRAFT,
+        },
+      }),
+    );
+
+    const result = await service.completeDuplicateKeeper({
+      keeperRegistryId: 'keeper',
+      sourceDraftRegistryId: 'source-draft',
+      performedByUserId: 'senior-1',
+      metadata: {
+        specialty: 'Rheumatology',
+        subspecialty: 'Pediatric Rheumatology',
+        category: 'Inflammatory',
+        bodySystem: 'Musculoskeletal',
+        organSystem: 'Joints',
+        clinicalSetting: 'OUTPATIENT',
+        ageGroup: 'PEDIATRIC',
+        urgencyLevel: 'ROUTINE',
+        preferredClueTypes: ['history', 'exam', 'lab', 'imaging'],
+        isPlayable: true,
+      },
+      aliases: [{ term: 'JIA', acceptedForMatch: true }],
+      reason: 'AI metadata found duplicate draft',
+    });
+
+    expect(result.action).toBe('COMPLETE_DUPLICATE_KEEPER');
+    expect(result.keeperRegistryId).toBe('keeper');
+    expect(transactionClient.diagnosisRegistry.update).toHaveBeenCalledWith({
+      where: { id: 'keeper' },
+      data: expect.objectContaining({
+        specialty: 'Rheumatology',
+        subspecialty: 'Pediatric Rheumatology',
+        category: 'Inflammatory',
+        bodySystem: 'Musculoskeletal',
+        organSystem: 'Joints',
+        isPlayable: true,
+      }),
+      select: { id: true },
+    });
+    expect(transactionClient.diagnosisAlias.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        diagnosisRegistryId: 'keeper',
+        term: 'JIA',
+        normalizedTerm: 'jia',
+        source: 'complete-duplicate-keeper',
+      }),
+      select: { id: true },
+    });
+    expect(
+      transactionClient.caseDifferentialMapping.updateMany,
+    ).toHaveBeenCalledWith({
+      where: { resolvedDiagnosisRegistryId: 'source-draft' },
+      data: { resolvedDiagnosisRegistryId: 'keeper' },
+    });
+    expect(transactionClient.diagnosisRegistry.update).toHaveBeenCalledWith({
+      where: { id: 'source-draft' },
+      data: expect.objectContaining({
+        status: DiagnosisRegistryStatus.DEPRECATED,
+        active: false,
+        isPlayable: false,
+        isGeneratable: false,
+      }),
+      select: { id: true },
+    });
   });
 });

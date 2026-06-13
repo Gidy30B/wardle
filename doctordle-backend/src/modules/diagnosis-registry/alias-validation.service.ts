@@ -37,6 +37,7 @@ export type AliasValidationInput = {
   targetDiagnosisRegistryId: string;
   acceptedForMatch?: boolean;
   ignoreAliasId?: string;
+  ignoredDiagnosisRegistryIds?: string[];
   allowTargetCanonicalAlias?: boolean;
 };
 
@@ -131,7 +132,12 @@ export async function validateAliasWithClient(
 
   const registryCollisions = (await prisma.diagnosisRegistry.findMany({
     where: {
-      id: { not: input.targetDiagnosisRegistryId },
+      id: {
+        notIn: [
+          input.targetDiagnosisRegistryId,
+          ...(input.ignoredDiagnosisRegistryIds ?? []),
+        ],
+      },
       OR: [
         { canonicalNormalized: normalizedAlias },
         { canonicalName: { equals: alias, mode: 'insensitive' } },
@@ -169,6 +175,9 @@ export async function validateAliasWithClient(
     where: {
       normalizedTerm: normalizedAlias,
       active: true,
+      diagnosisRegistryId: {
+        notIn: input.ignoredDiagnosisRegistryIds ?? [],
+      },
       ...(input.ignoreAliasId ? { id: { not: input.ignoreAliasId } } : {}),
     },
     select: {

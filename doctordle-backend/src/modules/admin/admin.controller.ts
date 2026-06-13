@@ -743,6 +743,45 @@ export class AdminController {
     });
   }
 
+  @Post('diagnosis-registry/merge/complete-duplicate-keeper')
+  @SeniorEditorialAccess()
+  async completeDuplicateKeeper(
+    @Req() request: AuthenticatedRequest,
+    @Body()
+    body: {
+      keeperRegistryId?: string;
+      sourceDraftRegistryId?: string;
+      metadata?: Record<string, unknown>;
+      aliases?: Array<{
+        term?: string;
+        acceptedForMatch?: boolean;
+        kind?: string;
+      }>;
+      reason?: string;
+    },
+  ) {
+    return this.diagnosisRegistryMergeExecutionService.completeDuplicateKeeper({
+      keeperRegistryId: this.requireUuidLike(
+        body.keeperRegistryId,
+        'keeperRegistryId',
+      ),
+      sourceDraftRegistryId: this.requireUuidLike(
+        body.sourceDraftRegistryId,
+        'sourceDraftRegistryId',
+      ),
+      performedByUserId: request.user.id,
+      metadata: body.metadata ?? {},
+      aliases: (body.aliases ?? [])
+        .filter((alias) => typeof alias.term === 'string' && alias.term.trim())
+        .map((alias) => ({
+          term: alias.term!.trim(),
+          acceptedForMatch: alias.acceptedForMatch,
+          kind: alias.kind as never,
+        })),
+      reason: body.reason,
+    });
+  }
+
   @Get('diagnosis-registry/:diagnosisRegistryId/merge-related')
   @EditorialAccess()
   async getDiagnosisRegistryMergeRelated(

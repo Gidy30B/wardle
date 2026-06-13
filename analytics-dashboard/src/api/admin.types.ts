@@ -2036,6 +2036,24 @@ export type RegistryMergeExecutionResult = {
   };
 };
 
+export type CompleteDuplicateKeeperPayload = {
+  keeperRegistryId: string;
+  sourceDraftRegistryId: string;
+  metadata: UpdateDiagnosisRegistryMetadataPayload;
+  aliases?: Array<{
+    term: string;
+    acceptedForMatch?: boolean;
+    kind?: 'CANONICAL' | 'ACCEPTED' | 'ABBREVIATION' | 'SEARCH_ONLY';
+  }>;
+  reason?: string;
+};
+
+export type CompleteDuplicateKeeperResult = RegistryMergeExecutionResult & {
+  action: 'COMPLETE_DUPLICATE_KEEPER';
+  keeperRegistryId: string;
+  lifecycle: DiagnosisRegistryLifecycleReport;
+};
+
 export type EditorialInboxItemType =
   | 'teachingRules'
   | 'briefs'

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   addDiagnosisAlias,
+  completeDuplicateKeeper,
   createRegistryFromCandidate,
   generateDiagnosisRegistryAiMetadataSuggestion,
   getDiagnosisRegistryMetadataSuggestions,
@@ -11,6 +12,7 @@ import {
   updateDiagnosisRegistryLifecycle,
   updateDiagnosisRegistryMetadata,
   type AiDiagnosisRegistryMetadataSuggestion,
+  type CompleteDuplicateKeeperResult,
   type CreateRegistryFromCandidateResult,
   type DiagnosisRegistryMetadataSuggestion,
   type DiagnosisRegistryCandidate,
@@ -64,6 +66,7 @@ export default function RegistryCandidatesPage() {
   );
   const [aiMetadataLoading, setAiMetadataLoading] = useState(false);
   const [metadataApplyBusy, setMetadataApplyBusy] = useState(false);
+  const [duplicateCompleteBusy, setDuplicateCompleteBusy] = useState(false);
   const [aiManualConfirmed, setAiManualConfirmed] = useState(false);
   const [metadataApplyMessage, setMetadataApplyMessage] = useState<
     string | null
@@ -214,7 +217,6 @@ export default function RegistryCandidatesPage() {
       try {
         setActivationError(null);
         setActivationMessage(null);
-        setAiMetadataSuggestion(null);
         setAiManualConfirmed(false);
         setMetadataApplyMessage(null);
         const suggestion = await getDiagnosisRegistryMetadataSuggestions(
@@ -223,13 +225,15 @@ export default function RegistryCandidatesPage() {
         );
         if (!active) return;
         setMetadataSuggestion(suggestion);
-        setMetadataDraft({
+        setMetadataDraft((current) => current ?? {
           ...suggestion.metadata,
           isPlayable: true,
           isGeneratable: creationResult.registry.isGeneratable,
         });
-        setSelectedAliases(
-          new Set(suggestion.aliases.map((alias) => alias.normalizedTerm)),
+        setSelectedAliases((current) =>
+          current.size
+            ? current
+            : new Set(suggestion.aliases.map((alias) => alias.normalizedTerm)),
         );
       } catch (suggestionError) {
         if (!active) return;
@@ -404,6 +408,73 @@ export default function RegistryCandidatesPage() {
     }
   }
 
+  async function completeDuplicateKeeperWorkflow(keeperRegistryId: string) {
+    if (!creationResult || !metadataDraft) {
+      return;
+    }
+
+    try {
+      setDuplicateCompleteBusy(true);
+      setActivationError(null);
+      setActivationMessage(null);
+      const aliases = getMergedAliasSuggestions(
+        metadataSuggestion,
+        aiMetadataSuggestion,
+      )
+        .filter((alias) => selectedAliases.has(alias.normalizedTerm))
+        .map((alias) => ({
+          term: alias.term,
+          acceptedForMatch: alias.acceptedForMatch,
+          kind:
+            alias.term.length <= 8 && alias.term === alias.term.toUpperCase()
+              ? ('ABBREVIATION' as const)
+              : ('ACCEPTED' as const),
+        }));
+      const result = await completeDuplicateKeeper(client, {
+        keeperRegistryId,
+        sourceDraftRegistryId: creationResult.registry.id,
+        metadata: metadataDraft,
+        aliases,
+        reason:
+          'Completed existing duplicate registry from draft activation workflow.',
+      });
+      setActivationMessage(
+        'Existing duplicate registry completed. Review the keeper lifecycle, then activate for dictionary when blockers are clear.',
+      );
+      retargetActivationToKeeper(result);
+      await load();
+    } catch (completeError) {
+      setActivationError(
+        completeError instanceof Error
+          ? completeError.message
+          : 'Duplicate keeper completion failed.',
+      );
+    } finally {
+      setDuplicateCompleteBusy(false);
+    }
+  }
+
+  function retargetActivationToKeeper(result: CompleteDuplicateKeeperResult) {
+    setCreationResult((current) => {
+      if (!current) {
+        return current;
+      }
+      return {
+        ...current,
+        registry: {
+          ...current.registry,
+          id: result.keeperRegistryId,
+          status: result.lifecycle.lifecycle
+            .status as CreateRegistryFromCandidateResult['registry']['status'],
+          active: result.lifecycle.lifecycle.active,
+          onboardingStatus: result.lifecycle.lifecycle.onboardingStatus,
+          isPlayable: result.lifecycle.lifecycle.isPlayable,
+          isGeneratable: result.lifecycle.lifecycle.isGeneratable,
+        },
+      };
+    });
+  }
+
   function startActivationWorkflow(candidate: DiagnosisRegistryCandidate) {
     if (!candidate.createdRegistry || !candidate.registryQueueState) {
       return;
@@ -510,14 +581,19 @@ export default function RegistryCandidatesPage() {
           selectedAliases={selectedAliases}
           aiMetadataLoading={aiMetadataLoading}
           metadataApplyBusy={metadataApplyBusy}
+          duplicateCompleteBusy={duplicateCompleteBusy}
           metadataApplyMessage={metadataApplyMessage}
           aiManualConfirmed={aiManualConfirmed}
           activationBusy={activationBusy}
           activationMessage={activationMessage}
           activationError={activationError}
+          duplicateSuggestions={getDuplicateSuggestions(creationResult.candidate)}
           onMetadataDraftChange={setMetadataDraft}
           onGenerateAiMetadata={() => void generateAiMetadata()}
           onApplyMetadata={() => void applyMetadataDraft()}
+          onCompleteDuplicateKeeper={(keeperRegistryId) =>
+            void completeDuplicateKeeperWorkflow(keeperRegistryId)
+          }
           onAiManualConfirmedChange={setAiManualConfirmed}
           onToggleAlias={(normalizedTerm) => {
             setSelectedAliases((current) => {
@@ -913,14 +989,17 @@ function RegistryCreationSuccess({
   selectedAliases,
   aiMetadataLoading,
   metadataApplyBusy,
+  duplicateCompleteBusy,
   metadataApplyMessage,
   aiManualConfirmed,
   activationBusy,
   activationMessage,
   activationError,
+  duplicateSuggestions,
   onMetadataDraftChange,
   onGenerateAiMetadata,
   onApplyMetadata,
+  onCompleteDuplicateKeeper,
   onAiManualConfirmedChange,
   onToggleAlias,
   onActivate,
@@ -932,22 +1011,29 @@ function RegistryCreationSuccess({
   selectedAliases: Set<string>;
   aiMetadataLoading: boolean;
   metadataApplyBusy: boolean;
+  duplicateCompleteBusy: boolean;
   metadataApplyMessage: string | null;
   aiManualConfirmed: boolean;
   activationBusy: boolean;
   activationMessage: string | null;
   activationError: string | null;
+  duplicateSuggestions: DiagnosisRegistryCandidateDuplicateSuggestions;
   onMetadataDraftChange: (
     next: UpdateDiagnosisRegistryMetadataPayload | null,
   ) => void;
   onGenerateAiMetadata: () => void;
   onApplyMetadata: () => void;
+  onCompleteDuplicateKeeper: (keeperRegistryId: string) => void;
   onAiManualConfirmedChange: (checked: boolean) => void;
   onToggleAlias: (normalizedTerm: string) => void;
   onActivate: () => void;
 }) {
   const workspacePath = `/editorial/diagnoses/${result.registry.id}`;
   const aliasSuggestions = getMergedAliasSuggestions(suggestion, aiSuggestion);
+  const duplicateKeepers = getRegistryDuplicateKeepers(
+    duplicateSuggestions,
+    result.registry.id,
+  );
   const lowMetadataConfidence = Boolean(
     aiSuggestion && aiSuggestion.metadataConfidence < 0.7,
   );
@@ -1220,6 +1306,48 @@ function RegistryCreationSuccess({
           </ul>
         ) : null}
 
+        {duplicateKeepers.length ? (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-800">
+              Duplicate existing registry found
+            </p>
+            <p className="mt-1 text-sm text-amber-900">
+              This draft appears to duplicate an existing registry row. Complete
+              the keeper with the reviewed metadata and aliases, then activate
+              the keeper when lifecycle blockers are clear.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {duplicateKeepers.map((keeper) => (
+                <button
+                  key={keeper.id}
+                  type="button"
+                  onClick={() => onCompleteDuplicateKeeper(keeper.id)}
+                  disabled={
+                    !metadataDraft ||
+                    duplicateCompleteBusy ||
+                    activationBusy ||
+                    (lowMetadataConfidence && !aiManualConfirmed)
+                  }
+                  className="rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {duplicateCompleteBusy
+                    ? 'Completing duplicate...'
+                    : `Complete existing registry instead: ${keeper.displayLabel}`}
+                </button>
+              ))}
+              <Link
+                to="/editorial/registry-merge"
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Merge this draft manually
+              </Link>
+              <span className="rounded-md border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700">
+                Keep separate requires senior override
+              </span>
+            </div>
+          </div>
+        ) : null}
+
         {metadataApplyMessage ? (
           <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
             {metadataApplyMessage}
@@ -1302,6 +1430,32 @@ function getMergedAliasSuggestions(
   }
 
   return aliases;
+}
+
+function getRegistryDuplicateKeepers(
+  suggestions: DiagnosisRegistryCandidateDuplicateSuggestions,
+  sourceRegistryId: string,
+): Array<{ id: string; displayLabel: string; status: string }> {
+  const keepers = new Map<string, { id: string; displayLabel: string; status: string }>();
+  for (const match of suggestions.registryCanonicalMatches ?? []) {
+    if (match.id !== sourceRegistryId) {
+      keepers.set(match.id, {
+        id: match.id,
+        displayLabel: match.displayLabel,
+        status: match.status,
+      });
+    }
+  }
+  for (const match of suggestions.registryAliasMatches ?? []) {
+    if (match.registry.id !== sourceRegistryId) {
+      keepers.set(match.registry.id, {
+        id: match.registry.id,
+        displayLabel: match.registry.displayLabel,
+        status: match.registry.status,
+      });
+    }
+  }
+  return [...keepers.values()];
 }
 
 function DuplicateSuggestions({

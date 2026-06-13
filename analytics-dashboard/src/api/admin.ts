@@ -66,6 +66,8 @@ import type {
   DiagnosisRegistryCandidateQueueSummary,
   RegistryCandidateFilters,
   RegistryMergeAnalysis,
+  CompleteDuplicateKeeperPayload,
+  CompleteDuplicateKeeperResult,
   RegistryMergeAnalysisPayload,
   RegistryMergeExecutePayload,
   RegistryMergeExecutionResult,
@@ -328,6 +330,16 @@ export function executeDiagnosisRegistryMerge(
 ) {
   return client.post<RegistryMergeExecutionResult>(
     '/admin/diagnosis-registry/merge/execute',
+    payload,
+  );
+}
+
+export function completeDuplicateKeeper(
+  client: ApiClient,
+  payload: CompleteDuplicateKeeperPayload,
+) {
+  return client.post<CompleteDuplicateKeeperResult>(
+    '/admin/diagnosis-registry/merge/complete-duplicate-keeper',
     payload,
   );
 }
