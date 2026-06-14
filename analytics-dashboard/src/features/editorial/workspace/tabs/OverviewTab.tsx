@@ -7,11 +7,17 @@ import type {
   DiagnosisRegistryLifecycleEvaluation,
   DiagnosisRegistryLifecycleReport,
   WorkspaceCoverageGap,
-  WorkspaceCoverageMatrixRow,
   WorkspaceRecommendedAction,
 } from '../../../../api/admin';
 import StatusBadge from '../../../../components/ui/StatusBadge';
 import type { StatusBadgeTone } from '../../../../components/ui/statusBadgeMeta';
+import {
+  EditorialNarrativeThread,
+  LearnerFailureProjection,
+  NarrativeCheckpoint,
+  NarrativeStream,
+  ReasoningTransition,
+} from '../EditorialNarrativePrimitives';
 import {
   CompactPanel,
   EditorialStream,
@@ -19,15 +25,12 @@ import {
   IssueSummaryStrip,
   MessageList,
   MetricGrid,
-  PrototypeSectionHeader,
   SectionActionGroup,
   StreamDisclosure,
   StatusStrip,
 } from '../EditorialPrimitives';
 import {
   CoverageGapsCard,
-  CoverageMatrixCard,
-  CoverageScoreCard,
   ReadinessBreakdownCard,
 } from '../CoveragePanels';
 import {
@@ -41,8 +44,6 @@ import {
 import type { WorkspaceTab } from '../workspaceTypes';
 export function OverviewTab({
   workspace,
-  selectedRow,
-  onRowSelect,
   onGapSelect,
   onTabChange,
   canRunSeniorActions,
@@ -52,8 +53,6 @@ export function OverviewTab({
   onNormalizeLifecycleFlags,
 }: {
   workspace: DiagnosisEditorialWorkspace;
-  selectedRow: WorkspaceCoverageMatrixRow | null;
-  onRowSelect: (row: WorkspaceCoverageMatrixRow) => void;
   onGapSelect: (gap: WorkspaceCoverageGap) => void;
   onTabChange: (tab: WorkspaceTab) => void;
   canRunSeniorActions: boolean;
@@ -64,7 +63,8 @@ export function OverviewTab({
 }) {
   const blockers = workspace.workspaceSummary.blockers;
   const warnings = workspace.workspaceSummary.warnings;
-  const hasIssues = blockers.length > 0 || warnings.length > 0;
+  const story = buildOverviewStory(workspace, onTabChange, onGapSelect);
+  const primaryAction = story.primaryAction;
 
   return (
     <div className="space-y-4">
@@ -73,74 +73,186 @@ export function OverviewTab({
         title="Publication readiness narrative"
         subtitle="Read from blockers to highest-impact fixes, then open diagnostics only when the local decision needs it."
       >
-        {hasIssues ? (
-          <div>
-            <PrototypeSectionHeader
-              eyebrow="Readiness blockers"
-              title="Resolve editorial blockers before maturity review"
-              subtitle="Highest-impact blockers and warnings from the workspace read model."
-            />
-            <div className="mt-3">
-              <IssueSummaryStrip blockers={blockers} warnings={warnings} />
-            </div>
-          </div>
-        ) : (
-          <div className="rounded-lg border border-[var(--color-green)]/25 bg-[var(--color-green)]/10 px-3 py-2 text-sm font-semibold text-[var(--color-green)]">
-            No publication blockers are currently reported.
-          </div>
-        )}
+        <EditorialNarrativeThread
+          eyebrow="Publication readiness"
+          title={story.title}
+          subtitle={story.subtitle}
+          tone={story.tone}
+          state={<StatusBadge status={formatLabel(workspace.workspaceSummary.status)} tone={story.tone} />}
+          action={
+            primaryAction ? (
+              <button
+                type="button"
+                disabled={!primaryAction.enabled}
+                onClick={() => onTabChange(primaryAction.targetTab)}
+                className="editorial-action editorial-action-primary disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {primaryAction.label}
+              </button>
+            ) : null
+          }
+        >
+          <NarrativeStream>
+            <NarrativeCheckpoint
+              tone={story.tone}
+              marker={<StoryMarker>Current state</StoryMarker>}
+              title={story.currentState}
+            >
+              <StatusStrip
+                items={[
+                  {
+                    label: 'Maturity',
+                    value: formatScore(workspace.workspaceSummary.overallScore),
+                    detail: 'Publication readiness score',
+                    tone: scoreTone(workspace.workspaceSummary.overallScore),
+                  },
+                  {
+                    label: 'Lifecycle',
+                    value: formatLabel(workspace.lifecycle.ready),
+                    detail: 'Ready-state flag',
+                    tone:
+                      workspace.lifecycle.ready === 'complete'
+                        ? 'success'
+                        : workspace.lifecycle.ready === 'blocked'
+                          ? 'danger'
+                          : 'warning',
+                  },
+                  {
+                    label: 'Cases',
+                    value: `${workspace.cases.summary.usable}/${workspace.cases.summary.total}`,
+                    detail: 'Usable playable cases',
+                    tone: workspace.cases.summary.usable ? 'success' : 'warning',
+                  },
+                  {
+                    label: 'Graph',
+                    value: formatLabel(workspace.graph.readiness),
+                    detail: 'Differential map readiness',
+                    tone:
+                      workspace.graph.readiness === 'ready'
+                        ? 'success'
+                        : 'warning',
+                  },
+                ]}
+              />
+            </NarrativeCheckpoint>
 
-        <RecommendedActionsCard
-          actions={workspace.recommendedActions}
-          onTabChange={onTabChange}
-        />
+            <ReasoningTransition tone={story.blocker.tone}>
+              Publication depends on clearing the most important blocker first.
+            </ReasoningTransition>
+
+            <NarrativeCheckpoint
+              tone={story.blocker.tone}
+              marker={<StoryMarker>Primary blocker</StoryMarker>}
+              title={story.blocker.title}
+              state={<StatusBadge status={story.blocker.badge} tone={story.blocker.tone} />}
+            >
+              <p className="text-xs leading-5 text-slate-400">{story.blocker.detail}</p>
+              {blockers.length || warnings.length ? (
+                <IssueSummaryStrip blockers={blockers} warnings={warnings} />
+              ) : null}
+            </NarrativeCheckpoint>
+
+            <ReasoningTransition tone={story.learnerRisk.tone}>
+              The blocker matters because it changes what the learner can safely recognize.
+            </ReasoningTransition>
+
+            <NarrativeCheckpoint
+              tone={story.learnerRisk.tone}
+              marker={<StoryMarker>Learner risk</StoryMarker>}
+              title={story.learnerRisk.title}
+              state={<StatusBadge status={story.learnerRisk.badge} tone={story.learnerRisk.tone} />}
+            >
+              {story.learnerRisk.detail ? (
+                <LearnerFailureProjection tone={story.learnerRisk.tone}>
+                  {story.learnerRisk.detail}
+                </LearnerFailureProjection>
+              ) : null}
+            </NarrativeCheckpoint>
+
+            <ReasoningTransition tone={story.gap.tone}>
+              The next gap tells us where editorial effort has the highest clinical leverage.
+            </ReasoningTransition>
+
+            <NarrativeCheckpoint
+              tone={story.gap.tone}
+              marker={<StoryMarker>First gap</StoryMarker>}
+              title={story.gap.title}
+              state={<StatusBadge status={story.gap.badge} tone={story.gap.tone} />}
+            >
+              <p className="text-xs leading-5 text-slate-400">{story.gap.detail}</p>
+              {story.gap.action ? (
+                <button
+                  type="button"
+                  onClick={story.gap.action}
+                  className="editorial-action px-2.5 py-1.5 text-xs"
+                >
+                  Open source
+                </button>
+              ) : null}
+            </NarrativeCheckpoint>
+
+            <ReasoningTransition tone={story.fix.tone}>
+              Choose one next move, then use the diagnostics only to explain the decision.
+            </ReasoningTransition>
+
+            <NarrativeCheckpoint
+              tone={story.fix.tone}
+              marker={<StoryMarker>Highest-impact fix</StoryMarker>}
+              title={story.fix.title}
+              state={<StatusBadge status={story.fix.badge} tone={story.fix.tone} />}
+            >
+              <p className="text-xs leading-5 text-slate-400">{story.fix.detail}</p>
+              {primaryAction ? (
+                <button
+                  type="button"
+                  disabled={!primaryAction.enabled}
+                  onClick={() => onTabChange(primaryAction.targetTab)}
+                  className="editorial-action editorial-action-primary px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {primaryAction.label}
+                </button>
+              ) : null}
+            </NarrativeCheckpoint>
+
+            <NarrativeCheckpoint
+              tone={story.path.tone}
+              marker={<StoryMarker>Readiness path</StoryMarker>}
+              title={story.path.title}
+            >
+              <MessageList
+                title="Next readiness signals"
+                tone={story.path.tone === 'danger' ? 'blocker' : 'warning'}
+                messages={story.path.items}
+              />
+            </NarrativeCheckpoint>
+          </NarrativeStream>
+        </EditorialNarrativeThread>
 
         <StreamDisclosure
-          title="Maturity and coverage diagnostics"
-          summary={`${workspace.coverageGaps.length} coverage gaps, ${workspace.readinessBreakdown.length} readiness signals`}
+          title="Secondary actions"
+          summary={`${workspace.recommendedActions.length} recommended action${workspace.recommendedActions.length === 1 ? '' : 's'}`}
         >
           <div className="space-y-4">
-            <StatusStrip
-              items={[
-                {
-                  label: 'Coverage',
-                  value: formatScore(workspace.workspaceSummary.overallScore),
-                  detail: `${workspace.coverageMatrix.filter((r) => r.fullCoverageStatus === 'covered').length}/${workspace.coverageMatrix.length} teaching rules covered`,
-                  tone: scoreTone(workspace.workspaceSummary.overallScore),
-                },
-                {
-                  label: 'Usable cases',
-                  value: `${workspace.cases.summary.usable}/${workspace.cases.summary.total}`,
-                  detail: 'Case inventory',
-                  tone: workspace.cases.summary.usable ? 'success' : 'warning',
-                },
-                {
-                  label: 'Clinical picture',
-                  value: formatLabel(workspace.education.status),
-                  detail: `Quality ${formatScore(workspace.workspaceSummary.educationScore)}`,
-                  tone: scoreTone(workspace.workspaceSummary.educationScore),
-                },
-                {
-                  label: 'Open actions',
-                  value: workspace.recommendedActions.length,
-                  detail: 'Recommended next moves',
-                  tone: workspace.recommendedActions.length ? 'warning' : 'success',
-                },
-              ]}
+            <RecommendedActionsCard
+              actions={workspace.recommendedActions}
+              onTabChange={onTabChange}
             />
             <CoverageGapsCard
               gaps={workspace.coverageGaps}
               onGapSelect={onGapSelect}
             />
+          </div>
+        </StreamDisclosure>
+
+        <StreamDisclosure
+          title="Readiness diagnostics"
+          summary={`${workspace.readinessBreakdown.length} readiness signals, ${workspace.coverageGaps.length} traceable gaps`}
+        >
+          <div className="space-y-4">
             <ExplainabilityPanel
               workspace={workspace}
               onTabChange={onTabChange}
               onGapSelect={onGapSelect}
-            />
-            <CoverageMatrixCard
-              rows={workspace.coverageMatrix}
-              selectedRow={selectedRow}
-              onRowSelect={onRowSelect}
             />
           </div>
         </StreamDisclosure>
@@ -165,13 +277,312 @@ export function OverviewTab({
             />
             <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
               <WorkspaceSummaryCard workspace={workspace} />
-              <CoverageScoreCard workspace={workspace} />
+              <MaturityExplanationCard workspace={workspace} />
             </div>
           </div>
         </StreamDisclosure>
       </EditorialStream>
     </div>
   );
+}
+
+type OverviewStory = {
+  title: string;
+  subtitle: string;
+  tone: StatusBadgeTone;
+  currentState: string;
+  primaryAction: {
+    label: string;
+    targetTab: WorkspaceTab;
+    enabled: boolean;
+  } | null;
+  blocker: {
+    title: string;
+    detail: string;
+    badge: string;
+    tone: StatusBadgeTone;
+  };
+  learnerRisk: {
+    title: string;
+    detail: string | null;
+    badge: string;
+    tone: StatusBadgeTone;
+  };
+  gap: {
+    title: string;
+    detail: string;
+    badge: string;
+    tone: StatusBadgeTone;
+    action?: () => void;
+  };
+  fix: {
+    title: string;
+    detail: string;
+    badge: string;
+    tone: StatusBadgeTone;
+  };
+  path: {
+    title: string;
+    items: string[];
+    tone: StatusBadgeTone;
+  };
+};
+
+function StoryMarker({ children }: { children: string }) {
+  return (
+    <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+      {children}
+    </span>
+  );
+}
+
+function buildOverviewStory(
+  workspace: DiagnosisEditorialWorkspace,
+  onTabChange: (tab: WorkspaceTab) => void,
+  onGapSelect: (gap: WorkspaceCoverageGap) => void,
+): OverviewStory {
+  const blockers = workspace.workspaceSummary.blockers;
+  const warnings = workspace.workspaceSummary.warnings;
+  const lifecycleBlocker = workspace.lifecycleGovernance?.blockers[0] ?? null;
+  const lifecycleWarning = workspace.lifecycleGovernance?.warnings[0] ?? null;
+  const blockerGap =
+    workspace.coverageGaps.find((gap) => gap.severity === 'blocker') ?? null;
+  const blockingClaim =
+    (workspace.unsupportedClaimsBySection ?? []).find(
+      (claim) => claim.blocksPublication,
+    ) ?? null;
+  const firstClaim = blockingClaim ?? (workspace.unsupportedClaimsBySection ?? [])[0];
+  const differentialCoverage = workspace.workspaceSummary.differentialCoverage;
+  const unresolvedDifferentials =
+    differentialCoverage && differentialCoverage.totalDifferentials > 0
+      ? Math.max(
+          0,
+          differentialCoverage.totalDifferentials -
+            differentialCoverage.resolvedLinks,
+        )
+      : workspace.workspaceSummary.unresolvedDifferentialCount ?? 0;
+  const primaryFix =
+    workspace.editorialPrioritization?.highestImpactFixes[0] ?? null;
+  const recommendedAction =
+    workspace.recommendedActions.find((action) => action.enabled) ??
+    workspace.recommendedActions[0] ??
+    null;
+  const primaryAction = primaryFix
+    ? {
+        label: primaryFix.label,
+        targetTab: normalizeOverviewTargetTab(primaryFix.targetTab),
+        enabled: true,
+      }
+    : recommendedAction
+      ? {
+          label: recommendedAction.label,
+          targetTab: normalizeOverviewTargetTab(recommendedAction.targetTab),
+          enabled: recommendedAction.enabled,
+        }
+      : null;
+  const tone: StatusBadgeTone = blockers.length
+    ? 'danger'
+    : warnings.length ||
+        workspace.coverageGaps.length ||
+        (workspace.unsupportedClaimsBySection ?? []).length
+      ? 'warning'
+      : scoreTone(workspace.workspaceSummary.overallScore);
+
+  const blocker = blockers[0]
+    ? {
+        title: blockers[0],
+        detail: 'This workspace blocker must be cleared before publication readiness can advance.',
+        badge: 'Blocked',
+        tone: 'danger' as StatusBadgeTone,
+      }
+    : lifecycleBlocker
+      ? {
+          title: lifecycleBlocker,
+          detail:
+            'Lifecycle governance is preventing activation, playability, or generation promotion.',
+          badge: 'Lifecycle blocker',
+          tone: 'danger' as StatusBadgeTone,
+        }
+      : blockerGap
+        ? {
+            title: blockerGap.title,
+            detail: blockerGap.recommendedAction,
+            badge: 'Coverage blocker',
+            tone: 'danger' as StatusBadgeTone,
+          }
+        : warnings[0] ?? lifecycleWarning
+          ? {
+              title: warnings[0] ?? lifecycleWarning ?? 'Warning',
+              detail:
+                'No hard publication blocker is reported, but this warning should be resolved or accepted explicitly.',
+              badge: 'Needs review',
+              tone: 'warning' as StatusBadgeTone,
+            }
+          : {
+              title: 'No publication blockers are currently reported.',
+              detail:
+                'The workspace read model is not reporting a blocker or warning on the primary publication path.',
+              badge: 'Clear',
+              tone: 'success' as StatusBadgeTone,
+            };
+
+  const learnerRisk = workspace.editorialPrioritization?.learnerRisk ?? null;
+  const learnerRiskTone = riskTierTone(learnerRisk?.tier);
+  const learnerRiskReasons =
+    workspace.editorialPrioritization?.triageReasons ??
+    workspace.editorialPrioritization?.editorialPriority.reasons ??
+    [];
+
+  const firstGap = workspace.coverageGaps[0] ?? null;
+  const gap = firstClaim
+    ? {
+        title: `Unsupported ${formatLabel(firstClaim.sectionType)} claim needs integrity review.`,
+        detail: firstClaim.claimText,
+        badge: firstClaim.blocksPublication ? 'Claim blocker' : 'Unsupported claim',
+        tone: firstClaim.blocksPublication
+          ? ('danger' as StatusBadgeTone)
+          : ('warning' as StatusBadgeTone),
+        action: () => onTabChange('integrity'),
+      }
+    : firstGap
+      ? {
+          title: firstGap.title,
+          detail: firstGap.recommendedAction,
+          badge: formatLabel(coverageGapSource(firstGap)),
+          tone:
+            firstGap.severity === 'blocker'
+              ? ('danger' as StatusBadgeTone)
+              : ('warning' as StatusBadgeTone),
+          action: () => onGapSelect(firstGap),
+        }
+      : workspace.cases.summary.usable === 0
+        ? {
+            title: 'No usable case is available for learner practice.',
+            detail:
+              'Create or review a playable case before treating this diagnosis as learner-ready.',
+            badge: 'Case gap',
+            tone: 'warning' as StatusBadgeTone,
+            action: () => onTabChange('cases'),
+          }
+        : unresolvedDifferentials > 0
+          ? {
+              title: `${unresolvedDifferentials} differential link${unresolvedDifferentials === 1 ? '' : 's'} remain unresolved.`,
+              detail:
+                'Resolve discriminator and mimic mapping so learners can safely distinguish this diagnosis.',
+              badge: 'Discriminator gap',
+              tone: 'warning' as StatusBadgeTone,
+              action: () => onTabChange('graph'),
+            }
+          : {
+              title: 'No claim, case, or discriminator gap is currently first in line.',
+              detail:
+                'The highest-priority gaps are clear; use secondary diagnostics for residual maintenance work.',
+              badge: 'No first gap',
+              tone: 'success' as StatusBadgeTone,
+            };
+
+  const fix = primaryFix
+    ? {
+        title: primaryFix.label,
+        detail: primaryFix.reason,
+        badge: formatLabel(primaryFix.severity),
+        tone: severityTone(primaryFix.severity),
+      }
+    : recommendedAction
+      ? {
+          title: recommendedAction.label,
+          detail:
+            recommendedAction.disabledReason ??
+            `Open ${formatLabel(recommendedAction.targetTab)} to continue.`,
+          badge: formatLabel(recommendedAction.severity ?? 'info'),
+          tone: severityTone(recommendedAction.severity),
+        }
+      : {
+          title: 'No next action is currently recommended.',
+          detail:
+            'The workspace has no explicit recommended action; continue with routine editorial review.',
+          badge: 'No action',
+          tone: 'success' as StatusBadgeTone,
+        };
+
+  const pathItems = [
+    ...workspace.readinessBreakdown
+      .slice()
+      .sort(
+        (left, right) => severityRank(left.severity) - severityRank(right.severity),
+      )
+      .slice(0, 4)
+      .map((item) => item.message),
+    ...(workspace.maturityExplanation ?? []).slice(0, 3),
+  ].filter(Boolean);
+
+  return {
+    title:
+      tone === 'danger'
+        ? 'Publication is blocked'
+        : tone === 'warning'
+          ? 'Publication needs editorial review'
+          : 'Publication path is clear',
+    subtitle:
+      workspace.editorialPrioritization?.recommendedNextAction ??
+      primaryAction?.label ??
+      'Review the readiness path and confirm no residual editorial risk remains.',
+    tone,
+    currentState: `${workspace.diagnosis.displayLabel} is ${formatLabel(
+      workspace.workspaceSummary.status,
+    )} with ${blockers.length} blocker${blockers.length === 1 ? '' : 's'}, ${
+      warnings.length
+    } warning${warnings.length === 1 ? '' : 's'}, and ${
+      workspace.coverageGaps.length
+    } traceable gap${workspace.coverageGaps.length === 1 ? '' : 's'}.`,
+    primaryAction,
+    blocker,
+    learnerRisk: {
+      title: learnerRisk
+        ? `Learner risk is ${formatLabel(learnerRisk.tier)} (${learnerRisk.score}).`
+        : 'Learner risk has not been scored for this diagnosis.',
+      detail: learnerRiskReasons[0] ?? null,
+      badge: learnerRisk ? formatLabel(learnerRisk.tier) : 'Unscored',
+      tone: learnerRiskTone,
+    },
+    gap,
+    fix,
+    path: {
+      title: pathItems.length
+        ? 'Clear these readiness signals in order, then re-check lifecycle state.'
+        : 'No readiness signals are currently blocking the path.',
+      items: pathItems.length ? pathItems : ['No readiness signals currently reported.'],
+      tone: pathItems.length ? tone : 'success',
+    },
+  };
+}
+
+function normalizeOverviewTargetTab(tab: string | null | undefined): WorkspaceTab {
+  if (
+    tab === 'overview' ||
+    tab === 'teaching-rules' ||
+    tab === 'editorial-brief' ||
+    tab === 'education' ||
+    tab === 'cases' ||
+    tab === 'graph' ||
+    tab === 'integrity'
+  ) {
+    return tab;
+  }
+  return 'overview';
+}
+
+function severityTone(severity?: string | null): StatusBadgeTone {
+  if (severity === 'blocker') return 'danger';
+  if (severity === 'warning') return 'warning';
+  return 'info';
+}
+
+function riskTierTone(tier?: string | null): StatusBadgeTone {
+  if (tier === 'critical' || tier === 'high') return 'danger';
+  if (tier === 'medium') return 'warning';
+  if (tier === 'low') return 'success';
+  return 'info';
 }
 
 function OnboardingCard({
@@ -709,6 +1120,42 @@ function WorkspaceSummaryCard({
       ) : (
         <p className="mt-3 text-sm text-slate-500">No workspace blockers loaded.</p>
       )}
+    </CompactPanel>
+  );
+}
+
+function MaturityExplanationCard({
+  workspace,
+}: {
+  workspace: DiagnosisEditorialWorkspace;
+}) {
+  const explanation = workspace.maturityExplanation ?? [];
+  const weighting = workspace.maturityWeighting;
+
+  return (
+    <CompactPanel title="Maturity explanation">
+      {explanation.length ? (
+        <MessageList
+          title="Explanation"
+          tone="warning"
+          messages={explanation.slice(0, 6)}
+        />
+      ) : (
+        <p className="text-sm text-slate-500">
+          No maturity explanation has been reported yet.
+        </p>
+      )}
+      {weighting ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {Object.entries(weighting).map(([key, value]) => (
+            <StatusBadge
+              key={key}
+              status={`${formatLabel(key)} ${value}`}
+              tone="neutral"
+            />
+          ))}
+        </div>
+      ) : null}
     </CompactPanel>
   );
 }

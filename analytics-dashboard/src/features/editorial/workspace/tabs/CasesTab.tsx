@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import type {
   CaseClueProgressionAnalysis,
   CaseClueDiscriminatorAnnotation,
+  CaseClueRevisionDraft,
+  CaseClueRevisionDraftPayload,
   CaseEscalationAnnotationPayload,
   CaseEscalationCoverageRow,
   CaseDifferentialElimination,
@@ -69,6 +71,12 @@ export function CasesTab({
   onGenerateDiscriminatorCase,
   onGenerateClueRevision,
   onAiDraftDecision,
+  onUpdateClueRevisionDraft,
+  onApproveClueRevisionDraft,
+  onRejectClueRevisionDraft,
+  onRequestChangesForClueRevisionDraft,
+  onSupersedeClueRevisionDraft,
+  onApplyClueRevisionDraft,
   onCreateLearningGoalCoverage,
   onCreateEscalationAnnotation,
   onUpdateLearningGoalCoverage,
@@ -95,6 +103,15 @@ export function CasesTab({
     action: AiDraftDecisionAction,
     note?: string,
   ) => void;
+  onUpdateClueRevisionDraft: (
+    draftId: string,
+    payload: CaseClueRevisionDraftPayload,
+  ) => void;
+  onApproveClueRevisionDraft: (draftId: string, note?: string) => void;
+  onRejectClueRevisionDraft: (draftId: string, note?: string) => void;
+  onRequestChangesForClueRevisionDraft: (draftId: string, note?: string) => void;
+  onSupersedeClueRevisionDraft: (draftId: string, note?: string) => void;
+  onApplyClueRevisionDraft: (draftId: string) => void;
   onCreateLearningGoalCoverage: (
     payload: CaseLearningGoalCoveragePayload,
   ) => void;
@@ -142,28 +159,46 @@ export function CasesTab({
       >
         <CaseInventoryEntity workspace={workspace} />
         <CaseContributionCard workspace={workspace} />
-        <ClueProgressionTimelineCard
-          workspace={workspace}
-          pendingAction={pendingAction}
-          onCreateDiscriminatorAnnotation={onCreateDiscriminatorAnnotation}
-          onUpdateDiscriminatorAnnotation={onUpdateDiscriminatorAnnotation}
-          onDeleteDiscriminatorAnnotation={onDeleteDiscriminatorAnnotation}
-          onGenerateDiscriminatorCase={onGenerateDiscriminatorCase}
-          onGenerateClueRevision={onGenerateClueRevision}
-          onAiDraftDecision={onAiDraftDecision}
-        />
-        <CaseCoverageExplainabilityCard
-          workspace={workspace}
-          caseGaps={caseGaps}
-          pendingAction={pendingAction}
-          onGenerateTargetedCase={onGenerateTargetedCase}
-          onCreateLearningGoalCoverage={onCreateLearningGoalCoverage}
-          onCreateEscalationAnnotation={onCreateEscalationAnnotation}
-          onUpdateLearningGoalCoverage={onUpdateLearningGoalCoverage}
-          onDeleteLearningGoalCoverage={onDeleteLearningGoalCoverage}
-          onUpdateEscalationAnnotation={onUpdateEscalationAnnotation}
-          onDeleteEscalationAnnotation={onDeleteEscalationAnnotation}
-        />
+        <StreamDisclosure
+          title="Clue progression and revision workflow"
+          summary="Discriminator annotations, clue repair drafts, and progression details"
+        >
+          <ClueProgressionTimelineCard
+            workspace={workspace}
+            pendingAction={pendingAction}
+            onCreateDiscriminatorAnnotation={onCreateDiscriminatorAnnotation}
+            onUpdateDiscriminatorAnnotation={onUpdateDiscriminatorAnnotation}
+            onDeleteDiscriminatorAnnotation={onDeleteDiscriminatorAnnotation}
+            onGenerateDiscriminatorCase={onGenerateDiscriminatorCase}
+            onGenerateClueRevision={onGenerateClueRevision}
+            onAiDraftDecision={onAiDraftDecision}
+            onUpdateClueRevisionDraft={onUpdateClueRevisionDraft}
+            onApproveClueRevisionDraft={onApproveClueRevisionDraft}
+            onRejectClueRevisionDraft={onRejectClueRevisionDraft}
+            onRequestChangesForClueRevisionDraft={
+              onRequestChangesForClueRevisionDraft
+            }
+            onSupersedeClueRevisionDraft={onSupersedeClueRevisionDraft}
+            onApplyClueRevisionDraft={onApplyClueRevisionDraft}
+          />
+        </StreamDisclosure>
+        <StreamDisclosure
+          title="Coverage editing"
+          summary="Learning goal and escalation annotation controls"
+        >
+          <CaseCoverageExplainabilityCard
+            workspace={workspace}
+            caseGaps={caseGaps}
+            pendingAction={pendingAction}
+            onGenerateTargetedCase={onGenerateTargetedCase}
+            onCreateLearningGoalCoverage={onCreateLearningGoalCoverage}
+            onCreateEscalationAnnotation={onCreateEscalationAnnotation}
+            onUpdateLearningGoalCoverage={onUpdateLearningGoalCoverage}
+            onDeleteLearningGoalCoverage={onDeleteLearningGoalCoverage}
+            onUpdateEscalationAnnotation={onUpdateEscalationAnnotation}
+            onDeleteEscalationAnnotation={onDeleteEscalationAnnotation}
+          />
+        </StreamDisclosure>
         {caseGaps.length ? (
           <CollapsibleDetail
             title="Case coverage gaps"
@@ -318,6 +353,12 @@ function ClueProgressionTimelineCard({
   onGenerateDiscriminatorCase,
   onGenerateClueRevision,
   onAiDraftDecision,
+  onUpdateClueRevisionDraft,
+  onApproveClueRevisionDraft,
+  onRejectClueRevisionDraft,
+  onRequestChangesForClueRevisionDraft,
+  onSupersedeClueRevisionDraft,
+  onApplyClueRevisionDraft,
 }: {
   workspace: DiagnosisEditorialWorkspace;
   pendingAction: string | null;
@@ -343,6 +384,15 @@ function ClueProgressionTimelineCard({
     action: AiDraftDecisionAction,
     note?: string,
   ) => void;
+  onUpdateClueRevisionDraft: (
+    draftId: string,
+    payload: CaseClueRevisionDraftPayload,
+  ) => void;
+  onApproveClueRevisionDraft: (draftId: string, note?: string) => void;
+  onRejectClueRevisionDraft: (draftId: string, note?: string) => void;
+  onRequestChangesForClueRevisionDraft: (draftId: string, note?: string) => void;
+  onSupersedeClueRevisionDraft: (draftId: string, note?: string) => void;
+  onApplyClueRevisionDraft: (draftId: string) => void;
 }) {
   const casesWithProgression = workspace.cases.items.filter(
     (caseItem) => caseItem.clueProgression?.diagnosticStates.length,
@@ -435,7 +485,14 @@ function ClueProgressionTimelineCard({
             caseId={selectedCase.id}
             analysis={selectedCase.clueProgression}
             annotations={selectedCase.clueDiscriminatorAnnotations ?? []}
+            revisionDrafts={selectedCase.clueRevisionDrafts ?? []}
             pendingAction={pendingAction}
+            onUpdateRevisionDraft={onUpdateClueRevisionDraft}
+            onApproveRevisionDraft={onApproveClueRevisionDraft}
+            onRejectRevisionDraft={onRejectClueRevisionDraft}
+            onRequestChangesRevisionDraft={onRequestChangesForClueRevisionDraft}
+            onSupersedeRevisionDraft={onSupersedeClueRevisionDraft}
+            onApplyRevisionDraft={onApplyClueRevisionDraft}
             onCreateAnnotation={onCreateDiscriminatorAnnotation}
             onUpdateAnnotation={onUpdateDiscriminatorAnnotation}
             onDeleteAnnotation={onDeleteDiscriminatorAnnotation}
@@ -477,7 +534,14 @@ function ClueProgressionStateList({
   caseId,
   analysis,
   annotations,
+  revisionDrafts,
   pendingAction,
+  onUpdateRevisionDraft,
+  onApproveRevisionDraft,
+  onRejectRevisionDraft,
+  onRequestChangesRevisionDraft,
+  onSupersedeRevisionDraft,
+  onApplyRevisionDraft,
   onCreateAnnotation,
   onUpdateAnnotation,
   onDeleteAnnotation,
@@ -485,7 +549,17 @@ function ClueProgressionStateList({
   caseId: string;
   analysis: CaseClueProgressionAnalysis;
   annotations: CaseClueDiscriminatorAnnotation[];
+  revisionDrafts: CaseClueRevisionDraft[];
   pendingAction: string | null;
+  onUpdateRevisionDraft: (
+    draftId: string,
+    payload: CaseClueRevisionDraftPayload,
+  ) => void;
+  onApproveRevisionDraft: (draftId: string, note?: string) => void;
+  onRejectRevisionDraft: (draftId: string, note?: string) => void;
+  onRequestChangesRevisionDraft: (draftId: string, note?: string) => void;
+  onSupersedeRevisionDraft: (draftId: string, note?: string) => void;
+  onApplyRevisionDraft: (draftId: string) => void;
   onCreateAnnotation: (
     caseId: string,
     payload: CreateCaseClueDiscriminatorAnnotationPayload,
@@ -505,6 +579,12 @@ function ClueProgressionStateList({
             annotation.clueIndex === state.clueIndex ||
             annotation.clueOrder === state.clueIndex ||
             annotation.clueOrder === state.clueIndex - 1,
+        );
+        const clueRevisionDrafts = revisionDrafts.filter(
+          (draft) =>
+            draft.clueIndex === state.clueIndex ||
+            draft.clueOrder === state.clueIndex ||
+            draft.clueOrder === state.clueIndex - 1,
         );
         const next = analysis.diagnosticStates[index + 1];
         const emergences = analysis.discriminatorEmergences.filter(
@@ -625,6 +705,18 @@ function ClueProgressionStateList({
                       : `${formatLabel(state.learnerConfusionRisk)} risk of confusion at this point.`)}
                 </LearnerFailureProjection>
               ) : null}
+              {clueRevisionDrafts.length ? (
+                <MaterializedClueRevisionDrafts
+                  drafts={clueRevisionDrafts}
+                  pendingAction={pendingAction}
+                  onUpdate={onUpdateRevisionDraft}
+                  onApprove={onApproveRevisionDraft}
+                  onReject={onRejectRevisionDraft}
+                  onRequestChanges={onRequestChangesRevisionDraft}
+                  onSupersede={onSupersedeRevisionDraft}
+                  onApply={onApplyRevisionDraft}
+                />
+              ) : null}
               <ClueDiscriminatorAnnotationEditor
                 caseId={caseId}
                 clueIndex={state.clueIndex}
@@ -646,6 +738,307 @@ function ClueProgressionStateList({
       })}
     </NarrativeStream>
   );
+}
+
+function MaterializedClueRevisionDrafts({
+  drafts,
+  pendingAction,
+  onUpdate,
+  onApprove,
+  onReject,
+  onRequestChanges,
+  onSupersede,
+  onApply,
+}: {
+  drafts: CaseClueRevisionDraft[];
+  pendingAction: string | null;
+  onUpdate: (draftId: string, payload: CaseClueRevisionDraftPayload) => void;
+  onApprove: (draftId: string, note?: string) => void;
+  onReject: (draftId: string, note?: string) => void;
+  onRequestChanges: (draftId: string, note?: string) => void;
+  onSupersede: (draftId: string, note?: string) => void;
+  onApply: (draftId: string) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--color-teal)]/25 bg-[var(--color-teal)]/10 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-teal)]">
+          Clue revision workflow
+        </p>
+        <StatusBadge
+          status={`${drafts.length} draft${drafts.length === 1 ? '' : 's'}`}
+          tone={drafts.some((draft) => draft.status === 'APPROVED') ? 'success' : 'warning'}
+        />
+      </div>
+      <div className="mt-2 space-y-2">
+        {drafts.map((draft) => (
+          <ClueRevisionDraftReviewCard
+            key={draft.id}
+            draft={draft}
+            pendingAction={pendingAction}
+            onUpdate={onUpdate}
+            onApprove={onApprove}
+            onReject={onReject}
+            onRequestChanges={onRequestChanges}
+            onSupersede={onSupersede}
+            onApply={onApply}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ClueRevisionDraftReviewCard({
+  draft,
+  pendingAction,
+  onUpdate,
+  onApprove,
+  onReject,
+  onRequestChanges,
+  onSupersede,
+  onApply,
+}: {
+  draft: CaseClueRevisionDraft;
+  pendingAction: string | null;
+  onUpdate: (draftId: string, payload: CaseClueRevisionDraftPayload) => void;
+  onApprove: (draftId: string, note?: string) => void;
+  onReject: (draftId: string, note?: string) => void;
+  onRequestChanges: (draftId: string, note?: string) => void;
+  onSupersede: (draftId: string, note?: string) => void;
+  onApply: (draftId: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draftText, setDraftText] = useState({
+    revisedClue: draft.revisedClue ?? '',
+    addedClue: draft.addedClue ?? '',
+    rationale: draft.rationale ?? '',
+    expectedEffect: draft.expectedEffect ?? '',
+  });
+  const busy = pendingAction !== null;
+  const readOnly = ['APPLIED', 'REJECTED', 'SUPERSEDED'].includes(draft.status);
+  const primary = clueRevisionPrimaryAction(draft);
+
+  function save() {
+    onUpdate(draft.id, {
+      revisedClue: draftText.revisedClue,
+      addedClue: draftText.addedClue,
+      rationale: draftText.rationale,
+      expectedEffect: draftText.expectedEffect,
+    });
+    setEditing(false);
+  }
+
+  function runPrimary() {
+    if (primary === 'approve') onApprove(draft.id);
+    if (primary === 'edit') setEditing(true);
+    if (primary === 'apply') onApply(draft.id);
+  }
+
+  return (
+    <div className="rounded-md border border-white/10 bg-slate-950/20 p-3 text-xs leading-5 text-slate-300">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap gap-1.5">
+            <StatusBadge status={formatLabel(draft.status)} tone={clueRevisionStatusTone(draft.status)} />
+            <StatusBadge status={`Draft ${draft.id.slice(0, 8)}`} tone="info" />
+            {draft.blockedReason ? (
+              <StatusBadge status="Blocked" tone="danger" />
+            ) : null}
+          </div>
+          {draft.originalClue ? (
+            <p className="mt-2 text-slate-500">Original: {draft.originalClue}</p>
+          ) : null}
+        </div>
+        {primary ? (
+          <button
+            type="button"
+            disabled={busy || (primary === 'apply' && !draft.canApply)}
+            className="editorial-action editorial-action-primary px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={runPrimary}
+          >
+            {primary === 'approve'
+              ? 'Approve'
+              : primary === 'edit'
+                ? 'Edit draft'
+                : 'Apply'}
+          </button>
+        ) : null}
+      </div>
+
+      {editing ? (
+        <div className="mt-3 grid gap-2">
+          <textarea
+            value={draftText.revisedClue}
+            onChange={(event) =>
+              setDraftText((current) => ({
+                ...current,
+                revisedClue: event.target.value,
+              }))
+            }
+            rows={2}
+            placeholder="Revised clue"
+            className="rounded-md border border-[var(--color-navy-border)] bg-slate-950/50 px-3 py-2 text-sm text-slate-100"
+          />
+          <textarea
+            value={draftText.addedClue}
+            onChange={(event) =>
+              setDraftText((current) => ({
+                ...current,
+                addedClue: event.target.value,
+              }))
+            }
+            rows={2}
+            placeholder="Added clue"
+            className="rounded-md border border-[var(--color-navy-border)] bg-slate-950/50 px-3 py-2 text-sm text-slate-100"
+          />
+          <input
+            value={draftText.rationale}
+            onChange={(event) =>
+              setDraftText((current) => ({
+                ...current,
+                rationale: event.target.value,
+              }))
+            }
+            placeholder="Rationale"
+            className="rounded-md border border-[var(--color-navy-border)] bg-slate-950/50 px-3 py-2 text-sm text-slate-100"
+          />
+          <input
+            value={draftText.expectedEffect}
+            onChange={(event) =>
+              setDraftText((current) => ({
+                ...current,
+                expectedEffect: event.target.value,
+              }))
+            }
+            placeholder="Expected effect"
+            className="rounded-md border border-[var(--color-navy-border)] bg-slate-950/50 px-3 py-2 text-sm text-slate-100"
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              className="editorial-action editorial-action-primary px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={save}
+            >
+              Save draft
+            </button>
+            <button
+              type="button"
+              className="editorial-action px-2.5 py-1.5 text-xs"
+              onClick={() => setEditing(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 space-y-1">
+          <p>
+            Proposed:{' '}
+            <span className="font-semibold text-slate-100">
+              {draft.revisedClue ?? draft.addedClue ?? 'No clue text stored'}
+            </span>
+          </p>
+          {draft.addedClue && draft.revisedClue ? (
+            <p className="text-slate-400">Added: {draft.addedClue}</p>
+          ) : null}
+          {draft.rationale ? (
+            <p className="text-slate-400">Rationale: {draft.rationale}</p>
+          ) : null}
+          {draft.expectedEffect ? (
+            <p className="text-slate-400">Expected: {draft.expectedEffect}</p>
+          ) : null}
+          {draft.blockedReason ? (
+            <LearnerFailureProjection tone="warning">
+              {draft.blockedReason}
+            </LearnerFailureProjection>
+          ) : null}
+        </div>
+      )}
+
+      {!readOnly ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-2">
+          <p className="text-slate-500">
+            Source audit: {draft.sourceAuditId.slice(0, 8)}
+          </p>
+          <SecondaryActionDisclosure>
+            {draft.canEdit && primary !== 'edit' ? (
+              <button
+                type="button"
+                className="editorial-action px-2.5 py-1.5 text-xs"
+                onClick={() => setEditing(true)}
+              >
+                Edit
+              </button>
+            ) : null}
+            {draft.canApprove && primary !== 'approve' ? (
+              <button
+                type="button"
+                disabled={busy}
+                className="editorial-action px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => onApprove(draft.id)}
+              >
+                Approve
+              </button>
+            ) : null}
+            {['PENDING_REVIEW', 'NEEDS_CHANGES'].includes(draft.status) ? (
+              <>
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="editorial-action px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() =>
+                    onRequestChanges(
+                      draft.id,
+                      'Needs clearer clue timing or discriminator support.',
+                    )
+                  }
+                >
+                  Request changes
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="editorial-action px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => onReject(draft.id)}
+                >
+                  Reject
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              disabled={busy || draft.status === 'APPLIED'}
+              className="editorial-action px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() =>
+                onSupersede(
+                  draft.id,
+                  'Superseded by newer clue revision workflow.',
+                )
+              }
+            >
+              Supersede
+            </button>
+          </SecondaryActionDisclosure>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function clueRevisionPrimaryAction(draft: CaseClueRevisionDraft) {
+  if (draft.status === 'PENDING_REVIEW') return 'approve';
+  if (draft.status === 'NEEDS_CHANGES') return 'edit';
+  if (draft.status === 'APPROVED') return 'apply';
+  return null;
+}
+
+function clueRevisionStatusTone(status: string) {
+  if (status === 'APPROVED' || status === 'APPLIED') return 'success';
+  if (status === 'REJECTED' || status === 'BLOCKED_CASE_NOT_EDITABLE') return 'danger';
+  if (status === 'NEEDS_CHANGES' || status === 'PENDING_REVIEW') return 'warning';
+  return 'neutral';
 }
 
 function ClueDiscriminatorAnnotationEditor({
@@ -1164,6 +1557,20 @@ function GeneratedDiscriminatorRepairs({
                       tone="neutral"
                     />
                   ) : null}
+                  {review.acceptedMaterializationStatus &&
+                  review.acceptedMaterializationStatus !== 'pending' &&
+                  review.acceptedMaterializationStatus !== 'not_applicable' ? (
+                    <StatusBadge
+                      status={materializationStatusLabel(
+                        review.acceptedMaterializationStatus,
+                      )}
+                      tone={
+                        review.acceptedMaterializationStatus === 'materialized'
+                          ? 'success'
+                          : 'warning'
+                      }
+                    />
+                  ) : null}
                 </div>
                 <DiscriminatorReveal label={payload.discriminator} />
                 {payload.learnerRisk || payload.editorialReason ? (
@@ -1244,9 +1651,21 @@ function GeneratedDiscriminatorRepairs({
                     </button>
                   </InlineReviewBar>
                 ) : (
-                  <p className="text-xs text-slate-500">
-                    Decision: {formatLabel(review.reviewStatus)}
-                  </p>
+                  <div className="space-y-1">
+                    <p className="text-xs text-slate-500">
+                      Decision: {formatLabel(review.reviewStatus)}
+                    </p>
+                    {review.acceptedMaterializationStatus ? (
+                      <p className="text-xs text-slate-500">
+                        {materializationStatusLabel(
+                          review.acceptedMaterializationStatus,
+                        )}
+                        {review.revisionDraftId
+                          ? ` (${review.revisionDraftId.slice(0, 8)})`
+                          : ''}
+                      </p>
+                    ) : null}
+                  </div>
                 )}
               </div>
             </NarrativeCheckpoint>
@@ -1266,6 +1685,18 @@ function draftReviewTone(status: string) {
   if (status === 'REJECTED') return 'danger';
   if (status === 'NEEDS_CHANGES' || status === 'PENDING_REVIEW') return 'warning';
   return 'neutral';
+}
+
+function materializationStatusLabel(
+  status: NonNullable<DiscriminatorDraftReview['acceptedMaterializationStatus']>,
+) {
+  if (status === 'materialized') return 'Materialized as draft revision';
+  if (status === 'blocked_case_not_editable') {
+    return 'Accepted as proposal only';
+  }
+  if (status === 'accepted_audit_only') return 'Accepted audit-only';
+  if (status === 'pending') return 'Pending materialization decision';
+  return 'No materialization required';
 }
 
 function CaseCoverageExplainabilityCard({

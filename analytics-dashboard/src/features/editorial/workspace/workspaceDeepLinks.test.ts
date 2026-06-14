@@ -10,7 +10,7 @@ import {
 } from './workspaceDeepLinks.ts';
 
 describe('workspace deep links', () => {
-  it('builds unsupported claim links to the clinical picture tab', () => {
+  it('builds unsupported claim links to the integrity tab', () => {
     assert.equal(
       buildUnsupportedClaimDeepLink({
         targetUrl: '/editorial/diagnoses/dx-1',
@@ -18,12 +18,13 @@ describe('workspace deep links', () => {
         sectionId: 'management',
         targetTab: 'education',
       }),
-      '/editorial/diagnoses/dx-1?tab=clinical-picture&claimId=claim-1&sectionId=management',
+      '/editorial/diagnoses/dx-1?tab=integrity&claimId=claim-1&sectionId=management',
     );
   });
 
-  it('normalizes the clinical-picture alias to the existing education tab', () => {
+  it('normalizes the clinical-picture alias to the existing education tab and accepts integrity', () => {
     assert.equal(normalizeWorkspaceTab('clinical-picture'), 'education');
+    assert.equal(normalizeWorkspaceTab('integrity'), 'integrity');
     assert.equal(normalizeWorkspaceTab('cases'), 'cases');
     assert.equal(normalizeWorkspaceTab('missing'), 'overview');
   });

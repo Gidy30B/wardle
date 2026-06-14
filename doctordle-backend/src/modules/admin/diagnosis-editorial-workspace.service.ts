@@ -6,14 +6,15 @@ import {
 } from '@nestjs/common';
 import {
   CaseEditorialStatus,
+  CaseSource,
   DifferentialResolutionStatus,
   DiagnosisRegistryCandidateStatus,
   DiagnosisGraphCandidateStatus,
   DiagnosisGraphCandidateType,
   DiagnosisGraphFactStatus,
   DiagnosisEducationStatus,
+  Prisma,
   ValidationOutcome,
-  type Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { DiagnosisGraphCandidatesService } from '../diagnosis-graph/diagnosis-graph-candidates.service';
@@ -107,6 +108,64 @@ type DiscriminatorDraftReviewPayload = {
   };
 };
 
+type ClueRevisionMaterializationResult = {
+  materialized: boolean;
+  status:
+    | 'not_applicable'
+    | 'materialized'
+    | 'accepted_audit_only'
+    | 'blocked_case_not_editable'
+    | 'pending';
+  reason?: string;
+  revisionDraftId?: string;
+  note?: string;
+};
+
+type CaseClueRevisionDraftRow = {
+  id: string;
+  caseId: string;
+  sourceAuditId: string;
+  clueOrder: number | null;
+  clueIndex: number | null;
+  originalClue: string | null;
+  revisedClue: string | null;
+  addedClue: string | null;
+  rationale: string | null;
+  expectedEffect: string | null;
+  status: string;
+  reviewerUserId: string | null;
+  decisionAt: Date | null;
+  decisionByUserId: string | null;
+  decisionNote: string | null;
+  appliedAt: Date | null;
+  appliedByUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type CaseClueRevisionDraftWithCase = CaseClueRevisionDraftRow & {
+  case: {
+    id: string;
+    editorialStatus: CaseEditorialStatus | null;
+    clues: Prisma.JsonValue | null;
+    title: string;
+    date: Date;
+    difficulty: string;
+    history: string;
+    symptoms: string[];
+    labs: Prisma.JsonValue | null;
+    explanation: Prisma.JsonValue | null;
+    differentials: string[];
+    diagnosisId: string | null;
+    diagnosisRegistryId: string | null;
+    proposedDiagnosisText: string;
+    diagnosisMappingStatus: Prisma.JsonValue | string;
+    diagnosisMappingMethod: Prisma.JsonValue | string;
+    diagnosisMappingConfidence: number | null;
+    diagnosisEditorialNote: string | null;
+  };
+};
+
 type CaseRow = {
   id: string;
   title: string;
@@ -160,6 +219,27 @@ type CaseRow = {
     educationalValue: string;
     reviewerUserId: string | null;
     reviewedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+  clueRevisionDrafts?: Array<{
+    id: string;
+    caseId: string;
+    sourceAuditId: string;
+    clueOrder: number | null;
+    clueIndex: number | null;
+    originalClue: string | null;
+    revisedClue: string | null;
+    addedClue: string | null;
+    rationale: string | null;
+    expectedEffect: string | null;
+    status: string;
+    reviewerUserId: string | null;
+    decisionAt: Date | null;
+    decisionByUserId: string | null;
+    decisionNote: string | null;
+    appliedAt: Date | null;
+    appliedByUserId: string | null;
     createdAt: Date;
     updatedAt: Date;
   }>;
@@ -352,8 +432,16 @@ export class DiagnosisEditorialWorkspaceService {
     const persistedCaseEscalationAnnotations =
       this.valueOrNull(caseEscalationAnnotationsResult) ?? [];
     const aiDraftAuditTrail = this.valueOrNull(aiDraftAuditTrailResult) ?? [];
+    const materializedClueRevisionDrafts =
+      this.projectMaterializedClueRevisionDrafts(registry.cases);
+    const clueRevisionDraftsByAuditId = new Map(
+      materializedClueRevisionDrafts.map((draft) => [draft.sourceAuditId, draft]),
+    );
     const discriminatorDraftReviews =
-      this.projectDiscriminatorDraftReviews(aiDraftAuditTrail);
+      this.projectDiscriminatorDraftReviews(
+        aiDraftAuditTrail,
+        clueRevisionDraftsByAuditId,
+      );
     const cases = this.buildCases(registry.cases, {
       diagnosisRegistryId: registry.id,
       diagnosisName: this.diagnosisName(registry),
@@ -558,6 +646,7 @@ export class DiagnosisEditorialWorkspaceService {
       editorialPrioritization,
       aiDraftAuditTrail,
       discriminatorDraftReviews,
+      materializedClueRevisionDrafts,
       editorialLearning: {
         available: revisions.length >= 2,
         candidateCounts: {
@@ -670,24 +759,209 @@ export class DiagnosisEditorialWorkspaceService {
       throw new NotFoundException('AI draft revision audit not found');
     }
 
-    if (input.decision === 'accept') {
-      await this.applyAcceptedDraftOutput(audit, input.userId);
-    }
+    const materialization =
+      input.decision === 'accept'
+        ? await this.applyAcceptedDraftOutput(audit, input.userId)
+        : null;
 
     const status = this.reviewStatusForDecision(input.decision);
-    return this.prisma.aiDraftRevisionAudit.update({
+    const updated = await this.prisma.aiDraftRevisionAudit.update({
       where: { id: audit.id },
       data: {
         editorDecision: input.decision,
         reviewStatus: status,
         reviewerUserId: input.userId,
         decisionAt: new Date(),
-        reviewNote:
-          input.note ??
-          this.defaultDraftDecisionNote(audit, input.decision) ??
-          null,
+        reviewNote: this.aiDraftDecisionNote({
+          audit,
+          decision: input.decision,
+          note: input.note,
+          materialization,
+        }),
       },
     });
+
+    return {
+      ...updated,
+      materialization: materialization ?? {
+        materialized: false,
+        status: 'not_applicable',
+      },
+    };
+  }
+
+  async updateClueRevisionDraft(input: {
+    draftId: string;
+    payload: {
+      revisedClue?: string | null;
+      addedClue?: string | null;
+      rationale?: string | null;
+      expectedEffect?: string | null;
+      decisionNote?: string | null;
+    };
+    reviewerUserId: string;
+  }) {
+    const draft = await this.loadCaseClueRevisionDraft(input.draftId);
+    if (!['PENDING_REVIEW', 'NEEDS_CHANGES'].includes(draft.status)) {
+      throw new BadRequestException(
+        'Only pending or needs-changes clue revision drafts can be edited',
+      );
+    }
+
+    const data: Prisma.CaseClueRevisionDraftUpdateInput = {
+      reviewerUserId: input.reviewerUserId,
+    };
+    if ('revisedClue' in input.payload) {
+      data.revisedClue = this.nullableTrim(input.payload.revisedClue);
+    }
+    if ('addedClue' in input.payload) {
+      data.addedClue = this.nullableTrim(input.payload.addedClue);
+    }
+    if ('rationale' in input.payload) {
+      data.rationale = this.nullableTrim(input.payload.rationale);
+    }
+    if ('expectedEffect' in input.payload) {
+      data.expectedEffect = this.nullableTrim(input.payload.expectedEffect);
+    }
+    if ('decisionNote' in input.payload) {
+      data.decisionNote = this.nullableTrim(input.payload.decisionNote);
+    }
+
+    const updated = await this.prisma.caseClueRevisionDraft.update({
+      where: { id: draft.id },
+      data,
+    });
+
+    return this.caseClueRevisionDraftDto(updated);
+  }
+
+  async approveClueRevisionDraft(input: {
+    draftId: string;
+    reviewerUserId: string;
+    note?: string | null;
+  }) {
+    return this.decideClueRevisionDraft({
+      ...input,
+      status: 'APPROVED',
+      allowedStatuses: ['PENDING_REVIEW', 'NEEDS_CHANGES'],
+    });
+  }
+
+  async rejectClueRevisionDraft(input: {
+    draftId: string;
+    reviewerUserId: string;
+    note?: string | null;
+  }) {
+    return this.decideClueRevisionDraft({
+      ...input,
+      status: 'REJECTED',
+      allowedStatuses: ['PENDING_REVIEW', 'NEEDS_CHANGES'],
+    });
+  }
+
+  async requestChangesForClueRevisionDraft(input: {
+    draftId: string;
+    reviewerUserId: string;
+    note?: string | null;
+  }) {
+    return this.decideClueRevisionDraft({
+      ...input,
+      status: 'NEEDS_CHANGES',
+      allowedStatuses: ['PENDING_REVIEW', 'NEEDS_CHANGES'],
+    });
+  }
+
+  async supersedeClueRevisionDraft(input: {
+    draftId: string;
+    reviewerUserId: string;
+    note?: string | null;
+  }) {
+    const draft = await this.loadCaseClueRevisionDraft(input.draftId);
+    if (draft.status === 'APPLIED') {
+      throw new BadRequestException('Applied clue revision drafts cannot be superseded');
+    }
+    const updated = await this.prisma.caseClueRevisionDraft.update({
+      where: { id: draft.id },
+      data: {
+        status: 'SUPERSEDED',
+        decisionAt: new Date(),
+        decisionByUserId: input.reviewerUserId,
+        decisionNote: input.note ?? null,
+      },
+    });
+    return this.caseClueRevisionDraftDto(updated);
+  }
+
+  async applyApprovedClueRevisionDraft(input: {
+    draftId: string;
+    reviewerUserId: string;
+  }) {
+    const draft = await this.loadCaseClueRevisionDraft(input.draftId);
+    if (draft.status === 'APPLIED') {
+      return {
+        ...this.caseClueRevisionDraftDto(draft),
+        applied: true,
+        reason: 'already_applied',
+        caseId: draft.caseId,
+      };
+    }
+    if (draft.status !== 'APPROVED') {
+      throw new BadRequestException('Only approved clue revision drafts can be applied');
+    }
+    if (!this.canMaterializeClueRevision(draft.case)) {
+      const blocked = await this.prisma.caseClueRevisionDraft.update({
+        where: { id: draft.id },
+        data: {
+          status: 'BLOCKED_CASE_NOT_EDITABLE',
+          decisionAt: new Date(),
+          decisionByUserId: input.reviewerUserId,
+          decisionNote: 'Target case is not editable.',
+        },
+      });
+      return {
+        ...this.caseClueRevisionDraftDto(blocked),
+        applied: false,
+        reason: 'target_case_not_editable',
+        caseId: draft.caseId,
+      };
+    }
+
+    const patch = this.patchCaseCluesForRevisionDraft(draft);
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updatedCase = await tx.case.update({
+        where: { id: draft.caseId },
+        data: {
+          clues: patch.clues,
+          diagnosisEditorialNote: this.appendCaseEditorialNote(
+            draft.case.diagnosisEditorialNote,
+            this.appliedClueRevisionNote(draft, patch),
+          ),
+        },
+        select: this.caseRevisionSnapshotSelect(),
+      });
+      await this.createCaseRevisionSnapshot(tx, {
+        caseRecord: updatedCase,
+        createdByUserId: input.reviewerUserId,
+      });
+      await tx.caseClueProgressionAnalysis.deleteMany({
+        where: { caseId: draft.caseId },
+      });
+      const applied = await tx.caseClueRevisionDraft.update({
+        where: { id: draft.id },
+        data: {
+          status: 'APPLIED',
+          appliedAt: new Date(),
+          appliedByUserId: input.reviewerUserId,
+        },
+      });
+      return applied;
+    });
+
+    return {
+      ...this.caseClueRevisionDraftDto(result),
+      applied: true,
+      caseId: draft.caseId,
+    };
   }
 
   async upsertCaseLearningGoalCoverage(input: {
@@ -1081,6 +1355,30 @@ export class DiagnosisEditorialWorkspaceService {
                 educationalValue: true,
                 reviewerUserId: true,
                 reviewedAt: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+            clueRevisionDrafts: {
+              orderBy: [{ clueOrder: 'asc' }, { createdAt: 'desc' }],
+              select: {
+                id: true,
+                caseId: true,
+                sourceAuditId: true,
+                clueOrder: true,
+                clueIndex: true,
+                originalClue: true,
+                revisedClue: true,
+                addedClue: true,
+                rationale: true,
+                expectedEffect: true,
+                status: true,
+                reviewerUserId: true,
+                decisionAt: true,
+                decisionByUserId: true,
+                decisionNote: true,
+                appliedAt: true,
+                appliedByUserId: true,
                 createdAt: true,
                 updatedAt: true,
               },
@@ -1513,8 +1811,15 @@ export class DiagnosisEditorialWorkspaceService {
       affectedArtifactType: string;
       affectedArtifactId: string;
       reviewStatus: string;
+      reviewNote?: string | null;
       createdAt: string;
     }>,
+    clueRevisionDraftsByAuditId: Map<
+      string,
+      ReturnType<
+        DiagnosisEditorialWorkspaceService['projectMaterializedClueRevisionDrafts']
+      >[number]
+    >,
   ) {
     return audits
       .map((audit) => {
@@ -1530,9 +1835,50 @@ export class DiagnosisEditorialWorkspaceService {
           reviewStatus: audit.reviewStatus,
           createdAt: audit.createdAt,
           ...projection,
+          ...this.discriminatorDraftMaterializationProjection(
+            audit,
+            projection.draftKind,
+            clueRevisionDraftsByAuditId.get(audit.id),
+          ),
         };
       })
       .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  }
+
+  private discriminatorDraftMaterializationProjection(
+    audit: { id: string; reviewStatus: string; reviewNote?: string | null },
+    draftKind?: DiscriminatorDraftKind,
+    draft?: ReturnType<
+      DiagnosisEditorialWorkspaceService['projectMaterializedClueRevisionDrafts']
+    >[number],
+  ) {
+    if (draftKind !== 'clue_revision_proposal') {
+      return { acceptedMaterializationStatus: 'not_applicable' as const };
+    }
+    if (draft) {
+      const status = ['APPLIED', 'APPROVED', 'REJECTED', 'SUPERSEDED'].includes(
+        draft.status,
+      )
+        ? draft.status.toLowerCase()
+        : 'materialized';
+      return {
+        acceptedMaterializationStatus: status,
+        revisionDraftId: draft.id,
+      };
+    }
+    if (audit.reviewStatus !== 'ACCEPTED') {
+      return { acceptedMaterializationStatus: 'pending' as const };
+    }
+    if (
+      audit.reviewNote?.includes(
+        'Accepted as proposal only; target case is not editable.',
+      )
+    ) {
+      return {
+        acceptedMaterializationStatus: 'blocked_case_not_editable' as const,
+      };
+    }
+    return { acceptedMaterializationStatus: 'accepted_audit_only' as const };
   }
 
   private discriminatorDraftAuditProjection(audit: {
@@ -1766,21 +2112,43 @@ export class DiagnosisEditorialWorkspaceService {
     return 'Accepted revision proposal; no case or clue mutation was performed.';
   }
 
+  private aiDraftDecisionNote(input: {
+    audit: { actionType: string };
+    decision: 'accept' | 'reject' | 'request_changes' | 'supersede';
+    note?: string | null;
+    materialization: ClueRevisionMaterializationResult | null;
+  }) {
+    const defaultNote =
+      input.materialization?.note ??
+      this.defaultDraftDecisionNote(input.audit, input.decision);
+    if (input.note && defaultNote) {
+      return `${input.note} ${defaultNote}`;
+    }
+    return input.note ?? defaultNote ?? null;
+  }
+
   private async applyAcceptedDraftOutput(
     audit: {
       id: string;
+      actionType?: string;
+      caseId?: string | null;
       affectedArtifactType: string;
       affectedArtifactId: string;
       sourceIssue: Prisma.JsonValue;
+      inputContext?: Prisma.JsonValue;
       generatedOutput: Prisma.JsonValue;
     },
     reviewerUserId: string,
-  ) {
+  ): Promise<ClueRevisionMaterializationResult> {
+    if (this.isDiscriminatorDraftAudit(audit.actionType ?? '')) {
+      return this.materializeAcceptedClueRevisionDraft(audit, reviewerUserId);
+    }
+
     if (
       audit.affectedArtifactType !== 'EDUCATION_SECTION' &&
       audit.affectedArtifactType !== 'EDUCATION'
     ) {
-      return;
+      return { materialized: false, status: 'not_applicable' };
     }
 
     const education = await this.prisma.diagnosisEducation.findUnique({
@@ -1822,6 +2190,398 @@ export class DiagnosisEditorialWorkspaceService {
         [section]: this.appendDraftRepair(currentValue, repairEntry),
       },
     });
+
+    return { materialized: false, status: 'not_applicable' };
+  }
+
+  private async materializeAcceptedClueRevisionDraft(
+    audit: {
+      id: string;
+      actionType?: string;
+      caseId?: string | null;
+      affectedArtifactId: string;
+      sourceIssue: Prisma.JsonValue;
+      inputContext?: Prisma.JsonValue;
+      generatedOutput: Prisma.JsonValue;
+    },
+    reviewerUserId: string,
+  ): Promise<ClueRevisionMaterializationResult> {
+    const reviewPayload = this.parseDiscriminatorDraftReviewPayload({
+      actionType: audit.actionType ?? '',
+      sourceIssue: audit.sourceIssue,
+      inputContext: audit.inputContext,
+      generatedOutput: audit.generatedOutput,
+      caseId: audit.caseId,
+    });
+    if (!reviewPayload) {
+      return {
+        materialized: false,
+        status: 'accepted_audit_only',
+        reason: 'malformed_review_payload',
+        note: 'Accepted as proposal only; clue revision payload was incomplete.',
+      };
+    }
+    if (reviewPayload.draftKind !== 'clue_revision_proposal') {
+      return {
+        materialized: false,
+        status: 'not_applicable',
+        reason: 'targeted_discriminator_case_audit_only',
+      };
+    }
+
+    const clueRevision = reviewPayload.proposedOutput.clueRevision;
+    if (!clueRevision || (!clueRevision.revisedClue && !clueRevision.addedClue)) {
+      return {
+        materialized: false,
+        status: 'accepted_audit_only',
+        reason: 'missing_proposed_clue',
+        note: 'Accepted as proposal only; clue revision payload was incomplete.',
+      };
+    }
+
+    const caseId =
+      reviewPayload.caseId ?? audit.caseId ?? audit.affectedArtifactId ?? null;
+    if (!caseId) {
+      return {
+        materialized: false,
+        status: 'accepted_audit_only',
+        reason: 'missing_case_id',
+        note: 'Accepted as proposal only; target case was not identified.',
+      };
+    }
+
+    const targetCase = await this.prisma.case.findFirst({
+      where: { id: caseId },
+      select: { id: true, editorialStatus: true },
+    });
+    if (!targetCase) {
+      return {
+        materialized: false,
+        status: 'accepted_audit_only',
+        reason: 'target_case_not_found',
+        note: 'Accepted as proposal only; target case was not found.',
+      };
+    }
+    if (!this.canMaterializeClueRevision(targetCase)) {
+      return {
+        materialized: false,
+        status: 'blocked_case_not_editable',
+        reason: 'target_case_not_editable',
+        note: 'Accepted as proposal only; target case is not editable.',
+      };
+    }
+
+    const existing = await this.prisma.caseClueRevisionDraft.findUnique({
+      where: { sourceAuditId: audit.id },
+      select: { id: true },
+    });
+    if (existing) {
+      return {
+        materialized: true,
+        status: 'materialized',
+        revisionDraftId: existing.id,
+        reason: 'already_materialized',
+        note: 'Materialized as draft case clue revision.',
+      };
+    }
+
+    const draft = await this.prisma.caseClueRevisionDraft.create({
+      data: {
+        caseId: targetCase.id,
+        sourceAuditId: audit.id,
+        clueOrder: reviewPayload.sourceClueOrder ?? null,
+        clueIndex: reviewPayload.sourceClueIndex ?? null,
+        originalClue: clueRevision.originalClue ?? null,
+        revisedClue: clueRevision.revisedClue ?? null,
+        addedClue: clueRevision.addedClue ?? null,
+        rationale: clueRevision.rationale ?? null,
+        expectedEffect: clueRevision.expectedEffect ?? null,
+        status: 'PENDING_REVIEW',
+        reviewerUserId,
+      },
+      select: { id: true },
+    });
+
+    return {
+      materialized: true,
+      status: 'materialized',
+      revisionDraftId: draft.id,
+      note: 'Materialized as draft case clue revision.',
+    };
+  }
+
+  private canMaterializeClueRevision(targetCase: {
+    editorialStatus: CaseEditorialStatus | null;
+  }) {
+    const editableStatuses: CaseEditorialStatus[] = [
+      CaseEditorialStatus.DRAFT,
+      CaseEditorialStatus.REVIEW,
+      CaseEditorialStatus.NEEDS_EDIT,
+    ];
+    return targetCase.editorialStatus
+      ? editableStatuses.includes(targetCase.editorialStatus)
+      : false;
+  }
+
+  private async decideClueRevisionDraft(input: {
+    draftId: string;
+    reviewerUserId: string;
+    note?: string | null;
+    status: 'APPROVED' | 'REJECTED' | 'NEEDS_CHANGES';
+    allowedStatuses: string[];
+  }) {
+    const draft = await this.loadCaseClueRevisionDraft(input.draftId);
+    if (!input.allowedStatuses.includes(draft.status)) {
+      throw new BadRequestException(
+        `Clue revision draft cannot move from ${draft.status} to ${input.status}`,
+      );
+    }
+    const updated = await this.prisma.caseClueRevisionDraft.update({
+      where: { id: draft.id },
+      data: {
+        status: input.status,
+        decisionAt: new Date(),
+        decisionByUserId: input.reviewerUserId,
+        decisionNote: input.note ?? null,
+      },
+    });
+    return this.caseClueRevisionDraftDto(updated);
+  }
+
+  private async loadCaseClueRevisionDraft(
+    draftId: string,
+  ): Promise<CaseClueRevisionDraftWithCase> {
+    const draft = await this.prisma.caseClueRevisionDraft.findUnique({
+      where: { id: draftId },
+      include: {
+        case: {
+          select: this.caseRevisionSnapshotSelect(),
+        },
+      },
+    });
+    if (!draft) {
+      throw new NotFoundException('Case clue revision draft not found');
+    }
+    return draft as CaseClueRevisionDraftWithCase;
+  }
+
+  private patchCaseCluesForRevisionDraft(draft: CaseClueRevisionDraftWithCase) {
+    const clues = this.cloneClueArray(draft.case.clues);
+    if (!draft.revisedClue && !draft.addedClue) {
+      throw new BadRequestException('Clue revision draft has no proposed clue text');
+    }
+    let targetIndex = this.resolveClueIndex(clues, draft);
+    let originalClue: Prisma.JsonValue | undefined =
+      targetIndex !== null ? clues[targetIndex] : undefined;
+    if (draft.revisedClue) {
+      if (targetIndex === null) {
+        throw new BadRequestException(
+          'Revised clue requires an existing clueOrder or clueIndex target',
+        );
+      }
+      originalClue = clues[targetIndex];
+      clues[targetIndex] = this.replaceClueText(clues[targetIndex], draft.revisedClue);
+    }
+    if (draft.addedClue) {
+      const insertAt = targetIndex === null ? clues.length : targetIndex + 1;
+      clues.splice(
+        insertAt,
+        0,
+        this.buildAddedClue(draft.addedClue, originalClue, insertAt),
+      );
+      targetIndex = insertAt;
+    }
+    return {
+      clues: this.normalizeClueOrder(clues) as Prisma.InputJsonValue,
+      originalClue,
+    };
+  }
+
+  private cloneClueArray(value: Prisma.JsonValue | null): Prisma.JsonValue[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return JSON.parse(JSON.stringify(value)) as Prisma.JsonValue[];
+  }
+
+  private resolveClueIndex(
+    clues: Prisma.JsonValue[],
+    draft: { clueIndex: number | null; clueOrder: number | null },
+  ) {
+    if (
+      typeof draft.clueIndex === 'number' &&
+      draft.clueIndex >= 0 &&
+      draft.clueIndex < clues.length
+    ) {
+      return draft.clueIndex;
+    }
+    if (typeof draft.clueOrder === 'number') {
+      const byOrder = clues.findIndex((clue) => {
+        if (!clue || typeof clue !== 'object' || Array.isArray(clue)) {
+          return false;
+        }
+        return this.numberValue(
+          (clue as Record<string, Prisma.JsonValue>).order,
+        ) === draft.clueOrder;
+      });
+      if (byOrder >= 0) {
+        return byOrder;
+      }
+      if (draft.clueOrder >= 0 && draft.clueOrder < clues.length) {
+        return draft.clueOrder;
+      }
+    }
+    return null;
+  }
+
+  private replaceClueText(clue: Prisma.JsonValue, text: string): Prisma.JsonValue {
+    if (typeof clue === 'string') {
+      return text;
+    }
+    if (clue && typeof clue === 'object' && !Array.isArray(clue)) {
+      const record = clue as Record<string, Prisma.JsonValue>;
+      return {
+        ...record,
+        value: text,
+        text,
+        sourceRevisionDraft: 'case_clue_revision_draft',
+      } as Prisma.JsonValue;
+    }
+    return { type: 'history', value: text, text } as Prisma.JsonValue;
+  }
+
+  private buildAddedClue(
+    text: string,
+    neighbor: Prisma.JsonValue | undefined,
+    order: number,
+  ): Prisma.JsonValue {
+    const base =
+      neighbor && typeof neighbor === 'object' && !Array.isArray(neighbor)
+        ? (neighbor as Record<string, Prisma.JsonValue>)
+        : {};
+    return {
+      type: this.stringValue(base.type) ?? 'history',
+      value: text,
+      text,
+      order,
+      sourceRevisionDraft: 'case_clue_revision_draft',
+    } as Prisma.JsonValue;
+  }
+
+  private normalizeClueOrder(clues: Prisma.JsonValue[]) {
+    return clues.map((clue, index) => {
+      if (clue && typeof clue === 'object' && !Array.isArray(clue)) {
+        return {
+          ...(clue as Record<string, Prisma.JsonValue>),
+          order: index,
+        } as Prisma.JsonValue;
+      }
+      return clue;
+    });
+  }
+
+  private appliedClueRevisionNote(
+    draft: CaseClueRevisionDraftWithCase,
+    patch: { originalClue?: Prisma.JsonValue },
+  ) {
+    return [
+      `Applied clue revision draft ${draft.id}.`,
+      `Source audit ${draft.sourceAuditId}.`,
+      draft.originalClue
+        ? `Original clue: ${draft.originalClue}.`
+        : patch.originalClue
+          ? `Original clue snapshot: ${JSON.stringify(patch.originalClue)}.`
+          : null,
+      draft.revisedClue ? `Revised clue: ${draft.revisedClue}.` : null,
+      draft.addedClue ? `Added clue: ${draft.addedClue}.` : null,
+      draft.expectedEffect ? `Expected effect: ${draft.expectedEffect}.` : null,
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  private appendCaseEditorialNote(current: string | null, note: string) {
+    return [current, note].filter(Boolean).join('\n');
+  }
+
+  private caseRevisionSnapshotSelect() {
+    return {
+      id: true,
+      editorialStatus: true,
+      clues: true,
+      title: true,
+      date: true,
+      difficulty: true,
+      history: true,
+      symptoms: true,
+      labs: true,
+      explanation: true,
+      differentials: true,
+      diagnosisId: true,
+      diagnosisRegistryId: true,
+      proposedDiagnosisText: true,
+      diagnosisMappingStatus: true,
+      diagnosisMappingMethod: true,
+      diagnosisMappingConfidence: true,
+      diagnosisEditorialNote: true,
+    } as const;
+  }
+
+  private async createCaseRevisionSnapshot(
+    tx: Prisma.TransactionClient,
+    input: {
+      caseRecord: ReturnType<
+        DiagnosisEditorialWorkspaceService['caseRevisionSnapshotSelect']
+      > extends infer _T
+        ? CaseClueRevisionDraftWithCase['case']
+        : never;
+      createdByUserId: string;
+    },
+  ) {
+    const latestRevision = await tx.caseRevision.findFirst({
+      where: { caseId: input.caseRecord.id },
+      orderBy: { revisionNumber: 'desc' },
+      select: { revisionNumber: true },
+    });
+    const revision = await tx.caseRevision.create({
+      data: {
+        caseId: input.caseRecord.id,
+        revisionNumber: (latestRevision?.revisionNumber ?? 0) + 1,
+        source: CaseSource.ADMIN_EDIT,
+        title: input.caseRecord.title,
+        date: input.caseRecord.date,
+        difficulty: input.caseRecord.difficulty,
+        history: input.caseRecord.history,
+        symptoms: input.caseRecord.symptoms,
+        labs: this.toNullableJsonValue(input.caseRecord.labs),
+        clues: this.toNullableJsonValue(input.caseRecord.clues),
+        explanation: this.toNullableJsonValue(input.caseRecord.explanation),
+        differentials: input.caseRecord.differentials,
+        diagnosisId: input.caseRecord.diagnosisId,
+        diagnosisRegistryId: input.caseRecord.diagnosisRegistryId,
+        proposedDiagnosisText: input.caseRecord.proposedDiagnosisText,
+        diagnosisMappingStatus: input.caseRecord.diagnosisMappingStatus as never,
+        diagnosisMappingMethod: input.caseRecord.diagnosisMappingMethod as never,
+        diagnosisMappingConfidence: input.caseRecord.diagnosisMappingConfidence,
+        diagnosisEditorialNote: input.caseRecord.diagnosisEditorialNote,
+        createdByUserId: input.createdByUserId,
+      },
+      select: { id: true },
+    });
+    await tx.case.update({
+      where: { id: input.caseRecord.id },
+      data: { currentRevisionId: revision.id },
+    });
+  }
+
+  private toNullableJsonValue(
+    value: Prisma.JsonValue | null,
+  ): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput {
+    return value === null ? Prisma.DbNull : (value as Prisma.InputJsonValue);
+  }
+
+  private nullableTrim(value: string | null | undefined) {
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
   }
 
   private appendDraftRepair(
@@ -2173,6 +2933,63 @@ export class DiagnosisEditorialWorkspaceService {
       reviewedAt: row.reviewedAt ? this.toIso(row.reviewedAt) : null,
       createdAt: this.toIso(row.createdAt),
       updatedAt: this.toIso(row.updatedAt),
+    };
+  }
+
+  private projectMaterializedClueRevisionDrafts(cases: CaseRow[]) {
+    return cases.flatMap((caseRecord) =>
+      this.caseClueRevisionDraftDtos(
+        caseRecord.clueRevisionDrafts ?? [],
+        caseRecord.editorialStatus,
+      ),
+    );
+  }
+
+  private caseClueRevisionDraftDtos(
+    rows: NonNullable<CaseRow['clueRevisionDrafts']>,
+    editorialStatus?: CaseEditorialStatus | null,
+  ) {
+    return rows.map((row) =>
+      this.caseClueRevisionDraftDto(
+        editorialStatus === undefined
+          ? row
+          : { ...row, case: { editorialStatus } },
+      ),
+    );
+  }
+
+  private caseClueRevisionDraftDto(
+    row: CaseClueRevisionDraftRow & {
+      case?: { editorialStatus: CaseEditorialStatus | null };
+    },
+  ) {
+    const editable = row.case ? this.canMaterializeClueRevision(row.case) : true;
+    const blockedReason = editable ? null : 'Target case is not editable.';
+    return {
+      id: row.id,
+      caseId: row.caseId,
+      sourceAuditId: row.sourceAuditId,
+      clueOrder: row.clueOrder,
+      clueIndex: row.clueIndex,
+      originalClue: row.originalClue,
+      revisedClue: row.revisedClue,
+      addedClue: row.addedClue,
+      rationale: row.rationale,
+      expectedEffect: row.expectedEffect,
+      status: row.status,
+      reviewerUserId: row.reviewerUserId,
+      decisionAt: row.decisionAt ? this.toIso(row.decisionAt) : null,
+      decisionByUserId: row.decisionByUserId,
+      decisionNote: row.decisionNote,
+      appliedAt: row.appliedAt ? this.toIso(row.appliedAt) : null,
+      appliedByUserId: row.appliedByUserId,
+      createdAt: this.toIso(row.createdAt),
+      updatedAt: this.toIso(row.updatedAt),
+      canEdit: editable && ['PENDING_REVIEW', 'NEEDS_CHANGES'].includes(row.status),
+      canApprove:
+        editable && ['PENDING_REVIEW', 'NEEDS_CHANGES'].includes(row.status),
+      canApply: editable && row.status === 'APPROVED',
+      blockedReason,
     };
   }
 
@@ -2693,7 +3510,11 @@ export class DiagnosisEditorialWorkspaceService {
         clueDiscriminatorAnnotations:
           this.caseClueDiscriminatorAnnotationDtos(
             caseRecord.clueDiscriminatorAnnotations ?? [],
-          ),
+        ),
+        clueRevisionDrafts: this.caseClueRevisionDraftDtos(
+          caseRecord.clueRevisionDrafts ?? [],
+          caseRecord.editorialStatus,
+        ),
       };
     });
     const usableCases = cases.filter((caseRecord) =>

@@ -22,11 +22,17 @@ import {
   normalizeDiagnosisRegistryLifecycleRow,
   regenerateDiagnosisEducationSection,
   repairUnsupportedClaimDraft,
+  applyCaseClueRevisionDraft,
+  approveCaseClueRevisionDraft,
+  rejectCaseClueRevisionDraft,
+  requestChangesForCaseClueRevisionDraft,
   reviewDiagnosisEditorialBrief,
   reviewDiagnosisTeachingRule,
   seedLegacyDiagnosisTeachingRules,
+  supersedeCaseClueRevisionDraft,
   updateDiagnosisRegistryLifecycle,
   updateDiagnosisEditorialBrief,
+  updateCaseClueRevisionDraft,
   updateDiagnosisTeachingRule,
   updateCaseEscalationAnnotation,
   updateCaseDiscriminatorAnnotation,
@@ -38,6 +44,7 @@ import {
   type ClaimRepairResult,
   type AiDraftDecisionAction,
   type CaseEscalationAnnotationPayload,
+  type CaseClueRevisionDraftPayload,
   type CreateCaseClueDiscriminatorAnnotationPayload,
   type UpdateCaseClueDiscriminatorAnnotationPayload,
   type CaseLearningGoalCoveragePayload,
@@ -71,6 +78,7 @@ import { TabBar, WorkspaceHeader } from './workspace/WorkspaceHeader';
 import { CasesTab } from './workspace/tabs/CasesTab';
 import { ClinicalPictureTab } from './workspace/tabs/ClinicalPictureTab';
 import { DifferentialMapTab } from './workspace/tabs/DifferentialMapTab';
+import { IntegrityTab } from './workspace/tabs/IntegrityTab';
 import { ObjectivesTab } from './workspace/tabs/ObjectivesTab';
 import { OverviewTab } from './workspace/tabs/OverviewTab';
 import { TeachingLearningTab } from './workspace/tabs/TeachingLearningTab';
@@ -191,7 +199,7 @@ export default function EditorialDiagnosisWorkspacePage() {
   const showClaimTargetUnavailable =
     Boolean(workspace) &&
     hasExplicitClaimTarget &&
-    activeTab === 'education' &&
+    activeTab === 'integrity' &&
     !targetedUnsupportedClaim;
 
   function openCoverageRow(row: WorkspaceCoverageMatrixRow) {
@@ -706,6 +714,67 @@ export default function EditorialDiagnosisWorkspacePage() {
     });
   }
 
+  function handleUpdateClueRevisionDraft(
+    draftId: string,
+    payload: CaseClueRevisionDraftPayload,
+  ) {
+    void runWorkspaceAction({
+      id: `clue-revision-update-${draftId}`,
+      pending: 'Updating clue revision draft...',
+      success: 'Clue revision draft updated.',
+      action: () => updateCaseClueRevisionDraft(client, draftId, payload),
+    });
+  }
+
+  function handleApproveClueRevisionDraft(draftId: string, note?: string) {
+    void runWorkspaceAction({
+      id: `clue-revision-approve-${draftId}`,
+      pending: 'Approving clue revision draft...',
+      success: 'Clue revision draft approved.',
+      action: () => approveCaseClueRevisionDraft(client, draftId, { note }),
+    });
+  }
+
+  function handleRejectClueRevisionDraft(draftId: string, note?: string) {
+    void runWorkspaceAction({
+      id: `clue-revision-reject-${draftId}`,
+      pending: 'Rejecting clue revision draft...',
+      success: 'Clue revision draft rejected.',
+      action: () => rejectCaseClueRevisionDraft(client, draftId, { note }),
+    });
+  }
+
+  function handleRequestChangesForClueRevisionDraft(
+    draftId: string,
+    note?: string,
+  ) {
+    void runWorkspaceAction({
+      id: `clue-revision-changes-${draftId}`,
+      pending: 'Requesting clue revision changes...',
+      success: 'Clue revision draft marked for changes.',
+      action: () =>
+        requestChangesForCaseClueRevisionDraft(client, draftId, { note }),
+    });
+  }
+
+  function handleSupersedeClueRevisionDraft(draftId: string, note?: string) {
+    void runWorkspaceAction({
+      id: `clue-revision-supersede-${draftId}`,
+      pending: 'Superseding clue revision draft...',
+      success: 'Clue revision draft superseded.',
+      action: () => supersedeCaseClueRevisionDraft(client, draftId, { note }),
+    });
+  }
+
+  function handleApplyClueRevisionDraft(draftId: string) {
+    void runWorkspaceAction({
+      id: `clue-revision-apply-${draftId}`,
+      pending: 'Applying clue revision draft...',
+      success: 'Clue revision draft applied to editable case.',
+      action: () => applyCaseClueRevisionDraft(client, draftId),
+    });
+  }
+
   function handleCreateLearningGoalCoverage(
     payload: CaseLearningGoalCoveragePayload,
   ) {
@@ -938,8 +1007,6 @@ export default function EditorialDiagnosisWorkspacePage() {
           {activeTab === 'overview' ? (
             <OverviewTab
               workspace={workspace}
-              selectedRow={selectedCoverageRow}
-              onRowSelect={openCoverageRow}
               onGapSelect={openCoverageGap}
               onTabChange={setActiveTab}
               canRunSeniorActions={canRunSeniorActions}
@@ -985,6 +1052,42 @@ export default function EditorialDiagnosisWorkspacePage() {
           {activeTab === 'education' ? (
             <ClinicalPictureTab
               workspace={workspace}
+            />
+          ) : null}
+          {activeTab === 'cases' ? (
+              <CasesTab
+                workspace={workspace}
+                coverage={coverageMap}
+                mimicCandidates={mimicCandidates}
+                pendingAction={pendingAction}
+                generatedTargetedCase={generatedTargetedCase}
+                onGapSelect={openCoverageGap}
+                onGenerateTargetedCase={handleGenerateTargetedCase}
+                onGenerateDiscriminatorCase={handleGenerateDiscriminatorCase}
+                onGenerateClueRevision={handleGenerateClueRevision}
+                onAiDraftDecision={handleAiDraftDecision}
+                onUpdateClueRevisionDraft={handleUpdateClueRevisionDraft}
+                onApproveClueRevisionDraft={handleApproveClueRevisionDraft}
+                onRejectClueRevisionDraft={handleRejectClueRevisionDraft}
+                onRequestChangesForClueRevisionDraft={
+                  handleRequestChangesForClueRevisionDraft
+                }
+                onSupersedeClueRevisionDraft={handleSupersedeClueRevisionDraft}
+                onApplyClueRevisionDraft={handleApplyClueRevisionDraft}
+                onCreateLearningGoalCoverage={handleCreateLearningGoalCoverage}
+                onCreateEscalationAnnotation={handleCreateEscalationAnnotation}
+                onUpdateLearningGoalCoverage={handleUpdateLearningGoalCoverage}
+                onDeleteLearningGoalCoverage={handleDeleteLearningGoalCoverage}
+                onUpdateEscalationAnnotation={handleUpdateEscalationAnnotation}
+                onDeleteEscalationAnnotation={handleDeleteEscalationAnnotation}
+                onCreateDiscriminatorAnnotation={handleCreateDiscriminatorAnnotation}
+                onUpdateDiscriminatorAnnotation={handleUpdateDiscriminatorAnnotation}
+                onDeleteDiscriminatorAnnotation={handleDeleteDiscriminatorAnnotation}
+              />
+          ) : null}
+          {activeTab === 'integrity' ? (
+            <IntegrityTab
+              workspace={workspace}
               revisions={revisions}
               revisionCompare={revisionCompare}
               revisionCompareLoading={revisionCompareLoading}
@@ -1001,29 +1104,6 @@ export default function EditorialDiagnosisWorkspacePage() {
               onFromVersionChange={setCompareFromVersion}
               onToVersionChange={setCompareToVersion}
             />
-          ) : null}
-          {activeTab === 'cases' ? (
-              <CasesTab
-                workspace={workspace}
-                coverage={coverageMap}
-                mimicCandidates={mimicCandidates}
-                pendingAction={pendingAction}
-                generatedTargetedCase={generatedTargetedCase}
-                onGapSelect={openCoverageGap}
-                onGenerateTargetedCase={handleGenerateTargetedCase}
-                onGenerateDiscriminatorCase={handleGenerateDiscriminatorCase}
-                onGenerateClueRevision={handleGenerateClueRevision}
-                onAiDraftDecision={handleAiDraftDecision}
-                onCreateLearningGoalCoverage={handleCreateLearningGoalCoverage}
-                onCreateEscalationAnnotation={handleCreateEscalationAnnotation}
-                onUpdateLearningGoalCoverage={handleUpdateLearningGoalCoverage}
-                onDeleteLearningGoalCoverage={handleDeleteLearningGoalCoverage}
-                onUpdateEscalationAnnotation={handleUpdateEscalationAnnotation}
-                onDeleteEscalationAnnotation={handleDeleteEscalationAnnotation}
-                onCreateDiscriminatorAnnotation={handleCreateDiscriminatorAnnotation}
-                onUpdateDiscriminatorAnnotation={handleUpdateDiscriminatorAnnotation}
-                onDeleteDiscriminatorAnnotation={handleDeleteDiscriminatorAnnotation}
-              />
           ) : null}
           {activeTab === 'graph' ? (
             <DifferentialMapTab
@@ -1046,9 +1126,7 @@ export default function EditorialDiagnosisWorkspacePage() {
           <EditorialRightRail
             workspace={workspace}
             activeTab={activeTab}
-            onGapSelect={openCoverageGap}
             onTabChange={setActiveTab}
-            onAiDraftDecision={handleAiDraftDecision}
           />
         </div>
       </div>

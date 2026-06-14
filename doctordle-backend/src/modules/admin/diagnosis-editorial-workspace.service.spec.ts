@@ -29,6 +29,11 @@ describe('DiagnosisEditorialWorkspaceService', () => {
       update: jest.Mock;
       delete: jest.Mock;
     };
+    caseClueRevisionDraft: {
+      findUnique: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+    };
     aiDraftRevisionAudit: {
       findMany: jest.Mock;
       create: jest.Mock;
@@ -36,7 +41,10 @@ describe('DiagnosisEditorialWorkspaceService', () => {
       update: jest.Mock;
     };
     diagnosisEducation: { findUnique: jest.Mock; update: jest.Mock };
-    case: { findFirst: jest.Mock };
+    case: { findFirst: jest.Mock; update: jest.Mock };
+    caseRevision: { findFirst: jest.Mock; create: jest.Mock };
+    caseClueProgressionAnalysis: { deleteMany: jest.Mock };
+    $transaction: jest.Mock;
   };
   let qualityService: { getSummary: jest.Mock };
   let coverageService: { getCoverage: jest.Mock };
@@ -76,6 +84,11 @@ describe('DiagnosisEditorialWorkspaceService', () => {
         update: jest.fn(),
         delete: jest.fn(),
       },
+      caseClueRevisionDraft: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
       aiDraftRevisionAudit: {
         findMany: jest.fn(),
         create: jest.fn(),
@@ -88,7 +101,16 @@ describe('DiagnosisEditorialWorkspaceService', () => {
       },
       case: {
         findFirst: jest.fn(),
+        update: jest.fn(),
       },
+      caseRevision: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
+      caseClueProgressionAnalysis: {
+        deleteMany: jest.fn(),
+      },
+      $transaction: jest.fn((callback) => callback(prisma)),
     };
     qualityService = {
       getSummary: jest.fn(),
@@ -156,6 +178,31 @@ describe('DiagnosisEditorialWorkspaceService', () => {
       }),
     );
     prisma.caseClueDiscriminatorAnnotation.delete.mockResolvedValue({ id: 'disc-1' });
+    prisma.caseClueRevisionDraft.findUnique.mockResolvedValue(null);
+    prisma.caseClueRevisionDraft.create.mockResolvedValue({ id: 'draft-1' });
+    prisma.caseClueRevisionDraft.update.mockImplementation(({ data }) =>
+      Promise.resolve({
+        id: 'draft-1',
+        caseId: 'case-1',
+        sourceAuditId: 'audit-disc-1',
+        clueOrder: 1,
+        clueIndex: 1,
+        originalClue: 'Original clue',
+        revisedClue: data.revisedClue ?? 'Revised clue',
+        addedClue: data.addedClue ?? null,
+        rationale: data.rationale ?? null,
+        expectedEffect: data.expectedEffect ?? null,
+        status: data.status ?? 'PENDING_REVIEW',
+        reviewerUserId: data.reviewerUserId ?? null,
+        decisionAt: data.decisionAt ?? null,
+        decisionByUserId: data.decisionByUserId ?? null,
+        decisionNote: data.decisionNote ?? null,
+        appliedAt: data.appliedAt ?? null,
+        appliedByUserId: data.appliedByUserId ?? null,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
     prisma.aiDraftRevisionAudit.findMany.mockResolvedValue([]);
     prisma.aiDraftRevisionAudit.create.mockResolvedValue({
       id: 'repair-1',
@@ -173,6 +220,10 @@ describe('DiagnosisEditorialWorkspaceService', () => {
     });
     prisma.diagnosisEducation.update.mockResolvedValue({ id: 'education-1' });
     prisma.case.findFirst.mockResolvedValue({ id: 'case-1' });
+    prisma.case.update.mockResolvedValue(caseSnapshot());
+    prisma.caseRevision.findFirst.mockResolvedValue({ revisionNumber: 1 });
+    prisma.caseRevision.create.mockResolvedValue({ id: 'revision-2' });
+    prisma.caseClueProgressionAnalysis.deleteMany.mockResolvedValue({ count: 1 });
     qualityService.getSummary.mockResolvedValue(summary());
     coverageService.getCoverage.mockResolvedValue(coverage());
     teachingRulesService.listRules.mockResolvedValue({
@@ -734,6 +785,94 @@ describe('DiagnosisEditorialWorkspaceService', () => {
     );
   });
 
+  it('projects materialized clue revision drafts into cases and review rows', async () => {
+    prisma.diagnosisRegistry.findUnique.mockResolvedValue(
+      registry({
+        cases: [
+          {
+            id: 'case-1',
+            title: 'RLQ pain',
+            difficulty: 'medium',
+            editorialStatus: CaseEditorialStatus.DRAFT,
+            date: now,
+            clues: [],
+            differentials: [],
+            explanation: {},
+            validationRuns: [],
+            clueProgressionAnalyses: [],
+            clueDiscriminatorAnnotations: [],
+            clueRevisionDrafts: [
+              {
+                id: 'draft-1',
+                caseId: 'case-1',
+                sourceAuditId: 'audit-disc-1',
+                clueOrder: 3,
+                clueIndex: 2,
+                originalClue: 'Upper abdominal pain after meals.',
+                revisedClue:
+                  'Pain migrates to the right iliac fossa with guarding.',
+                addedClue: null,
+                rationale: 'Make mimic separation explicit.',
+                expectedEffect: 'GERD eliminated by clue 3.',
+                status: 'PENDING_REVIEW',
+                reviewerUserId: 'admin-1',
+                createdAt: now,
+                updatedAt: now,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    prisma.aiDraftRevisionAudit.findMany.mockResolvedValue([
+      {
+        id: 'audit-disc-1',
+        caseId: 'case-1',
+        actionType: 'generate_clue_revision_proposal',
+        sourceIssue: {
+          target: {
+            diagnosisRegistryId,
+            caseId: 'case-1',
+            mimicName: 'GERD',
+            discriminator: 'migration',
+            generationIntent: 'weak_clue_transition',
+          },
+        },
+        inputContext: {},
+        generatedOutput: {},
+        editorDecision: 'accept',
+        affectedArtifactType: 'CASE_CLUE_REVISION_PROPOSAL',
+        affectedArtifactId: 'case-1',
+        reviewStatus: 'ACCEPTED',
+        createdByUserId: 'admin-1',
+        reviewerUserId: 'admin-1',
+        decisionAt: now,
+        reviewNote: 'Materialized as draft case clue revision.',
+        createdAt: now,
+      },
+    ]);
+
+    const result = await service.getFullWorkspace(diagnosisRegistryId);
+
+    expect(result.cases.items[0].clueRevisionDrafts).toEqual([
+      expect.objectContaining({
+        id: 'draft-1',
+        sourceAuditId: 'audit-disc-1',
+        revisedClue: 'Pain migrates to the right iliac fossa with guarding.',
+        status: 'PENDING_REVIEW',
+      }),
+    ]);
+    expect(result.materializedClueRevisionDrafts).toEqual([
+      expect.objectContaining({ id: 'draft-1', caseId: 'case-1' }),
+    ]);
+    expect(result.discriminatorDraftReviews[0]).toEqual(
+      expect.objectContaining({
+        acceptedMaterializationStatus: 'materialized',
+        revisionDraftId: 'draft-1',
+      }),
+    );
+  });
+
   it('degrades malformed discriminator draft audit metadata safely', async () => {
     prisma.aiDraftRevisionAudit.findMany.mockResolvedValue([
       {
@@ -763,18 +902,44 @@ describe('DiagnosisEditorialWorkspaceService', () => {
     );
   });
 
-  it('accepts discriminator drafts without unsafe case or clue mutation', async () => {
+  it('materializes accepted clue revision proposals for editable cases', async () => {
     prisma.aiDraftRevisionAudit.findFirst.mockResolvedValue({
       id: 'audit-disc-1',
       diagnosisRegistryId,
+      caseId: 'case-1',
       actionType: 'generate_clue_revision_proposal',
       affectedArtifactType: 'CASE_CLUE_REVISION_PROPOSAL',
       affectedArtifactId: 'case-1',
       sourceIssue: {},
-      generatedOutput: {},
+      inputContext: {},
+      generatedOutput: {
+        reviewPayload: {
+          draftKind: 'clue_revision_proposal',
+          generationIntent: 'weak_clue_transition',
+          diagnosisRegistryId,
+          caseId: 'case-1',
+          sourceClueOrder: 3,
+          sourceClueIndex: 2,
+          mimicName: 'GERD',
+          discriminator: 'migration to right iliac fossa',
+          proposedOutput: {
+            clueRevision: {
+              originalClue: 'Upper abdominal pain after meals.',
+              revisedClue:
+                'Pain migrates to the right iliac fossa with localized guarding.',
+              rationale: 'Make the discriminator explicit.',
+              expectedEffect: 'GERD eliminated by clue 3.',
+            },
+          },
+        },
+      },
+    });
+    prisma.case.findFirst.mockResolvedValue({
+      id: 'case-1',
+      editorialStatus: CaseEditorialStatus.DRAFT,
     });
 
-    await service.decideAiDraftRevision({
+    const result = await service.decideAiDraftRevision({
       diagnosisRegistryId,
       auditId: 'audit-disc-1',
       decision: 'accept',
@@ -782,15 +947,416 @@ describe('DiagnosisEditorialWorkspaceService', () => {
     });
 
     expect(prisma.diagnosisEducation.update).not.toHaveBeenCalled();
+    expect(prisma.caseClueRevisionDraft.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          caseId: 'case-1',
+          sourceAuditId: 'audit-disc-1',
+          clueOrder: 3,
+          clueIndex: 2,
+          originalClue: 'Upper abdominal pain after meals.',
+          revisedClue:
+            'Pain migrates to the right iliac fossa with localized guarding.',
+          rationale: 'Make the discriminator explicit.',
+          expectedEffect: 'GERD eliminated by clue 3.',
+          status: 'PENDING_REVIEW',
+          reviewerUserId: 'admin-1',
+        }),
+      }),
+    );
+    expect(prisma.aiDraftRevisionAudit.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reviewStatus: 'ACCEPTED',
+          reviewNote: 'Materialized as draft case clue revision.',
+        }),
+      }),
+    );
+    expect(result.materialization).toEqual(
+      expect.objectContaining({
+        materialized: true,
+        status: 'materialized',
+        revisionDraftId: 'draft-1',
+      }),
+    );
+  });
+
+  it('does not duplicate materialized clue revision drafts for repeated accepts', async () => {
+    prisma.aiDraftRevisionAudit.findFirst.mockResolvedValue({
+      id: 'audit-disc-1',
+      diagnosisRegistryId,
+      caseId: 'case-1',
+      actionType: 'generate_clue_revision_proposal',
+      affectedArtifactType: 'CASE_CLUE_REVISION_PROPOSAL',
+      affectedArtifactId: 'case-1',
+      sourceIssue: {},
+      inputContext: {},
+      generatedOutput: {
+        reviewPayload: {
+          draftKind: 'clue_revision_proposal',
+          generationIntent: 'weak_clue_transition',
+          diagnosisRegistryId,
+          caseId: 'case-1',
+          mimicName: 'GERD',
+          discriminator: 'migration',
+          proposedOutput: {
+            clueRevision: { revisedClue: 'Migratory pain localizes.' },
+          },
+        },
+      },
+    });
+    prisma.case.findFirst.mockResolvedValue({
+      id: 'case-1',
+      editorialStatus: CaseEditorialStatus.REVIEW,
+    });
+    prisma.caseClueRevisionDraft.findUnique.mockResolvedValue({ id: 'draft-1' });
+
+    const result = await service.decideAiDraftRevision({
+      diagnosisRegistryId,
+      auditId: 'audit-disc-1',
+      decision: 'accept',
+      userId: 'admin-1',
+    });
+
+    expect(prisma.caseClueRevisionDraft.create).not.toHaveBeenCalled();
+    expect(result.materialization).toEqual(
+      expect.objectContaining({
+        materialized: true,
+        status: 'materialized',
+        revisionDraftId: 'draft-1',
+      }),
+    );
+  });
+
+  it('keeps accepted clue proposals audit-only for published cases', async () => {
+    prisma.aiDraftRevisionAudit.findFirst.mockResolvedValue({
+      id: 'audit-disc-1',
+      diagnosisRegistryId,
+      caseId: 'case-1',
+      actionType: 'generate_clue_revision_proposal',
+      affectedArtifactType: 'CASE_CLUE_REVISION_PROPOSAL',
+      affectedArtifactId: 'case-1',
+      sourceIssue: {},
+      inputContext: {},
+      generatedOutput: {
+        reviewPayload: {
+          draftKind: 'clue_revision_proposal',
+          generationIntent: 'weak_clue_transition',
+          diagnosisRegistryId,
+          caseId: 'case-1',
+          mimicName: 'GERD',
+          discriminator: 'migration',
+          proposedOutput: {
+            clueRevision: { revisedClue: 'Migratory pain localizes.' },
+          },
+        },
+      },
+    });
+    prisma.case.findFirst.mockResolvedValue({
+      id: 'case-1',
+      editorialStatus: CaseEditorialStatus.PUBLISHED,
+    });
+
+    const result = await service.decideAiDraftRevision({
+      diagnosisRegistryId,
+      auditId: 'audit-disc-1',
+      decision: 'accept',
+      userId: 'admin-1',
+    });
+
+    expect(prisma.caseClueRevisionDraft.create).not.toHaveBeenCalled();
     expect(prisma.aiDraftRevisionAudit.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           reviewStatus: 'ACCEPTED',
           reviewNote:
-            'Accepted revision proposal; no case or clue mutation was performed.',
+            'Accepted as proposal only; target case is not editable.',
         }),
       }),
     );
+    expect(result.materialization).toEqual(
+      expect.objectContaining({
+        materialized: false,
+        status: 'blocked_case_not_editable',
+      }),
+    );
+  });
+
+  it('keeps targeted discriminator case accepts audit-only', async () => {
+    prisma.aiDraftRevisionAudit.findFirst.mockResolvedValue({
+      id: 'audit-disc-case',
+      diagnosisRegistryId,
+      caseId: 'case-1',
+      actionType: 'generate_targeted_discriminator_case',
+      affectedArtifactType: 'TARGETED_DISCRIMINATOR_CASE_DRAFT',
+      affectedArtifactId: 'case-1',
+      sourceIssue: {},
+      inputContext: {},
+      generatedOutput: {
+        reviewPayload: {
+          draftKind: 'targeted_discriminator_case',
+          generationIntent: 'weak_discriminator_case',
+          diagnosisRegistryId,
+          caseId: 'case-1',
+          mimicName: 'GERD',
+          discriminator: 'migration',
+          proposedOutput: { title: 'Targeted draft' },
+        },
+      },
+    });
+
+    const result = await service.decideAiDraftRevision({
+      diagnosisRegistryId,
+      auditId: 'audit-disc-case',
+      decision: 'accept',
+      userId: 'admin-1',
+    });
+
+    expect(prisma.caseClueRevisionDraft.create).not.toHaveBeenCalled();
+    expect(result.materialization).toEqual(
+      expect.objectContaining({
+        materialized: false,
+        status: 'not_applicable',
+      }),
+    );
+  });
+
+  it('degrades malformed accepted clue proposals safely', async () => {
+    prisma.aiDraftRevisionAudit.findFirst.mockResolvedValue({
+      id: 'audit-disc-bad',
+      diagnosisRegistryId,
+      actionType: 'generate_clue_revision_proposal',
+      affectedArtifactType: 'CASE_CLUE_REVISION_PROPOSAL',
+      affectedArtifactId: 'case-1',
+      sourceIssue: {},
+      inputContext: {},
+      generatedOutput: {},
+    });
+
+    const result = await service.decideAiDraftRevision({
+      diagnosisRegistryId,
+      auditId: 'audit-disc-bad',
+      decision: 'accept',
+      userId: 'admin-1',
+    });
+
+    expect(prisma.caseClueRevisionDraft.create).not.toHaveBeenCalled();
+    expect(prisma.aiDraftRevisionAudit.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reviewStatus: 'ACCEPTED',
+          reviewNote:
+            'Accepted as proposal only; clue revision payload was incomplete.',
+        }),
+      }),
+    );
+    expect(result.materialization).toEqual(
+      expect.objectContaining({
+        materialized: false,
+        status: 'accepted_audit_only',
+        reason: 'malformed_review_payload',
+      }),
+    );
+  });
+
+  it('updates pending clue revision drafts', async () => {
+    prisma.caseClueRevisionDraft.findUnique.mockResolvedValue(
+      clueRevisionDraft({ status: 'PENDING_REVIEW' }),
+    );
+
+    const result = await service.updateClueRevisionDraft({
+      draftId: 'draft-1',
+      payload: {
+        revisedClue: 'Pain now localizes to the right iliac fossa.',
+        rationale: 'Clarifies discriminator timing.',
+      },
+      reviewerUserId: 'admin-1',
+    });
+
+    expect(prisma.caseClueRevisionDraft.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'draft-1' },
+        data: expect.objectContaining({
+          revisedClue: 'Pain now localizes to the right iliac fossa.',
+          rationale: 'Clarifies discriminator timing.',
+          reviewerUserId: 'admin-1',
+        }),
+      }),
+    );
+    const updateData = prisma.caseClueRevisionDraft.update.mock.calls[0][0].data;
+    expect(updateData).not.toHaveProperty('addedClue');
+    expect(updateData).not.toHaveProperty('expectedEffect');
+    expect(result.canEdit).toBe(true);
+  });
+
+  it('blocks editing applied clue revision drafts', async () => {
+    prisma.caseClueRevisionDraft.findUnique.mockResolvedValue(
+      clueRevisionDraft({ status: 'APPLIED' }),
+    );
+
+    await expect(
+      service.updateClueRevisionDraft({
+        draftId: 'draft-1',
+        payload: { revisedClue: 'Too late' },
+        reviewerUserId: 'admin-1',
+      }),
+    ).rejects.toThrow('Only pending or needs-changes clue revision drafts can be edited');
+  });
+
+  it('approves pending clue revision drafts', async () => {
+    prisma.caseClueRevisionDraft.findUnique.mockResolvedValue(
+      clueRevisionDraft({ status: 'PENDING_REVIEW' }),
+    );
+
+    await service.approveClueRevisionDraft({
+      draftId: 'draft-1',
+      reviewerUserId: 'admin-1',
+      note: 'Clinically sound',
+    });
+
+    expect(prisma.caseClueRevisionDraft.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'APPROVED',
+          decisionByUserId: 'admin-1',
+          decisionNote: 'Clinically sound',
+        }),
+      }),
+    );
+  });
+
+  it('rejects, requests changes, and supersedes clue revision drafts', async () => {
+    prisma.caseClueRevisionDraft.findUnique.mockResolvedValue(
+      clueRevisionDraft({ status: 'PENDING_REVIEW' }),
+    );
+
+    await service.rejectClueRevisionDraft({
+      draftId: 'draft-1',
+      reviewerUserId: 'admin-1',
+      note: 'Unsafe clue',
+    });
+    await service.requestChangesForClueRevisionDraft({
+      draftId: 'draft-1',
+      reviewerUserId: 'admin-1',
+      note: 'Needs stronger timing',
+    });
+    prisma.caseClueRevisionDraft.findUnique.mockResolvedValue(
+      clueRevisionDraft({ status: 'APPROVED' }),
+    );
+    await service.supersedeClueRevisionDraft({
+      draftId: 'draft-1',
+      reviewerUserId: 'admin-1',
+      note: 'Newer draft exists',
+    });
+
+    expect(prisma.caseClueRevisionDraft.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'REJECTED' }),
+      }),
+    );
+    expect(prisma.caseClueRevisionDraft.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'NEEDS_CHANGES' }),
+      }),
+    );
+    expect(prisma.caseClueRevisionDraft.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'SUPERSEDED' }),
+      }),
+    );
+  });
+
+  it('applies approved clue revision drafts to editable case clue data', async () => {
+    prisma.caseClueRevisionDraft.findUnique.mockResolvedValue(
+      clueRevisionDraft({
+        status: 'APPROVED',
+        clueOrder: 1,
+        revisedClue: 'RLQ guarding replaces generalized tenderness.',
+        case: caseSnapshot({ editorialStatus: CaseEditorialStatus.DRAFT }),
+      }),
+    );
+
+    const result = await service.applyApprovedClueRevisionDraft({
+      draftId: 'draft-1',
+      reviewerUserId: 'admin-1',
+    });
+
+    expect(prisma.case.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'case-1' },
+        data: expect.objectContaining({
+          clues: expect.arrayContaining([
+            expect.objectContaining({
+              value: 'RLQ guarding replaces generalized tenderness.',
+            }),
+          ]),
+        }),
+      }),
+    );
+    expect(prisma.caseRevision.create).toHaveBeenCalled();
+    expect(prisma.caseClueProgressionAnalysis.deleteMany).toHaveBeenCalledWith({
+      where: { caseId: 'case-1' },
+    });
+    expect(result.applied).toBe(true);
+  });
+
+  it('blocks applying approved drafts to published cases safely', async () => {
+    prisma.caseClueRevisionDraft.findUnique.mockResolvedValue(
+      clueRevisionDraft({
+        status: 'APPROVED',
+        case: caseSnapshot({ editorialStatus: CaseEditorialStatus.PUBLISHED }),
+      }),
+    );
+
+    const result = await service.applyApprovedClueRevisionDraft({
+      draftId: 'draft-1',
+      reviewerUserId: 'admin-1',
+    });
+
+    expect(prisma.case.update).not.toHaveBeenCalled();
+    expect(prisma.caseClueRevisionDraft.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'BLOCKED_CASE_NOT_EDITABLE',
+          decisionNote: 'Target case is not editable.',
+        }),
+      }),
+    );
+    expect(result.applied).toBe(false);
+    expect(result.reason).toBe('target_case_not_editable');
+  });
+
+  it('treats already-applied clue revision draft apply as idempotent', async () => {
+    prisma.caseClueRevisionDraft.findUnique.mockResolvedValue(
+      clueRevisionDraft({ status: 'APPLIED' }),
+    );
+
+    const result = await service.applyApprovedClueRevisionDraft({
+      draftId: 'draft-1',
+      reviewerUserId: 'admin-1',
+    });
+
+    expect(prisma.case.update).not.toHaveBeenCalled();
+    expect(result.applied).toBe(true);
+    expect(result.reason).toBe('already_applied');
+  });
+
+  it('blocks malformed clue revision drafts from applying', async () => {
+    prisma.caseClueRevisionDraft.findUnique.mockResolvedValue(
+      clueRevisionDraft({
+        status: 'APPROVED',
+        revisedClue: null,
+        addedClue: null,
+      }),
+    );
+
+    await expect(
+      service.applyApprovedClueRevisionDraft({
+        draftId: 'draft-1',
+        reviewerUserId: 'admin-1',
+      }),
+    ).rejects.toThrow('Clue revision draft has no proposed clue text');
+    expect(prisma.case.update).not.toHaveBeenCalled();
   });
 
   it('creates and audits learning-goal coverage annotations', async () => {
@@ -1114,6 +1680,59 @@ describe('DiagnosisEditorialWorkspaceService', () => {
           updatedAt: now,
         },
       ],
+      ...overrides,
+    };
+  }
+
+  function caseSnapshot(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'case-1',
+      editorialStatus: CaseEditorialStatus.DRAFT,
+      title: 'RLQ pain',
+      date: now,
+      difficulty: 'medium',
+      history: 'Progressive abdominal pain.',
+      symptoms: ['abdominal pain'],
+      labs: null,
+      clues: [
+        { type: 'history', value: 'Periumbilical pain.', order: 0 },
+        { type: 'exam', value: 'Mild generalized tenderness.', order: 1 },
+      ],
+      explanation: {},
+      differentials: ['GERD'],
+      diagnosisId: null,
+      diagnosisRegistryId,
+      proposedDiagnosisText: 'Appendicitis',
+      diagnosisMappingStatus: 'LINKED',
+      diagnosisMappingMethod: 'REGISTRY_ID',
+      diagnosisMappingConfidence: 1,
+      diagnosisEditorialNote: null,
+      ...overrides,
+    };
+  }
+
+  function clueRevisionDraft(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'draft-1',
+      caseId: 'case-1',
+      sourceAuditId: 'audit-disc-1',
+      clueOrder: 1,
+      clueIndex: 1,
+      originalClue: 'Mild generalized tenderness.',
+      revisedClue: 'Right iliac fossa guarding emerges.',
+      addedClue: null,
+      rationale: 'Clarifies mimic separation.',
+      expectedEffect: 'GERD eliminated by clue 2.',
+      status: 'PENDING_REVIEW',
+      reviewerUserId: null,
+      decisionAt: null,
+      decisionByUserId: null,
+      decisionNote: null,
+      appliedAt: null,
+      appliedByUserId: null,
+      createdAt: now,
+      updatedAt: now,
+      case: caseSnapshot(),
       ...overrides,
     };
   }

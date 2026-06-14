@@ -91,8 +91,11 @@ import type {
   CaseInventoryHealth,
   AiDraftDecisionAction,
   AiDraftRevisionAudit,
+  ApplyCaseClueRevisionDraftResult,
   CaseEscalationAnnotationPayload,
   CaseClueDiscriminatorAnnotation,
+  CaseClueRevisionDraft,
+  CaseClueRevisionDraftPayload,
   CreateCaseClueDiscriminatorAnnotationPayload,
   CaseLearningGoalCoveragePayload,
   ClaimRepairResult,
@@ -935,6 +938,70 @@ export function decideAiDraftRevision(
   return client.post<AiDraftRevisionAudit>(
     `/admin/diagnosis-workspace/${diagnosisRegistryId}/ai-drafts/${auditId}/${action}`,
     payload,
+  );
+}
+
+export function updateCaseClueRevisionDraft(
+  client: ApiClient,
+  draftId: string,
+  payload: CaseClueRevisionDraftPayload,
+) {
+  return client.patch<CaseClueRevisionDraft>(
+    `/admin/case-clue-revision-drafts/${draftId}`,
+    payload,
+  );
+}
+
+export function approveCaseClueRevisionDraft(
+  client: ApiClient,
+  draftId: string,
+  payload: { note?: string | null } = {},
+) {
+  return client.post<CaseClueRevisionDraft>(
+    `/admin/case-clue-revision-drafts/${draftId}/approve`,
+    payload,
+  );
+}
+
+export function rejectCaseClueRevisionDraft(
+  client: ApiClient,
+  draftId: string,
+  payload: { note?: string | null } = {},
+) {
+  return client.post<CaseClueRevisionDraft>(
+    `/admin/case-clue-revision-drafts/${draftId}/reject`,
+    payload,
+  );
+}
+
+export function requestChangesForCaseClueRevisionDraft(
+  client: ApiClient,
+  draftId: string,
+  payload: { note?: string | null } = {},
+) {
+  return client.post<CaseClueRevisionDraft>(
+    `/admin/case-clue-revision-drafts/${draftId}/request-changes`,
+    payload,
+  );
+}
+
+export function supersedeCaseClueRevisionDraft(
+  client: ApiClient,
+  draftId: string,
+  payload: { note?: string | null } = {},
+) {
+  return client.post<CaseClueRevisionDraft>(
+    `/admin/case-clue-revision-drafts/${draftId}/supersede`,
+    payload,
+  );
+}
+
+export function applyCaseClueRevisionDraft(
+  client: ApiClient,
+  draftId: string,
+) {
+  return client.post<ApplyCaseClueRevisionDraftResult>(
+    `/admin/case-clue-revision-drafts/${draftId}/apply`,
   );
 }
 

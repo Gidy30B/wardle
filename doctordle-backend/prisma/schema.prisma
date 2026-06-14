@@ -888,6 +888,7 @@ model Case {
   escalationAnnotations      CaseEscalationAnnotation[]
   clueProgressionAnalyses    CaseClueProgressionAnalysis[]
   clueDiscriminatorAnnotations CaseClueDiscriminatorAnnotation[]
+  clueRevisionDrafts         CaseClueRevisionDraft[]
   aiDraftRevisionAudits      AiDraftRevisionAudit[]
 
   @@index([diagnosisId])
@@ -1029,6 +1030,32 @@ model AiDraftRevisionAudit {
   @@index([reviewStatus])
   @@index([createdByUserId])
   @@index([reviewerUserId])
+}
+
+model CaseClueRevisionDraft {
+  id             String   @id @default(uuid())
+  caseId         String
+  sourceAuditId  String   @unique
+  clueOrder      Int?
+  clueIndex      Int?
+  originalClue   String?
+  revisedClue    String?
+  addedClue      String?
+  rationale      String?
+  expectedEffect String?
+  status         String   @default("PENDING_REVIEW")
+  reviewerUserId String?
+  decisionAt     DateTime?
+  decisionByUserId String?
+  decisionNote   String?
+  appliedAt      DateTime?
+  appliedByUserId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  case           Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([sourceAuditId])
 }
 
 model CaseRevision {

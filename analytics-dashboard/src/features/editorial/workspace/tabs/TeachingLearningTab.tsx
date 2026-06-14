@@ -154,97 +154,102 @@ export function TeachingLearningTab({
                 )
               }
             >
-              <ReasoningThread
-                items={[
-                  {
-                    label: 'Reasoning goal',
-                    detail: formatLabel(rule.category),
-                    tone: 'info',
-                  },
-                  {
-                    label: 'Discriminator',
-                    detail:
-                      summarizeJson(rule.expectedEvidence) ??
-                      rule.rationale ??
-                      'No expected evidence has been attached.',
-                    tone: rule.expectedEvidence ? 'success' : 'warning',
-                  },
-                  {
-                    label: 'Generation impact',
-                    detail: [
-                      rule.appliesToEducation ? 'education' : null,
-                      rule.appliesToCaseGeneration ? 'case generation' : null,
-                      rule.appliesToGraph ? 'graph' : null,
-                    ]
-                      .filter(Boolean)
-                      .join(', ') || 'No generation targets enabled.',
-                    tone:
-                      rule.appliesToEducation ||
-                      rule.appliesToCaseGeneration ||
-                      rule.appliesToGraph
-                        ? 'success'
-                        : 'warning',
-                  },
-                ]}
-              />
-              <div className="mt-3 grid gap-2 lg:grid-cols-2">
-                <EvidenceConfidenceStrip
+              <StreamDisclosure
+                title="Support and coverage"
+                summary={composite?.label ?? 'Coverage context'}
+              >
+                <ReasoningThread
                   items={[
                     {
-                      label: 'Importance',
-                      value: formatLabel(rule.importance),
-                      tone:
-                        rule.importance === 'critical'
-                          ? 'danger'
-                          : rule.importance === 'high'
-                            ? 'warning'
-                            : 'info',
+                      label: 'Reasoning goal',
+                      detail: formatLabel(rule.category),
+                      tone: 'info',
                     },
                     {
-                      label: 'Evidence',
-                      value: rule.expectedEvidence ? 'Linked' : 'Missing',
+                      label: 'Discriminator',
+                      detail:
+                        summarizeJson(rule.expectedEvidence) ??
+                        rule.rationale ??
+                        'No expected evidence has been attached.',
                       tone: rule.expectedEvidence ? 'success' : 'warning',
                     },
                     {
-                      label: 'Pitfalls',
-                      value: rule.reasoningQualityWarnings?.length ?? 0,
-                      tone: rule.reasoningQualityWarnings?.length
-                        ? 'warning'
-                        : 'success',
-                    },
-                  ]}
-                />
-                <CoverageStateStrip
-                  items={[
-                    {
-                      label: 'Education',
-                      value: coverage
-                        ? formatLabel(coverage.educationCoverage)
-                        : 'Unknown',
+                      label: 'Generation impact',
+                      detail: [
+                        rule.appliesToEducation ? 'education' : null,
+                        rule.appliesToCaseGeneration ? 'case generation' : null,
+                        rule.appliesToGraph ? 'graph' : null,
+                      ]
+                        .filter(Boolean)
+                        .join(', ') || 'No generation targets enabled.',
                       tone:
-                        coverage?.educationCoverage === 'covered'
-                          ? 'success'
-                          : 'warning',
-                    },
-                    {
-                      label: 'Cases',
-                      value: coverage ? formatLabel(coverage.caseCoverage) : 'Unknown',
-                      tone:
-                        coverage?.caseCoverage === 'covered'
-                          ? 'success'
-                          : 'warning',
-                    },
-                    {
-                      label: 'Graph',
-                      value: coverage ? formatLabel(coverage.graphCoverage) : 'Unknown',
-                      tone:
-                        coverage?.graphCoverage === 'covered'
+                        rule.appliesToEducation ||
+                        rule.appliesToCaseGeneration ||
+                        rule.appliesToGraph
                           ? 'success'
                           : 'warning',
                     },
                   ]}
                 />
-              </div>
+                <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                  <EvidenceConfidenceStrip
+                    items={[
+                      {
+                        label: 'Importance',
+                        value: formatLabel(rule.importance),
+                        tone:
+                          rule.importance === 'critical'
+                            ? 'danger'
+                            : rule.importance === 'high'
+                              ? 'warning'
+                              : 'info',
+                      },
+                      {
+                        label: 'Evidence',
+                        value: rule.expectedEvidence ? 'Linked' : 'Missing',
+                        tone: rule.expectedEvidence ? 'success' : 'warning',
+                      },
+                      {
+                        label: 'Pitfalls',
+                        value: rule.reasoningQualityWarnings?.length ?? 0,
+                        tone: rule.reasoningQualityWarnings?.length
+                          ? 'warning'
+                          : 'success',
+                      },
+                    ]}
+                  />
+                  <CoverageStateStrip
+                    items={[
+                      {
+                        label: 'Education',
+                        value: coverage
+                          ? formatLabel(coverage.educationCoverage)
+                          : 'Unknown',
+                        tone:
+                          coverage?.educationCoverage === 'covered'
+                            ? 'success'
+                            : 'warning',
+                      },
+                      {
+                        label: 'Cases',
+                        value: coverage ? formatLabel(coverage.caseCoverage) : 'Unknown',
+                        tone:
+                          coverage?.caseCoverage === 'covered'
+                            ? 'success'
+                            : 'warning',
+                      },
+                      {
+                        label: 'Graph',
+                        value: coverage ? formatLabel(coverage.graphCoverage) : 'Unknown',
+                        tone:
+                          coverage?.graphCoverage === 'covered'
+                            ? 'success'
+                            : 'warning',
+                      },
+                    ]}
+                  />
+                </div>
+              </StreamDisclosure>
               <EmbeddedActionBar
                 note={
                   composite

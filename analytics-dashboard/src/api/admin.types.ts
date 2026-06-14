@@ -1637,7 +1637,57 @@ export type DiscriminatorDraftReview = {
   caseId?: string | null;
   sourceClueOrder?: number | null;
   sourceClueIndex?: number | null;
+  acceptedMaterializationStatus?:
+    | 'not_applicable'
+    | 'materialized'
+    | 'approved'
+    | 'applied'
+    | 'rejected'
+    | 'superseded'
+    | 'accepted_audit_only'
+    | 'blocked_case_not_editable'
+    | 'pending';
+  revisionDraftId?: string;
   discriminatorDraftReview: DiscriminatorDraftReviewPayload;
+};
+
+export type CaseClueRevisionDraft = {
+  id: string;
+  caseId: string;
+  sourceAuditId: string;
+  clueOrder: number | null;
+  clueIndex: number | null;
+  originalClue: string | null;
+  revisedClue: string | null;
+  addedClue: string | null;
+  rationale: string | null;
+  expectedEffect: string | null;
+  status: string;
+  reviewerUserId: string | null;
+  decisionAt: string | null;
+  decisionByUserId: string | null;
+  decisionNote: string | null;
+  appliedAt: string | null;
+  appliedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  canEdit?: boolean;
+  canApprove?: boolean;
+  canApply?: boolean;
+  blockedReason?: string | null;
+};
+
+export type CaseClueRevisionDraftPayload = {
+  revisedClue?: string | null;
+  addedClue?: string | null;
+  rationale?: string | null;
+  expectedEffect?: string | null;
+  decisionNote?: string | null;
+};
+
+export type ApplyCaseClueRevisionDraftResult = CaseClueRevisionDraft & {
+  applied?: boolean;
+  reason?: string;
 };
 
 export type AiDraftDecisionAction =
@@ -1915,6 +1965,7 @@ export type DiagnosisEditorialWorkspace = {
   editorialPrioritization?: EditorialPrioritization;
   aiDraftAuditTrail?: AiDraftRevisionAudit[];
   discriminatorDraftReviews?: DiscriminatorDraftReview[];
+  materializedClueRevisionDrafts?: CaseClueRevisionDraft[];
   workspaceSummary: {
     status: DiagnosisWorkspaceOverallStatus | 'ready' | 'needs_review' | string;
     overallScore: number | null;
@@ -2017,6 +2068,7 @@ export type DiagnosisEditorialWorkspace = {
       qualityProjection: AdminCaseQualityProjection;
       clueProgression?: CaseClueProgressionAnalysis;
       clueDiscriminatorAnnotations?: CaseClueDiscriminatorAnnotation[];
+      clueRevisionDrafts?: CaseClueRevisionDraft[];
     }>;
   };
   graph: {

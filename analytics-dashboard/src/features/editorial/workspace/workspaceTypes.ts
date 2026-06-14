@@ -5,16 +5,18 @@ export type WorkspaceTab =
   | 'teaching-rules'
   | 'editorial-brief'
   | 'education'
+  | 'integrity'
   | 'cases'
   | 'graph';
 
 export const WORKSPACE_TABS: Array<{ id: WorkspaceTab; label: string }> = [
   { id: 'overview', label: 'Overview' },
-  { id: 'teaching-rules', label: 'Teaching & Learning' },
   { id: 'editorial-brief', label: 'Objectives' },
   { id: 'education', label: 'Clinical Picture' },
-  { id: 'cases', label: 'Cases' },
+  { id: 'teaching-rules', label: 'Teaching & Learning' },
   { id: 'graph', label: 'Differential Map' },
+  { id: 'cases', label: 'Cases' },
+  { id: 'integrity', label: 'Integrity' },
 ];
 
 export const VALID_WORKSPACE_TABS = new Set<WorkspaceTab>(

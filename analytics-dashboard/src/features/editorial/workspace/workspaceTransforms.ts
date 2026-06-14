@@ -323,9 +323,9 @@ export function buildCopilotSuggestions(
           section.reason ??
           section.blockers[0] ??
           section.warnings[0] ??
-          'Section quality analysis marked this clinical-picture section for review.',
-        targetTab: 'education',
-        source: 'clinical picture',
+          'Section quality analysis marked this education section for integrity review.',
+      targetTab: 'integrity',
+      source: 'integrity',
         tone: section.blockers.length ? 'danger' : 'warning',
         enabled: true,
       });
@@ -471,7 +471,7 @@ export function buildCopilotSuggestions(
       id: `unsupported-claim-${claim.sectionId}-${claim.claimId}`,
       title: 'Repair unsupported claim',
       detail: `${formatLabel(claim.sectionType)}: ${claim.claimText}`,
-      targetTab: claim.sectionType === 'case' ? 'cases' : 'education',
+      targetTab: claim.sectionType === 'case' ? 'cases' : 'integrity',
       source: 'claim support',
       tone: claim.blocksPublication ? 'danger' : 'warning',
       enabled: claim.repairableAutomatically,

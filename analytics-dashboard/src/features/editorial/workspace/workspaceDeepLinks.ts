@@ -5,6 +5,7 @@ const validWorkspaceTabs = new Set<WorkspaceTab>([
   'teaching-rules',
   'editorial-brief',
   'education',
+  'integrity',
   'cases',
   'graph',
 ]);
@@ -44,7 +45,7 @@ export function buildUnsupportedClaimDeepLink(input: {
   const tab =
     input.targetTab && input.targetTab !== 'education'
       ? input.targetTab
-      : 'clinical-picture';
+      : 'integrity';
   params.set('tab', tab);
   if (input.claimId) {
     params.set('claimId', input.claimId);

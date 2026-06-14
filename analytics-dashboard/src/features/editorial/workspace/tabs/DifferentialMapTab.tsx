@@ -158,76 +158,8 @@ export function DifferentialMapTab({
           <EditorialStream
             eyebrow="Differential map"
             title="Mimic separation stream"
-            subtitle="Navigate likely mimics, discriminator reasoning, evidence confidence, case support, and graph governance in one flow."
+            subtitle="Pick a mimic, check why it is plausible, what separates it, case support, and the next action."
           >
-            <CompactPanel title="Graph readiness">
-              <StatusStrip
-                items={[
-                  {
-                    label: 'Status',
-                    value: formatLabel(workspace.graph.readiness),
-                    detail: 'Graph maturity',
-                    tone:
-                      workspace.graph.readiness === 'ready'
-                        ? 'success'
-                        : 'warning',
-                  },
-                  {
-                    label: 'Facts',
-                    value: workspace.graph.factCount,
-                    detail: 'Reviewed graph facts',
-                    tone: workspace.graph.factCount ? 'success' : 'warning',
-                  },
-                  {
-                    label: 'Candidates',
-                    value: workspace.graph.candidateCount,
-                    detail: 'Generated graph objects',
-                    tone: workspace.graph.candidateCount ? 'info' : 'neutral',
-                  },
-                  {
-                    label: 'Reviewable',
-                    value: workspace.graph.reviewableCandidateCount,
-                    detail: 'Awaiting editorial action',
-                    tone: workspace.graph.reviewableCandidateCount
-                      ? 'warning'
-                      : 'success',
-                  },
-                ]}
-              />
-              <Link
-                to="/diagnosis-graph/candidates"
-                className="mt-3 inline-flex text-sm font-semibold text-[var(--color-teal)] underline"
-              >
-                Open graph candidate queue
-              </Link>
-            </CompactPanel>
-            <DifferentialMapOverviewCard
-              workspace={workspace}
-              mimicGroups={mimicGroups}
-              pendingAction={graphDraftAction}
-              onSuggestTeachingDistinction={() =>
-                runGraphDraftAction(
-                  'teaching-distinction',
-                  'Generating teaching distinction candidates...',
-                  'Teaching distinction candidates generated for review.',
-                  () =>
-                    suggestTeachingDistinctionDraft(
-                      client,
-                      workspace.diagnosis.id,
-                    ),
-                )
-              }
-              onStrengthenDifferential={() =>
-                runGraphDraftAction(
-                  'strengthen-differential',
-                  'Generating reasoning path candidates...',
-                  'Reasoning path candidates generated for review.',
-                  () =>
-                    strengthenDifferentialDraft(client, workspace.diagnosis.id),
-                )
-              }
-              onGenerateTargetedCase={onGenerateTargetedCase}
-            />
             {allMimicItems.length === 0 ? (
               <EmptyGuidance
                 title="No mimics mapped yet"
@@ -305,6 +237,79 @@ export function DifferentialMapTab({
                 onGenerateClueRevision={onGenerateClueRevision}
               />
             )}
+            <StreamDisclosure
+              title="Map context"
+              summary={`${workspace.graph.reviewableCandidateCount} reviewable graph candidate${workspace.graph.reviewableCandidateCount === 1 ? '' : 's'}`}
+            >
+              <CompactPanel title="Graph readiness">
+                <StatusStrip
+                  items={[
+                    {
+                      label: 'Status',
+                      value: formatLabel(workspace.graph.readiness),
+                      detail: 'Graph maturity',
+                      tone:
+                        workspace.graph.readiness === 'ready'
+                          ? 'success'
+                          : 'warning',
+                    },
+                    {
+                      label: 'Facts',
+                      value: workspace.graph.factCount,
+                      detail: 'Reviewed graph facts',
+                      tone: workspace.graph.factCount ? 'success' : 'warning',
+                    },
+                    {
+                      label: 'Candidates',
+                      value: workspace.graph.candidateCount,
+                      detail: 'Generated graph objects',
+                      tone: workspace.graph.candidateCount ? 'info' : 'neutral',
+                    },
+                    {
+                      label: 'Reviewable',
+                      value: workspace.graph.reviewableCandidateCount,
+                      detail: 'Awaiting editorial action',
+                      tone: workspace.graph.reviewableCandidateCount
+                        ? 'warning'
+                        : 'success',
+                    },
+                  ]}
+                />
+                <Link
+                  to="/diagnosis-graph/candidates"
+                  className="mt-3 inline-flex text-sm font-semibold text-[var(--color-teal)] underline"
+                >
+                  Open graph candidate queue
+                </Link>
+              </CompactPanel>
+              <DifferentialMapOverviewCard
+                workspace={workspace}
+                mimicGroups={mimicGroups}
+                pendingAction={graphDraftAction}
+                onSuggestTeachingDistinction={() =>
+                  runGraphDraftAction(
+                    'teaching-distinction',
+                    'Generating teaching distinction candidates...',
+                    'Teaching distinction candidates generated for review.',
+                    () =>
+                      suggestTeachingDistinctionDraft(
+                        client,
+                        workspace.diagnosis.id,
+                      ),
+                  )
+                }
+                onStrengthenDifferential={() =>
+                  runGraphDraftAction(
+                    'strengthen-differential',
+                    'Generating reasoning path candidates...',
+                    'Reasoning path candidates generated for review.',
+                    () =>
+                      strengthenDifferentialDraft(client, workspace.diagnosis.id),
+                  )
+                }
+                onGenerateTargetedCase={onGenerateTargetedCase}
+              />
+            </StreamDisclosure>
             <StreamDisclosure
               title="Teaching relationship details"
               summary={`${workspace.graph.teachingRelationships?.length ?? 0} relationship${(workspace.graph.teachingRelationships?.length ?? 0) === 1 ? '' : 's'}`}

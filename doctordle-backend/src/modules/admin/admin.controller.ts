@@ -115,6 +115,14 @@ type AiDraftDecisionBody = {
   note?: string | null;
 };
 
+type CaseClueRevisionDraftUpdateBody = {
+  revisedClue?: string | null;
+  addedClue?: string | null;
+  rationale?: string | null;
+  expectedEffect?: string | null;
+  decisionNote?: string | null;
+};
+
 type CaseLearningGoalCoverageBody = {
   caseId?: string;
   learningGoalId?: string;
@@ -1301,6 +1309,88 @@ export class AdminController {
       decision: 'supersede',
       userId: request.user.id,
       note: body.note,
+    });
+  }
+
+  @Patch('case-clue-revision-drafts/:draftId')
+  @EditorialAccess()
+  async updateCaseClueRevisionDraft(
+    @Param('draftId', new ParseUUIDPipe()) draftId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: CaseClueRevisionDraftUpdateBody = {},
+  ) {
+    return this.diagnosisEditorialWorkspaceService.updateClueRevisionDraft({
+      draftId,
+      payload: body,
+      reviewerUserId: request.user.id,
+    });
+  }
+
+  @Post('case-clue-revision-drafts/:draftId/approve')
+  @EditorialAccess()
+  async approveCaseClueRevisionDraft(
+    @Param('draftId', new ParseUUIDPipe()) draftId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: AiDraftDecisionBody = {},
+  ) {
+    return this.diagnosisEditorialWorkspaceService.approveClueRevisionDraft({
+      draftId,
+      reviewerUserId: request.user.id,
+      note: body.note,
+    });
+  }
+
+  @Post('case-clue-revision-drafts/:draftId/reject')
+  @EditorialAccess()
+  async rejectCaseClueRevisionDraft(
+    @Param('draftId', new ParseUUIDPipe()) draftId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: AiDraftDecisionBody = {},
+  ) {
+    return this.diagnosisEditorialWorkspaceService.rejectClueRevisionDraft({
+      draftId,
+      reviewerUserId: request.user.id,
+      note: body.note,
+    });
+  }
+
+  @Post('case-clue-revision-drafts/:draftId/request-changes')
+  @EditorialAccess()
+  async requestChangesForCaseClueRevisionDraft(
+    @Param('draftId', new ParseUUIDPipe()) draftId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: AiDraftDecisionBody = {},
+  ) {
+    return this.diagnosisEditorialWorkspaceService.requestChangesForClueRevisionDraft({
+      draftId,
+      reviewerUserId: request.user.id,
+      note: body.note,
+    });
+  }
+
+  @Post('case-clue-revision-drafts/:draftId/supersede')
+  @EditorialAccess()
+  async supersedeCaseClueRevisionDraft(
+    @Param('draftId', new ParseUUIDPipe()) draftId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: AiDraftDecisionBody = {},
+  ) {
+    return this.diagnosisEditorialWorkspaceService.supersedeClueRevisionDraft({
+      draftId,
+      reviewerUserId: request.user.id,
+      note: body.note,
+    });
+  }
+
+  @Post('case-clue-revision-drafts/:draftId/apply')
+  @EditorialAccess()
+  async applyCaseClueRevisionDraft(
+    @Param('draftId', new ParseUUIDPipe()) draftId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.diagnosisEditorialWorkspaceService.applyApprovedClueRevisionDraft({
+      draftId,
+      reviewerUserId: request.user.id,
     });
   }
 

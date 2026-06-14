@@ -16,6 +16,16 @@ describe('AdminController generateCases', () => {
         .mockResolvedValue({ diagnosis: { id: 'registry-1' } }),
       repairUnsupportedClaim: jest.fn().mockResolvedValue({ repairId: 'repair-1' }),
       decideAiDraftRevision: jest.fn().mockResolvedValue({ id: 'audit-1' }),
+      updateClueRevisionDraft: jest.fn().mockResolvedValue({ id: 'draft-1' }),
+      approveClueRevisionDraft: jest.fn().mockResolvedValue({ id: 'draft-1' }),
+      rejectClueRevisionDraft: jest.fn().mockResolvedValue({ id: 'draft-1' }),
+      requestChangesForClueRevisionDraft: jest
+        .fn()
+        .mockResolvedValue({ id: 'draft-1' }),
+      supersedeClueRevisionDraft: jest.fn().mockResolvedValue({ id: 'draft-1' }),
+      applyApprovedClueRevisionDraft: jest
+        .fn()
+        .mockResolvedValue({ id: 'draft-1', applied: true }),
       upsertCaseLearningGoalCoverage: jest
         .fn()
         .mockResolvedValue({ id: 'coverage-1' }),
@@ -547,6 +557,38 @@ describe('AdminController generateCases', () => {
       decision: 'accept',
       userId: 'admin-1',
       note: 'Approved for draft',
+    });
+  });
+
+  it('updates and applies case clue revision drafts through the workspace service', async () => {
+    const { controller, diagnosisEditorialWorkspaceService } =
+      buildController();
+
+    await controller.updateCaseClueRevisionDraft(
+      '22222222-2222-4222-8222-222222222222',
+      { user: { id: 'admin-1' } } as never,
+      { revisedClue: 'Revised clue', rationale: 'Clearer discriminator' },
+    );
+    await controller.applyCaseClueRevisionDraft(
+      '22222222-2222-4222-8222-222222222222',
+      { user: { id: 'admin-1' } } as never,
+    );
+
+    expect(
+      diagnosisEditorialWorkspaceService.updateClueRevisionDraft,
+    ).toHaveBeenCalledWith({
+      draftId: '22222222-2222-4222-8222-222222222222',
+      payload: {
+        revisedClue: 'Revised clue',
+        rationale: 'Clearer discriminator',
+      },
+      reviewerUserId: 'admin-1',
+    });
+    expect(
+      diagnosisEditorialWorkspaceService.applyApprovedClueRevisionDraft,
+    ).toHaveBeenCalledWith({
+      draftId: '22222222-2222-4222-8222-222222222222',
+      reviewerUserId: 'admin-1',
     });
   });
 
