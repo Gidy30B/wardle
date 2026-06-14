@@ -5,7 +5,11 @@ import type {
 } from '../../../api/admin';
 import { useEffect, useMemo, useState } from 'react';
 import StatusBadge from '../../../components/ui/StatusBadge';
-import { CompactPanel, DraftAIActionsPanel } from './EditorialPrimitives';
+import {
+  CompactPanel,
+  DraftAIActionsPanel,
+  SecondaryActionDisclosure,
+} from './EditorialPrimitives';
 import { formatDate, formatLabel } from './workspaceTransforms';
 
 export function ClaimRepairPanel({
@@ -72,9 +76,12 @@ export function ClaimRepairPanel({
       {claims.length ? (
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
-            <StatusBadge status={`${claims.length} signals`} tone="warning" />
             <StatusBadge
-              status={`${blockers} blockers`}
+              status={
+                blockers
+                  ? `${blockers} publication blocker${blockers === 1 ? '' : 's'}`
+                  : `${claims.length} claim signal${claims.length === 1 ? '' : 's'}`
+              }
               tone={blockers ? 'danger' : 'success'}
             />
           </div>
@@ -158,10 +165,9 @@ function ClaimRepairCard({
           : 'border-[var(--color-navy-border)]',
       ].join(' ')}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge status={formatLabel(claim.sectionType)} tone="neutral" />
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <StatusBadge
-          status={claim.severity}
+          status={`${formatLabel(claim.sectionType)} - ${claim.severity}`}
           tone={claim.blocksPublication ? 'danger' : 'warning'}
         />
         <span className="text-xs text-slate-500">
@@ -175,15 +181,13 @@ function ClaimRepairCard({
       {repair ? (
         <div className="mt-3 rounded-lg border border-[var(--color-teal)]/30 bg-[var(--color-teal)]/10 p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge status="draft repair" tone="info" />
             <StatusBadge
               status={formatLabel(repair.reviewStatus)}
               tone={repair.reviewStatus === 'ACCEPTED' ? 'success' : 'warning'}
             />
-            <StatusBadge
-              status={`${Math.round(repair.confidence * 100)}% confidence`}
-              tone="neutral"
-            />
+            <span className="text-xs text-slate-500">
+              {Math.round(repair.confidence * 100)}% confidence
+            </span>
           </div>
           <p className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
             Proposed repair
@@ -205,29 +209,31 @@ function ClaimRepairCard({
               Audit ID: {repair.auditId ?? repair.repairId ?? repair.revisionId}
             </p>
           </details>
-          <div className="mt-3 grid gap-2 sm:grid-cols-4">
+          <div className="mt-3 flex flex-wrap gap-2">
             <RepairDecisionButton
               label="Accept"
               disabled={decisionDisabled}
               onClick={() => onClaimRepairDecision(claim, repair, 'accept')}
             />
-            <RepairDecisionButton
-              label="Reject"
-              disabled={decisionDisabled}
-              onClick={() => onClaimRepairDecision(claim, repair, 'reject')}
-            />
-            <RepairDecisionButton
-              label="Request changes"
-              disabled={decisionDisabled}
-              onClick={() =>
-                onClaimRepairDecision(claim, repair, 'request-changes')
-              }
-            />
-            <RepairDecisionButton
-              label="Supersede"
-              disabled={decisionDisabled}
-              onClick={() => onClaimRepairDecision(claim, repair, 'supersede')}
-            />
+            <SecondaryActionDisclosure>
+              <RepairDecisionButton
+                label="Reject"
+                disabled={decisionDisabled}
+                onClick={() => onClaimRepairDecision(claim, repair, 'reject')}
+              />
+              <RepairDecisionButton
+                label="Request changes"
+                disabled={decisionDisabled}
+                onClick={() =>
+                  onClaimRepairDecision(claim, repair, 'request-changes')
+                }
+              />
+              <RepairDecisionButton
+                label="Supersede"
+                disabled={decisionDisabled}
+                onClick={() => onClaimRepairDecision(claim, repair, 'supersede')}
+              />
+            </SecondaryActionDisclosure>
           </div>
         </div>
       ) : (

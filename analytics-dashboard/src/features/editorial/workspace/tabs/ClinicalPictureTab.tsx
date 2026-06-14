@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type {
   ClaimRepairResult,
   AiDraftDecisionAction,
@@ -9,16 +10,20 @@ import type {
 import RevisionCompareCard from '../../../cases/education/RevisionCompareCard';
 import RevisionHistoryCard from '../../../cases/education/RevisionHistoryCard';
 import StatusBadge from '../../../../components/ui/StatusBadge';
+import type { StatusBadgeTone } from '../../../../components/ui/statusBadgeMeta';
 import { ClaimRepairPanel } from '../ClaimRepairPanel';
 import {
   ClinicalSignalList,
-  CollapsibleDetail,
   CompactMetricGrid,
+  EditorialEntity,
   EditorialRow,
+  EditorialStream,
   EmptyGuidance,
-  DraftAIActionsPanel,
+  StreamDisclosure,
   ReasoningCard,
+  SidebarDetailLayout,
   TabNextStepCard,
+  WorkflowStateInline,
 } from '../EditorialPrimitives';
 import { formatDate, formatLabel, formatScore } from '../workspaceTransforms';
 import { repairsBySection } from '../acceptedRepairs';
@@ -72,6 +77,94 @@ export function ClinicalPictureTab({
       section.blockers.length > 0 ||
       section.warnings.length > 0,
   );
+  const [activeSection, setActiveSection] = useState(
+    workspace.education.sectionHealth[0]?.section ?? 'summary',
+  );
+  const sectionSidebar = (
+    <>
+      {workspace.education.sectionHealth.length ? (
+        workspace.education.sectionHealth.map((section) => (
+          <button
+            key={section.section}
+            type="button"
+            onClick={() => setActiveSection(section.section)}
+            className={[
+              'rounded-lg border p-2.5 text-left transition',
+              activeSection === section.section
+                ? 'border-[rgba(0,180,166,0.4)] bg-[var(--color-teal-bg)]'
+                : 'border-[var(--color-navy-border)] bg-[var(--color-navy-mid)]',
+            ].join(' ')}
+          >
+            <div className="flex items-start gap-2">
+              <span
+                className={[
+                  'mt-1 h-[6px] w-[6px] shrink-0 rounded-full',
+                  section.blockers.length
+                    ? 'bg-[var(--color-rose)]'
+                    : section.warnings.length
+                      ? 'bg-[var(--color-amber)]'
+                      : 'bg-[var(--color-teal)]',
+                ].join(' ')}
+              />
+              <div className="min-w-0">
+                <p
+                  className={`text-[12px] font-medium leading-snug ${
+                    activeSection === section.section
+                      ? 'text-[var(--color-teal)]'
+                      : 'text-[var(--color-white-text)]'
+                  }`}
+                >
+                  {formatLabel(section.section)}
+                </p>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className="text-[10px] text-[var(--color-slate)]">
+                    Quality {formatScore(section.score)}
+                  </span>
+                  {section.blockers.length + section.warnings.length > 0 ? (
+                    <StatusBadge
+                      status={`${section.blockers.length + section.warnings.length} issues`}
+                      tone={section.blockers.length ? 'danger' : 'warning'}
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </button>
+        ))
+      ) : (
+        <div className="rounded-lg border border-[var(--color-navy-border)] bg-[var(--color-navy-mid)] p-2.5 text-[12px] text-[var(--color-slate)]">
+          No sections
+        </div>
+      )}
+    </>
+  );
+
+  const activeSectionHealth = workspace.education.sectionHealth.find(
+    (section) => section.section === activeSection,
+  );
+  const sectionTone: StatusBadgeTone = activeSectionHealth
+    ? activeSectionHealth.blockers.length > 0
+      ? 'danger'
+      : activeSectionHealth.warnings.length > 0 ||
+          activeSectionHealth.regenerationRecommended
+        ? 'warning'
+        : 'success'
+    : 'neutral';
+  const qualityTone: StatusBadgeTone =
+    activeSectionHealth?.score === null || activeSectionHealth?.score === undefined
+      ? 'neutral'
+      : activeSectionHealth.score >= 0.75
+        ? 'success'
+        : activeSectionHealth.score >= 0.5
+          ? 'warning'
+          : 'danger';
+  const canRegenerateActiveSection = Boolean(
+    activeSectionHealth &&
+      isRegenerableEducationSection(activeSectionHealth.section),
+  );
+  const activeSectionClaims = (workspace.unsupportedClaimsBySection ?? []).filter(
+    (claim) => claim.sectionId === activeSection,
+  );
 
   return (
     <div className="space-y-4">
@@ -89,59 +182,137 @@ export function ClinicalPictureTab({
             .join(', ')} before marking this diagnosis mature.`}
         />
       ) : null}
-      <EducationQualityCard
-        workspace={workspace}
-        pendingAction={pendingAction}
-        onRegenerateSection={onRegenerateSection}
-      />
-      <AcceptedRepairsPanel workspace={workspace} />
-      <ClaimRepairPanel
-        claims={workspace.unsupportedClaimsBySection ?? []}
-        repairs={claimRepairs}
-        pendingAction={pendingAction}
-        targetClaimId={targetClaimId}
-        targetSectionId={targetSectionId}
-        onRepairUnsupportedClaim={onRepairUnsupportedClaim}
-        onClaimRepairDecision={onClaimRepairDecision}
-      />
-      <DraftAIActionsPanel
-        actions={weakSections.slice(0, 4).map((section) => ({
-          id: `regenerate-${section.section}`,
-          label: `Regenerate ${formatLabel(section.section)}`,
-          detail:
-            section.reason ??
-            section.blockers[0] ??
-            section.warnings[0] ??
-            'Section quality analysis recommends regeneration.',
-          disabled:
-            pendingAction !== null ||
-            !isRegenerableEducationSection(section.section),
-          onAction: () =>
-            onRegenerateSection(section.section as EducationRegenerableSection),
-        }))}
-        empty="No weak regenerable sections are currently reported."
-      />
-      <CollapsibleDetail
-        title="Revision history"
-        summary={`${revisions.length} revision${revisions.length === 1 ? '' : 's'} available`}
+      <EditorialStream
+        eyebrow="Clinical picture"
+        title="Recognition and teaching flow"
+        subtitle="Shape the diagnosis narrative, repair unsupported claims in context, and keep revision checkpoints lightweight."
       >
-        <RevisionHistoryCard revisions={revisions} loading={false} error={null} />
-      </CollapsibleDetail>
-      <CollapsibleDetail
-        title="Compare education revisions"
-        summary="Open when checking drift between draft versions"
-      >
-        <RevisionCompareCard
-          revisions={revisions}
-          selectedFromVersion={compareFromVersion}
-          selectedToVersion={compareToVersion}
-          comparison={revisionCompare}
-          loading={revisionCompareLoading}
-          error={revisionCompareError}
-          onFromVersionChange={onFromVersionChange}
-          onToVersionChange={onToVersionChange}
+        <SidebarDetailLayout
+          sidebar={sectionSidebar}
+          sidebarWidth={190}
+          detail={
+            <>
+              {activeSectionHealth ? (
+                <EditorialEntity
+                  eyebrow="Section health"
+                  title={formatLabel(activeSectionHealth.section)}
+                  subtitle={
+                    activeSectionHealth.reason ??
+                    activeSectionHealth.blockers[0] ??
+                    activeSectionHealth.warnings[0] ??
+                    'Recognition signal is acceptable.'
+                  }
+                  tone={sectionTone}
+                  state={
+                    <WorkflowStateInline
+                      label={
+                        activeSectionHealth.regenerationRecommended
+                          ? 'Regeneration recommended'
+                          : 'Healthy'
+                      }
+                      tone={sectionTone}
+                    />
+                  }
+                  action={
+                    canRegenerateActiveSection ? (
+                      <button
+                        type="button"
+                        disabled={pendingAction !== null}
+                        onClick={() =>
+                          onRegenerateSection(
+                            activeSectionHealth.section as EducationRegenerableSection,
+                          )
+                        }
+                        className="editorial-action px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Regenerate section
+                      </button>
+                    ) : null
+                  }
+                >
+                  <CompactMetricGrid
+                    items={[
+                      {
+                        label: 'Quality',
+                        value: formatScore(activeSectionHealth.score),
+                        tone: qualityTone,
+                      },
+                      {
+                        label: 'Coverage',
+                        value: formatScore(activeSectionHealth.coverageScore),
+                      },
+                      {
+                        label: 'Pattern compliance',
+                        value: formatScore(activeSectionHealth.patternComplianceScore),
+                      },
+                      {
+                        label: 'Regeneration',
+                        value: activeSectionHealth.regenerationRecommended
+                          ? 'Recommended'
+                          : 'Not needed',
+                        tone: activeSectionHealth.regenerationRecommended
+                          ? 'warning'
+                          : 'success',
+                      },
+                    ]}
+                  />
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <ClinicalSignalList
+                      title="Blockers"
+                      items={activeSectionHealth.blockers}
+                      empty="No blockers reported for this section."
+                      tone="danger"
+                    />
+                    <ClinicalSignalList
+                      title="Warnings"
+                      items={activeSectionHealth.warnings}
+                      empty="No warnings reported for this section."
+                      tone="warning"
+                    />
+                  </div>
+                </EditorialEntity>
+              ) : (
+                <EmptyGuidance
+                  title="No section health yet"
+                  description="Section health will appear after education quality analysis runs."
+                />
+              )}
+              <ClaimRepairPanel
+                claims={activeSectionClaims}
+                repairs={claimRepairs}
+                pendingAction={pendingAction}
+                targetClaimId={targetClaimId}
+                targetSectionId={targetSectionId}
+                onRepairUnsupportedClaim={onRepairUnsupportedClaim}
+                onClaimRepairDecision={onClaimRepairDecision}
+              />
+              <AcceptedRepairsPanel workspace={workspace} />
+              <StreamDisclosure
+                title="Revision checkpoints"
+                summary={`${revisions.length} revision${revisions.length === 1 ? '' : 's'} available`}
+              >
+                <div className="space-y-3">
+                  <RevisionHistoryCard
+                    revisions={revisions}
+                    loading={false}
+                    error={null}
+                  />
+                  <RevisionCompareCard
+                    revisions={revisions}
+                    selectedFromVersion={compareFromVersion}
+                    selectedToVersion={compareToVersion}
+                    comparison={revisionCompare}
+                    loading={revisionCompareLoading}
+                    error={revisionCompareError}
+                    onFromVersionChange={onFromVersionChange}
+                    onToVersionChange={onToVersionChange}
+                  />
+                </div>
+              </StreamDisclosure>
+            </>
+          }
         />
-      </CollapsibleDetail>
+      </EditorialStream>
     </div>
   );
 }
@@ -213,122 +384,6 @@ function AcceptedRepairsPanel({
           </div>
         ))}
       </div>
-    </ReasoningCard>
-  );
-}
-
-function EducationQualityCard({
-  workspace,
-  pendingAction,
-  onRegenerateSection,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-  pendingAction: string | null;
-  onRegenerateSection: (section: EducationRegenerableSection) => void;
-}) {
-  const regenerableSections: EducationRegenerableSection[] = [
-    'differentials',
-    'investigations',
-    'examPearls',
-    'management',
-  ];
-  const qualityScore = workspace.education.qualityScore;
-
-  return (
-    <ReasoningCard
-      eyebrow="Clinical signal health"
-      title="Education quality"
-      subtitle="Section quality, blockers, and regeneration points for draft-only clinical content."
-      tone={workspace.education.blockers.length ? 'danger' : workspace.education.warnings.length ? 'warning' : 'success'}
-    >
-      <CompactMetricGrid
-        items={[
-          { label: 'Status', value: formatLabel(workspace.education.status) },
-          { label: 'Version', value: workspace.education.version ?? 'None' },
-          {
-            label: 'Quality',
-            value: formatScore(qualityScore),
-            tone:
-              qualityScore === null || qualityScore === undefined
-                ? 'neutral'
-                : qualityScore >= 0.75
-                ? 'success'
-                : qualityScore >= 0.5
-                  ? 'warning'
-                  : 'danger',
-          },
-          {
-            label: 'Updated',
-            value: workspace.education.updatedAt
-              ? formatDate(workspace.education.updatedAt)
-              : 'Unknown',
-          },
-        ]}
-      />
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <ClinicalSignalList
-          title="Blockers"
-          items={workspace.education.blockers}
-          empty="No clinical-picture blockers reported."
-          tone="danger"
-        />
-        <ClinicalSignalList
-          title="Warnings"
-          items={workspace.education.warnings}
-          empty="No clinical-picture warnings reported."
-          tone="warning"
-        />
-      </div>
-      {workspace.education.sectionHealth.length ? (
-        <div className="mt-4 overflow-x-auto rounded-lg border border-[var(--color-navy-border)]">
-          <table className="min-w-full divide-y divide-[var(--color-navy-border)] text-sm">
-            <thead className="bg-white/5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-3 py-2">Section</th>
-                <th className="px-3 py-2">Score</th>
-                <th className="px-3 py-2">Regenerate</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--color-navy-border)]">
-              {workspace.education.sectionHealth.map((section) => (
-                <tr key={section.section}>
-                  <td className="px-3 py-2 font-medium text-slate-100">
-                    {formatLabel(section.section)}
-                  </td>
-                  <td className="px-3 py-2 text-slate-300">
-                    {formatScore(section.score)}
-                  </td>
-                  <td className="px-3 py-2">
-                    {regenerableSections.includes(
-                      section.section as EducationRegenerableSection,
-                    ) ? (
-                      <button
-                        type="button"
-                        disabled={pendingAction !== null}
-                        onClick={() =>
-                          onRegenerateSection(
-                            section.section as EducationRegenerableSection,
-                          )
-                        }
-                        className="editorial-action px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        Regenerate
-                      </button>
-                    ) : (
-                      <span className="text-xs text-slate-400">N/A</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <EmptyGuidance
-          title="No section health yet"
-          description="Section health will appear after education quality analysis runs."
-        />
-      )}
     </ReasoningCard>
   );
 }

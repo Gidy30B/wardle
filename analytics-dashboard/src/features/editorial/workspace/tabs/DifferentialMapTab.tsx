@@ -17,10 +17,14 @@ import {
   type DiagnosisTeachingRelationship,
   type DiagnosisTeachingRelationshipReviewAction,
   type EvidenceGraphReviewAction,
+  type GenerateClueRevisionProposalPayload,
   type GenerateTargetedCasePayload,
+  type GenerateTargetedDiscriminatorCasePayload,
+  type DiscriminatorDraftReview,
   type ReasoningPath,
   type ReasoningPathReviewAction,
   type StructuredDifferentialLink,
+  type TargetedDiscriminatorGenerationRequest,
   type WorkspaceCoverageMatrixRow,
 } from '../../../../api/admin';
 import type { ApiClient } from '../../../../api/client';
@@ -29,18 +33,40 @@ import type { StatusBadgeTone } from '../../../../components/ui/statusBadgeMeta'
 import type { ConsoleAccessState } from '../../../../hooks/useConsoleAccess';
 import { CoverageMatrixCard } from '../CoveragePanels';
 import {
-  CollapsibleDetail,
+  DiscriminatorReveal,
+  EditorialNarrativeThread,
+  LearnerFailureProjection,
+  NarrativeCheckpoint,
+  NarrativeStream,
+  ReasoningTransition,
+} from '../EditorialNarrativePrimitives';
+import {
   CompactMetricGrid,
   CompactPanel,
   DraftAIActionsPanel,
+  EditorialEntity,
+  EditorialStream,
   EditorialRow,
+  EmbeddedActionBar,
+  EmptyGuidance,
   ExplainabilityMetric,
   InlineReviewBar,
   MetricGrid,
   RelationshipActionButton,
+  ReasoningThread,
+  SecondaryActionDisclosure,
+  SidebarDetailLayout,
+  StreamDisclosure,
   StatusStrip,
   TabNextStepCard,
+  WorkflowStateInline,
 } from '../EditorialPrimitives';
+import {
+  buildMimicSurvivalSummary,
+  type MimicSurvivalSummary,
+  mimicSurvivalState,
+  mimicSurvivalStateMeta,
+} from '../mimicSurvival';
 import {
   errorMessage,
   formatLabel,
@@ -55,6 +81,8 @@ export function DifferentialMapTab({
   client,
   onRefresh,
   onGenerateTargetedCase,
+  onGenerateDiscriminatorCase,
+  onGenerateClueRevision,
   showError,
   showPending,
   showSuccess,
@@ -66,11 +94,27 @@ export function DifferentialMapTab({
   client: ApiClient;
   onRefresh: () => Promise<void>;
   onGenerateTargetedCase: (payload: GenerateTargetedCasePayload) => void;
+  onGenerateDiscriminatorCase: (
+    payload: GenerateTargetedDiscriminatorCasePayload,
+  ) => void;
+  onGenerateClueRevision: (payload: GenerateClueRevisionProposalPayload) => void;
   showError: (message: string) => void;
   showPending: (message: string) => void;
   showSuccess: (message: string) => void;
 }) {
   const [graphDraftAction, setGraphDraftAction] = useState<string | null>(null);
+  const [activeMimicId, setActiveMimicId] = useState<string | null>(null);
+
+  const activeRelationships = workspace.graph.teachingRelationships.filter(
+    (relationship) => relationship.status === 'ACTIVE',
+  );
+  const mimicGroups = useMemo(
+    () => buildMimicReasoningGroups(workspace, activeRelationships),
+    [workspace, activeRelationships],
+  );
+  const allMimicItems = mimicGroups.flatMap((group) => group.items);
+  const activeMimic =
+    allMimicItems.find((item) => item.id === activeMimicId) ?? allMimicItems[0] ?? null;
 
   async function runGraphDraftAction(
     id: string,
@@ -100,153 +144,345 @@ export function DifferentialMapTab({
           description="Generate or review graph and evidence candidates so discriminators, mimics, and reasoning paths can support this diagnosis."
         />
       ) : null}
-      <CompactPanel title="Graph readiness">
-        <StatusStrip
-          items={[
-            {
-              label: 'Status',
-              value: formatLabel(workspace.graph.readiness),
-              detail: 'Graph maturity',
-              tone: workspace.graph.readiness === 'ready' ? 'success' : 'warning',
-            },
-            {
-              label: 'Facts',
-              value: workspace.graph.factCount,
-              detail: 'Reviewed graph facts',
-              tone: workspace.graph.factCount ? 'success' : 'warning',
-            },
-            {
-              label: 'Candidates',
-              value: workspace.graph.candidateCount,
-              detail: 'Generated graph objects',
-              tone: workspace.graph.candidateCount ? 'info' : 'neutral',
-            },
-            {
-              label: 'Reviewable',
-              value: workspace.graph.reviewableCandidateCount,
-              detail: 'Awaiting editorial action',
-              tone: workspace.graph.reviewableCandidateCount ? 'warning' : 'success',
-            },
-          ]}
-        />
-        <Link
-          to="/diagnosis-graph/candidates"
-          className="mt-3 inline-flex text-sm font-semibold text-[var(--color-teal)] underline"
-        >
-          Open graph candidate queue
-        </Link>
-      </CompactPanel>
-      <DifferentialMapExplainabilityCard
-        workspace={workspace}
-        pendingAction={graphDraftAction}
-        onSuggestTeachingDistinction={() =>
-          runGraphDraftAction(
-            'teaching-distinction',
-            'Generating teaching distinction candidates...',
-            'Teaching distinction candidates generated for review.',
-            () =>
-              suggestTeachingDistinctionDraft(
-                client,
-                workspace.diagnosis.id,
-              ),
-          )
+      <div style={{ minHeight: 500 }}>
+      <SidebarDetailLayout
+        sidebar={
+          <MimicSurvivalSelector
+            groups={mimicGroups}
+            activeMimicId={activeMimic?.id ?? null}
+            onSelect={setActiveMimicId}
+          />
         }
-        onStrengthenDifferential={() =>
-          runGraphDraftAction(
-            'strengthen-differential',
-            'Generating reasoning path candidates...',
-            'Reasoning path candidates generated for review.',
-            () => strengthenDifferentialDraft(client, workspace.diagnosis.id),
-          )
+        sidebarWidth={220}
+        detail={
+          <EditorialStream
+            eyebrow="Differential map"
+            title="Mimic separation stream"
+            subtitle="Navigate likely mimics, discriminator reasoning, evidence confidence, case support, and graph governance in one flow."
+          >
+            <CompactPanel title="Graph readiness">
+              <StatusStrip
+                items={[
+                  {
+                    label: 'Status',
+                    value: formatLabel(workspace.graph.readiness),
+                    detail: 'Graph maturity',
+                    tone:
+                      workspace.graph.readiness === 'ready'
+                        ? 'success'
+                        : 'warning',
+                  },
+                  {
+                    label: 'Facts',
+                    value: workspace.graph.factCount,
+                    detail: 'Reviewed graph facts',
+                    tone: workspace.graph.factCount ? 'success' : 'warning',
+                  },
+                  {
+                    label: 'Candidates',
+                    value: workspace.graph.candidateCount,
+                    detail: 'Generated graph objects',
+                    tone: workspace.graph.candidateCount ? 'info' : 'neutral',
+                  },
+                  {
+                    label: 'Reviewable',
+                    value: workspace.graph.reviewableCandidateCount,
+                    detail: 'Awaiting editorial action',
+                    tone: workspace.graph.reviewableCandidateCount
+                      ? 'warning'
+                      : 'success',
+                  },
+                ]}
+              />
+              <Link
+                to="/diagnosis-graph/candidates"
+                className="mt-3 inline-flex text-sm font-semibold text-[var(--color-teal)] underline"
+              >
+                Open graph candidate queue
+              </Link>
+            </CompactPanel>
+            <DifferentialMapOverviewCard
+              workspace={workspace}
+              mimicGroups={mimicGroups}
+              pendingAction={graphDraftAction}
+              onSuggestTeachingDistinction={() =>
+                runGraphDraftAction(
+                  'teaching-distinction',
+                  'Generating teaching distinction candidates...',
+                  'Teaching distinction candidates generated for review.',
+                  () =>
+                    suggestTeachingDistinctionDraft(
+                      client,
+                      workspace.diagnosis.id,
+                    ),
+                )
+              }
+              onStrengthenDifferential={() =>
+                runGraphDraftAction(
+                  'strengthen-differential',
+                  'Generating reasoning path candidates...',
+                  'Reasoning path candidates generated for review.',
+                  () =>
+                    strengthenDifferentialDraft(client, workspace.diagnosis.id),
+                )
+              }
+              onGenerateTargetedCase={onGenerateTargetedCase}
+            />
+            {allMimicItems.length === 0 ? (
+              <EmptyGuidance
+                title="No mimics mapped yet"
+                description="Generate graph candidates, add a teaching relationship, or add a differential mapping to populate the mimic survival narrative."
+                action={
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={graphDraftAction !== null}
+                      onClick={() =>
+                        runGraphDraftAction(
+                          'strengthen-differential',
+                          'Generating reasoning path candidates...',
+                          'Reasoning path candidates generated for review.',
+                          () =>
+                            strengthenDifferentialDraft(client, workspace.diagnosis.id),
+                        )
+                      }
+                      className="editorial-action px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Generate reasoning path candidates
+                    </button>
+                    <button
+                      type="button"
+                      disabled={graphDraftAction !== null}
+                      onClick={() =>
+                        runGraphDraftAction(
+                          'teaching-distinction',
+                          'Generating teaching distinction candidates...',
+                          'Teaching distinction candidates generated for review.',
+                          () =>
+                            suggestTeachingDistinctionDraft(client, workspace.diagnosis.id),
+                        )
+                      }
+                      className="editorial-action px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Suggest teaching distinction
+                    </button>
+                    <Link
+                      to="/diagnosis-graph/candidates"
+                      className="editorial-action px-3 py-1.5 text-xs"
+                    >
+                      Open graph candidate queue
+                    </Link>
+                  </div>
+                }
+              />
+            ) : (
+              <MimicSurvivalNarrative
+                item={activeMimic!}
+                pendingAction={graphDraftAction}
+                onSuggestTeachingDistinction={() =>
+                  runGraphDraftAction(
+                    'teaching-distinction',
+                    'Generating teaching distinction candidates...',
+                    'Teaching distinction candidates generated for review.',
+                    () =>
+                      suggestTeachingDistinctionDraft(
+                        client,
+                        workspace.diagnosis.id,
+                      ),
+                  )
+                }
+                onStrengthenDifferential={() =>
+                  runGraphDraftAction(
+                    'strengthen-differential',
+                    'Generating reasoning path candidates...',
+                    'Reasoning path candidates generated for review.',
+                    () =>
+                      strengthenDifferentialDraft(client, workspace.diagnosis.id),
+                  )
+                }
+                onGenerateTargetedCase={onGenerateTargetedCase}
+                onGenerateDiscriminatorCase={onGenerateDiscriminatorCase}
+                onGenerateClueRevision={onGenerateClueRevision}
+              />
+            )}
+            <StreamDisclosure
+              title="Teaching relationship details"
+              summary={`${workspace.graph.teachingRelationships?.length ?? 0} relationship${(workspace.graph.teachingRelationships?.length ?? 0) === 1 ? '' : 's'}`}
+            >
+              <TeachingRelationshipPanel
+                diagnosisRegistryId={workspace.diagnosis.id}
+                relationships={workspace.graph.teachingRelationships ?? []}
+                access={access}
+                client={client}
+                onRefresh={onRefresh}
+                showError={showError}
+                showPending={showPending}
+                showSuccess={showSuccess}
+              />
+            </StreamDisclosure>
+            <StreamDisclosure
+              title="Reasoning paths"
+              summary={`${workspace.reasoningPaths?.length ?? 0} draft or active path${(workspace.reasoningPaths?.length ?? 0) === 1 ? '' : 's'}`}
+            >
+              <ReasoningPathsPanel
+                diagnosisRegistryId={workspace.diagnosis.id}
+                paths={workspace.reasoningPaths ?? []}
+                access={access}
+                client={client}
+                onRefresh={onRefresh}
+                onGenerateTargetedCase={onGenerateTargetedCase}
+                showError={showError}
+                showPending={showPending}
+                showSuccess={showSuccess}
+              />
+            </StreamDisclosure>
+            <StreamDisclosure
+              title="Evidence supporting this distinction"
+              summary={`${workspace.evidenceGraph?.relationships?.length ?? 0} evidence relationship${(workspace.evidenceGraph?.relationships?.length ?? 0) === 1 ? '' : 's'}`}
+            >
+              <EvidenceGraphPanel
+                diagnosisRegistryId={workspace.diagnosis.id}
+                relationships={workspace.evidenceGraph?.relationships ?? []}
+                summary={workspace.evidenceGraph?.summary}
+                access={access}
+                client={client}
+                onRefresh={onRefresh}
+                showError={showError}
+                showPending={showPending}
+                showSuccess={showSuccess}
+              />
+            </StreamDisclosure>
+            <StreamDisclosure
+              title="Evidence coverage details"
+              summary="Scores, readiness, gaps, and draft trust signals"
+            >
+              <EvidenceCoveragePanel coverage={workspace.evidenceCoverage} />
+            </StreamDisclosure>
+            <StreamDisclosure
+              title="Coverage matrix"
+              summary={`${workspace.coverageMatrix.filter((row) => row.graphCoverage !== 'covered').length} uncovered or partial rows`}
+            >
+              <CoverageMatrixCard
+                rows={workspace.coverageMatrix.filter(
+                  (row) => row.graphCoverage !== 'covered',
+                )}
+                selectedRow={selectedRow}
+                onRowSelect={onRowSelect}
+              />
+            </StreamDisclosure>
+            <StreamDisclosure
+              title="Linked differential records"
+              summary={`${(workspace.linkedDifferentials ?? []).length} linked differential${(workspace.linkedDifferentials ?? []).length === 1 ? '' : 's'}`}
+            >
+              <LinkedDifferentialsList links={workspace.linkedDifferentials ?? []} />
+            </StreamDisclosure>
+            <StreamDisclosure
+              title="Unreviewed graph candidates"
+              summary={`${workspace.graph.candidates.length} candidate${workspace.graph.candidates.length === 1 ? '' : 's'}`}
+            >
+              <GraphCandidateList candidates={workspace.graph.candidates} />
+            </StreamDisclosure>
+          </EditorialStream>
         }
-        onGenerateTargetedCase={onGenerateTargetedCase}
       />
-      <CollapsibleDetail
-        title="Teaching relationship details"
-        summary={`${workspace.graph.teachingRelationships?.length ?? 0} relationship${(workspace.graph.teachingRelationships?.length ?? 0) === 1 ? '' : 's'}`}
-      >
-        <TeachingRelationshipPanel
-          diagnosisRegistryId={workspace.diagnosis.id}
-          relationships={workspace.graph.teachingRelationships ?? []}
-          access={access}
-          client={client}
-          onRefresh={onRefresh}
-          showError={showError}
-          showPending={showPending}
-          showSuccess={showSuccess}
-        />
-      </CollapsibleDetail>
-      <CollapsibleDetail
-        title="Reasoning paths"
-        summary={`${workspace.reasoningPaths?.length ?? 0} draft or active path${(workspace.reasoningPaths?.length ?? 0) === 1 ? '' : 's'}`}
-      >
-        <ReasoningPathsPanel
-          diagnosisRegistryId={workspace.diagnosis.id}
-          paths={workspace.reasoningPaths ?? []}
-          access={access}
-          client={client}
-          onRefresh={onRefresh}
-          onGenerateTargetedCase={onGenerateTargetedCase}
-          showError={showError}
-          showPending={showPending}
-          showSuccess={showSuccess}
-        />
-      </CollapsibleDetail>
-      <CollapsibleDetail
-        title="Evidence supporting this distinction"
-        summary={`${workspace.evidenceGraph?.relationships?.length ?? 0} evidence relationship${(workspace.evidenceGraph?.relationships?.length ?? 0) === 1 ? '' : 's'}`}
-      >
-        <EvidenceGraphPanel
-          diagnosisRegistryId={workspace.diagnosis.id}
-          relationships={workspace.evidenceGraph?.relationships ?? []}
-          summary={workspace.evidenceGraph?.summary}
-          access={access}
-          client={client}
-          onRefresh={onRefresh}
-          showError={showError}
-          showPending={showPending}
-          showSuccess={showSuccess}
-        />
-      </CollapsibleDetail>
-      <CollapsibleDetail title="Evidence coverage details" summary="Scores, readiness, gaps, and draft trust signals">
-        <EvidenceCoveragePanel coverage={workspace.evidenceCoverage} />
-      </CollapsibleDetail>
-      <CollapsibleDetail
-        title="Coverage matrix"
-        summary={`${workspace.coverageMatrix.filter((row) => row.graphCoverage !== 'covered').length} uncovered or partial rows`}
-      >
-        <CoverageMatrixCard
-          rows={workspace.coverageMatrix.filter(
-            (row) => row.graphCoverage !== 'covered',
-          )}
-          selectedRow={selectedRow}
-          onRowSelect={onRowSelect}
-        />
-      </CollapsibleDetail>
-      <LinkedDifferentialsList links={workspace.linkedDifferentials ?? []} />
-      <CollapsibleDetail
-        title="Unreviewed graph candidates"
-        summary={`${workspace.graph.candidates.length} candidate${workspace.graph.candidates.length === 1 ? '' : 's'}`}
-      >
-        <GraphCandidateList candidates={workspace.graph.candidates} />
-      </CollapsibleDetail>
+      </div>
     </div>
   );
 }
 
-function DifferentialMapExplainabilityCard({
+function MimicSurvivalSelector({
+  groups,
+  activeMimicId,
+  onSelect,
+}: {
+  groups: MimicReasoningGroup[];
+  activeMimicId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+        Mimic survival
+      </p>
+      {groups.map((group) =>
+        group.items.length ? (
+          <div key={group.id} className="space-y-1.5">
+            <p className="px-1 text-xs font-semibold text-slate-400">
+              {group.label}
+            </p>
+            {group.items.map((item) => {
+              const survivalState = mimicSurvivalState(
+                item.caseEliminationSupport,
+                item.caseNeeded,
+              );
+              const meta = mimicSurvivalStateMeta(survivalState);
+              const active = item.id === activeMimicId;
+              const isDangerGroup =
+                group.id === 'must_not_miss' || group.id === 'escalation';
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onSelect(item.id)}
+                  className={[
+                    'w-full rounded-lg border px-3 py-2 text-left transition',
+                    active
+                      ? 'border-[var(--color-teal)] bg-[var(--color-teal-bg)]'
+                      : isDangerGroup
+                        ? 'border-[var(--color-rose)]/30 bg-[var(--color-rose)]/5 hover:border-[var(--color-rose)]/50'
+                        : 'border-[var(--color-navy-border)] bg-white/[0.03] hover:border-slate-500',
+                  ].join(' ')}
+                >
+                  <span className="block text-sm font-semibold text-[var(--color-white-text)]">
+                    {item.label}
+                  </span>
+                  <span className="mt-1.5 flex flex-wrap gap-1">
+                    <StatusBadge status={meta.label} tone={meta.tone} />
+                    {isDangerGroup ? (
+                      <StatusBadge status="Must-not-miss" tone="danger" />
+                    ) : null}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null,
+      )}
+    </div>
+  );
+}
+
+function DifferentialMapOverviewCard({
   workspace,
+  mimicGroups,
   pendingAction,
   onSuggestTeachingDistinction,
   onStrengthenDifferential,
   onGenerateTargetedCase,
 }: {
   workspace: DiagnosisEditorialWorkspace;
+  mimicGroups: MimicReasoningGroup[];
   pendingAction: string | null;
   onSuggestTeachingDistinction: () => void;
   onStrengthenDifferential: () => void;
   onGenerateTargetedCase: (payload: GenerateTargetedCasePayload) => void;
 }) {
+  const visibleItems = mimicGroups.flatMap((group) => group.items);
+  const explicitCount = visibleItems.reduce(
+    (count, item) => count + item.caseEliminationSupport.explicitSeparationCount,
+    0,
+  );
+  const heuristicCount = visibleItems.reduce(
+    (count, item) => count + item.caseEliminationSupport.heuristicOnlyCount,
+    0,
+  );
+  const unresolvedCount = visibleItems.reduce(
+    (count, item) =>
+      count +
+      item.caseEliminationSupport.unresolvedCount +
+      item.caseEliminationSupport.persistentConfusionCount,
+    0,
+  );
   const activeRelationships = workspace.graph.teachingRelationships.filter(
     (relationship) => relationship.status === 'ACTIVE',
   );
@@ -312,95 +548,89 @@ function DifferentialMapExplainabilityCard({
     tone: StatusBadgeTone;
     detail: string;
   }>;
-  const mimicGroups = buildMimicReasoningGroups(workspace, activeRelationships);
   const reasoningSummary = buildReasoningSummary(
     workspace,
-    mimicGroups.flatMap((group) => group.items),
+    visibleItems,
     discriminatorRelationships,
   );
 
   return (
-    <CompactPanel
-      title="Differential map"
-      subtitle="Clinical reasoning view for mimics, discriminators, support state, and next editorial action."
+    <EditorialNarrativeThread
+      eyebrow="Mimic survival"
+      title="Case-governed differential separation"
+      subtitle={`${explicitCount} explicit / ${heuristicCount} heuristic-only / ${unresolvedCount} unresolved`}
+      tone={unresolvedCount || heuristicCount ? 'warning' : 'success'}
     >
       <RelationshipSummaryStrip summary={reasoningSummary} />
-      <MimicReasoningGroups
-        groups={mimicGroups}
-        pendingAction={pendingAction}
-        onSuggestTeachingDistinction={onSuggestTeachingDistinction}
-        onStrengthenDifferential={onStrengthenDifferential}
-        onGenerateTargetedCase={onGenerateTargetedCase}
-      />
-      <CollapsibleDetail
-        title="Support legend"
-        summary="Explicit, inferred, and missing support tokens"
+      <StreamDisclosure
+        title="Signal legend and relationship metrics"
+        summary="Support legend, relationship counts, and explainability detail"
       >
         <SignalLegend />
         <RelationshipStrip nodes={relationshipNodes} />
-      </CollapsibleDetail>
-      <div className="grid gap-3 lg:grid-cols-2">
-        <ExplainabilityMetric
-          label="Discriminator coverage"
-          value={`${discriminatorRelationships.length} active`}
-          detail={`${workspace.evidenceGraph.summary.discriminatorEvidence} active discriminator evidence relationships are available.`}
-          tone={discriminatorRelationships.length ? 'success' : 'warning'}
-        />
-        <ExplainabilityMetric
-          label="Missing mimic coverage"
-          value={`${mimicRelationships.length} active`}
-          detail={
-            mimicRelationships.length
-              ? 'Active mimic-confusion teaching relationships are present.'
-              : 'No active mimic-confusion relationship is available for learner contrast.'
-          }
-          tone={mimicRelationships.length ? 'success' : 'warning'}
-        />
-        <ExplainabilityMetric
-          label="Case coverage"
-          value={
-            workspace.evidenceCoverage
-              ? `${workspace.evidenceCoverage.coverageBreakdown.caseEvidenceCoverage}%`
-              : `${workspace.cases.summary.usable} usable`
-          }
-          detail="Uses evidence coverage caseEvidenceCoverage when available; otherwise uses usable case inventory."
-          tone={workspace.cases.summary.usable ? 'success' : 'warning'}
-        />
-        <ExplainabilityMetric
-          label="Learner-confusion risk"
-          value={`${confusionRisks.length} signals`}
-          detail={
-            confusionRisks[0]?.commonConfusionReason ??
-            confusionRisks[0]?.learnerPitfall ??
-            'No explicit confusion reason or learner pitfall is attached.'
-          }
-          tone={confusionRisks.length ? 'warning' : 'success'}
-        />
-        <ExplainabilityMetric
-          label="Escalation coverage"
-          value={escalationCoverage?.coversEscalation ? 'Covered' : 'Missing'}
-          detail={
-            explicitEscalations || inferredEscalations
-              ? `${explicitEscalations} explicit, ${inferredEscalations} inferred case escalation links.`
-              : escalationCoverage
-              ? [
-                  escalationCoverage.missingEscalationTeaching
-                    ? 'missing teaching'
-                    : null,
-                  escalationCoverage.weakEscalationEvidence
-                    ? 'weak evidence'
-                    : null,
-                  escalationCoverage.noPlayableEscalationCase
-                    ? 'no playable case'
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(', ') || 'Active escalation support is available.'
-              : `${workspace.reasoningPaths.filter((path) => path.escalationEvidenceNodeIds.length > 0).length} reasoning paths include escalation evidence.`
-          }
-          tone={escalationCoverage?.coversEscalation ? 'success' : 'warning'}
-        />
-      </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ExplainabilityMetric
+            label="Discriminator coverage"
+            value={`${discriminatorRelationships.length} active`}
+            detail={`${workspace.evidenceGraph.summary.discriminatorEvidence} active discriminator evidence relationships are available.`}
+            tone={discriminatorRelationships.length ? 'success' : 'warning'}
+          />
+          <ExplainabilityMetric
+            label="Missing mimic coverage"
+            value={`${mimicRelationships.length} active`}
+            detail={
+              mimicRelationships.length
+                ? 'Active mimic-confusion teaching relationships are present.'
+                : 'No active mimic-confusion relationship is available for learner contrast.'
+            }
+            tone={mimicRelationships.length ? 'success' : 'warning'}
+          />
+          <ExplainabilityMetric
+            label="Case coverage"
+            value={
+              workspace.evidenceCoverage
+                ? `${workspace.evidenceCoverage.coverageBreakdown.caseEvidenceCoverage}%`
+                : `${workspace.cases.summary.usable} usable`
+            }
+            detail="Uses evidence coverage caseEvidenceCoverage when available; otherwise uses usable case inventory."
+            tone={workspace.cases.summary.usable ? 'success' : 'warning'}
+          />
+          <ExplainabilityMetric
+            label="Learner-confusion risk"
+            value={`${confusionRisks.length} signals`}
+            detail={
+              confusionRisks[0]?.commonConfusionReason ??
+              confusionRisks[0]?.learnerPitfall ??
+              'No explicit confusion reason or learner pitfall is attached.'
+            }
+            tone={confusionRisks.length ? 'warning' : 'success'}
+          />
+          <ExplainabilityMetric
+            label="Escalation coverage"
+            value={escalationCoverage?.coversEscalation ? 'Covered' : 'Missing'}
+            detail={
+              explicitEscalations || inferredEscalations
+                ? `${explicitEscalations} explicit, ${inferredEscalations} inferred case escalation links.`
+                : escalationCoverage
+                ? [
+                    escalationCoverage.missingEscalationTeaching
+                      ? 'missing teaching'
+                      : null,
+                    escalationCoverage.weakEscalationEvidence
+                      ? 'weak evidence'
+                      : null,
+                    escalationCoverage.noPlayableEscalationCase
+                      ? 'no playable case'
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(', ') || 'Active escalation support is available.'
+                : `${workspace.reasoningPaths.filter((path) => path.escalationEvidenceNodeIds.length > 0).length} reasoning paths include escalation evidence.`
+            }
+            tone={escalationCoverage?.coversEscalation ? 'success' : 'warning'}
+          />
+        </div>
+      </StreamDisclosure>
       <DraftAIActionsPanel
         actions={[
           {
@@ -440,7 +670,318 @@ function DifferentialMapExplainabilityCard({
           },
         ]}
       />
-    </CompactPanel>
+    </EditorialNarrativeThread>
+  );
+}
+
+function MimicSurvivalNarrative({
+  item,
+  pendingAction,
+  onSuggestTeachingDistinction,
+  onStrengthenDifferential,
+  onGenerateTargetedCase,
+  onGenerateDiscriminatorCase,
+  onGenerateClueRevision,
+}: {
+  item: MimicReasoningItem;
+  pendingAction: string | null;
+  onSuggestTeachingDistinction: () => void;
+  onStrengthenDifferential: () => void;
+  onGenerateTargetedCase: (payload: GenerateTargetedCasePayload) => void;
+  onGenerateDiscriminatorCase: (
+    payload: GenerateTargetedDiscriminatorCasePayload,
+  ) => void;
+  onGenerateClueRevision: (payload: GenerateClueRevisionProposalPayload) => void;
+}) {
+  const survival = item.caseEliminationSupport;
+  const survivalState = mimicSurvivalState(survival, item.caseNeeded);
+  const stateMeta = mimicSurvivalStateMeta(survivalState);
+  const group = groupMimicItem(item);
+  const groupDef = mimicGroupDefinitions.find(
+    (definition) => definition.id === group,
+  );
+  const primaryAction = mimicPrimaryAction(item);
+  const primaryOpportunity = item.generationOpportunities[0];
+  const topDiscriminator = item.discriminators[0] ?? null;
+  const discriminatorChips = item.discriminators.slice(0, 3);
+  const remainingDiscriminators = item.discriminators.slice(3);
+
+  const entryReason =
+    item.relationship?.commonConfusionReason ??
+    item.relationship?.learnerPitfall ??
+    item.link?.sourceText ??
+    'No documented reason for this differential entry yet.';
+  const entryDetail = item.link
+    ? `Linked as ${formatLabel(item.link.role)} from structured differential mapping.`
+    : item.relationship
+      ? `Relationship purpose: ${formatLabel(item.relationship.teachingPurpose)}.`
+      : null;
+
+  const transitionText =
+    survival.total === 0
+      ? 'No case has yet been checked against this discriminator.'
+      : survival.explicitSeparationCount > 0
+        ? `Cases have used ${topDiscriminator ? 'the discriminator above' : 'a discriminator'} to separate this mimic.`
+        : 'Cases eliminate this mimic, but not explicitly via the discriminator above.';
+  const transitionTone =
+    survival.total === 0 || survival.heuristicOnlyCount > 0 ? 'warning' : 'info';
+
+  const unresolvedTotal = survival.unresolvedCount + survival.persistentConfusionCount;
+  const checkpoint3Title =
+    survival.total === 0
+      ? 'No case-level elimination evidence is available for this mimic yet.'
+      : `${survival.explicitSeparationCount} case${survival.explicitSeparationCount === 1 ? '' : 's'} explicitly separate this mimic${
+          survival.heuristicOnlyCount > 0
+            ? `, ${survival.heuristicOnlyCount} more via heuristic-only elimination`
+            : ''
+        }${
+          unresolvedTotal > 0
+            ? `; ${unresolvedTotal} case${unresolvedTotal === 1 ? '' : 's'} leave it unresolved`
+            : '.'
+        }`;
+
+  const checkpoint4Title =
+    group === 'must_not_miss' && survivalState === 'unresolved'
+      ? 'This is a must-not-miss mimic and remains unresolved — learners may proceed without ruling it out.'
+      : item.caseNeeded || survival.total === 0
+        ? 'No case currently exercises this differential — generate one to verify learner separation.'
+        : survivalState === 'weak_elimination'
+          ? 'Cases eliminate this mimic, but only weakly or via heuristic — strengthen the discriminator or case design.'
+          : item.escalationSupport === 'missing' && group === 'escalation'
+            ? 'This escalation mimic has no escalation-path case coverage.'
+            : 'This mimic is well-separated — monitor for drift as new cases are added.';
+
+  const hasSupportDetails =
+    remainingDiscriminators.length > 0 ||
+    Boolean(item.relationship?.supportingTeachingRule) ||
+    Boolean(item.relationship?.supportingGraphFact) ||
+    Boolean(item.link);
+
+  return (
+    <EditorialNarrativeThread
+      eyebrow={groupDef?.label}
+      title={item.label}
+      subtitle={formatLabel(item.relationshipType)}
+      tone={groupTone(group)}
+      state={<StatusBadge status={stateMeta.label} tone={stateMeta.tone} />}
+    >
+      <NarrativeStream>
+        <NarrativeCheckpoint
+          tone={group === 'must_not_miss' || group === 'escalation' ? 'danger' : 'info'}
+          marker={
+            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Why this mimic enters the differential
+            </span>
+          }
+          title={`${formatLabel(item.relationshipType)} — ${entryReason}`}
+        >
+          {entryDetail ? (
+            <p className="text-xs leading-5 text-slate-500">{entryDetail}</p>
+          ) : null}
+          {item.learnerRisk ? (
+            <LearnerFailureProjection tone="warning">
+              {item.learnerRisk}
+            </LearnerFailureProjection>
+          ) : null}
+        </NarrativeCheckpoint>
+
+        <NarrativeCheckpoint
+          tone={item.evidenceSupport === 'missing' ? 'warning' : 'success'}
+          marker={
+            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              What should separate it
+            </span>
+          }
+          title={
+            topDiscriminator
+              ? `Discriminator: ${topDiscriminator}`
+              : 'No discriminator has been documented for this mimic yet.'
+          }
+        >
+          <div className="flex flex-wrap gap-1.5">
+            {discriminatorChips.length ? (
+              discriminatorChips.map((discriminator) => (
+                <DiscriminatorReveal key={discriminator} label={discriminator} />
+              ))
+            ) : (
+              <StatusBadge
+                status="No discriminator summary attached yet"
+                tone="warning"
+              />
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <StatusBadge
+              status={`Evidence ${formatLabel(item.evidenceSupport)}`}
+              tone={supportTone(item.evidenceSupport)}
+            />
+            <StatusBadge
+              status={`Teaching ${formatLabel(item.teachingSupport)}`}
+              tone={supportTone(item.teachingSupport)}
+            />
+          </div>
+        </NarrativeCheckpoint>
+
+        <ReasoningTransition tone={transitionTone}>{transitionText}</ReasoningTransition>
+
+        <NarrativeCheckpoint
+          tone={stateMeta.tone}
+          marker={
+            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              What cases currently teach
+            </span>
+          }
+          state={<StatusBadge status={stateMeta.label} tone={stateMeta.tone} />}
+          title={checkpoint3Title}
+        >
+          {survival.total === 0 ? (
+            <p className="text-xs leading-5 text-slate-500">
+              No case-level elimination evidence yet.
+            </p>
+          ) : (
+            <CompactMetricGrid
+              items={[
+                {
+                  label: 'Explicit separation',
+                  value: survival.explicitSeparationCount,
+                  tone: survival.explicitSeparationCount ? 'success' : 'neutral',
+                },
+                {
+                  label: 'Heuristic only',
+                  value: survival.heuristicOnlyCount,
+                  tone: survival.heuristicOnlyCount ? 'warning' : 'neutral',
+                },
+                {
+                  label: 'Unresolved/persistent',
+                  value: unresolvedTotal,
+                  tone: unresolvedTotal ? 'danger' : 'success',
+                },
+                {
+                  label: 'Weak elimination',
+                  value: survival.weakEliminationCount,
+                  tone: survival.weakEliminationCount ? 'warning' : 'success',
+                },
+              ]}
+            />
+          )}
+          {survival.persistentConfusionCount > 0 ||
+          survival.highRiskFlags.remainingConfusion ? (
+            <LearnerFailureProjection tone="danger">
+              {survival.persistentConfusionCount} case
+              {survival.persistentConfusionCount === 1 ? '' : 's'} show persistent
+              confusion — learners may still believe this mimic is plausible even
+              after elimination.
+            </LearnerFailureProjection>
+          ) : null}
+        </NarrativeCheckpoint>
+
+        <NarrativeCheckpoint
+          tone={
+            group === 'must_not_miss' && survivalState === 'unresolved'
+              ? 'danger'
+              : 'neutral'
+          }
+          marker={
+            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Editorial risk and next move
+            </span>
+          }
+          title={checkpoint4Title}
+        >
+          <MimicDraftRepairIndicator reviews={item.discriminatorDraftReviews} />
+          {primaryOpportunity ? (
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge
+                status={formatLabel(primaryOpportunity.generationIntent)}
+                tone="warning"
+              />
+              <button
+                type="button"
+                disabled={pendingAction !== null}
+                onClick={() =>
+                  onGenerateDiscriminatorCase({
+                    target: primaryOpportunity,
+                    difficulty: 'MEDIUM',
+                    clueRevealStrategy: 'late_discriminator',
+                  })
+                }
+                className="editorial-action editorial-action-primary px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Generate discriminator case
+              </button>
+              <button
+                type="button"
+                disabled={pendingAction !== null}
+                onClick={() =>
+                  onGenerateClueRevision({
+                    target: primaryOpportunity,
+                    desiredClueOrder:
+                      primaryOpportunity.sourceClueOrder ??
+                      primaryOpportunity.sourceClueIndex,
+                  })
+                }
+                className="editorial-action px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Strengthen pathway
+              </button>
+            </div>
+          ) : null}
+          <InlineReviewBar
+            note={
+              item.caseNeeded
+                ? 'Case support is missing for this mimic.'
+                : 'Review support before changing graph state.'
+            }
+          >
+            <button
+              type="button"
+              disabled={
+                pendingAction !== null ||
+                (primaryAction.kind === 'generate-case' && !item.targetDiagnosisId)
+              }
+              onClick={() => {
+                if (primaryAction.kind === 'generate-case' && item.targetDiagnosisId) {
+                  onGenerateTargetedCase({
+                    difficulty: 'MEDIUM',
+                    teachingUnitIds: [],
+                    mimicDiagnosisIds: [item.targetDiagnosisId],
+                    clueRevealStrategy: 'late_discriminator',
+                  });
+                } else if (primaryAction.kind === 'strengthen-differential') {
+                  onStrengthenDifferential();
+                } else if (primaryAction.kind === 'suggest-distinction') {
+                  onSuggestTeachingDistinction();
+                }
+              }}
+              className="editorial-action editorial-action-primary disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {primaryAction.label}
+            </button>
+          </InlineReviewBar>
+          {hasSupportDetails ? (
+            <details className="mt-1">
+              <summary className="cursor-pointer text-xs font-semibold text-slate-400">
+                Support details
+              </summary>
+              <div className="mt-2 space-y-1 text-xs leading-5 text-slate-500">
+                {remainingDiscriminators.map((discriminator) => (
+                  <p key={discriminator}>{discriminator}</p>
+                ))}
+                {item.relationship?.supportingTeachingRule ? (
+                  <p>
+                    Teaching rule: {item.relationship.supportingTeachingRule.title}
+                  </p>
+                ) : null}
+                {item.relationship?.supportingGraphFact ? (
+                  <p>Graph fact: {item.relationship.supportingGraphFact.label}</p>
+                ) : null}
+                {item.link ? <p>Structured link: {item.link.sourceText}</p> : null}
+              </div>
+            </details>
+          ) : null}
+        </NarrativeCheckpoint>
+      </NarrativeStream>
+    </EditorialNarrativeThread>
   );
 }
 
@@ -466,6 +1007,9 @@ type MimicReasoningItem = {
   caseSupport: SupportState;
   escalationSupport: SupportState;
   caseNeeded: boolean;
+  caseEliminationSupport: MimicSurvivalSummary;
+  generationOpportunities: TargetedDiscriminatorGenerationRequest[];
+  discriminatorDraftReviews: DiscriminatorDraftReview[];
   relationship?: DiagnosisTeachingRelationship;
   link?: StructuredDifferentialLink;
 };
@@ -503,198 +1047,6 @@ function RelationshipSummaryStrip({
           <p className="mt-2 text-xs leading-5 text-slate-500">{item.detail}</p>
         </div>
       ))}
-    </div>
-  );
-}
-
-function MimicReasoningGroups({
-  groups,
-  pendingAction,
-  onSuggestTeachingDistinction,
-  onStrengthenDifferential,
-  onGenerateTargetedCase,
-}: {
-  groups: MimicReasoningGroup[];
-  pendingAction: string | null;
-  onSuggestTeachingDistinction: () => void;
-  onStrengthenDifferential: () => void;
-  onGenerateTargetedCase: (payload: GenerateTargetedCasePayload) => void;
-}) {
-  if (!groups.some((group) => group.items.length)) {
-    return (
-      <div className="mb-4 rounded-lg border border-dashed border-[var(--color-navy-border)] bg-white/4 p-4">
-        <p className="text-sm font-semibold text-slate-100">
-          No mimic relationships yet
-        </p>
-        <p className="mt-1 text-sm leading-6 text-slate-400">
-          Generate or review teaching relationships so the map can show learner
-          confusion, discriminators, and support state by mimic.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mb-4 space-y-3">
-      {groups
-        .filter((group) => group.items.length)
-        .map((group) => (
-          <section
-            key={group.id}
-            className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3"
-          >
-            <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold text-slate-100">
-                  {group.label}
-                </p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  {group.detail}
-                </p>
-              </div>
-              <StatusBadge
-                status={`${group.items.length} mimic${
-                  group.items.length === 1 ? '' : 's'
-                }`}
-                tone={groupTone(group.id)}
-              />
-            </div>
-            <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-              {group.items.map((item) => (
-                <MimicReasoningCard
-                  key={item.id}
-                  item={item}
-                  pendingAction={pendingAction}
-                  onSuggestTeachingDistinction={onSuggestTeachingDistinction}
-                  onStrengthenDifferential={onStrengthenDifferential}
-                  onGenerateTargetedCase={onGenerateTargetedCase}
-                />
-              ))}
-            </div>
-          </section>
-        ))}
-    </div>
-  );
-}
-
-function MimicReasoningCard({
-  item,
-  pendingAction,
-  onSuggestTeachingDistinction,
-  onStrengthenDifferential,
-  onGenerateTargetedCase,
-}: {
-  item: MimicReasoningItem;
-  pendingAction: string | null;
-  onSuggestTeachingDistinction: () => void;
-  onStrengthenDifferential: () => void;
-  onGenerateTargetedCase: (payload: GenerateTargetedCasePayload) => void;
-}) {
-  const primaryAction = mimicPrimaryAction(item);
-
-  return (
-    <article className="rounded-lg border border-[var(--color-navy-border)] bg-[var(--color-navy-mid)]/60 p-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-100">{item.label}</p>
-          <p className="mt-1 text-xs text-slate-500">
-            {formatLabel(item.relationshipType)}
-          </p>
-        </div>
-        {item.caseNeeded ? (
-          <StatusBadge status="Case needed" tone="warning" />
-        ) : (
-          <StatusBadge status="Case support" tone={supportTone(item.caseSupport)} />
-        )}
-      </div>
-
-      {item.learnerRisk ? (
-        <p className="mt-2 text-xs leading-5 text-slate-400">
-          {item.learnerRisk}
-        </p>
-      ) : null}
-
-      <div className="mt-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          Top discriminator
-        </p>
-        <p className="mt-1 text-sm leading-6 text-slate-200">
-          {item.discriminators[0] ?? 'No discriminator summary attached yet.'}
-        </p>
-      </div>
-
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <SupportPill label="Evidence" state={item.evidenceSupport} />
-        <SupportPill label="Teaching" state={item.teachingSupport} />
-        <SupportPill label="Case" state={item.caseSupport} />
-        <SupportPill label="Escalation" state={item.escalationSupport} />
-      </div>
-
-      <InlineReviewBar
-        note={
-          item.caseNeeded
-            ? 'Case support is missing for this mimic.'
-            : 'Review support before changing graph state.'
-        }
-      >
-        <button
-          type="button"
-          disabled={
-            pendingAction !== null ||
-            (primaryAction.kind === 'generate-case' && !item.targetDiagnosisId)
-          }
-          onClick={() => {
-            if (primaryAction.kind === 'generate-case' && item.targetDiagnosisId) {
-              onGenerateTargetedCase({
-                difficulty: 'MEDIUM',
-                teachingUnitIds: [],
-                mimicDiagnosisIds: [item.targetDiagnosisId],
-                clueRevealStrategy: 'late_discriminator',
-              });
-            } else if (primaryAction.kind === 'strengthen-differential') {
-              onStrengthenDifferential();
-            } else if (primaryAction.kind === 'suggest-distinction') {
-              onSuggestTeachingDistinction();
-            }
-          }}
-          className="editorial-action editorial-action-primary disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {primaryAction.label}
-        </button>
-      </InlineReviewBar>
-
-      <details className="mt-3">
-        <summary className="cursor-pointer text-xs font-semibold text-slate-400">
-          Support details
-        </summary>
-        <div className="mt-2 space-y-1 text-xs leading-5 text-slate-500">
-          {item.discriminators.slice(1, 4).map((discriminator) => (
-            <p key={discriminator}>{discriminator}</p>
-          ))}
-          {item.relationship?.supportingTeachingRule ? (
-            <p>Teaching rule: {item.relationship.supportingTeachingRule.title}</p>
-          ) : null}
-          {item.relationship?.supportingGraphFact ? (
-            <p>Graph fact: {item.relationship.supportingGraphFact.label}</p>
-          ) : null}
-          {item.link ? <p>Structured link: {item.link.sourceText}</p> : null}
-        </div>
-      </details>
-    </article>
-  );
-}
-
-function SupportPill({ label, state }: { label: string; state: SupportState }) {
-  return (
-    <div className="rounded-md border border-[var(--color-navy-border)] bg-white/5 px-2 py-1.5">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-        {label}
-      </p>
-      <StatusBadge
-        status={formatLabel(state)}
-        tone={supportTone(state)}
-        className="mt-1"
-      />
     </div>
   );
 }
@@ -796,9 +1148,106 @@ function buildMimicReasoningItem(
         ? 'inferred'
         : 'missing',
     caseNeeded: !matchedCaseCoverage && (caseMissing || workspace.cases.summary.usable === 0),
+    caseEliminationSupport: caseEliminationSupportForMimic(
+      workspace,
+      label,
+      targetDiagnosisId,
+    ),
+    generationOpportunities: generationOpportunitiesForMimic(
+      workspace,
+      label,
+      targetDiagnosisId,
+    ),
+    discriminatorDraftReviews: discriminatorDraftReviewsForMimic(
+      workspace,
+      label,
+      targetDiagnosisId,
+    ),
     relationship,
     link,
   };
+}
+
+function MimicDraftRepairIndicator({
+  reviews,
+}: {
+  reviews: DiscriminatorDraftReview[];
+}) {
+  const pending = reviews.filter((review) =>
+    ['PENDING_REVIEW', 'REVIEW_REQUIRED', 'NEEDS_CHANGES'].includes(
+      review.reviewStatus,
+    ),
+  );
+  const primary = pending[0] ?? reviews[0];
+  if (!primary) {
+    return null;
+  }
+  const payload = primary.discriminatorDraftReview;
+  return (
+    <div className="mt-3 rounded-md border border-[var(--color-amber)]/25 bg-[var(--color-amber)]/10 p-3">
+      <div className="flex flex-wrap gap-1.5">
+        <StatusBadge status="Generated repair draft" tone="warning" />
+        <StatusBadge status={formatLabel(primary.reviewStatus)} tone="warning" />
+      </div>
+      <p className="mt-2 text-xs leading-5 text-slate-300">
+        Pending draft: {payload.mimicName} {formatLabel(payload.draftKind)}.
+      </p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">
+        Expected effect:{' '}
+        {payload.proposedOutput.expectedMimicElimination
+          ? `${payload.proposedOutput.expectedMimicElimination} separated by ${payload.discriminator}.`
+          : payload.proposedOutput.clueRevision?.expectedEffect ??
+            payload.reviewGuidance.primaryQuestion}
+      </p>
+    </div>
+  );
+}
+
+function generationOpportunitiesForMimic(
+  workspace: DiagnosisEditorialWorkspace,
+  label: string,
+  targetDiagnosisId: string | null,
+) {
+  return workspace.cases.items.flatMap((caseItem) =>
+    (caseItem.clueProgression?.targetedGenerationOpportunities ?? []).filter(
+      (opportunity) => {
+        if (
+          targetDiagnosisId &&
+          opportunity.mimicDiagnosisId &&
+          targetDiagnosisId === opportunity.mimicDiagnosisId
+        ) {
+          return true;
+        }
+        return opportunity.mimicName.toLowerCase() === label.toLowerCase();
+      },
+    ),
+  );
+}
+
+function discriminatorDraftReviewsForMimic(
+  workspace: DiagnosisEditorialWorkspace,
+  label: string,
+  targetDiagnosisId: string | null,
+) {
+  return (workspace.discriminatorDraftReviews ?? []).filter((review) => {
+    const payload = review.discriminatorDraftReview;
+    if (
+      targetDiagnosisId &&
+      payload.mimicDiagnosisId &&
+      targetDiagnosisId === payload.mimicDiagnosisId
+    ) {
+      return true;
+    }
+    return payload.mimicName.toLowerCase() === label.toLowerCase();
+  });
+}
+
+function caseEliminationSupportForMimic(
+  workspace: DiagnosisEditorialWorkspace,
+  label: string,
+  targetDiagnosisId: string | null,
+) {
+  return buildMimicSurvivalSummary(workspace, label, targetDiagnosisId);
 }
 
 function buildReasoningSummary(
@@ -1486,100 +1935,91 @@ function TeachingRelationshipPanel({
         </button>
       </div>
       {relationships.length ? (
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-[var(--color-navy-border)] text-sm">
-            <thead className="bg-white/5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-4 py-3">Relationship</th>
-                <th className="px-4 py-3">Teaching intent</th>
-                <th className="px-4 py-3">Evidence</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--color-navy-border)]">
-              {relationships.slice(0, 30).map((relationship) => (
-                <tr key={relationship.id} className="align-top transition hover:bg-white/6">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-slate-100">
-                      {relationship.sourceDiagnosisRegistry.displayLabel}{' '}
-                      {'->'}{' '}
-                      <Link
-                        to={`/editorial/diagnoses/${relationship.targetDiagnosisRegistryId}`}
-                        className="underline"
-                      >
-                        {relationship.targetDiagnosisRegistry.displayLabel}
-                      </Link>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {formatLabel(relationship.relationshipType)} · strength{' '}
-                      {relationship.strength}
-                    </p>
-                  </td>
-                  <td className="max-w-md px-4 py-3 text-slate-300">
-                    <p className="font-medium">
-                      {formatLabel(relationship.teachingPurpose)}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {relationship.discriminatorSummary ||
-                        relationship.commonConfusionReason ||
-                        relationship.learnerPitfall ||
-                        'No teaching summary yet.'}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-400">
-                    {relationship.supportingGraphFact ? (
-                      <span>
-                        Graph: {formatLabel(relationship.supportingGraphFact.type)}
-                      </span>
-                    ) : relationship.supportingTeachingRule ? (
-                      <span>
-                        Rule:{' '}
-                        <Link
-                          to={`/editorial/diagnoses/${diagnosisRegistryId}?tab=teaching-rules`}
-                          className="underline"
-                        >
-                          {relationship.supportingTeachingRule.title}
-                        </Link>
-                      </span>
-                    ) : relationship.supportingDifferentialLinkId ? (
-                      <span>{relationship.supportingDifferentialLinkId}</span>
-                    ) : (
-                      <span>No linked evidence</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-slate-300">
-                    {formatLabel(relationship.status)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <RelationshipActionButton
-                        label="Activate"
-                        disabled={!canReview || busyAction !== null}
-                        onClick={() =>
-                          reviewRelationship(relationship.id, 'activate')
-                        }
-                      />
-                      <RelationshipActionButton
-                        label="Reject"
-                        disabled={!canReview || busyAction !== null}
-                        onClick={() =>
-                          reviewRelationship(relationship.id, 'reject')
-                        }
-                      />
-                      <RelationshipActionButton
-                        label="Deprecate"
-                        disabled={!canReview || busyAction !== null}
-                        onClick={() =>
-                          reviewRelationship(relationship.id, 'deprecate')
-                        }
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-2 p-3">
+          {relationships.slice(0, 30).map((relationship) => (
+            <EditorialEntity
+              key={relationship.id}
+              eyebrow="Reasoning relationship"
+              title={`${relationship.sourceDiagnosisRegistry.displayLabel} -> ${relationship.targetDiagnosisRegistry.displayLabel}`}
+              subtitle={
+                relationship.discriminatorSummary ||
+                relationship.commonConfusionReason ||
+                relationship.learnerPitfall ||
+                'No teaching summary yet.'
+              }
+              tone={relationship.status === 'ACTIVE' ? 'success' : 'warning'}
+              state={
+                <WorkflowStateInline
+                  label={formatLabel(relationship.status)}
+                  tone={relationship.status === 'ACTIVE' ? 'success' : 'warning'}
+                />
+              }
+              action={
+                <RelationshipActionButton
+                  label="Activate"
+                  disabled={!canReview || busyAction !== null}
+                  onClick={() => reviewRelationship(relationship.id, 'activate')}
+                />
+              }
+            >
+              <ReasoningThread
+                items={[
+                  {
+                    label: 'Relationship',
+                    detail: `${formatLabel(
+                      relationship.relationshipType,
+                    )}, strength ${relationship.strength}`,
+                    tone: 'info',
+                  },
+                  {
+                    label: 'Clinical meaning',
+                    detail: formatLabel(relationship.teachingPurpose),
+                    tone: 'success',
+                  },
+                  {
+                    label: 'Evidence support',
+                    detail: relationshipEvidenceSummary(
+                      diagnosisRegistryId,
+                      relationship,
+                    ),
+                    tone: relationship.supportingGraphFact ||
+                      relationship.supportingTeachingRule ||
+                      relationship.supportingDifferentialLinkId
+                      ? 'success'
+                      : 'warning',
+                  },
+                  {
+                    label: 'Learner impact',
+                    detail:
+                      relationship.commonConfusionReason ||
+                      relationship.learnerPitfall ||
+                      'No learner impact note attached.',
+                    tone:
+                      relationship.commonConfusionReason ||
+                      relationship.learnerPitfall
+                        ? 'warning'
+                        : 'neutral',
+                  },
+                ]}
+              />
+              <EmbeddedActionBar note="Review actions update the same teaching relationship record.">
+                <SecondaryActionDisclosure>
+                  <RelationshipActionButton
+                    label="Reject"
+                    disabled={!canReview || busyAction !== null}
+                    onClick={() => reviewRelationship(relationship.id, 'reject')}
+                  />
+                  <RelationshipActionButton
+                    label="Deprecate"
+                    disabled={!canReview || busyAction !== null}
+                    onClick={() =>
+                      reviewRelationship(relationship.id, 'deprecate')
+                    }
+                  />
+                </SecondaryActionDisclosure>
+              </EmbeddedActionBar>
+            </EditorialEntity>
+          ))}
         </div>
       ) : (
         <div className="px-4 py-6 text-sm text-slate-500">
@@ -1588,6 +2028,22 @@ function TeachingRelationshipPanel({
       )}
     </section>
   );
+}
+
+function relationshipEvidenceSummary(
+  diagnosisRegistryId: string,
+  relationship: DiagnosisTeachingRelationship,
+) {
+  if (relationship.supportingGraphFact) {
+    return `Graph fact: ${formatLabel(relationship.supportingGraphFact.type)}`;
+  }
+  if (relationship.supportingTeachingRule) {
+    return `Teaching rule: ${relationship.supportingTeachingRule.title}`;
+  }
+  if (relationship.supportingDifferentialLinkId) {
+    return `Differential link: ${relationship.supportingDifferentialLinkId}`;
+  }
+  return `No linked evidence yet for ${diagnosisRegistryId}.`;
 }
 
 function ReasoningPathsPanel({
@@ -1812,32 +2268,34 @@ function ReasoningPathCard({
                     disabled={!canReview || busyAction !== null}
                     onClick={() => onReview(path.id, 'activate')}
                   />
-                  <RelationshipActionButton
-                    label="Reject"
-                    disabled={!canReview || busyAction !== null}
-                    onClick={() => onReview(path.id, 'reject')}
-                  />
-                  <RelationshipActionButton
-                    label="Deprecate"
-                    disabled={!canReview || busyAction !== null}
-                    onClick={() => onReview(path.id, 'deprecate')}
-                  />
-                  <RelationshipActionButton
-                    label="Draft case"
-                    disabled={
-                      busyAction !== null ||
-                      path.generationPurpose !== 'CASE_GENERATION' ||
-                      path.status !== 'ACTIVE'
-                    }
-                    onClick={() =>
-                      onGenerateTargetedCase({
-                        difficulty: 'MEDIUM',
-                        teachingUnitIds: [],
-                        reasoningPathId: path.id,
-                        clueRevealStrategy: 'late_discriminator',
-                      })
-                    }
-                  />
+                  <SecondaryActionDisclosure>
+                    <RelationshipActionButton
+                      label="Reject"
+                      disabled={!canReview || busyAction !== null}
+                      onClick={() => onReview(path.id, 'reject')}
+                    />
+                    <RelationshipActionButton
+                      label="Deprecate"
+                      disabled={!canReview || busyAction !== null}
+                      onClick={() => onReview(path.id, 'deprecate')}
+                    />
+                    <RelationshipActionButton
+                      label="Draft case"
+                      disabled={
+                        busyAction !== null ||
+                        path.generationPurpose !== 'CASE_GENERATION' ||
+                        path.status !== 'ACTIVE'
+                      }
+                      onClick={() =>
+                        onGenerateTargetedCase({
+                          difficulty: 'MEDIUM',
+                          teachingUnitIds: [],
+                          reasoningPathId: path.id,
+                          clueRevealStrategy: 'late_discriminator',
+                        })
+                      }
+                    />
+                  </SecondaryActionDisclosure>
                 </div>
               </div>
     </div>

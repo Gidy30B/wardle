@@ -4,15 +4,19 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import {
   compareDiagnosisEducationRevisions,
   createCaseEscalationAnnotation,
+  createCaseDiscriminatorAnnotation,
   createCaseLearningGoalCoverage,
   createDiagnosisEditorialBrief,
   createDiagnosisTeachingRule,
   decideAiDraftRevision,
   deleteCaseEscalationAnnotation,
+  deleteCaseDiscriminatorAnnotation,
   deleteCaseLearningGoalCoverage,
   generateCaseFromUncoveredGoal,
+  generateClueRevisionProposalDraft,
   generateDiagnosisEditorialBrief,
   generateDiagnosisTeachingRuleCandidates,
+  generateTargetedDiscriminatorCaseDraft,
   getDiagnosisEditorialBrief,
   getDiagnosisEditorialWorkspace,
   normalizeDiagnosisRegistryLifecycleRow,
@@ -25,6 +29,7 @@ import {
   updateDiagnosisEditorialBrief,
   updateDiagnosisTeachingRule,
   updateCaseEscalationAnnotation,
+  updateCaseDiscriminatorAnnotation,
   updateCaseLearningGoalCoverage,
   type DiagnosisEditorialBriefResponse,
   type DiagnosisEditorialBriefReviewAction,
@@ -33,6 +38,8 @@ import {
   type ClaimRepairResult,
   type AiDraftDecisionAction,
   type CaseEscalationAnnotationPayload,
+  type CreateCaseClueDiscriminatorAnnotationPayload,
+  type UpdateCaseClueDiscriminatorAnnotationPayload,
   type CaseLearningGoalCoveragePayload,
   type DiagnosisRegistryLifecycleAction,
   type DiagnosisEducationRevisionCompareResult,
@@ -40,6 +47,8 @@ import {
   type DiagnosisTeachingRuleWritePayload,
   type EducationRegenerableSection,
   type GenerateTargetedCasePayload,
+  type GenerateClueRevisionProposalPayload,
+  type GenerateTargetedDiscriminatorCasePayload,
   type GenerateTargetedCaseResult,
   type WorkspaceCoverageGap,
   type WorkspaceCoverageMatrixRow,
@@ -576,6 +585,43 @@ export default function EditorialDiagnosisWorkspacePage() {
     });
   }
 
+  function handleGenerateDiscriminatorCase(
+    payload: GenerateTargetedDiscriminatorCasePayload,
+  ) {
+    if (!diagnosisRegistryId) {
+      return;
+    }
+    void runWorkspaceAction({
+      id: `discriminator-case-${payload.target.mimicDiagnosisId ?? payload.target.mimicName}`,
+      pending: 'Generating discriminator case draft...',
+      success: 'Discriminator case draft created for review.',
+      action: async () => {
+        const result = await generateTargetedDiscriminatorCaseDraft(
+          client,
+          diagnosisRegistryId,
+          payload,
+        );
+        setGeneratedTargetedCase(result.result.generatedCase);
+        return result;
+      },
+    });
+  }
+
+  function handleGenerateClueRevision(
+    payload: GenerateClueRevisionProposalPayload,
+  ) {
+    if (!diagnosisRegistryId) {
+      return;
+    }
+    void runWorkspaceAction({
+      id: `clue-revision-${payload.target.mimicDiagnosisId ?? payload.target.mimicName}`,
+      pending: 'Generating clue revision draft...',
+      success: 'Clue revision draft created for review.',
+      action: () =>
+        generateClueRevisionProposalDraft(client, diagnosisRegistryId, payload),
+    });
+  }
+
   function handleRepairUnsupportedClaim(claim: {
     artifactId: string;
     sourceType: string;
@@ -766,6 +812,48 @@ export default function EditorialDiagnosisWorkspacePage() {
     });
   }
 
+  function handleCreateDiscriminatorAnnotation(
+    caseId: string,
+    payload: CreateCaseClueDiscriminatorAnnotationPayload,
+  ) {
+    void runWorkspaceAction({
+      id: `discriminator-annotation-${caseId}-${payload.clueOrder}`,
+      pending: 'Saving discriminator annotation...',
+      success: 'Discriminator annotation saved.',
+      action: () => createCaseDiscriminatorAnnotation(client, caseId, payload),
+    });
+  }
+
+  function handleUpdateDiscriminatorAnnotation(
+    caseId: string,
+    annotationId: string,
+    payload: UpdateCaseClueDiscriminatorAnnotationPayload,
+  ) {
+    void runWorkspaceAction({
+      id: `discriminator-annotation-update-${annotationId}`,
+      pending: 'Updating discriminator annotation...',
+      success: 'Discriminator annotation updated.',
+      action: () =>
+        updateCaseDiscriminatorAnnotation(client, caseId, annotationId, payload),
+    });
+  }
+
+  function handleDeleteDiscriminatorAnnotation(
+    caseId: string,
+    annotationId: string,
+  ) {
+    const confirmed = window.confirm('Remove this discriminator annotation?');
+    if (!confirmed) {
+      return;
+    }
+    void runWorkspaceAction({
+      id: `discriminator-annotation-delete-${annotationId}`,
+      pending: 'Removing discriminator annotation...',
+      success: 'Discriminator annotation removed.',
+      action: () => deleteCaseDiscriminatorAnnotation(client, caseId, annotationId),
+    });
+  }
+
   function handleRegenerateSection(section: EducationRegenerableSection) {
     if (!diagnosisRegistryId) {
       return;
@@ -923,12 +1011,18 @@ export default function EditorialDiagnosisWorkspacePage() {
                 generatedTargetedCase={generatedTargetedCase}
                 onGapSelect={openCoverageGap}
                 onGenerateTargetedCase={handleGenerateTargetedCase}
+                onGenerateDiscriminatorCase={handleGenerateDiscriminatorCase}
+                onGenerateClueRevision={handleGenerateClueRevision}
+                onAiDraftDecision={handleAiDraftDecision}
                 onCreateLearningGoalCoverage={handleCreateLearningGoalCoverage}
                 onCreateEscalationAnnotation={handleCreateEscalationAnnotation}
                 onUpdateLearningGoalCoverage={handleUpdateLearningGoalCoverage}
                 onDeleteLearningGoalCoverage={handleDeleteLearningGoalCoverage}
                 onUpdateEscalationAnnotation={handleUpdateEscalationAnnotation}
                 onDeleteEscalationAnnotation={handleDeleteEscalationAnnotation}
+                onCreateDiscriminatorAnnotation={handleCreateDiscriminatorAnnotation}
+                onUpdateDiscriminatorAnnotation={handleUpdateDiscriminatorAnnotation}
+                onDeleteDiscriminatorAnnotation={handleDeleteDiscriminatorAnnotation}
               />
           ) : null}
           {activeTab === 'graph' ? (
@@ -940,6 +1034,8 @@ export default function EditorialDiagnosisWorkspacePage() {
               client={client}
               onRefresh={refreshWorkspace}
               onGenerateTargetedCase={handleGenerateTargetedCase}
+              onGenerateDiscriminatorCase={handleGenerateDiscriminatorCase}
+              onGenerateClueRevision={handleGenerateClueRevision}
               showError={showError}
               showPending={showPending}
               showSuccess={showSuccess}

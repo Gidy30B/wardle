@@ -22,6 +22,13 @@ describe('DiagnosisEditorialWorkspaceService', () => {
       update: jest.Mock;
       delete: jest.Mock;
     };
+    caseClueDiscriminatorAnnotation: {
+      findMany: jest.Mock;
+      findFirst: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+      delete: jest.Mock;
+    };
     aiDraftRevisionAudit: {
       findMany: jest.Mock;
       create: jest.Mock;
@@ -59,6 +66,13 @@ describe('DiagnosisEditorialWorkspaceService', () => {
         findMany: jest.fn(),
         findFirst: jest.fn(),
         upsert: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      },
+      caseClueDiscriminatorAnnotation: {
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
       },
@@ -122,6 +136,26 @@ describe('DiagnosisEditorialWorkspaceService', () => {
     prisma.reasoningDraftValidationRun.findMany.mockResolvedValue([]);
     prisma.caseLearningGoalCoverage.findMany.mockResolvedValue([]);
     prisma.caseEscalationAnnotation.findMany.mockResolvedValue([]);
+    prisma.caseClueDiscriminatorAnnotation.findMany.mockResolvedValue([]);
+    prisma.caseClueDiscriminatorAnnotation.create.mockImplementation(({ data }) =>
+      Promise.resolve({
+        id: 'disc-1',
+        ...data,
+        reviewedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+    prisma.caseClueDiscriminatorAnnotation.update.mockImplementation(({ data }) =>
+      Promise.resolve({
+        id: 'disc-1',
+        caseId: 'case-1',
+        ...data,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+    prisma.caseClueDiscriminatorAnnotation.delete.mockResolvedValue({ id: 'disc-1' });
     prisma.aiDraftRevisionAudit.findMany.mockResolvedValue([]);
     prisma.aiDraftRevisionAudit.create.mockResolvedValue({
       id: 'repair-1',
@@ -179,6 +213,124 @@ describe('DiagnosisEditorialWorkspaceService', () => {
     expect(result.maturityBreakdown).toEqual(
       expect.objectContaining({ overall: expect.any(Number) }),
     );
+  });
+
+  it('includes clue discriminator annotations and applies editorial override', async () => {
+    prisma.diagnosisRegistry.findUnique.mockResolvedValue(
+      registry({
+        cases: [
+          {
+            id: 'case-1',
+            title: 'Meal-timed epigastric pain',
+            difficulty: 'medium',
+            editorialStatus: CaseEditorialStatus.APPROVED,
+            date: now,
+            clues: [
+              { type: 'history', value: 'Epigastric pain after meals.', order: 0 },
+              {
+                type: 'history',
+                value: 'Delayed post-meal timing without reflux pattern.',
+                order: 1,
+              },
+            ],
+            differentials: ['GERD'],
+            explanation: {},
+            validationRuns: [],
+            clueProgressionAnalyses: [],
+            clueDiscriminatorAnnotations: [
+              {
+                id: 'disc-1',
+                caseId: 'case-1',
+                clueOrder: 2,
+                clueIndex: 2,
+                eliminatedDiagnosisId: null,
+                eliminatedDiagnosisName: 'GERD',
+                discriminator: 'Delayed post-meal timing separates from reflux-pattern disease',
+                reasoning: 'Timing points away from reflux.',
+                eliminationStrength: 'strong',
+                educationalValue: 'high',
+                reviewerUserId: 'editor-1',
+                reviewedAt: now,
+                createdAt: now,
+                updatedAt: now,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const result = await service.getFullWorkspace(diagnosisRegistryId);
+    const caseItem = result.cases.items[0];
+
+    expect(caseItem.clueDiscriminatorAnnotations).toEqual([
+      expect.objectContaining({
+        id: 'disc-1',
+        eliminatedDiagnosisName: 'GERD',
+      }),
+    ]);
+    expect(caseItem.clueProgression.differentialElimination).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          mimicName: 'GERD',
+          annotationSource: 'editorial',
+          annotationId: 'disc-1',
+          finalStatus: 'eliminated',
+        }),
+      ]),
+    );
+    expect(
+      caseItem.clueProgression.explicitDiscriminatorAnnotationCount,
+    ).toBe(1);
+  });
+
+  it('creates, updates, and deletes discriminator annotations', async () => {
+    const created = await service.createDiscriminatorAnnotation(
+      'case-1',
+      {
+        clueOrder: 2,
+        eliminatedDiagnosisName: 'GERD',
+        discriminator: 'Delayed post-meal timing',
+        eliminationStrength: 'moderate',
+        educationalValue: 'high',
+      },
+      'editor-1',
+    );
+
+    prisma.caseClueDiscriminatorAnnotation.findFirst.mockResolvedValue({
+      id: 'disc-1',
+      caseId: 'case-1',
+      clueOrder: 2,
+      clueIndex: null,
+      eliminatedDiagnosisId: null,
+      eliminatedDiagnosisName: 'GERD',
+      discriminator: 'Delayed post-meal timing',
+      reasoning: null,
+      eliminationStrength: 'moderate',
+      educationalValue: 'high',
+      reviewerUserId: 'editor-1',
+      reviewedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const updated = await service.updateDiscriminatorAnnotation(
+      'case-1',
+      'disc-1',
+      { discriminator: 'No reflux pattern' },
+      'editor-2',
+    );
+    const deleted = await service.deleteDiscriminatorAnnotation(
+      'case-1',
+      'disc-1',
+      'editor-2',
+    );
+
+    expect(created).toEqual(expect.objectContaining({ id: 'disc-1' }));
+    expect(updated).toEqual(
+      expect.objectContaining({ discriminator: 'No reflux pattern' }),
+    );
+    expect(deleted).toEqual({ deleted: true, id: 'disc-1' });
   });
 
   it('returns unsupported claims grouped by section', async () => {
@@ -513,6 +665,134 @@ describe('DiagnosisEditorialWorkspaceService', () => {
     );
   });
 
+  it('projects discriminator draft audits into review payloads', async () => {
+    prisma.aiDraftRevisionAudit.findMany.mockResolvedValue([
+      {
+        id: 'audit-disc-1',
+        caseId: 'case-1',
+        actionType: 'generate_clue_revision_proposal',
+        sourceIssue: {
+          target: {
+            diagnosisRegistryId,
+            caseId: 'case-1',
+            mimicName: 'GERD',
+            discriminator: 'delayed post-meal timing without reflux',
+            generationIntent: 'missing_discriminator_case',
+            sourceClueOrder: 3,
+          },
+        },
+        inputContext: {
+          existingClue: 'Upper abdominal pain after meals.',
+          desiredClueOrder: 3,
+        },
+        generatedOutput: {
+          proposedClue:
+            'Add positional reflux absence to separate GERD explicitly.',
+          expectedProgressionEffect: 'GERD eliminated by clue 3.',
+        },
+        editorDecision: null,
+        affectedArtifactType: 'CASE_CLUE_REVISION_PROPOSAL',
+        affectedArtifactId: 'case-1',
+        reviewStatus: 'PENDING_REVIEW',
+        createdByUserId: 'admin-1',
+        reviewerUserId: null,
+        decisionAt: null,
+        reviewNote: null,
+        createdAt: now,
+      },
+    ]);
+
+    const result = await service.getFullWorkspace(diagnosisRegistryId);
+
+    expect(result.discriminatorDraftReviews).toEqual([
+      expect.objectContaining({
+        auditId: 'audit-disc-1',
+        draftKind: 'clue_revision_proposal',
+        generationIntent: 'missing_discriminator_case',
+        mimicName: 'GERD',
+        discriminator: 'delayed post-meal timing without reflux',
+        reviewStatus: 'PENDING_REVIEW',
+        discriminatorDraftReview: expect.objectContaining({
+          reviewGuidance: expect.objectContaining({
+            primaryQuestion: expect.stringContaining('clue revision'),
+          }),
+          proposedOutput: expect.objectContaining({
+            clueRevision: expect.objectContaining({
+              originalClue: 'Upper abdominal pain after meals.',
+              expectedEffect: 'GERD eliminated by clue 3.',
+            }),
+          }),
+        }),
+      }),
+    ]);
+    expect(result.aiDraftAuditTrail[0]).toEqual(
+      expect.objectContaining({
+        draftKind: 'clue_revision_proposal',
+        mimicName: 'GERD',
+        discriminatorDraftReview: expect.any(Object),
+      }),
+    );
+  });
+
+  it('degrades malformed discriminator draft audit metadata safely', async () => {
+    prisma.aiDraftRevisionAudit.findMany.mockResolvedValue([
+      {
+        id: 'audit-disc-bad',
+        caseId: null,
+        actionType: 'generate_clue_revision_proposal',
+        sourceIssue: {},
+        inputContext: {},
+        generatedOutput: {},
+        editorDecision: null,
+        affectedArtifactType: 'CASE_CLUE_REVISION_PROPOSAL',
+        affectedArtifactId: diagnosisRegistryId,
+        reviewStatus: 'PENDING_REVIEW',
+        createdByUserId: 'admin-1',
+        reviewerUserId: null,
+        decisionAt: null,
+        reviewNote: null,
+        createdAt: now,
+      },
+    ]);
+
+    const result = await service.getFullWorkspace(diagnosisRegistryId);
+
+    expect(result.discriminatorDraftReviews).toEqual([]);
+    expect(result.aiDraftAuditTrail[0]).toEqual(
+      expect.not.objectContaining({ discriminatorDraftReview: expect.anything() }),
+    );
+  });
+
+  it('accepts discriminator drafts without unsafe case or clue mutation', async () => {
+    prisma.aiDraftRevisionAudit.findFirst.mockResolvedValue({
+      id: 'audit-disc-1',
+      diagnosisRegistryId,
+      actionType: 'generate_clue_revision_proposal',
+      affectedArtifactType: 'CASE_CLUE_REVISION_PROPOSAL',
+      affectedArtifactId: 'case-1',
+      sourceIssue: {},
+      generatedOutput: {},
+    });
+
+    await service.decideAiDraftRevision({
+      diagnosisRegistryId,
+      auditId: 'audit-disc-1',
+      decision: 'accept',
+      userId: 'admin-1',
+    });
+
+    expect(prisma.diagnosisEducation.update).not.toHaveBeenCalled();
+    expect(prisma.aiDraftRevisionAudit.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reviewStatus: 'ACCEPTED',
+          reviewNote:
+            'Accepted revision proposal; no case or clue mutation was performed.',
+        }),
+      }),
+    );
+  });
+
   it('creates and audits learning-goal coverage annotations', async () => {
     prisma.caseLearningGoalCoverage.upsert = jest.fn().mockResolvedValue({
       id: 'coverage-1',
@@ -697,6 +977,88 @@ describe('DiagnosisEditorialWorkspaceService', () => {
     );
   });
 
+  it('counts unresolved must-not-miss mimic confusion as a case blocker', async () => {
+    prisma.diagnosisRegistry.findUnique.mockResolvedValue(
+      registry({
+        cases: [
+          {
+            id: 'case-1',
+            title: 'Epigastric pain',
+            difficulty: 'medium',
+            editorialStatus: CaseEditorialStatus.APPROVED,
+            date: now,
+            clues: [
+              { type: 'history', value: 'Burning epigastric pain.', order: 0 },
+            ],
+            differentials: ['Gastric cancer'],
+            explanation: {},
+            validationRuns: [],
+            clueProgressionAnalyses: [
+              {
+                diagnosticStates: [],
+                mimicCollapses: [],
+                discriminatorEmergences: [],
+                differentialElimination: [
+                  {
+                    mimicDiagnosisId: 'gastric-cancer',
+                    mimicName: 'Gastric cancer',
+                    relationshipType: 'IMPORTANT_EXCLUSION',
+                    initialPlausibility: 'high',
+                    finalStatus: 'persistent',
+                    eliminationStrength: 'weak',
+                    educationalValue: 'high',
+                    prematureCollapseRisk: false,
+                    remainingConfusionRisk: true,
+                  },
+                ],
+                leadingDifferentials: [],
+                remainingMimics: ['Gastric cancer'],
+                discriminatorSignals: [],
+                editorialSignals: [
+                  'unresolved_mimic',
+                  'missing_discriminator_case',
+                  'persistent_confusion',
+                ],
+                likelyLockInClue: null,
+                confidenceEstimate: 0.4,
+                ambiguityScore: 0.7,
+                prematureLeakFlag: false,
+                unresolvedAmbiguityFlag: true,
+                totalMimicsTracked: 1,
+                eliminatedMimicCount: 0,
+                unresolvedMimicCount: 0,
+                persistentConfusionCount: 1,
+                weakEliminationCount: 0,
+                editorialNotes: 'Important mimic remains unresolved.',
+                analysisVersion: 'heuristic_v1',
+                generatedAt: now,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const result = await service.getFullWorkspace(diagnosisRegistryId);
+
+    expect(result.cases.summary.blockerCount).toBeGreaterThanOrEqual(1);
+    expect(result.cases.summary.progressionSignals).toEqual(
+      expect.objectContaining({
+        persistentConfusionCount: 1,
+        missingDiscriminatorCaseCount: 1,
+      }),
+    );
+    expect(result.editorialPrioritization.highestImpactFixes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'generate_discriminator_draft',
+          targetTab: 'graph',
+          severity: 'blocker',
+        }),
+      ]),
+    );
+  });
+
   it('throws not found when the diagnosis registry entry is missing', async () => {
     prisma.diagnosisRegistry.findUnique.mockResolvedValue(null);
 
@@ -728,9 +1090,19 @@ describe('DiagnosisEditorialWorkspaceService', () => {
           title: 'RLQ pain',
           difficulty: 'medium',
           editorialStatus: CaseEditorialStatus.APPROVED,
-          updatedAt: now,
+          date: now,
+          clues: [
+            { type: 'history', value: 'Migratory abdominal pain.', order: 0 },
+            {
+              type: 'exam',
+              value: 'Right lower quadrant tenderness.',
+              order: 1,
+            },
+          ],
+          differentials: ['Ovarian torsion'],
           explanation: {},
           validationRuns: [],
+          clueProgressionAnalyses: [],
         },
       ],
       graphFacts: [

@@ -61,6 +61,54 @@ function formatStatusLabel(status: string) {
     .join(' ');
 }
 
+export function toneTextClass(tone?: StatusBadgeTone) {
+  if (tone === 'danger') return 'text-[var(--color-rose)]';
+  if (tone === 'warning') return 'text-[var(--color-amber)]';
+  if (tone === 'success') return 'text-[var(--color-green)]';
+  if (tone === 'info') return 'text-[var(--color-teal)]';
+  return 'text-slate-300';
+}
+
+export function toneBorderClass(tone?: StatusBadgeTone) {
+  if (tone === 'danger') return 'border-[var(--color-rose)]/35';
+  if (tone === 'warning') return 'border-[var(--color-amber)]/35';
+  if (tone === 'success') return 'border-[var(--color-green)]/30';
+  if (tone === 'info') return 'border-[var(--color-teal)]/30';
+  return 'border-[var(--color-navy-border)]';
+}
+
+export function toneBgClass(tone?: StatusBadgeTone) {
+  if (tone === 'danger') return 'bg-[var(--color-rose)]/10';
+  if (tone === 'warning') return 'bg-[var(--color-amber)]/10';
+  if (tone === 'success') return 'bg-[var(--color-green)]/10';
+  if (tone === 'info') return 'bg-[var(--color-teal)]/10';
+  return 'bg-white/4';
+}
+
+export type MimicEliminationLike = {
+  finalStatus: string;
+  eliminationStrength?: string;
+  prematureCollapseRisk?: boolean;
+  remainingConfusionRisk?: boolean;
+};
+
+export function mimicStateTone(item: MimicEliminationLike): StatusBadgeTone {
+  if (item.prematureCollapseRisk || item.finalStatus === 'persistent') {
+    return 'danger';
+  }
+  if (
+    item.finalStatus === 'unresolved' ||
+    item.remainingConfusionRisk ||
+    item.eliminationStrength === 'weak'
+  ) {
+    return 'warning';
+  }
+  if (item.finalStatus === 'eliminated') {
+    return 'success';
+  }
+  return 'neutral';
+}
+
 export function getStatusBadgeMeta(
   status: StatusBadgeValue | null | undefined,
   kind?: StatusBadgeKind,

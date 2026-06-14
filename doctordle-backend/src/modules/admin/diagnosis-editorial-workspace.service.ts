@@ -24,6 +24,11 @@ import {
 } from '../education/education-revision-quality-analyzer.service';
 import { CaseQualityProjectionService } from './case-quality-projection.service';
 import {
+  ClueProgressionAnalysisService,
+  type CaseClueDiscriminatorAnnotationInput,
+  type ClueProgressionAnalysis,
+} from './clue-progression-analysis.service';
+import {
   DiagnosisWorkspaceQualityService,
   type DiagnosisWorkspaceQualitySummary,
 } from './diagnosis-workspace-quality.service';
@@ -63,17 +68,100 @@ type ActionDescriptor = {
   targetEndpoint?: string;
 };
 
+type DiscriminatorDraftKind =
+  | 'targeted_discriminator_case'
+  | 'clue_revision_proposal';
+
+type DiscriminatorDraftReviewPayload = {
+  draftKind: DiscriminatorDraftKind;
+  generationIntent: string;
+  diagnosisRegistryId: string;
+  caseId?: string;
+  sourceClueOrder?: number;
+  sourceClueIndex?: number;
+  mimicDiagnosisId?: string;
+  mimicName: string;
+  discriminator: string;
+  learnerRisk?: string;
+  editorialReason?: string;
+  proposedOutput: {
+    title?: string;
+    caseDraft?: unknown;
+    clueRevision?: {
+      originalClue?: string;
+      revisedClue?: string;
+      addedClue?: string;
+      rationale?: string;
+      expectedEffect?: string;
+    };
+    clueProgressionRationale?: string;
+    expectedMimicElimination?: string;
+    expectedLearnerTakeaway?: string;
+  };
+  reviewGuidance: {
+    primaryQuestion: string;
+    acceptEffect: string;
+    rejectEffect: string;
+    requestChangesHint: string;
+    safetyNotes: string[];
+  };
+};
+
 type CaseRow = {
   id: string;
   title: string;
   difficulty: string;
   editorialStatus: CaseEditorialStatus | null;
   date: Date;
+  clues: Prisma.JsonValue | null;
+  differentials: string[];
   explanation: Prisma.JsonValue | null;
   validationRuns: Array<{
     outcome: ValidationOutcome | null;
     summary: Prisma.JsonValue | null;
     findings: Prisma.JsonValue | null;
+  }>;
+  clueProgressionAnalyses?: Array<{
+    diagnosticStates: Prisma.JsonValue;
+    mimicCollapses: Prisma.JsonValue;
+    discriminatorEmergences: Prisma.JsonValue;
+    differentialElimination?: Prisma.JsonValue;
+    leadingDifferentials: Prisma.JsonValue;
+    remainingMimics: Prisma.JsonValue;
+    discriminatorSignals: Prisma.JsonValue;
+    editorialSignals: Prisma.JsonValue;
+    likelyLockInClue: number | null;
+    confidenceEstimate: number | null;
+    ambiguityScore: number;
+    prematureLeakFlag: boolean;
+    unresolvedAmbiguityFlag: boolean;
+    totalMimicsTracked?: number;
+    eliminatedMimicCount?: number;
+    unresolvedMimicCount?: number;
+    persistentConfusionCount?: number;
+    weakEliminationCount?: number;
+    explicitDiscriminatorAnnotationCount?: number;
+    heuristicOnlyEliminationCount?: number;
+    missingEditorialAnnotationCount?: number;
+    editorialNotes: string | null;
+    analysisVersion: string;
+    generatedAt: Date;
+  }>;
+  clueDiscriminatorAnnotations?: Array<{
+    id: string;
+    caseId: string;
+    clueOrder: number;
+    clueIndex: number | null;
+    eliminatedDiagnosisId: string | null;
+    eliminatedDiagnosisName: string;
+    discriminator: string;
+    reasoning: string | null;
+    eliminationStrength: string;
+    educationalValue: string;
+    reviewerUserId: string | null;
+    reviewedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
   }>;
 };
 
@@ -132,6 +220,8 @@ type RegistryRow = {
 export class DiagnosisEditorialWorkspaceService {
   private readonly fallbackEditorialTriageProjectionService =
     new EditorialTriageProjectionService();
+  private readonly fallbackClueProgressionAnalysisService =
+    new ClueProgressionAnalysisService();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -153,6 +243,8 @@ export class DiagnosisEditorialWorkspaceService {
     private readonly reasoningPathService?: ReasoningPathService,
     @Optional()
     private readonly editorialTriageProjectionService?: EditorialTriageProjectionService,
+    @Optional()
+    private readonly clueProgressionAnalysisService?: ClueProgressionAnalysisService,
   ) {}
 
   async getFullWorkspace(diagnosisRegistryId: string) {
@@ -260,7 +352,14 @@ export class DiagnosisEditorialWorkspaceService {
     const persistedCaseEscalationAnnotations =
       this.valueOrNull(caseEscalationAnnotationsResult) ?? [];
     const aiDraftAuditTrail = this.valueOrNull(aiDraftAuditTrailResult) ?? [];
-    const cases = this.buildCases(registry.cases);
+    const discriminatorDraftReviews =
+      this.projectDiscriminatorDraftReviews(aiDraftAuditTrail);
+    const cases = this.buildCases(registry.cases, {
+      diagnosisRegistryId: registry.id,
+      diagnosisName: this.diagnosisName(registry),
+      linkedDifferentials,
+      teachingRelationships,
+    });
     const coverageMatrix = this.buildCoverageMatrix({
       coverage,
       rules: rules.rules,
@@ -321,7 +420,9 @@ export class DiagnosisEditorialWorkspaceService {
       escalationCoverage,
       learningGoalCoverage,
     });
-    const editorialPrioritization = this.triageProjectionService.project({
+    const clueProgressionWarnings = this.buildClueProgressionWarnings(cases.items);
+    const editorialPrioritization = this.withClueProgressionPrioritization(
+      this.triageProjectionService.project({
       workspaceBlockerCount: summary?.blockers.length ?? 0,
       coverageBlockerCount: coverageGaps.filter(
         (gap) => gap.severity === 'blocker',
@@ -356,7 +457,10 @@ export class DiagnosisEditorialWorkspaceService {
       hasEducation: Boolean(registry.education),
       activeTeachingRuleCount: rules.rules.length,
       graphRelationshipCount: registry.graphFacts.length,
-    });
+      }),
+      cases,
+      discriminatorDraftReviews,
+    );
 
     return {
       diagnosis: {
@@ -394,6 +498,7 @@ export class DiagnosisEditorialWorkspaceService {
         warnings: this.unique([
           ...(summary?.warnings ?? []),
           ...compositionWarnings,
+          ...clueProgressionWarnings,
         ]),
         recommendedActions: summary?.recommendedNextActions ?? [],
         unresolvedDifferentialCount:
@@ -452,6 +557,7 @@ export class DiagnosisEditorialWorkspaceService {
       maturityExplanation: maturityGovernance.explanation,
       editorialPrioritization,
       aiDraftAuditTrail,
+      discriminatorDraftReviews,
       editorialLearning: {
         available: revisions.length >= 2,
         candidateCounts: {
@@ -475,6 +581,13 @@ export class DiagnosisEditorialWorkspaceService {
     return (
       this.editorialTriageProjectionService ??
       this.fallbackEditorialTriageProjectionService
+    );
+  }
+
+  private get clueProgressionService() {
+    return (
+      this.clueProgressionAnalysisService ??
+      this.fallbackClueProgressionAnalysisService
     );
   }
 
@@ -569,7 +682,10 @@ export class DiagnosisEditorialWorkspaceService {
         reviewStatus: status,
         reviewerUserId: input.userId,
         decisionAt: new Date(),
-        reviewNote: input.note ?? null,
+        reviewNote:
+          input.note ??
+          this.defaultDraftDecisionNote(audit, input.decision) ??
+          null,
       },
     });
   }
@@ -756,6 +872,99 @@ export class DiagnosisEditorialWorkspaceService {
     return { deleted: true, id: row.id };
   }
 
+  async listDiscriminatorAnnotationsForCase(caseId: string) {
+    const rows = await this.prisma.caseClueDiscriminatorAnnotation.findMany({
+      where: { caseId },
+      orderBy: [{ clueOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+    return this.caseClueDiscriminatorAnnotationDtos(rows);
+  }
+
+  async createDiscriminatorAnnotation(
+    caseId: string,
+    payload: {
+      clueOrder?: number;
+      clueIndex?: number | null;
+      eliminatedDiagnosisId?: string | null;
+      eliminatedDiagnosisName?: string;
+      discriminator?: string;
+      reasoning?: string | null;
+      eliminationStrength?: string;
+      educationalValue?: string;
+    },
+    reviewerUserId: string,
+  ) {
+    await this.assertCaseExists(caseId);
+    const data = this.discriminatorAnnotationData(payload, reviewerUserId);
+    const row = await this.prisma.caseClueDiscriminatorAnnotation.create({
+      data: { ...data, caseId },
+    });
+    await this.recordDiscriminatorAnnotationAudit(
+      'create_case_clue_discriminator_annotation',
+      row,
+      reviewerUserId,
+    );
+    return this.caseClueDiscriminatorAnnotationDto(row);
+  }
+
+  async updateDiscriminatorAnnotation(
+    caseId: string,
+    annotationId: string,
+    payload: {
+      clueOrder?: number;
+      clueIndex?: number | null;
+      eliminatedDiagnosisId?: string | null;
+      eliminatedDiagnosisName?: string;
+      discriminator?: string;
+      reasoning?: string | null;
+      eliminationStrength?: string;
+      educationalValue?: string;
+    },
+    reviewerUserId: string,
+  ) {
+    const existing = await this.prisma.caseClueDiscriminatorAnnotation.findFirst({
+      where: { id: annotationId, caseId },
+    });
+    if (!existing) {
+      throw new NotFoundException('Discriminator annotation not found');
+    }
+    const row = await this.prisma.caseClueDiscriminatorAnnotation.update({
+      where: { id: annotationId },
+      data: this.discriminatorAnnotationData(
+        { ...existing, ...payload },
+        reviewerUserId,
+      ),
+    });
+    await this.recordDiscriminatorAnnotationAudit(
+      'update_case_clue_discriminator_annotation',
+      row,
+      reviewerUserId,
+    );
+    return this.caseClueDiscriminatorAnnotationDto(row);
+  }
+
+  async deleteDiscriminatorAnnotation(
+    caseId: string,
+    annotationId: string,
+    reviewerUserId: string,
+  ) {
+    const row = await this.prisma.caseClueDiscriminatorAnnotation.findFirst({
+      where: { id: annotationId, caseId },
+    });
+    if (!row) {
+      throw new NotFoundException('Discriminator annotation not found');
+    }
+    await this.prisma.caseClueDiscriminatorAnnotation.delete({
+      where: { id: annotationId },
+    });
+    await this.recordDiscriminatorAnnotationAudit(
+      'delete_case_clue_discriminator_annotation',
+      row,
+      reviewerUserId,
+    );
+    return { deleted: true, id: row.id };
+  }
+
   async loadRegistry(diagnosisRegistryId: string): Promise<RegistryRow | null> {
     return this.prisma.diagnosisRegistry.findUnique({
       where: { id: diagnosisRegistryId },
@@ -815,6 +1024,8 @@ export class DiagnosisEditorialWorkspaceService {
             difficulty: true,
             editorialStatus: true,
             date: true,
+            clues: true,
+            differentials: true,
             explanation: true,
             validationRuns: {
               orderBy: [{ startedAt: 'desc' }],
@@ -823,6 +1034,55 @@ export class DiagnosisEditorialWorkspaceService {
                 outcome: true,
                 summary: true,
                 findings: true,
+              },
+            },
+            clueProgressionAnalyses: {
+              orderBy: [{ generatedAt: 'desc' }],
+              take: 1,
+              select: {
+                diagnosticStates: true,
+                mimicCollapses: true,
+                discriminatorEmergences: true,
+                differentialElimination: true,
+                leadingDifferentials: true,
+                remainingMimics: true,
+                discriminatorSignals: true,
+                editorialSignals: true,
+                likelyLockInClue: true,
+                confidenceEstimate: true,
+                ambiguityScore: true,
+                prematureLeakFlag: true,
+                unresolvedAmbiguityFlag: true,
+                totalMimicsTracked: true,
+                eliminatedMimicCount: true,
+                unresolvedMimicCount: true,
+                persistentConfusionCount: true,
+                weakEliminationCount: true,
+                explicitDiscriminatorAnnotationCount: true,
+                heuristicOnlyEliminationCount: true,
+                missingEditorialAnnotationCount: true,
+                editorialNotes: true,
+                analysisVersion: true,
+                generatedAt: true,
+              },
+            },
+            clueDiscriminatorAnnotations: {
+              orderBy: [{ clueOrder: 'asc' }, { createdAt: 'asc' }],
+              select: {
+                id: true,
+                caseId: true,
+                clueOrder: true,
+                clueIndex: true,
+                eliminatedDiagnosisId: true,
+                eliminatedDiagnosisName: true,
+                discriminator: true,
+                reasoning: true,
+                eliminationStrength: true,
+                educationalValue: true,
+                reviewerUserId: true,
+                reviewedAt: true,
+                createdAt: true,
+                updatedAt: true,
               },
             },
           },
@@ -1205,8 +1465,10 @@ export class DiagnosisEditorialWorkspaceService {
       take: 25,
       select: {
         id: true,
+        caseId: true,
         actionType: true,
         sourceIssue: true,
+        inputContext: true,
         generatedOutput: true,
         editorDecision: true,
         affectedArtifactType: true,
@@ -1222,19 +1484,264 @@ export class DiagnosisEditorialWorkspaceService {
 
     return rows.map((row) => ({
       id: row.id,
+      caseId: row.caseId,
       actionType: row.actionType,
       sourceIssue: row.sourceIssue,
+      inputContext: row.inputContext,
       generatedOutput: row.generatedOutput,
       editorDecision: row.editorDecision,
       affectedArtifactType: row.affectedArtifactType,
       affectedArtifactId: row.affectedArtifactId,
       reviewStatus: row.reviewStatus,
+      ...this.discriminatorDraftAuditProjection(row),
       createdByUserId: row.createdByUserId,
       reviewerUserId: row.reviewerUserId,
       decisionAt: row.decisionAt ? this.toIso(row.decisionAt) : null,
       reviewNote: row.reviewNote,
       createdAt: this.toIso(row.createdAt),
     }));
+  }
+
+  private projectDiscriminatorDraftReviews(
+    audits: Array<{
+      id: string;
+      caseId?: string | null;
+      actionType: string;
+      sourceIssue: Prisma.JsonValue;
+      inputContext?: Prisma.JsonValue;
+      generatedOutput: Prisma.JsonValue;
+      affectedArtifactType: string;
+      affectedArtifactId: string;
+      reviewStatus: string;
+      createdAt: string;
+    }>,
+  ) {
+    return audits
+      .map((audit) => {
+        const projection = this.discriminatorDraftAuditProjection(audit);
+        if (!projection.discriminatorDraftReview) {
+          return null;
+        }
+        return {
+          auditId: audit.id,
+          actionType: audit.actionType,
+          affectedArtifactType: audit.affectedArtifactType,
+          affectedArtifactId: audit.affectedArtifactId,
+          reviewStatus: audit.reviewStatus,
+          createdAt: audit.createdAt,
+          ...projection,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  }
+
+  private discriminatorDraftAuditProjection(audit: {
+    id?: string;
+    caseId?: string | null;
+    actionType: string;
+    sourceIssue: Prisma.JsonValue;
+    inputContext?: Prisma.JsonValue;
+    generatedOutput: Prisma.JsonValue;
+  }) {
+    const reviewPayload = this.parseDiscriminatorDraftReviewPayload(audit);
+    if (!reviewPayload) {
+      return {};
+    }
+
+    return {
+      draftKind: reviewPayload.draftKind,
+      generationIntent: reviewPayload.generationIntent,
+      mimicName: reviewPayload.mimicName,
+      discriminator: reviewPayload.discriminator,
+      caseId: reviewPayload.caseId ?? audit.caseId ?? null,
+      sourceClueOrder: reviewPayload.sourceClueOrder ?? null,
+      sourceClueIndex: reviewPayload.sourceClueIndex ?? null,
+      targetTab:
+        reviewPayload.draftKind === 'targeted_discriminator_case'
+          ? 'cases'
+          : 'cases',
+      discriminatorDraftReview: reviewPayload,
+    };
+  }
+
+  private parseDiscriminatorDraftReviewPayload(audit: {
+    actionType: string;
+    sourceIssue: Prisma.JsonValue;
+    inputContext?: Prisma.JsonValue;
+    generatedOutput: Prisma.JsonValue;
+    caseId?: string | null;
+  }): DiscriminatorDraftReviewPayload | null {
+    if (!this.isDiscriminatorDraftAudit(audit.actionType)) {
+      return null;
+    }
+    const generatedOutput = this.jsonRecord(audit.generatedOutput);
+    const embedded = this.jsonRecord(generatedOutput.reviewPayload);
+    const embeddedTarget = this.jsonRecord(generatedOutput.discriminatorTarget);
+    const sourceIssue = this.jsonRecord(audit.sourceIssue);
+    const sourceTarget = this.jsonRecord(sourceIssue.target);
+    const inputContext = this.jsonRecord(audit.inputContext);
+    const contextTarget = this.jsonRecord(inputContext.discriminatorTarget);
+    const target = Object.keys(embeddedTarget).length
+      ? embeddedTarget
+      : Object.keys(sourceTarget).length
+        ? sourceTarget
+        : contextTarget;
+    const draftKind =
+      this.stringValue(embedded.draftKind) ??
+      (audit.actionType === 'generate_targeted_discriminator_case'
+        ? 'targeted_discriminator_case'
+        : 'clue_revision_proposal');
+    if (
+      draftKind !== 'targeted_discriminator_case' &&
+      draftKind !== 'clue_revision_proposal'
+    ) {
+      return null;
+    }
+    const mimicName =
+      this.stringValue(embedded.mimicName) ?? this.stringValue(target.mimicName);
+    const discriminator =
+      this.stringValue(embedded.discriminator) ??
+      this.stringValue(target.discriminator);
+    const generationIntent =
+      this.stringValue(embedded.generationIntent) ??
+      this.stringValue(target.generationIntent);
+    if (!mimicName || !discriminator || !generationIntent) {
+      return null;
+    }
+
+    return {
+      draftKind,
+      generationIntent,
+      diagnosisRegistryId:
+        this.stringValue(embedded.diagnosisRegistryId) ??
+        this.stringValue(target.diagnosisRegistryId) ??
+        '',
+      caseId:
+        this.stringValue(embedded.caseId) ??
+        this.stringValue(target.caseId) ??
+        audit.caseId ??
+        undefined,
+      sourceClueOrder:
+        this.numberValue(embedded.sourceClueOrder) ??
+        this.numberValue(target.sourceClueOrder) ??
+        this.numberValue(inputContext.desiredClueOrder),
+      sourceClueIndex:
+        this.numberValue(embedded.sourceClueIndex) ??
+        this.numberValue(target.sourceClueIndex),
+      mimicDiagnosisId:
+        this.stringValue(embedded.mimicDiagnosisId) ??
+        this.stringValue(target.mimicDiagnosisId) ??
+        undefined,
+      mimicName,
+      discriminator,
+      learnerRisk:
+        this.stringValue(embedded.learnerRisk) ??
+        this.stringValue(target.learnerRisk) ??
+        undefined,
+      editorialReason:
+        this.stringValue(embedded.editorialReason) ??
+        this.stringValue(target.editorialReason) ??
+        this.stringValue(generatedOutput.editorialRationale) ??
+        undefined,
+      proposedOutput: this.discriminatorProposedOutput({
+        draftKind,
+        embedded,
+        generatedOutput,
+        inputContext,
+        mimicName,
+        discriminator,
+      }),
+      reviewGuidance: this.buildDiscriminatorReviewGuidance(
+        generationIntent,
+        draftKind,
+      ),
+    };
+  }
+
+  private discriminatorProposedOutput(input: {
+    draftKind: DiscriminatorDraftKind;
+    embedded: Record<string, Prisma.JsonValue>;
+    generatedOutput: Record<string, Prisma.JsonValue>;
+    inputContext: Record<string, Prisma.JsonValue>;
+    mimicName: string;
+    discriminator: string;
+  }): DiscriminatorDraftReviewPayload['proposedOutput'] {
+    const embeddedOutput = this.jsonRecord(input.embedded.proposedOutput);
+    if (Object.keys(embeddedOutput).length) {
+      return embeddedOutput as DiscriminatorDraftReviewPayload['proposedOutput'];
+    }
+    if (input.draftKind === 'targeted_discriminator_case') {
+      const result = this.jsonRecord(input.generatedOutput.result);
+      const generatedCase =
+        this.jsonRecord(result.generatedCase) ||
+        this.jsonRecord(input.generatedOutput.caseDraft);
+      return {
+        title: this.stringValue(generatedCase.title) ?? undefined,
+        caseDraft: Object.keys(generatedCase).length ? generatedCase : result,
+        clueProgressionRationale:
+          'Generated case should keep the mimic plausible early, then separate it with the target discriminator.',
+        expectedMimicElimination:
+          this.stringValue(input.generatedOutput.intendedMimicElimination) ??
+          input.mimicName,
+        expectedLearnerTakeaway: input.discriminator,
+      };
+    }
+    const proposedClue =
+      this.stringValue(input.generatedOutput.proposedClue) ??
+      this.stringValue(input.generatedOutput.replacementOrAdditionalClue);
+    const originalClue = this.stringValue(input.inputContext.existingClue);
+    return {
+      clueRevision: {
+        originalClue: originalClue ?? undefined,
+        revisedClue: originalClue ? (proposedClue ?? undefined) : undefined,
+        addedClue: originalClue ? undefined : (proposedClue ?? undefined),
+        rationale:
+          this.stringValue(input.generatedOutput.editorialRationale) ??
+          undefined,
+        expectedEffect:
+          this.stringValue(input.generatedOutput.expectedProgressionEffect) ??
+          `Strengthens explicit elimination of ${input.mimicName}.`,
+      },
+      clueProgressionRationale:
+        'Revision should make the mimic collapse traceable at the target clue.',
+      expectedMimicElimination:
+        this.stringValue(input.generatedOutput.intendedMimicElimination) ??
+        input.mimicName,
+      expectedLearnerTakeaway: input.discriminator,
+    };
+  }
+
+  private buildDiscriminatorReviewGuidance(
+    intent: string,
+    draftKind: DiscriminatorDraftKind,
+  ): DiscriminatorDraftReviewPayload['reviewGuidance'] {
+    const caseDraft = draftKind === 'targeted_discriminator_case';
+    return {
+      primaryQuestion: caseDraft
+        ? 'Does this draft case safely teach the missing discriminator?'
+        : 'Does this clue revision make mimic elimination explicit without leaking the answer?',
+      acceptEffect: caseDraft
+        ? 'Marks the case draft repair as accepted for editorial case drafting; it does not publish.'
+        : 'Marks the clue revision proposal as accepted for editorial repair; it does not mutate published cases.',
+      rejectEffect:
+        'Keeps the detected gap open and records that this draft should not be used.',
+      requestChangesHint:
+        'Name the missing clinical evidence, clue timing, or learner-confusion issue the next draft should fix.',
+      safetyNotes: [
+        'Draft-only output: no autonomous publishing.',
+        'Editors must verify clinical accuracy and clue pacing before use.',
+        intent === 'must_not_miss_separation'
+          ? 'Must-not-miss separation requires extra senior review.'
+          : 'Confirm the discriminator is specific enough to teach the intended distinction.',
+      ],
+    };
+  }
+
+  private isDiscriminatorDraftAudit(actionType: string) {
+    return (
+      actionType === 'generate_targeted_discriminator_case' ||
+      actionType === 'generate_clue_revision_proposal'
+    );
   }
 
   private reviewStatusForDecision(
@@ -1244,6 +1751,19 @@ export class DiagnosisEditorialWorkspaceService {
     if (decision === 'reject') return 'REJECTED';
     if (decision === 'request_changes') return 'NEEDS_CHANGES';
     return 'SUPERSEDED';
+  }
+
+  private defaultDraftDecisionNote(
+    audit: { actionType: string },
+    decision: 'accept' | 'reject' | 'request_changes' | 'supersede',
+  ) {
+    if (decision !== 'accept' || !this.isDiscriminatorDraftAudit(audit.actionType)) {
+      return null;
+    }
+    if (audit.actionType === 'generate_targeted_discriminator_case') {
+      return 'Accepted for editorial case drafting; no publication was performed.';
+    }
+    return 'Accepted revision proposal; no case or clue mutation was performed.';
   }
 
   private async applyAcceptedDraftOutput(
@@ -1381,6 +1901,79 @@ export class DiagnosisEditorialWorkspaceService {
     }
   }
 
+  private async assertCaseExists(caseId: string) {
+    const caseRecord = await this.prisma.case.findFirst({
+      where: { id: caseId },
+      select: { id: true },
+    });
+    if (!caseRecord) {
+      throw new BadRequestException('Case does not exist');
+    }
+  }
+
+  private discriminatorAnnotationData(
+    payload: {
+      clueOrder?: number;
+      clueIndex?: number | null;
+      eliminatedDiagnosisId?: string | null;
+      eliminatedDiagnosisName?: string;
+      discriminator?: string;
+      reasoning?: string | null;
+      eliminationStrength?: string;
+      educationalValue?: string;
+    },
+    reviewerUserId: string,
+  ) {
+    if (typeof payload.clueOrder !== 'number' || Number.isNaN(payload.clueOrder)) {
+      throw new BadRequestException('clueOrder must be numeric');
+    }
+    const eliminatedDiagnosisName = payload.eliminatedDiagnosisName?.trim();
+    if (!eliminatedDiagnosisName) {
+      throw new BadRequestException('eliminatedDiagnosisName is required');
+    }
+    const discriminator = payload.discriminator?.trim();
+    if (!discriminator) {
+      throw new BadRequestException('discriminator is required');
+    }
+    const eliminationStrength = this.constrainedValue(
+      payload.eliminationStrength ?? 'moderate',
+      ['weak', 'moderate', 'strong'],
+      'eliminationStrength',
+    );
+    const educationalValue = this.constrainedValue(
+      payload.educationalValue ?? 'medium',
+      ['low', 'medium', 'high'],
+      'educationalValue',
+    );
+
+    return {
+      clueOrder: Math.trunc(payload.clueOrder),
+      clueIndex:
+        typeof payload.clueIndex === 'number'
+          ? Math.trunc(payload.clueIndex)
+          : null,
+      eliminatedDiagnosisId: payload.eliminatedDiagnosisId ?? null,
+      eliminatedDiagnosisName,
+      discriminator,
+      reasoning: payload.reasoning?.trim() || null,
+      eliminationStrength,
+      educationalValue,
+      reviewerUserId,
+      reviewedAt: new Date(),
+    };
+  }
+
+  private constrainedValue<T extends string>(
+    value: string,
+    allowed: readonly T[],
+    field: string,
+  ): T {
+    if (!allowed.includes(value as T)) {
+      throw new BadRequestException(`${field} must be one of ${allowed.join(', ')}`);
+    }
+    return value as T;
+  }
+
   private async recordCoverageAudit(input: {
     diagnosisRegistryId: string;
     actionType: string;
@@ -1405,6 +1998,37 @@ export class DiagnosisEditorialWorkspaceService {
         reviewerUserId: input.userId,
         decisionAt: new Date(),
         editorDecision: 'coverage_annotation_saved',
+      },
+    });
+  }
+
+  private async recordDiscriminatorAnnotationAudit(
+    actionType: string,
+    row: { id: string; caseId: string },
+    userId: string,
+  ) {
+    const caseRecord = await this.prisma.case.findFirst({
+      where: { id: row.caseId },
+      select: { diagnosisRegistryId: true },
+    });
+    if (!caseRecord?.diagnosisRegistryId) {
+      return;
+    }
+    await this.prisma.aiDraftRevisionAudit.create({
+      data: {
+        diagnosisRegistryId: caseRecord.diagnosisRegistryId,
+        caseId: row.caseId,
+        actionType,
+        sourceIssue: { source: 'clue_discriminator_annotation' } as Prisma.InputJsonValue,
+        inputContext: { caseId: row.caseId } as Prisma.InputJsonValue,
+        generatedOutput: this.toInputJson(row),
+        affectedArtifactType: 'CASE_CLUE_DISCRIMINATOR_ANNOTATION',
+        affectedArtifactId: row.id,
+        reviewStatus: 'ACCEPTED',
+        createdByUserId: userId,
+        reviewerUserId: userId,
+        decisionAt: new Date(),
+        editorDecision: actionType,
       },
     });
   }
@@ -1459,6 +2083,105 @@ export class DiagnosisEditorialWorkspaceService {
       updatedAt: this.toIso(row.updatedAt),
       status: row.covered ? 'explicitly_covered' : 'needs_review',
     };
+  }
+
+  private caseClueDiscriminatorAnnotationInputs(
+    rows: Array<{
+      id: string;
+      caseId: string;
+      clueOrder: number;
+      clueIndex: number | null;
+      eliminatedDiagnosisId: string | null;
+      eliminatedDiagnosisName: string;
+      discriminator: string;
+      reasoning: string | null;
+      eliminationStrength: string;
+      educationalValue: string;
+    }>,
+  ): CaseClueDiscriminatorAnnotationInput[] {
+    return rows.map((row) => ({
+      id: row.id,
+      caseId: row.caseId,
+      clueOrder: row.clueOrder,
+      clueIndex: row.clueIndex,
+      eliminatedDiagnosisId: row.eliminatedDiagnosisId,
+      eliminatedDiagnosisName: row.eliminatedDiagnosisName,
+      discriminator: row.discriminator,
+      reasoning: row.reasoning,
+      eliminationStrength: this.constrainedAnnotationValue(
+        row.eliminationStrength,
+        ['weak', 'moderate', 'strong'],
+        'moderate',
+      ),
+      educationalValue: this.constrainedAnnotationValue(
+        row.educationalValue,
+        ['low', 'medium', 'high'],
+        'medium',
+      ),
+    }));
+  }
+
+  private caseClueDiscriminatorAnnotationDtos(
+    rows: Array<{
+      id: string;
+      caseId: string;
+      clueOrder: number;
+      clueIndex: number | null;
+      eliminatedDiagnosisId: string | null;
+      eliminatedDiagnosisName: string;
+      discriminator: string;
+      reasoning: string | null;
+      eliminationStrength: string;
+      educationalValue: string;
+      reviewerUserId: string | null;
+      reviewedAt: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+    }>,
+  ) {
+    return rows.map((row) => this.caseClueDiscriminatorAnnotationDto(row));
+  }
+
+  private caseClueDiscriminatorAnnotationDto(row: {
+    id: string;
+    caseId: string;
+    clueOrder: number;
+    clueIndex: number | null;
+    eliminatedDiagnosisId: string | null;
+    eliminatedDiagnosisName: string;
+    discriminator: string;
+    reasoning: string | null;
+    eliminationStrength: string;
+    educationalValue: string;
+    reviewerUserId: string | null;
+    reviewedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    return {
+      id: row.id,
+      caseId: row.caseId,
+      clueOrder: row.clueOrder,
+      clueIndex: row.clueIndex,
+      eliminatedDiagnosisId: row.eliminatedDiagnosisId,
+      eliminatedDiagnosisName: row.eliminatedDiagnosisName,
+      discriminator: row.discriminator,
+      reasoning: row.reasoning,
+      eliminationStrength: row.eliminationStrength,
+      educationalValue: row.educationalValue,
+      reviewerUserId: row.reviewerUserId,
+      reviewedAt: row.reviewedAt ? this.toIso(row.reviewedAt) : null,
+      createdAt: this.toIso(row.createdAt),
+      updatedAt: this.toIso(row.updatedAt),
+    };
+  }
+
+  private constrainedAnnotationValue<T extends string>(
+    value: string,
+    allowed: readonly T[],
+    fallback: T,
+  ): T {
+    return allowed.includes(value as T) ? (value as T) : fallback;
   }
 
   private buildLearningGoalCoverage(input: {
@@ -1859,6 +2582,10 @@ export class DiagnosisEditorialWorkspaceService {
       : null;
   }
 
+  private numberValue(value: Prisma.JsonValue | null | undefined) {
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  }
+
   private sectionTypeFromArtifact(artifactType: string) {
     switch (artifactType) {
       case 'EDUCATION_SECTION':
@@ -1901,10 +2628,60 @@ export class DiagnosisEditorialWorkspaceService {
     return Math.max(0, Math.min(100, Math.round(value)));
   }
 
-  private buildCases(cases: CaseRow[]) {
+  private buildCases(
+    cases: CaseRow[],
+    context: {
+      diagnosisRegistryId: string;
+      diagnosisName: string;
+      linkedDifferentials: Array<{
+        diagnosisRegistryId?: string | null;
+        displayLabel?: string | null;
+        canonicalName?: string | null;
+        role?: string | null;
+        confidence?: number | null;
+        sourceText?: string | null;
+      }>;
+      teachingRelationships: Array<{
+        targetDiagnosisRegistryId?: string | null;
+        relationshipType?: string | null;
+        teachingPurpose?: string | null;
+        discriminatorSummary?: string | null;
+        commonConfusionReason?: string | null;
+        learnerPitfall?: string | null;
+        strength?: number | null;
+        status?: string | null;
+        targetDiagnosisRegistry?: {
+          displayLabel?: string | null;
+          canonicalName?: string | null;
+        } | null;
+        supportingGraphFact?: { label?: string | null } | null;
+        supportingTeachingRule?: { title?: string | null } | null;
+      }>;
+    },
+  ) {
     const items = cases.map((caseRecord) => {
       const qualityProjection =
         this.caseQualityProjectionService.buildProjection(caseRecord);
+      const clueProgression = this.clueProgressionService.fromPersisted(
+        {
+          caseId: caseRecord.id,
+          diagnosisRegistryId: context.diagnosisRegistryId,
+          diagnosisName: context.diagnosisName,
+          title: caseRecord.title,
+          clues: caseRecord.clues,
+          differentials: caseRecord.differentials,
+          explanation: caseRecord.explanation,
+          differentialContext: {
+            linkedDifferentials: context.linkedDifferentials,
+            teachingRelationships: context.teachingRelationships,
+          },
+          clueDiscriminatorAnnotations:
+            this.caseClueDiscriminatorAnnotationInputs(
+              caseRecord.clueDiscriminatorAnnotations ?? [],
+            ),
+        },
+        caseRecord.clueProgressionAnalyses?.[0] ?? null,
+      );
       return {
         id: caseRecord.id,
         title: caseRecord.title,
@@ -1912,12 +2689,18 @@ export class DiagnosisEditorialWorkspaceService {
         difficulty: caseRecord.difficulty,
         updatedAt: this.toIso(caseRecord.date),
         qualityProjection,
+        clueProgression,
+        clueDiscriminatorAnnotations:
+          this.caseClueDiscriminatorAnnotationDtos(
+            caseRecord.clueDiscriminatorAnnotations ?? [],
+          ),
       };
     });
     const usableCases = cases.filter((caseRecord) =>
       this.isUsableCaseStatus(caseRecord.editorialStatus),
     );
     const latest = items[0] ?? null;
+    const progressionSignals = this.summarizeClueProgression(items);
 
     return {
       summary: {
@@ -1927,13 +2710,20 @@ export class DiagnosisEditorialWorkspaceService {
           cases.map((caseRecord) => caseRecord.editorialStatus),
         ),
         warningCount: items.reduce(
-          (count, item) => count + item.qualityProjection.warnings.length,
+          (count, item) =>
+            count +
+            item.qualityProjection.warnings.length +
+            this.warningProgressionSignalCount(item.clueProgression),
           0,
         ),
         blockerCount: items.reduce(
-          (count, item) => count + item.qualityProjection.blockers.length,
+          (count, item) =>
+            count +
+            item.qualityProjection.blockers.length +
+            this.blockingProgressionSignalCount(item.clueProgression),
           0,
         ),
+        progressionSignals,
         latest: latest
           ? {
               id: latest.id,
@@ -1945,6 +2735,272 @@ export class DiagnosisEditorialWorkspaceService {
           : null,
       },
       items,
+    };
+  }
+
+  private summarizeClueProgression(
+    items: Array<{ clueProgression: ClueProgressionAnalysis }>,
+  ) {
+    const allSignals = items.flatMap(
+      (item) => item.clueProgression.editorialSignals,
+    );
+    return {
+      total: allSignals.length,
+      bySignal: this.countBy(allSignals),
+      prematureLockInCases: items.filter((item) =>
+        item.clueProgression.editorialSignals.includes('premature_lock_in'),
+      ).length,
+      unresolvedAmbiguityCases: items.filter((item) =>
+        item.clueProgression.editorialSignals.includes('unresolved_mimic'),
+      ).length,
+      abruptGiveawayCases: items.filter((item) =>
+        item.clueProgression.editorialSignals.includes('abrupt_giveaway'),
+      ).length,
+      unresolvedMimicCount: items.reduce(
+        (count, item) => count + item.clueProgression.unresolvedMimicCount,
+        0,
+      ),
+      weakEliminationCount: items.reduce(
+        (count, item) => count + item.clueProgression.weakEliminationCount,
+        0,
+      ),
+      persistentConfusionCount: items.reduce(
+        (count, item) =>
+          count + item.clueProgression.persistentConfusionCount,
+        0,
+      ),
+      missingDiscriminatorCaseCount: items.filter((item) =>
+        item.clueProgression.editorialSignals.includes(
+          'missing_discriminator_case',
+        ),
+      ).length,
+      explicitDiscriminatorAnnotationCount: items.reduce(
+        (count, item) =>
+          count +
+          item.clueProgression.explicitDiscriminatorAnnotationCount,
+        0,
+      ),
+      heuristicOnlyEliminationCount: items.reduce(
+        (count, item) =>
+          count + item.clueProgression.heuristicOnlyEliminationCount,
+        0,
+      ),
+      missingEditorialAnnotationCount: items.reduce(
+        (count, item) =>
+          count + item.clueProgression.missingEditorialAnnotationCount,
+        0,
+      ),
+      targetedGenerationOpportunityCount: items.reduce(
+        (count, item) =>
+          count + item.clueProgression.targetedGenerationOpportunities.length,
+        0,
+      ),
+      byGenerationIntent: this.countBy(
+        items.flatMap((item) =>
+          item.clueProgression.targetedGenerationOpportunities.map(
+            (opportunity) => opportunity.generationIntent,
+          ),
+        ),
+      ),
+    };
+  }
+
+  private warningProgressionSignalCount(analysis: ClueProgressionAnalysis) {
+    return (
+      analysis.editorialSignals.filter(
+      (signal) =>
+        !['premature_lock_in', 'abrupt_giveaway'].includes(signal),
+      ).length +
+      analysis.unresolvedMimicCount +
+      analysis.weakEliminationCount +
+      analysis.heuristicOnlyEliminationCount +
+      analysis.missingEditorialAnnotationCount +
+      analysis.targetedGenerationOpportunities.length
+    );
+  }
+
+  private blockingProgressionSignalCount(analysis: ClueProgressionAnalysis) {
+    return (
+      analysis.editorialSignals.filter((signal) =>
+      ['premature_lock_in', 'abrupt_giveaway'].includes(signal),
+      ).length + analysis.persistentConfusionCount
+    );
+  }
+
+  private buildClueProgressionWarnings(
+    items: Array<{
+      title: string;
+      clueProgression: ClueProgressionAnalysis;
+    }>,
+  ) {
+    return items
+      .filter((item) => item.clueProgression.editorialSignals.length > 0)
+      .slice(0, 4)
+      .map((item) => {
+        const signal = item.clueProgression.editorialSignals[0];
+        if (signal === 'premature_lock_in') {
+          return `${item.title}: case becomes solvable before discriminator pacing is earned.`;
+        }
+        if (signal === 'unresolved_mimic') {
+          return `${item.title}: mimics remain unresolved after the final clue.`;
+        }
+        if (signal === 'weak_transition') {
+          return `${item.title}: one or more clues add little diagnostic movement.`;
+        }
+        if (signal === 'missing_discriminator_case') {
+          return `${item.title}: a tracked mimic is not explicitly separated by the clue sequence.`;
+        }
+        if (signal === 'weak_elimination') {
+          return `${item.title}: at least one mimic is eliminated only by weak evidence.`;
+        }
+        if (signal === 'weak_discriminator_case') {
+          return `${item.title}: weak mimic separation is ready for a targeted discriminator case.`;
+        }
+        if (signal === 'unresolved_mimic_generation_needed') {
+          return `${item.title}: unresolved mimic should drive draft case or clue-revision generation.`;
+        }
+        if (signal === 'weak_progression_generation_candidate') {
+          return `${item.title}: weak clue transition can be repaired with a discriminator revision draft.`;
+        }
+        if (signal === 'persistent_confusion') {
+          return `${item.title}: high-risk mimic confusion persists after final clue.`;
+        }
+        if (signal === 'heuristic_only_discrimination') {
+          return `${item.title}: mimic separation is inferred but not editor-annotated.`;
+        }
+        if (signal === 'missing_editorial_discriminator') {
+          return `${item.title}: important mimic separation needs editorial discriminator annotation.`;
+        }
+        if (signal === 'weak_editorial_discriminator') {
+          return `${item.title}: editorial discriminator annotation is marked weak.`;
+        }
+        return `${item.title}: clue progression signal ${signal} requires editorial review.`;
+      });
+  }
+
+  private withClueProgressionPrioritization<
+    T extends {
+      highestImpactFixes: Array<{
+        id: string;
+        label: string;
+        reason: string;
+        targetTab: TargetTab;
+        severity: ReadinessSeverity;
+      }>;
+      triageReasons: string[];
+      recommendedNextAction: string;
+      targetTab: TargetTab;
+    },
+  >(
+    prioritization: T,
+    cases: {
+      summary: {
+        progressionSignals: {
+          prematureLockInCases: number;
+          unresolvedAmbiguityCases: number;
+          abruptGiveawayCases: number;
+          unresolvedMimicCount?: number;
+          weakEliminationCount?: number;
+          persistentConfusionCount?: number;
+          missingDiscriminatorCaseCount?: number;
+          heuristicOnlyEliminationCount?: number;
+          missingEditorialAnnotationCount?: number;
+          targetedGenerationOpportunityCount?: number;
+          byGenerationIntent?: Record<string, number>;
+        };
+      };
+    },
+    discriminatorDraftReviews: Array<{
+      reviewStatus: string;
+      draftKind: DiscriminatorDraftKind;
+    }> = [],
+  ): T {
+    const signals = cases.summary.progressionSignals;
+    const pendingDiscriminatorDraftCount = discriminatorDraftReviews.filter(
+      (draft) =>
+        draft.reviewStatus === 'PENDING_REVIEW' ||
+        draft.reviewStatus === 'REVIEW_REQUIRED' ||
+        draft.reviewStatus === 'NEEDS_CHANGES',
+    ).length;
+    const severity: ReadinessSeverity =
+      signals.prematureLockInCases ||
+      signals.abruptGiveawayCases ||
+      (signals.persistentConfusionCount ?? 0) > 0
+        ? 'blocker'
+        : 'warning';
+    const count =
+      signals.prematureLockInCases +
+      signals.unresolvedAmbiguityCases +
+      signals.abruptGiveawayCases +
+      (signals.missingDiscriminatorCaseCount ?? 0) +
+      (signals.weakEliminationCount ?? 0) +
+      (signals.persistentConfusionCount ?? 0) +
+      (signals.heuristicOnlyEliminationCount ?? 0) +
+      (signals.missingEditorialAnnotationCount ?? 0) +
+      (signals.targetedGenerationOpportunityCount ?? 0);
+    if (count === 0) {
+      return prioritization;
+    }
+
+    const hasMimicEliminationGap =
+      (signals.persistentConfusionCount ?? 0) > 0 ||
+      (signals.missingDiscriminatorCaseCount ?? 0) > 0 ||
+      (signals.unresolvedMimicCount ?? 0) > 0;
+    const needsEditorialAnnotation =
+      (signals.heuristicOnlyEliminationCount ?? 0) > 0 ||
+      (signals.missingEditorialAnnotationCount ?? 0) > 0;
+    const hasGenerationOpportunity =
+      (signals.targetedGenerationOpportunityCount ?? 0) > 0;
+    const hasPendingDiscriminatorDraft = pendingDiscriminatorDraftCount > 0;
+    const fix = {
+      id: hasPendingDiscriminatorDraft
+        ? 'review_discriminator_draft'
+        : hasGenerationOpportunity
+        ? 'generate_discriminator_draft'
+        : needsEditorialAnnotation
+        ? 'add_editorial_discriminator_annotation'
+        : hasMimicEliminationGap
+        ? 'differential_elimination_gap'
+        : 'clue_progression_quality',
+      label: hasPendingDiscriminatorDraft
+        ? 'Review discriminator repair draft'
+        : hasGenerationOpportunity
+        ? 'Generate discriminator draft'
+        : needsEditorialAnnotation
+        ? 'Add editorial discriminator annotation'
+        : hasMimicEliminationGap
+        ? 'Add discriminator case support'
+        : 'Repair clue progression',
+      reason:
+        hasPendingDiscriminatorDraft
+          ? `${pendingDiscriminatorDraftCount} generated discriminator repair draft${pendingDiscriminatorDraftCount === 1 ? '' : 's'} await editor review.`
+          :
+        hasGenerationOpportunity
+          ? 'At least one mimic gap can be repaired by a targeted discriminator case or clue-revision draft.'
+          :
+        needsEditorialAnnotation
+          ? 'At least one mimic separation is heuristic-only or lacks editor-governed discriminator annotation.'
+          :
+        hasMimicEliminationGap
+          ? 'At least one important mimic is not explicitly eliminated by case clues.'
+          :
+        signals.prematureLockInCases || signals.abruptGiveawayCases
+          ? 'At least one case leaks the likely diagnosis too abruptly.'
+          : 'At least one case leaves mimics unresolved through the final clue.',
+      targetTab: (needsEditorialAnnotation
+        ? 'cases'
+        : hasPendingDiscriminatorDraft || hasGenerationOpportunity || hasMimicEliminationGap
+          ? 'graph'
+          : 'cases') as TargetTab,
+      severity,
+    };
+
+    return {
+      ...prioritization,
+      highestImpactFixes: [fix, ...prioritization.highestImpactFixes],
+      triageReasons: [fix.reason, ...prioritization.triageReasons],
+      recommendedNextAction: fix.label,
+      targetTab: fix.targetTab,
     };
   }
 

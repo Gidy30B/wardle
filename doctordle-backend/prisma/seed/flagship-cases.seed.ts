@@ -1,4 +1,3 @@
-
 import {
   PrismaClient,
   CaseEditorialStatus,
@@ -13,7 +12,9 @@ import { Pool } from 'pg';
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error('DATABASE_URL is required to run the Sickle Cell Disease flagship seed.');
+  throw new Error(
+    'DATABASE_URL is required to run the Elderly UTI flagship seed.',
+  );
 }
 
 const pool = new Pool({ connectionString: databaseUrl });
@@ -29,8 +30,8 @@ function normalizeClinicalText(value: string): string {
 }
 
 const now = new Date();
-const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 12, 12, 0, 0));
-const seedVersion = 'flagship-sickle-cell-disease-v1';
+const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 13, 12, 0, 0));
+const seedVersion = 'flagship-elderly-uti-v1';
 
 function addUtcDays(date: Date, days: number): Date {
   const next = new Date(date);
@@ -88,249 +89,242 @@ const clues = [
     order: 0,
     type: 'history',
     value:
-      'An 8-year-old child is brought to the emergency department with severe pain in both legs and the lower back that began suddenly overnight.',
+      'An 82-year-old woman is brought to the emergency department because of worsening confusion and reduced oral intake over two days.',
   },
   {
     order: 1,
     type: 'history',
     value:
-      'The mother reports multiple similar episodes since early childhood, often triggered by dehydration or infection. She also notes occasional yellowing of the eyes.',
+      'Her daughter reports new urinary frequency and foul-smelling urine, although the patient has not complained of dysuria.',
   },
   {
     order: 2,
     type: 'vital',
     value:
-      'Temperature is 38.2°C, heart rate is 118/min, respiratory rate is 24/min, and blood pressure is 100/65 mmHg.',
+      'Temperature is 38.2°C, heart rate is 110/min, respiratory rate is 22/min, and blood pressure is 100/64 mmHg.',
   },
   {
     order: 3,
     type: 'exam',
     value:
-      'The child appears pale and mildly jaundiced with diffuse tenderness over the long bones, but there is no joint swelling or redness.',
+      'Examination reveals suprapubic tenderness and mild dehydration, with no meningism or focal neurological deficit.',
   },
   {
     order: 4,
     type: 'lab',
     value:
-      'Full blood count reveals hemoglobin of 7.0 g/dL with reticulocytosis. Blood film demonstrates sickle-shaped red blood cells and target cells.',
+      'Urinalysis demonstrates positive nitrites, positive leukocyte esterase, pyuria, and bacteriuria.',
   },
   {
     order: 5,
     type: 'investigation',
     value:
-      'Hemoglobin electrophoresis shows predominantly HbS with absent HbA, confirming the underlying hemoglobin abnormality.',
+      'Urine culture grows Escherichia coli sensitive to ceftriaxone.',
   },
 ] as const;
 
 const differentials = [
-  'Acute osteomyelitis',
-  'Septic arthritis',
-  'Acute leukemia',
-  'Juvenile idiopathic arthritis',
-  'Hemolytic anemia',
+  'Delirium secondary to dehydration',
+  'Community-acquired pneumonia',
+  'Acute pyelonephritis',
+  'Stroke',
+  'Asymptomatic bacteriuria',
 ];
 
 // ─── Explanation ─────────────────────────────────────────────────────────────
 
 const explanation = {
-  diagnosis: 'Sickle Cell Disease presenting with vaso-occlusive pain crisis',
+  diagnosis: 'Urinary Tract Infection presenting with delirium in an elderly patient',
 
   summary:
-    'This is sickle cell disease presenting with a vaso-occlusive pain crisis: recurrent severe bone pain triggered by dehydration or infection, chronic hemolysis with jaundice, anemia with reticulocytosis, sickled red cells on blood film, and hemoglobin electrophoresis showing predominantly HbS with absent HbA.',
+    'This is urinary tract infection in an elderly patient: acute delirium, reduced oral intake, urinary frequency, fever, suprapubic tenderness, pyuria, bacteriuria, and urine culture growing Escherichia coli. The case highlights that older adults may present atypically without prominent dysuria.',
 
   keyEvidence: [
-    'Severe sudden pain in both legs and lower back',
-    'Multiple similar episodes since early childhood',
-    'Episodes triggered by dehydration or infection',
-    'Occasional yellowing of the eyes',
-    'Pallor and mild jaundice',
-    'Diffuse long-bone tenderness without joint swelling',
-    'Hemoglobin 7.0 g/dL with reticulocytosis',
-    'Sickle-shaped red cells and target cells on blood film',
-    'Predominantly HbS with absent HbA on hemoglobin electrophoresis',
+    'Acute confusion over two days',
+    'Reduced oral intake',
+    'New urinary frequency',
+    'Foul-smelling urine',
+    'Fever and tachycardia',
+    'Suprapubic tenderness',
+    'Positive nitrites and leukocyte esterase',
+    'Pyuria and bacteriuria',
+    'Urine culture growing Escherichia coli',
   ],
 
   reasoning: [
-    'Sudden severe pain in the limbs and lower back suggests vaso-occlusion in bone and marrow rather than isolated joint disease.',
-    'Recurrent similar painful episodes since early childhood strongly suggest an inherited chronic disorder rather than a first episode of trauma or infection.',
-    'Dehydration and infection are classic triggers for sickling and vaso-occlusive crises.',
-    'Intermittent jaundice indicates chronic hemolysis, supporting sickle cell disease over isolated orthopedic causes of limb pain.',
-    'Pallor and jaundice on examination support chronic hemolytic anemia.',
-    'Diffuse long-bone tenderness without focal joint swelling makes septic arthritis less likely and supports vaso-occlusive bone pain.',
-    'Anemia with reticulocytosis shows marrow response to ongoing hemolysis.',
-    'Sickle-shaped red cells and target cells on blood film provide strong morphologic evidence of sickle hemoglobinopathy.',
-    'Hemoglobin electrophoresis with predominantly HbS and absent HbA confirms sickle cell disease rather than sickle trait.',
+    'Acute confusion in an elderly patient suggests delirium and should prompt a search for infection, dehydration, medication effects, metabolic disturbance, and neurological causes.',
+    'New urinary frequency and foul-smelling urine provide a urinary source, even though dysuria may be absent in older adults.',
+    'Fever, tachycardia, and mild hypotension support systemic inflammatory response rather than simple asymptomatic bacteriuria.',
+    'Suprapubic tenderness supports lower urinary tract involvement.',
+    'Positive nitrites, leukocyte esterase, pyuria, and bacteriuria support urinary infection when paired with compatible symptoms.',
+    'Urine culture growing Escherichia coli confirms the causative organism and guides antibiotic choice.',
+    'The absence of focal neurological deficits makes stroke less likely as the primary cause of confusion.',
+    'The absence of respiratory symptoms or chest findings makes pneumonia less likely.',
   ],
 
   keyFindings: [
-    'Recurrent painful crises',
-    'Bone and back pain',
-    'Triggering by infection or dehydration',
-    'Pallor',
-    'Jaundice',
-    'Anemia',
-    'Reticulocytosis',
-    'Sickled red cells',
-    'HbS predominance',
-    'Absent HbA',
+    'Elderly patient',
+    'Delirium',
+    'Reduced oral intake',
+    'Urinary frequency',
+    'Foul-smelling urine',
+    'Fever',
+    'Suprapubic tenderness',
+    'Positive nitrites',
+    'Pyuria',
+    'E. coli urine culture',
   ],
 
   differentials,
 
   whyNotOthers: [
     {
-      diagnosis: 'Acute osteomyelitis',
+      diagnosis: 'Delirium secondary to dehydration',
       reason:
-        'Osteomyelitis can cause fever and bone pain, but this child has recurrent similar episodes, chronic hemolysis, sickled cells, and confirmatory Hb electrophoresis.',
+        'Dehydration contributes to delirium, but fever, urinary symptoms, pyuria, bacteriuria, and positive urine culture identify UTI as the precipitating cause.',
     },
     {
-      diagnosis: 'Septic arthritis',
+      diagnosis: 'Community-acquired pneumonia',
       reason:
-        'Septic arthritis usually causes a hot swollen painful joint with restricted movement; this case has diffuse long-bone tenderness without joint swelling.',
+        'Pneumonia can cause delirium in older adults, but this case lacks respiratory symptoms or focal chest findings and has strong urinary evidence.',
     },
     {
-      diagnosis: 'Acute leukemia',
+      diagnosis: 'Acute pyelonephritis',
       reason:
-        'Leukemia can cause bone pain and anemia, but the blood film and electrophoresis confirm sickle hemoglobinopathy rather than marrow malignancy.',
+        'Systemic symptoms can occur in pyelonephritis, but there is no flank pain or costovertebral angle tenderness; this presentation is more consistent with lower UTI causing delirium.',
     },
     {
-      diagnosis: 'Juvenile idiopathic arthritis',
+      diagnosis: 'Stroke',
       reason:
-        'Juvenile idiopathic arthritis causes chronic inflammatory joint disease, not recurrent hemolytic painful crises with HbS predominance.',
+        'Stroke can cause acute confusion, but the absence of focal neurological signs and the presence of infection evidence make UTI-associated delirium more likely.',
     },
     {
-      diagnosis: 'Hemolytic anemia',
+      diagnosis: 'Asymptomatic bacteriuria',
       reason:
-        'Hemolysis is present, but the pain pattern and hemoglobin electrophoresis specify sickle cell disease as the underlying cause.',
+        'Asymptomatic bacteriuria is common in older adults, but this patient has fever, delirium, urinary frequency, and suprapubic tenderness, making true infection more likely.',
     },
   ],
 
   managementPearl:
-    'In vaso-occlusive crisis, treat pain promptly, assess for infection and acute chest syndrome, maintain hydration carefully, give oxygen only if hypoxic, and avoid delaying analgesia while awaiting confirmatory tests.',
+    'In older adults, diagnose UTI only when urinary or systemic symptoms support infection; avoid treating asymptomatic bacteriuria. When infection is likely, assess delirium severity, hydration, sepsis risk, renal function, and local antibiotic guidance while awaiting culture sensitivities.',
 
   differentialAnalysis: [
     {
-      diagnosis: 'Acute osteomyelitis',
+      diagnosis: 'Delirium secondary to dehydration',
       whyPlausibleEarly:
-        'Fever and long-bone pain in a child can suggest osteomyelitis, especially because sickle cell disease also increases infection risk.',
+        'Reduced oral intake and confusion commonly occur with dehydration in elderly patients.',
       ruledOutByClues: [
         {
           clueOrder: 1,
-          evidence: 'multiple similar episodes since early childhood',
+          evidence: 'new urinary frequency and foul-smelling urine',
           reason:
-            'Recurrent self-similar painful episodes are more typical of vaso-occlusive crises than repeated acute osteomyelitis.',
+            'These symptoms suggest a urinary trigger rather than isolated dehydration.',
         },
         {
-          clueOrder: 3,
-          evidence: 'diffuse tenderness over the long bones without focal swelling',
+          clueOrder: 2,
+          evidence: 'temperature 38.2°C and heart rate 110/min',
           reason:
-            'Osteomyelitis more often produces localized bone tenderness and inflammatory signs.',
-        },
-        {
-          clueOrder: 5,
-          evidence: 'predominantly HbS with absent HbA',
-          reason:
-            'Electrophoresis confirms sickle cell disease as the underlying disorder explaining recurrent crises.',
-        },
-      ],
-      finalReasonLessLikely:
-        'Osteomyelitis remains an important complication to screen for, but it does not best explain the recurrent triggered pain and hemolytic evidence.',
-    },
-    {
-      diagnosis: 'Septic arthritis',
-      whyPlausibleEarly:
-        'Fever and limb pain can raise concern for joint infection.',
-      ruledOutByClues: [
-        {
-          clueOrder: 3,
-          evidence: 'no joint swelling or redness',
-          reason:
-            'Septic arthritis usually presents with a hot swollen joint and marked pain on movement.',
+            'Fever and tachycardia support infection or systemic inflammation.',
         },
         {
           clueOrder: 4,
-          evidence: 'sickle-shaped red blood cells and target cells',
+          evidence: 'positive nitrites, leukocyte esterase, pyuria, and bacteriuria',
           reason:
-            'The blood film points toward sickle cell disease rather than primary joint infection.',
+            'Urinalysis supports urinary infection when paired with compatible symptoms.',
         },
       ],
       finalReasonLessLikely:
-        'The pain is diffuse and bony rather than localized to an inflamed joint.',
+        'Dehydration may contribute, but UTI is the better unifying diagnosis.',
     },
     {
-      diagnosis: 'Acute leukemia',
+      diagnosis: 'Community-acquired pneumonia',
       whyPlausibleEarly:
-        'Bone pain, pallor, and anemia in a child can occur in leukemia.',
+        'Pneumonia may present atypically with delirium and fever in older adults.',
       ruledOutByClues: [
         {
           clueOrder: 1,
-          evidence: 'recurrent similar episodes triggered by dehydration or infection',
+          evidence: 'urinary frequency and foul-smelling urine',
           reason:
-            'This pattern is classic for vaso-occlusive crisis rather than progressive marrow failure.',
-        },
-        {
-          clueOrder: 4,
-          evidence: 'reticulocytosis',
-          reason:
-            'Reticulocytosis suggests marrow compensation for hemolysis, not marrow replacement.',
-        },
-        {
-          clueOrder: 5,
-          evidence: 'hemoglobin electrophoresis shows predominantly HbS with absent HbA',
-          reason:
-            'Electrophoresis confirms sickle cell disease.',
-        },
-      ],
-      finalReasonLessLikely:
-        'There is no blast-based blood film pattern or marrow failure profile; the hemoglobinopathy explains the presentation.',
-    },
-    {
-      diagnosis: 'Juvenile idiopathic arthritis',
-      whyPlausibleEarly:
-        'Limb pain in a child can be mistaken for inflammatory joint disease.',
-      ruledOutByClues: [
-        {
-          clueOrder: 0,
-          evidence: 'sudden severe pain overnight',
-          reason:
-            'Vaso-occlusive pain crisis is often acute and severe, while JIA is usually chronic inflammatory joint pain.',
+            'The symptom cluster points toward the urinary tract rather than respiratory tract.',
         },
         {
           clueOrder: 3,
-          evidence: 'no joint swelling or redness',
+          evidence: 'no focal neurological deficit and suprapubic tenderness',
           reason:
-            'JIA typically involves joint swelling, stiffness, or restricted movement.',
-        },
-      ],
-      finalReasonLessLikely:
-        'The absence of inflammatory joint signs and the presence of hemolytic sickle features make JIA unlikely.',
-    },
-    {
-      diagnosis: 'Hemolytic anemia',
-      whyPlausibleEarly:
-        'Pallor, jaundice, anemia, and reticulocytosis indicate hemolysis.',
-      ruledOutByClues: [
-        {
-          clueOrder: 0,
-          evidence: 'severe pain in both legs and lower back',
-          reason:
-            'Pain crisis is not explained by generic hemolytic anemia alone.',
-        },
-        {
-          clueOrder: 4,
-          evidence: 'sickle-shaped red blood cells',
-          reason:
-            'The smear identifies a sickling disorder.',
+            'Suprapubic tenderness supports a urinary source; no respiratory signs are given.',
         },
         {
           clueOrder: 5,
-          evidence: 'predominantly HbS with absent HbA',
+          evidence: 'urine culture grows Escherichia coli',
           reason:
-            'This confirms sickle cell disease rather than an unspecified hemolytic anemia.',
+            'Culture confirms a urinary pathogen compatible with UTI.',
         },
       ],
       finalReasonLessLikely:
-        'Hemolysis is part of the disease, but sickle cell disease is the specific diagnosis.',
+        'There are no respiratory symptoms or chest findings to support pneumonia.',
+    },
+    {
+      diagnosis: 'Acute pyelonephritis',
+      whyPlausibleEarly:
+        'Fever with UTI findings can represent upper urinary tract infection.',
+      ruledOutByClues: [
+        {
+          clueOrder: 3,
+          evidence: 'suprapubic tenderness without flank pain or focal renal angle tenderness',
+          reason:
+            'Lower abdominal suprapubic tenderness favors cystitis/lower UTI over pyelonephritis.',
+        },
+      ],
+      finalReasonLessLikely:
+        'Upper tract involvement is not strongly supported by the available examination findings.',
+    },
+    {
+      diagnosis: 'Stroke',
+      whyPlausibleEarly:
+        'Acute confusion in an elderly patient can be caused by cerebrovascular disease.',
+      ruledOutByClues: [
+        {
+          clueOrder: 3,
+          evidence: 'no focal neurological deficit',
+          reason:
+            'Stroke is less likely without focal neurological signs.',
+        },
+        {
+          clueOrder: 4,
+          evidence: 'urinalysis demonstrates pyuria and bacteriuria',
+          reason:
+            'The investigation supports an infective delirium trigger.',
+        },
+      ],
+      finalReasonLessLikely:
+        'The presentation is better explained by infection-associated delirium.',
+    },
+    {
+      diagnosis: 'Asymptomatic bacteriuria',
+      whyPlausibleEarly:
+        'Bacteriuria is common in older adults and can be detected incidentally.',
+      ruledOutByClues: [
+        {
+          clueOrder: 0,
+          evidence: 'worsening confusion and reduced oral intake',
+          reason:
+            'The patient has an acute systemic clinical change rather than an incidental urine result.',
+        },
+        {
+          clueOrder: 1,
+          evidence: 'new urinary frequency',
+          reason:
+            'New urinary symptoms support symptomatic infection.',
+        },
+        {
+          clueOrder: 2,
+          evidence: 'fever and tachycardia',
+          reason:
+            'Systemic signs make asymptomatic bacteriuria less likely.',
+        },
+      ],
+      finalReasonLessLikely:
+        'This is symptomatic infection, not incidental bacteriuria alone.',
     },
   ],
 
@@ -344,140 +338,141 @@ const explanation = {
 // ─── Education ────────────────────────────────────────────────────────────────
 
 const educationForFrontend = {
-  title: 'Sickle Cell Disease',
+  title: 'Urinary Tract Infection',
 
   summary: {
     definition:
-      'Sickle cell disease is an inherited hemoglobinopathy caused by abnormal hemoglobin S, leading to red cell sickling, chronic hemolytic anemia, vaso-occlusion, and recurrent painful crises.',
+      'Urinary tract infection is infection of the urinary tract, most commonly caused by ascending bacteria such as Escherichia coli. In older adults it may present with atypical features such as delirium, falls, or functional decline.',
     highYieldTakeaway:
-      'Think sickle cell disease when a child has recurrent severe bone pain, anemia, jaundice, reticulocytosis, sickled red cells, and hemoglobin electrophoresis showing predominantly HbS with absent HbA.',
+      'Think UTI in an older adult with acute delirium plus urinary symptoms, fever, suprapubic tenderness, pyuria, and bacteriuria — but avoid treating asymptomatic bacteriuria without compatible symptoms.',
   },
 
   recognitionPattern: [
     {
-      pattern: 'Recurrent painful vaso-occlusive crises',
+      pattern: 'Atypical UTI presentation in older adults',
       whyItMatters:
-        'Vaso-occlusion causes severe pain in bones, back, chest, abdomen, or limbs and is the most common acute presentation.',
+        'Older adults may not report classic dysuria and can present with delirium, reduced intake, weakness, or falls.',
       progression:
-        'Trigger such as dehydration or infection → red cell sickling → microvascular obstruction → ischemic pain → inflammatory amplification.',
+        'Urinary infection → systemic inflammatory response → delirium, dehydration, functional decline, and possible sepsis.',
       discriminator:
-        'Recurrent severe bone pain with hemolysis strongly separates sickle cell crisis from isolated trauma or arthritis.',
+        'Delirium plus urinary symptoms and inflammatory signs supports infection rather than incidental bacteriuria.',
       commonTrap:
-        'Do not delay analgesia while waiting for confirmatory tests in a known or strongly suspected vaso-occlusive crisis.',
+        'Do not diagnose UTI from a positive urine dipstick alone in an older adult.',
     },
     {
-      pattern: 'Chronic hemolysis',
+      pattern: 'Lower urinary tract infection',
       whyItMatters:
-        'Sickled red cells are fragile and hemolyze, causing chronic anemia, jaundice, gallstones, and reticulocytosis.',
+        'Frequency, suprapubic tenderness, pyuria, nitrites, and bacteriuria support cystitis/lower UTI.',
       discriminator:
-        'Anemia with reticulocytosis and jaundice points toward hemolysis rather than marrow failure.',
+        'Absence of flank pain or costovertebral angle tenderness makes pyelonephritis less likely.',
       commonTrap:
-        'A low hemoglobin in sickle cell disease must be compared with baseline; a sudden drop suggests aplastic crisis, splenic sequestration, or acute hemolysis.',
+        'Foul-smelling urine alone is not enough to diagnose UTI.',
     },
     {
-      pattern: 'HbS predominance with absent HbA',
+      pattern: 'Culture-confirmed bacterial UTI',
       whyItMatters:
-        'Hemoglobin electrophoresis confirms the diagnosis and distinguishes sickle cell disease from sickle trait.',
+        'Urine culture identifies the organism and antibiotic sensitivities, especially important in older adults with comorbidity or recent antibiotic exposure.',
       discriminator:
-        'Sickle trait usually has substantial HbA, while sickle cell disease has absent or very low HbA depending on genotype.',
+        'E. coli is the most common pathogen in uncomplicated and many complicated UTIs.',
       commonTrap:
-        'A sickling screen alone is not enough for complete characterization; electrophoresis or HPLC is needed.',
+        'Do not ignore local resistance patterns or renal function when choosing antibiotics.',
     },
   ],
 
   keySymptoms: [
     {
-      symptom: 'Severe limb or back pain',
+      symptom: 'Acute confusion',
       significance:
-        'Typical of vaso-occlusive crisis due to microvascular obstruction in bone and marrow.',
+        'May represent delirium triggered by infection, dehydration, medication effects, or metabolic disturbance in older adults.',
     },
     {
-      symptom: 'Recurrent painful episodes',
+      symptom: 'Reduced oral intake',
       significance:
-        'Suggests a chronic inherited sickling disorder rather than a single acute orthopedic or infectious event.',
+        'May worsen dehydration and delirium and can accompany systemic infection.',
     },
     {
-      symptom: 'Yellow eyes',
+      symptom: 'Urinary frequency',
       significance:
-        'Suggests jaundice from chronic hemolysis.',
+        'Supports lower urinary tract involvement when new or clearly worse than baseline.',
     },
     {
-      symptom: 'Fever',
+      symptom: 'Absent dysuria',
       significance:
-        'May be a trigger for crisis or a sign of serious infection; children with sickle cell disease are functionally asplenic and high risk.',
+        'Does not exclude UTI in older adults, who may present atypically.',
     },
   ],
 
   keySigns: [
     {
-      finding: 'Pallor',
+      finding: 'Fever and tachycardia',
       significance:
-        'Reflects chronic anemia from hemolysis.',
+        'Support systemic infection rather than incidental bacteriuria.',
       discriminator:
-        'Anemia with reticulocytosis supports hemolysis rather than isolated inflammatory pain.',
+        'Systemic signs increase concern for clinically significant infection.',
     },
     {
-      finding: 'Jaundice',
+      finding: 'Suprapubic tenderness',
       significance:
-        'Reflects bilirubin production from chronic red cell breakdown.',
+        'Supports lower urinary tract inflammation.',
       discriminator:
-        'Jaundice plus bone pain suggests sickle cell disease over uncomplicated arthritis.',
+        'Flank tenderness would increase suspicion for pyelonephritis.',
     },
     {
-      finding: 'Diffuse long-bone tenderness',
+      finding: 'No focal neurological deficit',
       significance:
-        'Supports vaso-occlusive bone pain.',
-      discriminator:
-        'Absence of joint swelling or redness makes septic arthritis less likely.',
+        'Makes stroke less likely as the primary cause of acute confusion.',
+    },
+    {
+      finding: 'Mild dehydration',
+      significance:
+        'Common in elderly infection and may worsen delirium.',
     },
   ],
 
   examPearls: [
     {
       type: 'physical',
-      title: 'Pain without joint inflammation points to bone vaso-occlusion',
+      title: 'Delirium needs a trigger search',
       content:
-        'Severe limb pain with diffuse long-bone tenderness but no swollen red joint supports vaso-occlusive crisis rather than septic arthritis.',
+        'Acute confusion in an elderly patient should prompt evaluation for infection, dehydration, medication toxicity, metabolic disturbance, and neurological disease.',
       whyItMatters:
-        'It helps localize the process to bone and marrow ischemia rather than primary joint infection.',
+        'UTI is common, but it should not be assumed without compatible urinary or systemic evidence.',
       discriminator:
-        'Joint swelling, refusal to move a single joint, or marked focal warmth should trigger septic arthritis evaluation.',
+        'Urinary symptoms, suprapubic tenderness, fever, pyuria, and bacteriuria make UTI more likely.',
       trapAvoided:
-        'Do not dismiss fever in sickle cell disease; infection can coexist with vaso-occlusive crisis.',
+        'Avoid anchoring on a positive urine dipstick alone.',
     },
     {
       type: 'lab_reasoning',
-      title: 'Reticulocytosis shows marrow response to hemolysis',
+      title: 'Pyuria is supportive, not diagnostic alone',
       content:
-        'A low hemoglobin with reticulocytosis suggests the marrow is responding to red cell destruction.',
+        'Pyuria and bacteriuria support UTI only when symptoms or systemic signs indicate infection.',
       whyItMatters:
-        'This supports chronic hemolytic anemia and helps separate uncomplicated vaso-occlusive crisis from aplastic crisis.',
+        'Asymptomatic bacteriuria is common in older adults and does not always require antibiotics.',
       discriminator:
-        'A low reticulocyte count in sickle cell disease is dangerous and suggests aplastic crisis, often from parvovirus B19.',
+        'Fever, new urinary symptoms, and delirium strengthen the diagnosis of true infection.',
       trapAvoided:
-        'Do not treat all anemia in sickle cell disease the same; reticulocyte count changes the differential.',
+        'Do not overtreat colonization or asymptomatic bacteriuria.',
     },
     {
       type: 'lab_reasoning',
-      title: 'Electrophoresis separates disease from trait',
+      title: 'Culture turns suspicion into targeted therapy',
       content:
-        'Predominantly HbS with absent HbA confirms sickle cell disease rather than sickle trait.',
+        'Urine culture identifies the organism and sensitivities, allowing antibiotics to be narrowed.',
       whyItMatters:
-        'This determines lifelong risk, counseling, follow-up, and preventive care.',
-      discriminator:
-        'Sickle trait usually has both HbA and HbS, with HbA predominating.',
-      trapAvoided:
-        'Do not call someone sickle cell disease based only on a positive sickling screen.',
+        'Older adults are more likely to have resistant organisms, comorbidity, or renal impairment affecting antibiotic choice.',
+      managementImplication:
+        'Review culture results and de-escalate antibiotics when possible.',
     },
     {
       type: 'MNEMONIC',
-      title: 'VOC trigger checklist',
+      title: 'ELDER UTI checklist',
       content:
-        'SICKLE — Stress or infection; Inadequate hydration; Cold exposure; Low oxygen; Exertion; missed prevention.',
+        'ELDER — Elderly delirium; Lower urinary symptoms; Dipstick supports; Evaluate sepsis; Review culture.',
       whyItMatters:
-        'These triggers help identify why a vaso-occlusive crisis occurred and how to prevent recurrence.',
+        'Keeps diagnosis anchored on clinical infection plus urine evidence.',
       discriminator:
-        'Trigger recognition supports crisis physiology when paired with recurrent severe bone pain and hemolysis.',
+        'The key separator is symptomatic infection rather than incidental bacteriuria.',
       trapAvoided:
         'Mnemonic content belongs here only; scoringSystems is intentionally reserved for formal tools.',
     },
@@ -487,227 +482,220 @@ const educationForFrontend = {
 
   investigations: [
     {
-      test: 'Full blood count',
+      test: 'Urinalysis',
       interpretation:
-        'Typically shows chronic anemia; compare hemoglobin with the patient’s baseline.',
+        'Nitrites, leukocyte esterase, pyuria, and bacteriuria support UTI when symptoms or systemic signs are present.',
       whyItMatters:
-        'A sudden fall may indicate aplastic crisis, splenic sequestration, acute hemolysis, or bleeding.',
+        'Rapidly supports diagnosis but must be interpreted clinically.',
     },
     {
-      test: 'Reticulocyte count',
+      test: 'Urine culture',
       interpretation:
-        'Usually elevated in chronic hemolysis. Low reticulocytes suggest aplastic crisis.',
+        'Identifies the causative organism and antibiotic sensitivities.',
       whyItMatters:
-        'Separates compensated hemolysis from marrow suppression.',
+        'Guides targeted therapy, especially in older adults or suspected complicated infection.',
     },
     {
-      test: 'Peripheral blood film',
+      test: 'Full blood count and inflammatory markers',
       interpretation:
-        'May show sickled red cells, target cells, polychromasia, and features of hemolysis.',
+        'May show leukocytosis or raised inflammatory markers but can be nonspecific.',
       whyItMatters:
-        'Provides rapid morphologic support for sickle cell disease.',
+        'Helps assess systemic illness and alternative sources of infection.',
     },
     {
-      test: 'Hemoglobin electrophoresis or HPLC',
+      test: 'Renal function and electrolytes',
       interpretation:
-        'Shows HbS pattern and distinguishes sickle cell disease from sickle trait and other hemoglobinopathies.',
+        'Assesses dehydration, kidney injury, and safe antibiotic dosing.',
       whyItMatters:
-        'This is the diagnostic confirmation test.',
+        'Older adults are vulnerable to AKI and medication toxicity.',
     },
     {
-      test: 'Infection screen when febrile',
+      test: 'Blood cultures',
       interpretation:
-        'Blood cultures, urine testing, chest assessment, malaria testing where relevant, and targeted imaging may be needed.',
+        'Consider if febrile, septic, hypotensive, or clinically unstable.',
       whyItMatters:
-        'Children with sickle cell disease are at increased risk of serious bacterial infection.',
+        'Detects bacteremia and supports escalation decisions.',
     },
     {
-      test: 'Chest assessment',
+      test: 'Imaging',
       interpretation:
-        'Assess for chest pain, cough, hypoxia, infiltrates, or respiratory distress.',
+        'Renal tract imaging is considered for obstruction, recurrent infection, poor response, stones, or suspected pyelonephritis complications.',
       whyItMatters:
-        'Acute chest syndrome is a major life-threatening complication and may initially resemble pneumonia.',
+        'Identifies complicated UTI or obstruction requiring source control.',
     },
   ],
 
   pitfalls: [
     {
-      pitfall: 'Delaying analgesia during vaso-occlusive crisis',
+      pitfall: 'Treating asymptomatic bacteriuria',
       consequence:
-        'Uncontrolled pain worsens distress, sympathetic stress, and care experience; analgesia should be prompt and adequate.',
+        'Unnecessary antibiotics increase resistance, adverse effects, and C. difficile risk.',
     },
     {
-      pitfall: 'Ignoring fever',
+      pitfall: 'Assuming absence of dysuria excludes UTI',
       consequence:
-        'Serious bacterial infection can progress rapidly because of functional asplenia.',
+        'Older adults may present atypically with delirium or functional decline.',
     },
     {
-      pitfall: 'Missing acute chest syndrome',
+      pitfall: 'Ignoring sepsis risk',
       consequence:
-        'Respiratory symptoms or hypoxia during crisis can deteriorate quickly and require urgent escalation.',
+        'Elderly patients can deteriorate quickly and may need early escalation.',
     },
     {
-      pitfall: 'Assuming all anemia is baseline',
+      pitfall: 'Forgetting medication and metabolic causes of delirium',
       consequence:
-        'Aplastic crisis, splenic sequestration, or acute hemolysis may be missed.',
+        'Delirium may be multifactorial; missing other triggers delays recovery.',
     },
     {
-      pitfall: 'Overhydrating aggressively',
+      pitfall: 'Not reviewing culture sensitivities',
       consequence:
-        'Excess fluids may worsen pulmonary complications; hydration should be careful and clinically guided.',
+        'Broad or ineffective antibiotics may be continued unnecessarily.',
     },
   ],
 
   managementOverview: [
     {
-      step: 'Assess severity and complications',
+      step: 'Confirm symptomatic infection',
       rationale:
-        'Check pain severity, oxygen saturation, fever, respiratory symptoms, hydration status, neurological symptoms, and baseline hemoglobin if known.',
+        'Use urinary symptoms, systemic signs, examination, urinalysis, and culture rather than urine dipstick alone.',
     },
     {
-      step: 'Give prompt analgesia',
+      step: 'Assess delirium and sepsis severity',
       rationale:
-        'Vaso-occlusive crisis is painful and should be treated early with appropriate stepwise analgesia, including opioids when indicated.',
+        'Check mental state, hydration, vital signs, oxygenation, lactate if indicated, and organ dysfunction.',
     },
     {
-      step: 'Maintain careful hydration',
+      step: 'Start empiric antibiotics when UTI is clinically likely',
       rationale:
-        'Dehydration promotes sickling, but excessive fluids can worsen respiratory complications.',
+        'Choose treatment based on severity, local guidelines, renal function, allergy history, and resistance risk.',
     },
     {
-      step: 'Treat infection risk',
+      step: 'Hydrate carefully',
       rationale:
-        'Fever in sickle cell disease needs urgent assessment and empiric antibiotics depending on severity and local protocols.',
+        'Correct dehydration while monitoring for fluid overload in frail or cardiac patients.',
     },
     {
-      step: 'Give oxygen only if hypoxic',
+      step: 'Review culture and narrow therapy',
       rationale:
-        'Hypoxia worsens sickling; oxygen is indicated when saturation is low or acute chest syndrome is suspected.',
+        'Targeted therapy reduces resistance and adverse effects.',
     },
     {
-      step: 'Consider transfusion for severe complications',
+      step: 'Address delirium care',
       rationale:
-        'Simple or exchange transfusion may be needed for severe acute chest syndrome, stroke, severe anemia, or selected high-risk complications.',
+        'Reorientation, mobilization, hydration, sleep support, sensory aids, and medication review improve recovery.',
     },
     {
-      step: 'Long-term prevention',
+      step: 'Look for complications or alternative sources',
       rationale:
-        'Hydroxyurea, vaccination, penicillin prophylaxis in children, folate support where indicated, malaria prevention where relevant, and specialist follow-up reduce morbidity.',
+        'Persistent fever, flank pain, obstruction, recurrent infection, or poor response should prompt broader assessment.',
     },
   ],
 
   differentialDistinguishers: [
     {
-      diagnosis: 'Acute osteomyelitis',
+      diagnosis: 'Delirium secondary to dehydration',
       whyConfused:
-        'Both can cause fever and bone pain, and osteomyelitis is more common in sickle cell disease.',
+        'Reduced intake and confusion are common in elderly dehydration.',
       distinguishingPoint:
-        'Osteomyelitis is more focal and infective; vaso-occlusive crisis is often recurrent, multifocal, and triggered by dehydration or infection.',
+        'UTI is supported by urinary symptoms, fever, suprapubic tenderness, pyuria, bacteriuria, and positive culture.',
       keySeparator:
-        'Recurrent crises plus HbS-confirmed disease support vaso-occlusion.',
+        'Infection evidence identifies the precipitating cause.',
       classicTrap:
-        'Do not assume it is only crisis if fever, focal tenderness, or persistent inflammatory markers suggest osteomyelitis.',
+        'Treating dehydration alone while missing infection.',
     },
     {
-      diagnosis: 'Septic arthritis',
+      diagnosis: 'Community-acquired pneumonia',
       whyConfused:
-        'Fever and limb pain can mimic joint infection.',
+        'Pneumonia may present with delirium and fever in older adults.',
       distinguishingPoint:
-        'Septic arthritis usually causes a hot swollen joint with severe pain on movement.',
+        'Respiratory symptoms, hypoxia, crackles, or chest imaging would support pneumonia.',
       keySeparator:
-        'Diffuse bone tenderness without joint swelling supports vaso-occlusive pain.',
+        'This case has a urinary symptom cluster and culture-confirmed E. coli UTI.',
+    },
+    {
+      diagnosis: 'Acute pyelonephritis',
+      whyConfused:
+        'Fever and UTI findings may indicate upper tract infection.',
+      distinguishingPoint:
+        'Flank pain, costovertebral angle tenderness, vomiting, or marked systemic illness favors pyelonephritis.',
+      keySeparator:
+        'Suprapubic tenderness without flank signs favors lower UTI.',
+    },
+    {
+      diagnosis: 'Stroke',
+      whyConfused:
+        'Acute confusion in an elderly patient may be neurological.',
+      distinguishingPoint:
+        'Focal neurological deficits, acute speech disturbance, unilateral weakness, or visual symptoms support stroke.',
+      keySeparator:
+        'No focal deficit and strong infection evidence favor delirium from UTI.',
+    },
+    {
+      diagnosis: 'Asymptomatic bacteriuria',
+      whyConfused:
+        'Bacteriuria is common in elderly patients.',
+      distinguishingPoint:
+        'Asymptomatic bacteriuria lacks urinary symptoms or systemic signs attributable to infection.',
+      keySeparator:
+        'This patient has delirium, fever, urinary frequency, suprapubic tenderness, and culture evidence.',
       classicTrap:
-        'Missing septic arthritis can destroy a joint, so focal joint findings need urgent workup.',
-    },
-    {
-      diagnosis: 'Acute leukemia',
-      whyConfused:
-        'Bone pain, pallor, and anemia occur in leukemia.',
-      distinguishingPoint:
-        'Leukemia often shows marrow failure, bruising, infections, lymphadenopathy, hepatosplenomegaly, or blasts.',
-      keySeparator:
-        'Reticulocytosis, sickled cells, and HbS predominance point to sickle cell disease.',
-      classicTrap:
-        'Do not ignore atypical blood film features or pancytopenia.',
-    },
-    {
-      diagnosis: 'Juvenile idiopathic arthritis',
-      whyConfused:
-        'A child with limb pain may be mislabelled as inflammatory joint disease.',
-      distinguishingPoint:
-        'JIA causes chronic joint swelling, stiffness, and restricted movement.',
-      keySeparator:
-        'Acute severe bone pain with hemolysis and HbS pattern supports sickle cell crisis.',
-    },
-    {
-      diagnosis: 'Generic hemolytic anemia',
-      whyConfused:
-        'Jaundice, anemia, and reticulocytosis indicate hemolysis.',
-      distinguishingPoint:
-        'Sickle cell disease adds vaso-occlusive pain and HbS predominance.',
-      keySeparator:
-        'Electrophoresis confirms the specific hemoglobinopathy.',
+        'Overtreating bacteriuria when no symptoms are present.',
     },
   ],
 
   complications: [
     {
-      complication: 'Acute chest syndrome',
+      complication: 'Delirium and functional decline',
       whyItMatters:
-        'A major cause of morbidity and mortality; suspect with chest pain, cough, fever, hypoxia, or new infiltrate.',
+        'UTI can precipitate acute cognitive and functional deterioration in older adults.',
     },
     {
-      complication: 'Stroke',
+      complication: 'Sepsis',
       whyItMatters:
-        'Children with sickle cell disease are at increased risk of ischemic stroke and need urgent evaluation of neurological symptoms.',
+        'Older adults can progress rapidly to hypotension, organ dysfunction, or bacteremia.',
     },
     {
-      complication: 'Splenic sequestration',
+      complication: 'Acute kidney injury',
       whyItMatters:
-        'Can cause sudden severe anemia and shock, especially in young children.',
+        'Dehydration, infection, and nephrotoxic medications increase AKI risk.',
     },
     {
-      complication: 'Aplastic crisis',
+      complication: 'Pyelonephritis',
       whyItMatters:
-        'Often triggered by parvovirus B19 and presents with sudden anemia and low reticulocyte count.',
+        'Ascending infection can involve the kidneys and require escalation.',
     },
     {
-      complication: 'Severe infection',
+      complication: 'Recurrent UTI',
       whyItMatters:
-        'Functional asplenia increases risk of encapsulated bacterial infection.',
-    },
-    {
-      complication: 'Chronic organ damage',
-      whyItMatters:
-        'Repeated vaso-occlusion can damage kidneys, lungs, brain, bones, and eyes over time.',
+        'Recurrent infection should prompt assessment for urinary retention, stones, atrophic vaginitis, catheter use, or structural abnormality.',
     },
   ],
 
   recallPrompts: [
     {
-      prompt: 'What confirms sickle cell disease rather than sickle trait?',
+      prompt: 'Why can UTI present atypically in elderly patients?',
       answer:
-        'Hemoglobin electrophoresis or HPLC showing predominantly HbS with absent or very low HbA supports sickle cell disease rather than trait.',
+        'Older adults may have blunted local symptoms and present with delirium, reduced intake, falls, weakness, or functional decline.',
     },
     {
-      prompt: 'What causes pain in vaso-occlusive crisis?',
+      prompt: 'Why should asymptomatic bacteriuria not be treated routinely?',
       answer:
-        'Sickled red cells obstruct small blood vessels, causing tissue ischemia and inflammatory pain, especially in bone and marrow.',
+        'Because bacteriuria is common in older adults and unnecessary antibiotics cause resistance, adverse effects, and C. difficile risk without benefit.',
     },
     {
-      prompt: 'Why is reticulocytosis expected in sickle cell disease?',
+      prompt: 'What urine findings support UTI?',
       answer:
-        'Chronic hemolysis stimulates the marrow to increase red cell production, raising the reticulocyte count.',
+        'Positive nitrites, leukocyte esterase, pyuria, bacteriuria, and a compatible urine culture support UTI when symptoms or systemic signs are present.',
     },
     {
-      prompt: 'What complications must be screened for during a painful crisis?',
+      prompt: 'What features would suggest pyelonephritis rather than lower UTI?',
       answer:
-        'Acute chest syndrome, infection, severe anemia, splenic sequestration, stroke symptoms, and dehydration should be assessed.',
+        'Flank pain, costovertebral angle tenderness, vomiting, higher fever, or more severe systemic illness suggest pyelonephritis.',
     },
     {
-      prompt: 'Name common triggers for vaso-occlusive crisis.',
+      prompt: 'What should be assessed in an elderly patient with UTI-associated delirium?',
       answer:
-        'Dehydration, infection, cold exposure, hypoxia, physical stress, and sometimes missed preventive care can trigger crises.',
+        'Assess sepsis severity, hydration, renal function, medications, alternative infection sources, and delirium safety risks.',
     },
   ],
 
@@ -717,21 +705,20 @@ const educationForFrontend = {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const canonicalName = 'sickle cell disease';
-  const displayLabel = 'Sickle Cell Disease';
+  const canonicalName = 'urinary tract infection';
+  const displayLabel = 'Urinary Tract Infection';
+  const caseTitle = 'Urinary Tract Infection in an Elderly Patient';
 
   const normalizedTerms = [
     canonicalName,
     displayLabel,
-    'sickle cell anaemia',
-    'sickle cell anemia',
-    'sickle cell disease vaso occlusive crisis',
-    'vaso occlusive crisis',
-    'sickle cell crisis',
-    'hbss disease',
+    'uti',
+    'urinary infection',
+    'lower urinary tract infection',
+    'cystitis',
   ].map(normalizeClinicalText);
 
-  let registry = await prisma.diagnosisRegistry.findFirst({
+  const registry = await prisma.diagnosisRegistry.findFirst({
     where: {
       OR: [
         { canonicalNormalized: { in: normalizedTerms } },
@@ -751,50 +738,16 @@ async function main() {
       canonicalNormalized: true,
       displayLabel: true,
       active: true,
+      status: true,
+      isPlayable: true,
+      isGeneratable: true,
     },
   });
 
   if (!registry) {
-    registry = await prisma.diagnosisRegistry.create({
-      data: {
-        canonicalName,
-        canonicalNormalized: normalizeClinicalText(canonicalName),
-        displayLabel,
-        active: true,
-        status: 'ACTIVE',
-        isDescriptive: false,
-        isCompositional: false,
-        searchPriority: 0,
-        category: 'Hematology',
-        specialty: 'Hematology',
-        subspecialty: 'Hemoglobinopathy',
-        bodySystem: 'Hematologic',
-        organSystem: 'Blood',
-        difficultyBand: 'BASIC',
-        rarityBand: 'COMMON',
-        clinicalSetting: 'EMERGENCY',
-        ageGroup: 'PEDIATRIC',
-        urgencyLevel: 'URGENT',
-        isPlayable: true,
-        isGeneratable: true,
-        preferredClueTypes: ['history', 'vital', 'exam', 'lab', 'investigation'],
-        onboardingStatus: 'READY_FOR_REVIEW',
-        activationReviewedAt: now,
-        notes:
-          'Seeded from flagship Sickle Cell Disease vaso-occlusive crisis case. Registry was created because no existing active diagnosis was found.',
-      },
-      select: {
-        id: true,
-        canonicalName: true,
-        canonicalNormalized: true,
-        displayLabel: true,
-        active: true,
-      },
-    });
-
-    console.log('Created DiagnosisRegistry entry for Sickle Cell Disease', {
-      registryId: registry.id,
-    });
+    throw new Error(
+      'Cannot seed elderly UTI case: existing Urinary Tract Infection registry entry was not found. Do not create a duplicate elderly-specific registry.',
+    );
   }
 
   const education = await prisma.diagnosisEducation.upsert({
@@ -862,7 +815,7 @@ async function main() {
   });
 
   const history =
-    clues.find((clue) => clue.type === 'history')?.value ?? displayLabel;
+    clues.find((clue) => clue.type === 'history')?.value ?? caseTitle;
 
   const symptoms = clues
     .filter((clue) => clue.type === 'symptom')
@@ -871,7 +824,7 @@ async function main() {
   const existingCases = await prisma.case.findMany({
     where: {
       diagnosisRegistryId: registry.id,
-      proposedDiagnosisText: { in: [displayLabel, registry.displayLabel] },
+      title: caseTitle,
     },
     orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
     select: {
@@ -893,7 +846,7 @@ async function main() {
 
   if (!reusableCase && scheduledDuplicate) {
     throw new Error(
-      `Cannot seed ${displayLabel}: a scheduled case already exists for this registry (${scheduledDuplicate.id}, ${scheduledDuplicate.title}). Refusing to create a duplicate flagship inventory case.`,
+      `Cannot seed ${caseTitle}: a scheduled case already exists for this case variant (${scheduledDuplicate.id}, ${scheduledDuplicate.title}). Refusing to create a duplicate flagship inventory case.`,
     );
   }
 
@@ -904,11 +857,11 @@ async function main() {
     await findAvailableInventoryPlaceholderDate({
       preferredDate: inventoryPlaceholderDate,
       reusableCaseId: reusableCase?.id,
-      displayLabel,
+      displayLabel: caseTitle,
     });
 
   const caseData = {
-    title: displayLabel,
+    title: caseTitle,
     publicNumber,
     date: assignedInventoryPlaceholderDate,
     difficulty: 'medium',
@@ -926,7 +879,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Seeded flagship Sickle Cell Disease vaso-occlusive crisis inventory case. Registry was looked up first and created only if missing.',
+      'Seeded elderly-presentation UTI flagship inventory case linked to existing Urinary Tract Infection registry. No duplicate elderly-specific registry was created.',
   };
 
   const seededCase = reusableCase
@@ -943,8 +896,7 @@ async function main() {
   const revisionData = {
     source: 'MANUAL' as const,
     publishTrack: 'DAILY' as const,
-    title: displayLabel,
-    publicNumber,
+    title: caseTitle,
     date: assignedInventoryPlaceholderDate,
     difficulty: 'medium',
     history,
@@ -958,7 +910,7 @@ async function main() {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Frontend-aligned flagship Sickle Cell Disease inventory revision using registry lookup/create-if-missing and duplicate-safe case reuse.',
+      'Frontend-aligned flagship elderly UTI inventory revision using existing registry lookup and duplicate-safe case reuse.',
   };
 
   const revision = reusableCase?.currentRevisionId
@@ -996,20 +948,20 @@ async function main() {
       source: 'MANUAL',
       publishTrack: 'DAILY',
       outcome: 'PASSED',
-      validatorVersion: 'flagship-human-review:sickle-cell-disease-v1',
+      validatorVersion: 'flagship-human-review:elderly-uti-v1',
       summary: {
         contentTier: 'FLAGSHIP',
         seedVersion,
         humanReviewed: true,
         note:
-          'Manual frontend-aligned Sickle Cell Disease vaso-occlusive crisis inventory case seeded with registry lookup/create-if-missing, supported clue types, mnemonic in examPearls, and duplicate-safe case reuse.',
+          'Manual frontend-aligned elderly UTI case seeded against existing Urinary Tract Infection registry with supported clue types and duplicate-safe case reuse.',
       },
       findings: [],
       completedAt: now,
     },
   });
 
-  console.log('Seeded frontend-aligned Sickle Cell Disease:', {
+  console.log('Seeded frontend-aligned elderly UTI case:', {
     registryId: registry.id,
     registryDisplayLabel: registry.displayLabel,
     caseId: seededCase.id,

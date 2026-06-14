@@ -60,6 +60,7 @@ describe('diagnosis registry status helpers', () => {
     expect(getDictionaryVisibleDiagnosisRegistryWhere()).toEqual({
       status: 'ACTIVE',
       active: true,
+      isPlayable: true,
     });
   });
 });

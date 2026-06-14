@@ -16,6 +16,12 @@ describe('TargetedCaseGenerationService', () => {
           },
         ]),
       },
+      aiDraftRevisionAudit: {
+        create: jest.fn().mockResolvedValue({
+          id: 'audit-1',
+          reviewStatus: 'PENDING_REVIEW',
+        }),
+      },
     };
     const caseGenerator = {
       generateBatch: jest.fn().mockResolvedValue({
@@ -71,7 +77,7 @@ describe('TargetedCaseGenerationService', () => {
         difficulty: 'medium',
         registryFirst: true,
         diagnosisRegistryIds: [diagnosisRegistryId],
-        targetedCase: {
+        targetedCase: expect.objectContaining({
           teachingUnitIds: ['migratory_rlq_pain'],
           mimics: [
             {
@@ -80,7 +86,7 @@ describe('TargetedCaseGenerationService', () => {
             },
           ],
           clueRevealStrategy: 'late_discriminator',
-        },
+        }),
       }),
     );
     expect(result.generatedCase?.editorialStatus).toBe('DRAFT');
@@ -139,5 +145,78 @@ describe('TargetedCaseGenerationService', () => {
         },
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('generates targeted discriminator cases with draft audit governance', async () => {
+    const { caseGenerator, prisma, service } = buildService();
+    const target = {
+      caseId: '33333333-3333-4333-8333-333333333333',
+      diagnosisRegistryId,
+      mimicDiagnosisId,
+      mimicName: 'Gastroenteritis',
+      discriminator: 'Migratory right lower quadrant pain',
+      generationIntent: 'heuristic_only_repair' as const,
+      learnerRisk: 'Learners may keep gastroenteritis alive too long.',
+      editorialReason: 'Heuristic-only separation needs a governed draft.',
+    };
+
+    const result = await service.generateTargetedDiscriminatorCase({
+      diagnosisRegistryId,
+      payload: { target },
+      userId: 'user-1',
+    });
+
+    expect(caseGenerator.generateBatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetedCase: expect.objectContaining({
+          discriminatorTarget: target,
+          clueRevealStrategy: 'late_discriminator',
+        }),
+      }),
+    );
+    expect(prisma.aiDraftRevisionAudit.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          actionType: 'generate_targeted_discriminator_case',
+          reviewStatus: 'PENDING_REVIEW',
+          createdByUserId: 'user-1',
+        }),
+      }),
+    );
+    expect(result.audit.reviewStatus).toBe('PENDING_REVIEW');
+  });
+
+  it('creates reviewable clue revision proposals without mutating cases', async () => {
+    const { prisma, service } = buildService();
+    const target = {
+      caseId: '33333333-3333-4333-8333-333333333333',
+      diagnosisRegistryId,
+      mimicName: 'GERD',
+      discriminator: 'reflux and recumbency pattern',
+      sourceClueOrder: 3,
+      generationIntent: 'missing_discriminator_case' as const,
+    };
+
+    const result = await service.generateClueRevisionProposal({
+      diagnosisRegistryId,
+      payload: {
+        target,
+        existingClue: 'Upper abdominal pain after meals.',
+      },
+      userId: 'user-1',
+    });
+
+    expect(result.proposal.proposedClue).toContain(
+      'reflux and recumbency pattern',
+    );
+    expect(prisma.aiDraftRevisionAudit.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          actionType: 'generate_clue_revision_proposal',
+          affectedArtifactType: 'CASE_CLUE_REVISION_PROPOSAL',
+          reviewStatus: 'PENDING_REVIEW',
+        }),
+      }),
+    );
   });
 });

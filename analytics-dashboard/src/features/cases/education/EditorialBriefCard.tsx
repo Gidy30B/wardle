@@ -10,11 +10,16 @@ import type {
 } from '../../../api/admin';
 import {
   CompactMetricGrid,
+  CoverageStateStrip,
+  EditorialEntity,
+  EmbeddedActionBar,
   EmptyGuidance,
-  InlineReviewBar,
   PrototypeSectionHeader,
+  ReasoningThread,
+  SecondaryActionDisclosure,
+  StreamDisclosure,
+  WorkflowStateInline,
 } from '../../editorial/workspace/EditorialPrimitives';
-import StatusBadge from '../../../components/ui/StatusBadge';
 
 type Props = {
   briefResponse: DiagnosisEditorialBriefResponse | null;
@@ -194,104 +199,146 @@ function BriefSummary({
   reviewDisabledReason: string;
   onReview: (action: DiagnosisEditorialBriefReviewAction) => void;
 }) {
+  const primary = primaryBriefAction(brief);
+
   return (
-    <div className="mt-4 space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge
-          status={formatLabel(brief.status)}
-          tone={statusTone(brief.status)}
-        />
-        <StatusBadge status={`v${brief.version}`} tone="neutral" />
-        <StatusBadge
-          status={
-            isGenerationActive(brief.status)
-              ? 'Drives generation'
-              : 'Not used for generation'
-          }
-          tone={isGenerationActive(brief.status) ? 'success' : 'neutral'}
-        />
-      </div>
-
-      <p className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 px-3 py-2 text-sm leading-6 text-slate-300">
-        {brief.summary}
-      </p>
-
-      <div className="grid gap-2 md:grid-cols-2">
-        <ListBlock label="Learning goals" values={jsonList(brief.learningGoals)} />
-        <ListBlock
-          label="Difficulty guidance"
-          values={jsonList(brief.difficultyGuidance)}
-        />
-        <ListBlock
-          label="Education guidance"
-          values={jsonList(brief.educationGuidance)}
-        />
-        <ListBlock
-          label="Case generation guidance"
-          values={jsonList(brief.caseGenerationGuidance)}
-        />
-      </div>
-
-      <CompactMetricGrid
+    <EditorialEntity
+      eyebrow="Editorial intent document"
+      title="Unified brief"
+      subtitle={brief.summary}
+      tone={isGenerationActive(brief.status) ? 'success' : 'warning'}
+      state={
+        <>
+          <WorkflowStateInline
+            label={formatLabel(brief.status)}
+            tone={statusTone(brief.status)}
+          />
+          <WorkflowStateInline label={`v${brief.version}`} tone="neutral" />
+        </>
+      }
+      action={
+        primary ? (
+          <ReviewButton
+            label={primary.label}
+            action={primary.action}
+            disabled={disabled || !canReview || primary.disabled}
+            title={!canReview ? reviewDisabledReason : undefined}
+            onReview={onReview}
+          />
+        ) : null
+      }
+    >
+      <ReasoningThread
         items={[
           {
-            label: 'Required teaching rules',
-            value: jsonList(brief.requiredTeachingRuleIds).length,
-            tone: jsonList(brief.requiredTeachingRuleIds).length
-              ? 'success'
-              : 'warning',
+            label: 'Learning objectives',
+            detail: listSentence(jsonList(brief.learningGoals)),
+            tone: jsonList(brief.learningGoals).length ? 'success' : 'warning',
           },
           {
-            label: 'Required mimics',
-            value: jsonList(brief.requiredMimicIds).length,
-            tone: jsonList(brief.requiredMimicIds).length ? 'info' : 'neutral',
+            label: 'Teaching focus',
+            detail: listSentence(jsonList(brief.educationGuidance)),
+            tone: jsonList(brief.educationGuidance).length ? 'success' : 'warning',
           },
           {
-            label: 'Pitfalls',
-            value: jsonList(brief.requiredPitfalls).length,
-            tone: jsonList(brief.requiredPitfalls).length
-              ? 'warning'
-              : 'neutral',
+            label: 'Learner traps',
+            detail: listSentence(jsonList(brief.requiredPitfalls)),
+            tone: jsonList(brief.requiredPitfalls).length ? 'warning' : 'neutral',
           },
           {
-            label: 'Generation state',
-            value: isGenerationActive(brief.status) ? 'Active' : 'Draft',
-            tone: isGenerationActive(brief.status) ? 'success' : 'warning',
+            label: 'Scope',
+            detail: listSentence(jsonList(brief.difficultyGuidance)),
+            tone: jsonList(brief.difficultyGuidance).length ? 'info' : 'neutral',
           },
         ]}
       />
-
-      <InlineReviewBar note="Brief decisions shape draft generation only; publishing remains a separate editorial step.">
-        <ReviewButton
-          label="Approve"
-          action="approve"
-          disabled={disabled || !canReview || brief.status === 'APPROVED'}
-          title={!canReview ? reviewDisabledReason : undefined}
-          onReview={onReview}
+      <div className="mt-3 grid gap-2 lg:grid-cols-2">
+        <CoverageStateStrip
+          items={[
+            {
+              label: 'Cases',
+              value: jsonList(brief.caseGenerationGuidance).length
+                ? 'Guided'
+                : 'Missing',
+              tone: jsonList(brief.caseGenerationGuidance).length
+                ? 'success'
+                : 'warning',
+            },
+            {
+              label: 'Distinctions',
+              value: jsonList(brief.requiredTeachingRuleIds).length,
+              tone: jsonList(brief.requiredTeachingRuleIds).length
+                ? 'success'
+                : 'warning',
+            },
+            {
+              label: 'Differential map',
+              value: jsonList(brief.graphGuidance).length ? 'Guided' : 'Missing',
+              tone: jsonList(brief.graphGuidance).length ? 'success' : 'warning',
+            },
+          ]}
         />
-        <ReviewButton
-          label="Activate"
-          action="activate"
-          disabled={disabled || !canReview || brief.status === 'ACTIVE'}
-          title={!canReview ? reviewDisabledReason : undefined}
-          onReview={onReview}
+        <CompactMetricGrid
+          items={[
+            {
+              label: 'Required mimics',
+              value: jsonList(brief.requiredMimicIds).length,
+              tone: jsonList(brief.requiredMimicIds).length ? 'info' : 'neutral',
+            },
+            {
+              label: 'Pitfalls',
+              value: jsonList(brief.requiredPitfalls).length,
+              tone: jsonList(brief.requiredPitfalls).length
+                ? 'warning'
+                : 'neutral',
+            },
+          ]}
         />
-        <ReviewButton
-          label="Needs review"
-          action="needs_review"
-          disabled={disabled || !canReview || brief.status === 'NEEDS_REVIEW'}
-          title={!canReview ? reviewDisabledReason : undefined}
-          onReview={onReview}
-        />
-        <ReviewButton
-          label="Deprecate"
-          action="deprecate"
-          disabled={disabled || !canReview || brief.status === 'DEPRECATED'}
-          title={!canReview ? reviewDisabledReason : undefined}
-          onReview={onReview}
-        />
-      </InlineReviewBar>
-    </div>
+      </div>
+      <EmbeddedActionBar note="Brief decisions shape draft generation only; publishing remains separate.">
+        <SecondaryActionDisclosure>
+          <ReviewButton
+            label="Approve"
+            action="approve"
+            disabled={disabled || !canReview || brief.status === 'APPROVED'}
+            title={!canReview ? reviewDisabledReason : undefined}
+            onReview={onReview}
+          />
+          <ReviewButton
+            label="Activate"
+            action="activate"
+            disabled={disabled || !canReview || brief.status === 'ACTIVE'}
+            title={!canReview ? reviewDisabledReason : undefined}
+            onReview={onReview}
+          />
+          <ReviewButton
+            label="Needs review"
+            action="needs_review"
+            disabled={disabled || !canReview || brief.status === 'NEEDS_REVIEW'}
+            title={!canReview ? reviewDisabledReason : undefined}
+            onReview={onReview}
+          />
+          <ReviewButton
+            label="Deprecate"
+            action="deprecate"
+            disabled={disabled || !canReview || brief.status === 'DEPRECATED'}
+            title={!canReview ? reviewDisabledReason : undefined}
+            onReview={onReview}
+          />
+        </SecondaryActionDisclosure>
+      </EmbeddedActionBar>
+      <StreamDisclosure
+        title="Full intent details"
+        summary="Mimics, investigations, management anchors, guidance, and low-priority metadata"
+      >
+        <div className="grid gap-2 md:grid-cols-2">
+          <ListBlock label="Required mimics" values={jsonList(brief.requiredMimicIds)} />
+          <ListBlock label="Key investigations" values={jsonList(brief.keyInvestigations)} />
+          <ListBlock label="Management anchors" values={jsonList(brief.managementAnchors)} />
+          <ListBlock label="Graph guidance" values={jsonList(brief.graphGuidance)} />
+        </div>
+      </StreamDisclosure>
+    </EditorialEntity>
   );
 }
 
@@ -545,6 +592,28 @@ function ReviewButton({
       {label}
     </button>
   );
+}
+
+function primaryBriefAction(brief: DiagnosisEditorialBrief): {
+  label: string;
+  action: DiagnosisEditorialBriefReviewAction;
+  disabled: boolean;
+} | null {
+  if (brief.status === 'DRAFT' || brief.status === 'NEEDS_REVIEW') {
+    return { label: 'Approve', action: 'approve', disabled: false };
+  }
+  if (brief.status === 'APPROVED') {
+    return { label: 'Activate', action: 'activate', disabled: false };
+  }
+  return null;
+}
+
+function listSentence(values: string[]) {
+  if (!values.length) {
+    return 'Not defined yet.';
+  }
+  const visible = values.slice(0, 3).join(', ');
+  return values.length > 3 ? `${visible} +${values.length - 3}` : visible;
 }
 
 function toForm(brief: DiagnosisEditorialBrief): BriefFormState {

@@ -6,8 +6,9 @@ import type {
 } from '../../../api/admin';
 import StatusBadge from '../../../components/ui/StatusBadge';
 import {
+  ChipOverflowRow,
   CompactPanel,
-  CoverageStatusPill,
+  EditorialRow,
   EditorialEmptyState,
 } from './EditorialPrimitives';
 import {
@@ -137,79 +138,82 @@ export function CoverageMatrixCard({
     <CompactPanel
       title="Coverage matrix"
       subtitle="Curriculum coverage across education, cases, and graph support."
-      action={<StatusBadge status={`${rows.length} rules`} tone="info" />}
     >
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-[var(--color-navy-border)] text-sm">
-          <thead className="bg-white/5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-4 py-3">Teaching rule</th>
-              <th className="px-4 py-3">Education</th>
-              <th className="px-4 py-3">Cases</th>
-              <th className="px-4 py-3">Graph</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--color-navy-border)]">
-            {rows.map((row) => {
-              const selected =
-                selectedRow?.stableKey === row.stableKey ||
-                selectedRow?.teachingRuleId === row.teachingRuleId;
-              const compositeStatus = coverageCompositeStatus(row);
+      <div className="space-y-2">
+        {rows.map((row) => {
+          const selected =
+            selectedRow?.stableKey === row.stableKey ||
+            selectedRow?.teachingRuleId === row.teachingRuleId;
+          const compositeStatus = coverageCompositeStatus(row);
 
-              return (
-                <tr
-                  key={`${row.stableKey}-${row.teachingRuleId ?? 'legacy'}`}
-                  className={[
-                    'cursor-pointer transition hover:bg-white/6',
-                    selected
-                      ? 'bg-[var(--color-teal)]/10 ring-1 ring-inset ring-[var(--color-teal)]/35'
-                      : '',
-                  ].join(' ')}
-                  onClick={() => onRowSelect(row)}
-                >
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      className="text-left"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onRowSelect(row);
-                      }}
-                    >
-                      <span className="block font-medium text-slate-100">
-                        {row.title}
-                      </span>
-                      <span className="mt-1 block text-sm text-slate-500">
-                        {formatLabel(row.category)} -{' '}
-                        {formatLabel(row.importance)}
-                      </span>
-                    </button>
-                  </td>
-                  <td className="px-4 py-3">
-                    <CoverageStatusPill status={row.educationCoverage} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <CoverageStatusPill status={row.caseCoverage} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <CoverageStatusPill status={row.graphCoverage} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge
-                      status={compositeStatus.label}
-                      tone={compositeStatus.tone}
-                    />
-                  </td>
-                  <td className="max-w-xs px-4 py-3 text-slate-500">
-                    {row.recommendedAction}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+          return (
+            <button
+              key={`${row.stableKey}-${row.teachingRuleId ?? 'legacy'}`}
+              type="button"
+              onClick={() => onRowSelect(row)}
+              className={[
+                'block w-full text-left',
+                selected
+                  ? 'rounded-lg ring-1 ring-[var(--color-teal)]/45'
+                  : '',
+              ].join(' ')}
+            >
+              <EditorialRow
+                title={row.title}
+                subtitle={`${formatLabel(row.category)} - ${formatLabel(
+                  row.importance,
+                )}`}
+                tone={compositeStatus.tone}
+                meta={
+                  <ChipOverflowRow
+                    items={[
+                      {
+                        id: 'education',
+                        label: `Education ${formatLabel(row.educationCoverage)}`,
+                        tone:
+                          row.educationCoverage === 'covered'
+                            ? 'success'
+                            : row.educationCoverage === 'missing'
+                              ? 'danger'
+                              : 'warning',
+                      },
+                      {
+                        id: 'cases',
+                        label: `Cases ${formatLabel(row.caseCoverage)}`,
+                        tone:
+                          row.caseCoverage === 'covered'
+                            ? 'success'
+                            : row.caseCoverage === 'missing'
+                              ? 'danger'
+                              : 'warning',
+                      },
+                      {
+                        id: 'graph',
+                        label: `Graph ${formatLabel(row.graphCoverage)}`,
+                        tone:
+                          row.graphCoverage === 'covered'
+                            ? 'success'
+                            : row.graphCoverage === 'missing'
+                              ? 'danger'
+                              : 'warning',
+                      },
+                    ]}
+                  />
+                }
+                action={
+                  <StatusBadge
+                    status={compositeStatus.label}
+                    tone={compositeStatus.tone}
+                  />
+                }
+              >
+                <p className="text-xs leading-5 text-slate-500">
+                  {row.recommendedAction}
+                </p>
+              </EditorialRow>
+            </button>
+          );
+        })}
       </div>
     </CompactPanel>
   );

@@ -17,6 +17,7 @@ import {
 import { createApiClient } from '../../api/client';
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
+import StatusBadge from '../../components/ui/StatusBadge';
 import { useConsoleAccess } from '../../hooks/useConsoleAccess';
 
 const typeOptions: DiagnosisGraphCandidateType[] = [
@@ -330,129 +331,129 @@ export default function DiagnosisGraphCandidatesPage() {
       {error ? <ErrorState message={error} /> : null}
 
       {!loading && !error ? (
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Diagnosis</th>
-                  <th className="px-4 py-3">Type</th>
-                  <th className="px-4 py-3">Raw text / Label</th>
-                  <th className="px-4 py-3">Target</th>
-                  <th className="px-4 py-3">Source</th>
-                  <th className="px-4 py-3">Path</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Created</th>
-                  <th className="px-4 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {rows.map((candidate) => {
-                  const unresolvedMimic = isUnresolvedMimic(candidate);
-                  const approveDisabled =
-                    busyId === candidate.id ||
-                    !canReviewCandidates ||
-                    unresolvedMimic;
-                  return (
-                  <tr key={candidate.id} className="align-top">
-                    <td className="px-4 py-3 text-slate-700">
-                      {candidate.diagnosisRegistry?.displayLabel ??
-                        candidate.diagnosisRegistryId}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-slate-900">
-                      <div>{candidate.type}</div>
-                      {unresolvedMimic ? (
-                        <div className="mt-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                          Unresolved registry
-                        </div>
-                      ) : null}
-                    </td>
-                    <td className="max-w-md px-4 py-3 text-slate-700">
-                      {candidate.rawText}
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">
-                      {candidate.targetDiagnosisRegistry?.displayLabel ??
-                        candidate.unresolvedTargetText ??
-                        '-'}
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">
-                      {candidate.sourceType}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600">
-                      {candidate.sourcePath}
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">
-                      {candidate.status}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {formatDate(candidate.createdAt)}
-                    </td>
-                    <td className="space-y-2 px-4 py-3">
-                      <button
-                        type="button"
-                        disabled={approveDisabled}
-                        title={
-                          unresolvedMimic
-                            ? 'Resolve registry identity before approval.'
-                            : !canReviewCandidates
-                              ? seniorDisabledReason
-                              : undefined
-                        }
-                        onClick={() =>
-                          canReviewCandidates
+        <section className="rounded-lg border border-slate-200 bg-white p-4">
+          <div className="space-y-3">
+            {rows.map((candidate) => {
+              const unresolvedMimic = isUnresolvedMimic(candidate);
+              const approveDisabled =
+                busyId === candidate.id ||
+                !canReviewCandidates ||
+                unresolvedMimic;
+              const primaryLabel = unresolvedMimic ? 'Resolve mimic' : 'Approve';
+              const primaryDisabled = unresolvedMimic
+                ? busyId === candidate.id || !canReviewCandidates
+                : approveDisabled;
+              const primaryTitle = !canReviewCandidates
+                ? seniorDisabledReason
+                : unresolvedMimic
+                  ? 'Resolve registry identity before approval.'
+                  : undefined;
+
+              return (
+                <article
+                  key={candidate.id}
+                  className="rounded-lg border border-slate-200 bg-slate-50/70 p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-sm font-semibold text-slate-950">
+                          {candidate.diagnosisRegistry?.displayLabel ??
+                            candidate.diagnosisRegistryId}
+                        </h2>
+                        <StatusBadge status={candidate.type} tone="info" />
+                        {unresolvedMimic ? (
+                          <StatusBadge status="Unresolved registry" tone="warning" />
+                        ) : null}
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-slate-700">
+                        {candidate.rawText}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Target:{' '}
+                        {candidate.targetDiagnosisRegistry?.displayLabel ??
+                          candidate.unresolvedTargetText ??
+                          'None yet'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={primaryDisabled}
+                      title={primaryTitle}
+                      onClick={() =>
+                        unresolvedMimic
+                          ? openResolve(candidate)
+                          : canReviewCandidates
                             ? void runAction(candidate.id, () =>
-                                approveDiagnosisGraphCandidate(client, candidate.id),
+                                approveDiagnosisGraphCandidate(
+                                  client,
+                                  candidate.id,
+                                ),
                               )
                             : setActionError(seniorDisabledReason)
-                        }
-                        className="block rounded-md border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 disabled:opacity-50"
-                      >
-                        Approve
-                      </button>
-                      {unresolvedMimic ? (
+                      }
+                      className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {primaryLabel}
+                    </button>
+                  </div>
+                  <details className="mt-3 rounded-md border border-slate-200 bg-white px-3 py-2">
+                    <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Details and more actions
+                    </summary>
+                    <div className="mt-3 grid gap-3 text-xs text-slate-600 md:grid-cols-[1fr_auto]">
+                      <div className="space-y-1">
+                        <p>
+                          <span className="font-semibold">Source:</span>{' '}
+                          {candidate.sourceType}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Path:</span>{' '}
+                          <span className="font-mono">{candidate.sourcePath}</span>
+                        </p>
+                        <p>
+                          <span className="font-semibold">Status:</span>{' '}
+                          {candidate.status}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Created:</span>{' '}
+                          {formatDate(candidate.createdAt)}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-start gap-2 md:justify-end">
                         <button
                           type="button"
                           disabled={busyId === candidate.id || !canReviewCandidates}
                           title={
                             !canReviewCandidates ? seniorDisabledReason : undefined
                           }
-                          onClick={() => openResolve(candidate)}
-                          className="block rounded-md border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-800 disabled:opacity-50"
+                          onClick={() => rejectCandidate(candidate)}
+                          className="rounded-md border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 disabled:opacity-50"
                         >
-                          Resolve mimic
+                          Reject
                         </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        disabled={busyId === candidate.id || !canReviewCandidates}
-                        title={!canReviewCandidates ? seniorDisabledReason : undefined}
-                        onClick={() => rejectCandidate(candidate)}
-                        className="block rounded-md border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 disabled:opacity-50"
-                      >
-                        Reject
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busyId === candidate.id || !canReviewCandidates}
-                        title={!canReviewCandidates ? seniorDisabledReason : undefined}
-                        onClick={() => mergeCandidate(candidate)}
-                        className="block rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 disabled:opacity-50"
-                      >
-                        Merge
-                      </button>
-                    </td>
-                  </tr>
-                  );
-                })}
-                {rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
-                      No graph candidates match the current filters.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+                        <button
+                          type="button"
+                          disabled={busyId === candidate.id || !canReviewCandidates}
+                          title={
+                            !canReviewCandidates ? seniorDisabledReason : undefined
+                          }
+                          onClick={() => mergeCandidate(candidate)}
+                          className="rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                        >
+                          Merge
+                        </button>
+                      </div>
+                    </div>
+                  </details>
+                </article>
+              );
+            })}
+            {rows.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+                No graph candidates match the current filters.
+              </div>
+            ) : null}
           </div>
         </section>
       ) : null}

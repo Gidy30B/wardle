@@ -265,6 +265,7 @@ type PersistedGeneratedExplanation = GeneratedCase['explanation'] & {
       mimicDiagnosisIds: string[];
       mimics: string[];
       clueRevealStrategy: NonNullable<GenerateCaseInput['clueRevealStrategy']> | null;
+      discriminatorTarget: GenerateCaseInput['discriminatorTarget'] | null;
     };
     reasoningPathTrace?: {
       reasoningPathId: string | null;
@@ -1448,6 +1449,7 @@ export class CaseGeneratorService {
           targetedMimics: input.options.targetedCase?.mimics,
           reasoningPathContext: input.options.targetedCase?.reasoningPathContext,
           clueRevealStrategy: input.options.targetedCase?.clueRevealStrategy,
+          discriminatorTarget: input.options.targetedCase?.discriminatorTarget,
         };
         const generatedCase =
           input.registryFirst
@@ -2238,6 +2240,9 @@ export class CaseGeneratorService {
     const revealStrategy = this.clueRevealStrategyInstruction(
       input.clueRevealStrategy,
     );
+    const discriminatorTarget = this.discriminatorTargetInstruction(
+      input.discriminatorTarget,
+    );
 
     return [
       '',
@@ -2251,6 +2256,7 @@ export class CaseGeneratorService {
       `* For ${difficulty} difficulty, avoid giveaway manifestations until clue ${revealCoreUnitByClue} or later.`,
       '* Keep 1-2 plausible mimics alive until the middle clues when possible.',
       revealStrategy ? `* Reveal strategy: ${revealStrategy}` : undefined,
+      discriminatorTarget,
       keepAlive.length
         ? `* Preferred mimics to keep plausible early: ${keepAlive.slice(0, 4).join(', ')}.`
         : undefined,
@@ -2350,6 +2356,31 @@ export class CaseGeneratorService {
     }
 
     return undefined;
+  }
+
+  private discriminatorTargetInstruction(
+    target: GenerateCaseInput['discriminatorTarget'],
+  ): string | undefined {
+    if (!target) {
+      return undefined;
+    }
+    const clueTiming = target.sourceClueOrder ?? target.sourceClueIndex;
+    const timing = clueTiming
+      ? ` around clue ${target.sourceClueOrder ?? target.sourceClueIndex}`
+      : '';
+    return [
+      `* Target discriminator${timing}: explicitly separate ${target.mimicName} using ${target.discriminator}.`,
+      `* Generation intent: ${target.generationIntent}.`,
+      target.learnerRisk
+        ? `* Learner confusion to address: ${target.learnerRisk}.`
+        : undefined,
+      target.editorialReason
+        ? `* Editorial rationale: ${target.editorialReason}.`
+        : undefined,
+      '* Preserve gradual mimic collapse; avoid abrupt giveaway clues while making the discriminator reviewable.',
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join('\n');
   }
 
   private buildCaseTeachingAlignmentReport(
@@ -2817,7 +2848,8 @@ export class CaseGeneratorService {
       ...(input.targetedTeachingUnitIds?.length ||
       input.targetedMimics?.length ||
       input.clueRevealStrategy ||
-      input.reasoningPathContext
+      input.reasoningPathContext ||
+      input.discriminatorTarget
         ? {
             targetedGeneration: {
               teachingUnitIds: input.targetedTeachingUnitIds ?? [],
@@ -2834,6 +2866,7 @@ export class CaseGeneratorService {
               mimics:
                 input.targetedMimics?.map((mimic) => mimic.diagnosis) ?? [],
               clueRevealStrategy: input.clueRevealStrategy ?? null,
+              discriminatorTarget: input.discriminatorTarget ?? null,
             },
           }
         : {}),

@@ -1,6 +1,17 @@
 import type { Case as PrismaCase } from '@prisma/client';
 import type { GenerationContext } from '../editorial/generation-context-builder.service';
 
+export type DiscriminatorGenerationTarget = {
+  mimicDiagnosisId?: string;
+  mimicName: string;
+  discriminator: string;
+  sourceClueOrder?: number;
+  sourceClueIndex?: number;
+  generationIntent: string;
+  learnerRisk?: string;
+  editorialReason?: string;
+};
+
 export type ClinicalClue = {
   type: 'history' | 'symptom' | 'vital' | 'lab' | 'exam' | 'imaging';
   value: string;
@@ -137,6 +148,7 @@ export type GenerateCaseInput = {
     diagnosisRegistryId?: string;
     diagnosis: string;
   }>;
+  discriminatorTarget?: DiscriminatorGenerationTarget;
   clueRevealStrategy?:
     | 'classic'
     | 'early_anchor'
@@ -167,6 +179,7 @@ export type GenerateBatchOptions = {
     }>;
     reasoningPathContext?: GenerateCaseInput['reasoningPathContext'];
     clueRevealStrategy?: GenerateCaseInput['clueRevealStrategy'];
+    discriminatorTarget?: GenerateCaseInput['discriminatorTarget'];
   };
 };
 

@@ -4,7 +4,400 @@ import { ArrowRight, ChevronDown, WandSparkles } from 'lucide-react';
 import type { WorkspaceCoverageMatrixRow } from '../../../api/admin';
 import StatusBadge from '../../../components/ui/StatusBadge';
 import type { StatusBadgeTone } from '../../../components/ui/statusBadgeMeta';
+import {
+  toneBgClass,
+  toneBorderClass,
+  toneTextClass,
+} from '../../../components/ui/statusBadgeMeta';
 import { formatLabel } from './workspaceTransforms';
+
+type ChipItem = {
+  id: string;
+  label: string;
+  tone?: StatusBadgeTone;
+  className?: string;
+};
+
+type StreamSignal = {
+  label: string;
+  value: string | number | null | undefined;
+  tone?: StatusBadgeTone;
+};
+
+type PrototypeTone = 'teal' | 'amber' | 'rose' | 'green' | 'slate';
+
+const PROTOTYPE_TONE_CLASSES: Record<PrototypeTone, string> = {
+  teal: 'bg-[var(--color-teal-bg)] text-[var(--color-teal)] border-[rgba(0,180,166,0.2)]',
+  amber:
+    'bg-[var(--color-amber-bg)] text-[var(--color-amber)] border-[rgba(232,160,32,0.2)]',
+  rose: 'bg-[var(--color-rose-bg)] text-[var(--color-rose)] border-[rgba(224,92,106,0.2)]',
+  green:
+    'bg-[var(--color-green-bg)] text-[var(--color-green)] border-[rgba(58,191,138,0.2)]',
+  slate:
+    'bg-[var(--color-dim1)] text-[var(--color-slate-lt)] border-[var(--color-navy-border)]',
+};
+
+export function Pill({
+  tone = 'slate',
+  size = 'sm',
+  children,
+}: {
+  tone?: PrototypeTone;
+  size?: 'xs' | 'sm';
+  children: ReactNode;
+}) {
+  return (
+    <span
+      className={[
+        'inline-flex items-center border font-medium uppercase tracking-[0.04em]',
+        size === 'xs'
+          ? 'rounded px-1.5 py-px text-[8px]'
+          : 'rounded px-[7px] py-[2px] text-[10px]',
+        PROTOTYPE_TONE_CLASSES[tone],
+      ].join(' ')}
+    >
+      {children}
+    </span>
+  );
+}
+
+export function Btn({
+  variant = 'ghost',
+  onClick,
+  disabled,
+  children,
+}: {
+  variant?: 'primary' | 'ghost' | 'amber' | 'rose';
+  onClick?: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  const classes =
+    variant === 'primary'
+      ? 'bg-[var(--color-teal)] text-[var(--color-navy)]'
+      : variant === 'amber'
+        ? 'border border-[rgba(232,160,32,0.25)] bg-[var(--color-amber-bg)] text-[var(--color-amber)]'
+        : variant === 'rose'
+          ? 'border border-[rgba(224,92,106,0.25)] bg-[var(--color-rose-bg)] text-[var(--color-rose)]'
+          : 'border border-[var(--color-navy-border)] bg-[var(--color-dim1)] text-[var(--color-slate-lt)]';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium transition hover:bg-[var(--color-dim2)] disabled:cursor-not-allowed disabled:opacity-35 ${classes}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function Warn({
+  type,
+  children,
+}: {
+  type: 'amber' | 'rose';
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`mb-2 flex items-start gap-2 rounded-md border p-2.5 text-[12px] leading-relaxed ${PROTOTYPE_TONE_CLASSES[type]}`}
+    >
+      <span className="shrink-0">{type === 'rose' ? 'x' : '!'}</span>
+      <span>{children}</span>
+    </div>
+  );
+}
+
+export function SidebarDetailLayout({
+  sidebar,
+  detail,
+  sidebarWidth = 200,
+}: {
+  sidebar: ReactNode;
+  detail: ReactNode;
+  sidebarWidth?: number;
+}) {
+  return (
+    <div className="flex gap-3.5" style={{ minHeight: 500 }}>
+      <div
+        className="shrink-0 flex flex-col gap-1.5"
+        style={{ width: sidebarWidth }}
+      >
+        {sidebar}
+      </div>
+      <div className="flex-1 min-w-0 flex flex-col gap-3.5 overflow-y-auto">
+        {detail}
+      </div>
+    </div>
+  );
+}
+
+export function EditorialStream({
+  eyebrow,
+  title,
+  subtitle,
+  action,
+  children,
+}: {
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border border-[var(--color-navy-border)] bg-white/[0.03] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          {eyebrow ? <p className="editorial-eyebrow">{eyebrow}</p> : null}
+          <h2 className="mt-1 text-base font-semibold text-slate-100">{title}</h2>
+          {subtitle ? (
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+              {subtitle}
+            </p>
+          ) : null}
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
+      <div className="mt-4 space-y-3">{children}</div>
+    </section>
+  );
+}
+
+export function EditorialEntity({
+  eyebrow,
+  title,
+  subtitle,
+  tone = 'neutral',
+  state,
+  action,
+  children,
+}: {
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  tone?: StatusBadgeTone;
+  state?: ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <article
+      className={`rounded-lg border ${toneBorderClass(tone)} ${toneBgClass(
+        tone,
+      )} px-4 py-3`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          {eyebrow ? (
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              {eyebrow}
+            </p>
+          ) : null}
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-semibold leading-5 text-slate-100">
+              {title}
+            </h3>
+            {state}
+          </div>
+          {subtitle ? (
+            <p className="mt-1 text-xs leading-5 text-slate-400">{subtitle}</p>
+          ) : null}
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
+      <div className="mt-3">{children}</div>
+    </article>
+  );
+}
+
+export function DistinctionStream({
+  title,
+  learnerConfusion,
+  discriminator,
+  action,
+  children,
+}: {
+  title: string;
+  learnerConfusion?: string | null;
+  discriminator?: string | null;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <EditorialEntity
+      eyebrow="Clinical distinction"
+      title={title}
+      subtitle={discriminator ?? 'No discriminator summary available yet.'}
+      tone={learnerConfusion ? 'warning' : 'info'}
+      action={action}
+    >
+      {learnerConfusion ? (
+        <LearnerConfusionIndicator>{learnerConfusion}</LearnerConfusionIndicator>
+      ) : null}
+      <div className="mt-3">{children}</div>
+    </EditorialEntity>
+  );
+}
+
+export function EmbeddedActionBar({
+  note,
+  children,
+}: {
+  note?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3">
+      {note ? (
+        <p className="min-w-48 flex-1 text-xs leading-5 text-slate-500">{note}</p>
+      ) : null}
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </div>
+  );
+}
+
+export function EvidenceConfidenceStrip({ items }: { items: StreamSignal[] }) {
+  return <InlineSignalStrip items={items} label="Evidence confidence" />;
+}
+
+export function CoverageStateStrip({ items }: { items: StreamSignal[] }) {
+  return <InlineSignalStrip items={items} label="Coverage state" />;
+}
+
+export function WorkflowStateInline({
+  label,
+  tone = 'neutral',
+}: {
+  label: string;
+  tone?: StatusBadgeTone;
+}) {
+  return (
+    <span
+      className={`rounded-full border ${toneBorderClass(tone)} ${toneBgClass(
+        tone,
+      )} px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${toneTextClass(
+        tone,
+      )}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+export function LearnerConfusionIndicator({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <p className="rounded-md border border-[var(--color-amber)]/25 bg-[var(--color-amber)]/10 px-3 py-2 text-xs leading-5 text-amber-100">
+      <span className="font-semibold">Learner confusion: </span>
+      {children}
+    </p>
+  );
+}
+
+export function EditorialFlowDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 py-1">
+      <div className="h-px flex-1 bg-white/10" />
+      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+        {label}
+      </span>
+      <div className="h-px flex-1 bg-white/10" />
+    </div>
+  );
+}
+
+export function StreamDisclosure({
+  title,
+  summary,
+  children,
+}: {
+  title: string;
+  summary?: string;
+  children: ReactNode;
+}) {
+  return (
+    <details className="group rounded-md border border-white/10 bg-white/[0.03]">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
+        <span>
+          <span className="block text-xs font-semibold text-slate-200">
+            {title}
+          </span>
+          {summary ? (
+            <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+              {summary}
+            </span>
+          ) : null}
+        </span>
+        <ChevronDown
+          className="h-4 w-4 shrink-0 text-slate-500 transition group-open:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      <div className="border-t border-white/10 p-3">{children}</div>
+    </details>
+  );
+}
+
+export function ReasoningThread({
+  items,
+}: {
+  items: Array<{ label: string; detail: string | ReactNode; tone?: StatusBadgeTone }>;
+}) {
+  return (
+    <div className="space-y-2">
+      {items.map((item) => (
+        <div key={item.label} className="grid gap-2 sm:grid-cols-[9rem_1fr]">
+          <p
+            className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${toneTextClass(
+              item.tone,
+            )}`}
+          >
+            {item.label}
+          </p>
+          <div className="text-xs leading-5 text-slate-300">{item.detail}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InlineSignalStrip({
+  items,
+  label,
+}: {
+  items: StreamSignal[];
+  label: string;
+}) {
+  if (!items.length) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-3">
+        {items.map((item) => (
+          <span key={item.label} className="text-xs text-slate-500">
+            {item.label}:{' '}
+            <span className={`font-semibold ${toneTextClass(item.tone)}`}>
+              {item.value === null || item.value === undefined
+                ? 'Unknown'
+                : item.value}
+            </span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function CompactPanel({
   title,
@@ -375,6 +768,82 @@ export function SectionActionGroup({
   children: ReactNode;
 }) {
   return <div className="flex flex-wrap gap-2">{children}</div>;
+}
+
+export function ChipOverflowRow({
+  items,
+  limit = 3,
+}: {
+  items: ChipItem[];
+  limit?: number;
+}) {
+  const visible = items.slice(0, limit);
+  const hidden = items.slice(limit);
+
+  if (!items.length) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {visible.map((item) =>
+        item.className ? (
+          <span
+            key={item.id}
+            className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${item.className}`}
+          >
+            {item.label}
+          </span>
+        ) : (
+          <StatusBadge
+            key={item.id}
+            status={item.label}
+            tone={item.tone ?? 'neutral'}
+          />
+        ),
+      )}
+      {hidden.length ? (
+        <details className="group relative">
+          <summary className="inline-flex cursor-pointer list-none rounded-full border border-[var(--color-navy-border)] bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-400 transition hover:bg-white/10">
+            +{hidden.length}
+          </summary>
+          <div className="absolute right-0 z-20 mt-2 grid min-w-48 gap-1 rounded-lg border border-[var(--color-navy-border)] bg-[var(--color-navy-mid)] p-2 shadow-xl">
+            {hidden.map((item) => (
+              <span
+                key={item.id}
+                className="rounded-md bg-white/5 px-2 py-1 text-xs text-slate-300"
+              >
+                {item.label}
+              </span>
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+export function SecondaryActionDisclosure({
+  label = 'More actions',
+  children,
+}: {
+  label?: string;
+  children: ReactNode;
+}) {
+  return (
+    <details className="group relative">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md border border-[var(--color-navy-border)] bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-white/10">
+        {label}
+        <ChevronDown
+          className="h-3.5 w-3.5 transition group-open:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      <div className="absolute right-0 z-20 mt-2 grid min-w-44 gap-2 rounded-lg border border-[var(--color-navy-border)] bg-[var(--color-navy-mid)] p-2 shadow-xl">
+        {children}
+      </div>
+    </details>
+  );
 }
 
 export function EmptyGuidance({

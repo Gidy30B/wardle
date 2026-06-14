@@ -163,6 +163,44 @@ export type GenerateTargetedCasePayload = {
   mimicDiagnosisIds?: string[];
   reasoningPathId?: string;
   clueRevealStrategy?: ClueRevealStrategy;
+  discriminatorTarget?: TargetedDiscriminatorGenerationRequest;
+};
+
+export type DiscriminatorGenerationIntent =
+  | 'missing_discriminator_case'
+  | 'weak_discriminator_case'
+  | 'persistent_confusion_case'
+  | 'must_not_miss_separation'
+  | 'late_lock_in_repair'
+  | 'weak_clue_transition'
+  | 'heuristic_only_repair';
+
+export type TargetedDiscriminatorGenerationRequest = {
+  caseId?: string;
+  diagnosisRegistryId: string;
+  mimicDiagnosisId?: string;
+  mimicName: string;
+  discriminator: string;
+  sourceAnnotationId?: string;
+  sourceClueOrder?: number;
+  sourceClueIndex?: number;
+  generationIntent: DiscriminatorGenerationIntent | string;
+  learnerRisk?: string;
+  editorialReason?: string;
+};
+
+export type GenerateTargetedDiscriminatorCasePayload = {
+  target: TargetedDiscriminatorGenerationRequest;
+  difficulty?: TargetedCaseDifficulty;
+  teachingUnitIds?: string[];
+  reasoningPathId?: string;
+  clueRevealStrategy?: ClueRevealStrategy;
+};
+
+export type GenerateClueRevisionProposalPayload = {
+  target: TargetedDiscriminatorGenerationRequest;
+  existingClue?: string;
+  desiredClueOrder?: number;
 };
 
 export type CaseEditorialStatus =
@@ -1513,8 +1551,10 @@ export type CaseEscalationCoverageRow = {
 
 export type AiDraftRevisionAudit = {
   id: string;
+  caseId?: string | null;
   actionType: string;
   sourceIssue: unknown;
+  inputContext?: unknown;
   generatedOutput: unknown;
   editorDecision: string | null;
   affectedArtifactType: string;
@@ -1533,6 +1573,71 @@ export type AiDraftRevisionAudit = {
   decisionAt?: string | null;
   reviewNote?: string | null;
   createdAt: string;
+  draftKind?: DiscriminatorDraftKind;
+  generationIntent?: DiscriminatorGenerationIntent | string;
+  mimicName?: string;
+  discriminator?: string;
+  sourceClueOrder?: number | null;
+  sourceClueIndex?: number | null;
+  targetTab?: 'cases' | 'differential-map' | string;
+  discriminatorDraftReview?: DiscriminatorDraftReviewPayload;
+};
+
+export type DiscriminatorDraftKind =
+  | 'targeted_discriminator_case'
+  | 'clue_revision_proposal';
+
+export type DiscriminatorDraftReviewPayload = {
+  draftKind: DiscriminatorDraftKind;
+  generationIntent: DiscriminatorGenerationIntent | string;
+  diagnosisRegistryId: string;
+  caseId?: string;
+  sourceClueOrder?: number;
+  sourceClueIndex?: number;
+  mimicDiagnosisId?: string;
+  mimicName: string;
+  discriminator: string;
+  learnerRisk?: string;
+  editorialReason?: string;
+  proposedOutput: {
+    title?: string;
+    caseDraft?: unknown;
+    clueRevision?: {
+      originalClue?: string;
+      revisedClue?: string;
+      addedClue?: string;
+      rationale?: string;
+      expectedEffect?: string;
+    };
+    clueProgressionRationale?: string;
+    expectedMimicElimination?: string;
+    expectedLearnerTakeaway?: string;
+  };
+  reviewGuidance: {
+    primaryQuestion: string;
+    acceptEffect: string;
+    rejectEffect: string;
+    requestChangesHint: string;
+    safetyNotes: string[];
+  };
+};
+
+export type DiscriminatorDraftReview = {
+  auditId: string;
+  actionType: string;
+  affectedArtifactType: string;
+  affectedArtifactId: string;
+  reviewStatus: AiDraftRevisionAudit['reviewStatus'];
+  createdAt: string;
+  targetTab: 'cases' | 'differential-map' | string;
+  draftKind: DiscriminatorDraftKind;
+  generationIntent: DiscriminatorGenerationIntent | string;
+  mimicName: string;
+  discriminator: string;
+  caseId?: string | null;
+  sourceClueOrder?: number | null;
+  sourceClueIndex?: number | null;
+  discriminatorDraftReview: DiscriminatorDraftReviewPayload;
 };
 
 export type AiDraftDecisionAction =
@@ -1651,6 +1756,134 @@ export type EditorialPrioritization = {
   targetTab?: WorkspaceTargetTab | string;
 };
 
+export type ClueProgressionSignal =
+  | 'premature_lock_in'
+  | 'insufficient_discrimination'
+  | 'abrupt_giveaway'
+  | 'stagnant_progression'
+  | 'unresolved_mimic'
+  | 'escalation_missing'
+  | 'weak_transition'
+  | string;
+
+export type CaseClueProgressionState = {
+  clueIndex: number;
+  clue: string;
+  clueType: string;
+  leadingDifferentials: string[];
+  confidenceEstimate: number;
+  confidenceShift: number;
+  remainingMimics: string[];
+  collapsedMimics: string[];
+  discriminatorSignals: string[];
+  ambiguityScore: number;
+  prematureLeakFlag: boolean;
+  unresolvedAmbiguityFlag: boolean;
+  learnerConfusionRisk: 'low' | 'medium' | 'high' | string;
+  editorialConcern: string | null;
+  progressionQuality: 'strong' | 'watch' | 'weak' | string;
+};
+
+export type CaseMimicCollapse = {
+  clueIndex: number;
+  mimic: string;
+  evidence: string;
+  confidenceShift: number;
+};
+
+export type CaseDiscriminatorEmergence = {
+  clueIndex: number;
+  signal: string;
+  evidence: string;
+  strength: 'low' | 'medium' | 'high' | string;
+};
+
+export type CaseDifferentialElimination = {
+  mimicDiagnosisId?: string;
+  mimicName: string;
+  relationshipType?: string;
+  initialPlausibility: 'low' | 'medium' | 'high' | string;
+  finalStatus:
+    | 'eliminated'
+    | 'persistent'
+    | 'unresolved'
+    | 'not_applicable'
+    | string;
+  eliminatedAtClueIndex?: number;
+  eliminatedAtClueOrder?: number;
+  eliminatedBy?: string;
+  discriminatorUsed?: string;
+  eliminationStrength: 'weak' | 'moderate' | 'strong' | string;
+  educationalValue: 'low' | 'medium' | 'high' | string;
+  prematureCollapseRisk: boolean;
+  remainingConfusionRisk: boolean;
+  annotationSource?: 'editorial' | 'heuristic' | string;
+  annotationId?: string;
+  editorialConfidence?: 'low' | 'medium' | 'high' | string;
+  notes?: string;
+};
+
+export type CaseClueDiscriminatorAnnotation = {
+  id: string;
+  caseId: string;
+  clueOrder: number;
+  clueIndex: number | null;
+  eliminatedDiagnosisId: string | null;
+  eliminatedDiagnosisName: string;
+  discriminator: string;
+  reasoning: string | null;
+  eliminationStrength: 'weak' | 'moderate' | 'strong' | string;
+  educationalValue: 'low' | 'medium' | 'high' | string;
+  reviewerUserId: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateCaseClueDiscriminatorAnnotationPayload = {
+  clueOrder: number;
+  clueIndex?: number | null;
+  eliminatedDiagnosisId?: string | null;
+  eliminatedDiagnosisName: string;
+  discriminator: string;
+  reasoning?: string | null;
+  eliminationStrength: 'weak' | 'moderate' | 'strong';
+  educationalValue: 'low' | 'medium' | 'high';
+};
+
+export type UpdateCaseClueDiscriminatorAnnotationPayload =
+  Partial<CreateCaseClueDiscriminatorAnnotationPayload>;
+
+export type CaseClueProgressionAnalysis = {
+  caseId: string;
+  diagnosisRegistryId: string | null;
+  analysisVersion: string;
+  diagnosticStates: CaseClueProgressionState[];
+  mimicCollapses: CaseMimicCollapse[];
+  discriminatorEmergences: CaseDiscriminatorEmergence[];
+  differentialElimination: CaseDifferentialElimination[];
+  targetedGenerationOpportunities: TargetedDiscriminatorGenerationRequest[];
+  leadingDifferentials: string[];
+  remainingMimics: string[];
+  discriminatorSignals: string[];
+  editorialSignals: ClueProgressionSignal[];
+  likelyLockInClue: number | null;
+  confidenceEstimate: number | null;
+  ambiguityScore: number;
+  prematureLeakFlag: boolean;
+  unresolvedAmbiguityFlag: boolean;
+  totalMimicsTracked: number;
+  eliminatedMimicCount: number;
+  unresolvedMimicCount: number;
+  persistentConfusionCount: number;
+  weakEliminationCount: number;
+  explicitDiscriminatorAnnotationCount: number;
+  heuristicOnlyEliminationCount: number;
+  missingEditorialAnnotationCount: number;
+  editorialNotes: string | null;
+  generatedAt: string;
+};
+
 export type DiagnosisEditorialWorkspace = {
   diagnosis: {
     id: string;
@@ -1681,6 +1914,7 @@ export type DiagnosisEditorialWorkspace = {
   maturityExplanation?: string[];
   editorialPrioritization?: EditorialPrioritization;
   aiDraftAuditTrail?: AiDraftRevisionAudit[];
+  discriminatorDraftReviews?: DiscriminatorDraftReview[];
   workspaceSummary: {
     status: DiagnosisWorkspaceOverallStatus | 'ready' | 'needs_review' | string;
     overallScore: number | null;
@@ -1756,6 +1990,22 @@ export type DiagnosisEditorialWorkspace = {
       byStatus: Record<string, number>;
       warningCount: number;
       blockerCount: number;
+      progressionSignals?: {
+        total: number;
+        bySignal: Record<string, number>;
+        prematureLockInCases: number;
+        unresolvedAmbiguityCases: number;
+        abruptGiveawayCases: number;
+        unresolvedMimicCount?: number;
+        weakEliminationCount?: number;
+        persistentConfusionCount?: number;
+        missingDiscriminatorCaseCount?: number;
+        explicitDiscriminatorAnnotationCount?: number;
+        heuristicOnlyEliminationCount?: number;
+        missingEditorialAnnotationCount?: number;
+        targetedGenerationOpportunityCount?: number;
+        byGenerationIntent?: Record<string, number>;
+      };
       latest: WorkspaceCaseSummary['latest'] | null;
     };
     items: Array<{
@@ -1765,6 +2015,8 @@ export type DiagnosisEditorialWorkspace = {
       difficulty: string;
       updatedAt: string;
       qualityProjection: AdminCaseQualityProjection;
+      clueProgression?: CaseClueProgressionAnalysis;
+      clueDiscriminatorAnnotations?: CaseClueDiscriminatorAnnotation[];
     }>;
   };
   graph: {

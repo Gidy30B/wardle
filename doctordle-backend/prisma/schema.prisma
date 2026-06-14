@@ -468,6 +468,7 @@ model DiagnosisRegistry {
   reasoningDraftValidationRuns          ReasoningDraftValidationRun[]
   caseLearningGoalCoverage              CaseLearningGoalCoverage[]
   caseEscalationAnnotations             CaseEscalationAnnotation[]
+  caseClueProgressionAnalyses           CaseClueProgressionAnalysis[]
   aiDraftRevisionAudits                 AiDraftRevisionAudit[]
 
   @@index([status])
@@ -885,11 +886,73 @@ model Case {
   evidenceRelationships      DiagnosisEvidenceRelationship[] @relation("DiagnosisEvidenceRelationshipCase")
   learningGoalCoverage       CaseLearningGoalCoverage[]
   escalationAnnotations      CaseEscalationAnnotation[]
+  clueProgressionAnalyses    CaseClueProgressionAnalysis[]
+  clueDiscriminatorAnnotations CaseClueDiscriminatorAnnotation[]
   aiDraftRevisionAudits      AiDraftRevisionAudit[]
 
   @@index([diagnosisId])
   @@index([diagnosisRegistryId])
   @@index([diagnosisMappingStatus])
+}
+
+model CaseClueDiscriminatorAnnotation {
+  id                      String   @id @default(uuid())
+  caseId                  String
+  clueOrder               Int
+  clueIndex               Int?
+  eliminatedDiagnosisId   String?
+  eliminatedDiagnosisName String
+  discriminator           String
+  reasoning               String?
+  eliminationStrength     String   @default("moderate")
+  educationalValue        String   @default("medium")
+  reviewerUserId          String?
+  reviewedAt              DateTime?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  case                    Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, clueOrder])
+  @@index([caseId, eliminatedDiagnosisName])
+}
+
+model CaseClueProgressionAnalysis {
+  id                        String            @id @default(uuid())
+  caseId                    String
+  diagnosisRegistryId       String?
+  analysisVersion           String            @default("heuristic_v1")
+  diagnosticStates          Json
+  mimicCollapses            Json
+  discriminatorEmergences   Json
+  differentialElimination   Json              @default("[]")
+  leadingDifferentials      Json
+  remainingMimics           Json
+  discriminatorSignals      Json
+  editorialSignals          Json
+  likelyLockInClue          Int?
+  confidenceEstimate        Float?
+  ambiguityScore            Float             @default(0)
+  prematureLeakFlag         Boolean           @default(false)
+  unresolvedAmbiguityFlag   Boolean           @default(false)
+  totalMimicsTracked        Int               @default(0)
+  eliminatedMimicCount      Int               @default(0)
+  unresolvedMimicCount      Int               @default(0)
+  persistentConfusionCount  Int               @default(0)
+  weakEliminationCount      Int               @default(0)
+  explicitDiscriminatorAnnotationCount Int     @default(0)
+  heuristicOnlyEliminationCount Int            @default(0)
+  missingEditorialAnnotationCount Int          @default(0)
+  editorialNotes            String?
+  generatedAt               DateTime          @default(now())
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+  case                      Case              @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  diagnosisRegistry         DiagnosisRegistry? @relation(fields: [diagnosisRegistryId], references: [id], onDelete: SetNull)
+
+  @@unique([caseId])
+  @@index([diagnosisRegistryId])
+  @@index([likelyLockInClue])
+  @@index([prematureLeakFlag, unresolvedAmbiguityFlag])
 }
 
 model CaseLearningGoalCoverage {

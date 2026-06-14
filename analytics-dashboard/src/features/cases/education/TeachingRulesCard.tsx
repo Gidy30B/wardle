@@ -14,8 +14,16 @@ import type {
 } from '../../../api/admin';
 import {
   CompactMetricGrid,
+  CoverageStateStrip,
+  EditorialEntity,
+  EmbeddedActionBar,
   EmptyGuidance,
+  EvidenceConfidenceStrip,
   PrototypeSectionHeader,
+  ReasoningThread,
+  SecondaryActionDisclosure,
+  StreamDisclosure,
+  WorkflowStateInline,
 } from '../../editorial/workspace/EditorialPrimitives';
 
 type Props = {
@@ -333,28 +341,45 @@ function RuleRow({
   onEdit: () => void;
   onReview: (action: DiagnosisTeachingRuleReviewAction) => void;
 }) {
+  const primary = primaryRuleAction(rule);
+  const entityTone =
+    rule.status === 'ACTIVE' || rule.status === 'APPROVED'
+      ? 'success'
+      : rule.status === 'REJECTED' || rule.status === 'DEPRECATED'
+        ? 'danger'
+        : 'warning';
+
   return (
-    <article className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-semibold text-slate-100">{rule.title}</p>
-            <Pill tone={statusTone(rule.status)}>{formatLabel(rule.status)}</Pill>
-            <Pill tone={importanceTone(rule.importance)}>
-              {formatLabel(rule.importance)}
-            </Pill>
-          </div>
-          <p className="mt-1 text-xs text-slate-500">
-            {formatLabel(rule.category)} · {formatLabel(rule.source)} ·{' '}
-            {rule.stableKey}
-          </p>
-          {rule.rationale ? (
-            <p className="mt-2 text-sm leading-6 text-slate-300">{rule.rationale}</p>
-          ) : null}
-          <GeneratedBecauseBlock metadata={rule.generationMetadata} />
-          <ValidationTrustBlock validationRun={validationRun} />
-        </div>
-        <div className="flex flex-wrap gap-2">
+    <EditorialEntity
+      eyebrow="Clinical distinction"
+      title={rule.title}
+      subtitle={rule.rationale ?? 'No discriminator rationale has been added.'}
+      tone={entityTone}
+      state={
+        <>
+          <WorkflowStateInline label={formatLabel(rule.status)} tone={entityTone} />
+          <WorkflowStateInline
+            label={formatLabel(rule.importance)}
+            tone={
+              rule.importance === 'critical'
+                ? 'danger'
+                : rule.importance === 'high'
+                  ? 'warning'
+                  : 'neutral'
+            }
+          />
+        </>
+      }
+      action={
+        primary ? (
+          <ReviewButton
+            label={primary.label}
+            action={primary.action}
+            disabled={disabled || !canReview || primary.disabled}
+            title={!canReview ? reviewDisabledReason : undefined}
+            onReview={onReview}
+          />
+        ) : (
           <button
             type="button"
             onClick={onEdit}
@@ -363,6 +388,99 @@ function RuleRow({
           >
             Edit
           </button>
+        )
+      }
+    >
+      <ReasoningThread
+        items={[
+          {
+            label: 'Teaching goal',
+            detail: formatLabel(rule.category),
+            tone: 'info',
+          },
+          {
+            label: 'Discriminator',
+            detail:
+              firstListItem(rule.acceptableManifestations) ??
+              rule.rationale ??
+              'No acceptable manifestation is listed.',
+            tone: rule.acceptableManifestations ? 'success' : 'warning',
+          },
+          {
+            label: 'Learner confusion',
+            detail:
+              firstListItem(rule.requiredDifferentials) ??
+              'No required mimic or differential has been listed.',
+            tone: rule.requiredDifferentials ? 'warning' : 'neutral',
+          },
+        ]}
+      />
+      <div className="mt-3 grid gap-2 lg:grid-cols-2">
+        <EvidenceConfidenceStrip
+          items={[
+            {
+              label: 'Source',
+              value: formatLabel(rule.source),
+              tone: rule.source === 'GENERATED' ? 'info' : 'success',
+            },
+            {
+              label: 'Validation',
+              value: validationRun
+                ? formatLabel(validationRun.trustTier)
+                : 'Not checked',
+              tone: validationRun
+                ? validationRun.trustTier === 'HIGH_TRUST'
+                  ? 'success'
+                  : validationRun.trustTier === 'BLOCKED'
+                    ? 'danger'
+                    : 'warning'
+                : 'neutral',
+            },
+            {
+              label: 'Warnings',
+              value: rule.reasoningQualityWarnings?.length ?? 0,
+              tone: rule.reasoningQualityWarnings?.length
+                ? 'warning'
+                : 'success',
+            },
+          ]}
+        />
+        <CoverageStateStrip
+          items={[
+            {
+              label: 'Education',
+              value: rule.appliesToEducation ? 'Drives' : 'Off',
+              tone: rule.appliesToEducation ? 'success' : 'neutral',
+            },
+            {
+              label: 'Cases',
+              value: rule.appliesToCaseGeneration ? 'Drives' : 'Off',
+              tone: rule.appliesToCaseGeneration ? 'success' : 'neutral',
+            },
+            {
+              label: 'Graph',
+              value: rule.appliesToGraph ? 'Drives' : 'Off',
+              tone: rule.appliesToGraph ? 'success' : 'neutral',
+            },
+          ]}
+        />
+      </div>
+      <EmbeddedActionBar
+        note={
+          rule.avoidTooEarly
+            ? 'Avoid revealing this distinction too early in generated cases.'
+            : 'Governance and update controls are preserved.'
+        }
+      >
+        <button
+          type="button"
+          onClick={onEdit}
+          disabled={disabled}
+          className="editorial-action px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Edit
+        </button>
+        <SecondaryActionDisclosure>
           <ReviewButton
             label="Approve"
             action="approve"
@@ -398,14 +516,13 @@ function RuleRow({
             title={!canReview ? reviewDisabledReason : undefined}
             onReview={onReview}
           />
-        </div>
-      </div>
-
-      <details className="mt-3 rounded-lg border border-[var(--color-navy-border)] bg-slate-950/30">
-        <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-400">
-          Details
-        </summary>
-        <div className="grid gap-3 border-t border-[var(--color-navy-border)] p-3 text-sm md:grid-cols-2">
+        </SecondaryActionDisclosure>
+      </EmbeddedActionBar>
+      <StreamDisclosure
+        title="Supporting diagnostics"
+        summary="Manifestations, mimics, generation metadata, validation, and stable keys"
+      >
+        <div className="grid gap-3 text-sm md:grid-cols-2">
           <DetailList
             label="Acceptable manifestations"
             values={jsonList(rule.acceptableManifestations)}
@@ -414,24 +531,17 @@ function RuleRow({
             label="Required differentials"
             values={jsonList(rule.requiredDifferentials)}
           />
-          <div className="md:col-span-2 flex flex-wrap gap-2 text-xs text-slate-600">
-            <Pill tone={rule.appliesToEducation ? 'green' : 'muted'}>
-              Education {rule.appliesToEducation ? 'on' : 'off'}
-            </Pill>
-            <Pill tone={rule.appliesToCaseGeneration ? 'green' : 'muted'}>
-              Case generation {rule.appliesToCaseGeneration ? 'on' : 'off'}
-            </Pill>
-            <Pill tone={rule.appliesToGraph ? 'green' : 'muted'}>
-              Graph {rule.appliesToGraph ? 'on' : 'off'}
-            </Pill>
-            <Pill tone={rule.avoidTooEarly ? 'amber' : 'muted'}>
-              {rule.avoidTooEarly ? 'Avoid early reveal' : 'No reveal limit'}
-            </Pill>
+          <GeneratedBecauseBlock metadata={rule.generationMetadata} />
+          <ValidationTrustBlock validationRun={validationRun} />
+          <div className="md:col-span-2 text-xs leading-5 text-slate-500">
+            Stable key: {rule.stableKey} - Updated:{' '}
+            {new Date(rule.updatedAt).toLocaleDateString()}
           </div>
         </div>
-      </details>
-    </article>
+      </StreamDisclosure>
+    </EditorialEntity>
   );
+
 }
 
 function RuleForm({
@@ -799,6 +909,28 @@ function ReviewButton({
   );
 }
 
+function primaryRuleAction(rule: DiagnosisTeachingRule): {
+  label: string;
+  action: DiagnosisTeachingRuleReviewAction;
+  disabled: boolean;
+} | null {
+  if (rule.status === 'CANDIDATE' || rule.status === 'NEEDS_REVIEW') {
+    return {
+      label: 'Approve',
+      action: 'approve',
+      disabled: false,
+    };
+  }
+  if (rule.status === 'APPROVED') {
+    return { label: 'Activate', action: 'activate', disabled: false };
+  }
+  return null;
+}
+
+function firstListItem(value: JsonValue | null) {
+  return jsonList(value)[0] ?? null;
+}
+
 function DetailList({ label, values }: { label: string; values: string[] }) {
   return (
     <div>
@@ -837,19 +969,6 @@ function Pill({
       {children}
     </span>
   );
-}
-
-function statusTone(status: DiagnosisTeachingRuleStatus) {
-  if (status === 'ACTIVE' || status === 'APPROVED') return 'green';
-  if (status === 'CANDIDATE' || status === 'NEEDS_REVIEW') return 'amber';
-  if (status === 'REJECTED' || status === 'DEPRECATED') return 'rose';
-  return 'muted';
-}
-
-function importanceTone(importance: DiagnosisTeachingRuleImportance) {
-  if (importance === 'critical') return 'rose';
-  if (importance === 'high') return 'amber';
-  return 'muted';
 }
 
 function toForm(rule: DiagnosisTeachingRule): RuleFormState {

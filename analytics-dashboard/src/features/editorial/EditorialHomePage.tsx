@@ -4,9 +4,11 @@ import { Link } from 'react-router-dom';
 import {
   getDiagnosisRegistryOnboardingSummary,
   getDiagnosisRegistryLifecycleTelemetry,
+  getCurriculumPlannerOverview,
   getEditorialInbox,
   normalizeDiagnosisRegistryLifecycle,
   searchDiagnosisRegistry,
+  type CurriculumPlannerDiagnosis,
   type DiagnosisEditorialOnboardingSummary,
   type RegistryLifecycleTelemetry,
   type DiagnosisRegistrySearchItem,
@@ -21,6 +23,7 @@ import {
   type ConsoleAccessState,
 } from '../../hooks/useConsoleAccess';
 import { SpecialtyIcon } from '../specialties/specialty-icons';
+import { Pill } from './workspace/EditorialPrimitives';
 
 function greeting(displayName: string) {
   const hour = new Date().getHours();
@@ -45,6 +48,9 @@ export default function EditorialHomePage() {
 
   const [inboxSummary, setInboxSummary] = useState<EditorialInboxSummary | null>(null);
   const [priorityItems, setPriorityItems] = useState<EditorialInboxItem[]>([]);
+  const [activeDiagnoses, setActiveDiagnoses] = useState<
+    CurriculumPlannerDiagnosis[]
+  >([]);
   const [onboardingSummary, setOnboardingSummary] =
     useState<DiagnosisEditorialOnboardingSummary | null>(null);
   const [lifecycleTelemetry, setLifecycleTelemetry] =
@@ -107,16 +113,22 @@ export default function EditorialHomePage() {
     async function loadSummary() {
       try {
         setSummaryError(null);
-        const [inboxResponse, onboarding, lifecycle] = await Promise.all([
+        const [inboxResponse, onboarding, lifecycle, planner] = await Promise.all([
           getEditorialInbox(client, { severity: 'blocker', limit: 5 }),
           getDiagnosisRegistryOnboardingSummary(client),
           getDiagnosisRegistryLifecycleTelemetry(client),
+          getCurriculumPlannerOverview(client, { priorityTier: '', track: '' }),
         ]);
         if (!active) return;
         setInboxSummary(inboxResponse.summary);
         setPriorityItems(inboxResponse.items.slice(0, 4));
         setOnboardingSummary(onboarding);
         setLifecycleTelemetry(lifecycle);
+        setActiveDiagnoses(
+          planner.priorityDiagnoses
+            .filter((item) => item.priorityTier !== 'low')
+            .slice(0, 6),
+        );
       } catch (err) {
         if (!active) return;
         setSummaryError(
@@ -231,6 +243,8 @@ export default function EditorialHomePage() {
               </div>
             </section>
           ) : null}
+
+          <MyDiagnosesCard diagnoses={activeDiagnoses} />
 
           {/* Diagnosis search */}
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -398,6 +412,90 @@ function PriorityActionRow({
         className="shrink-0 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-800"
       >
         Open
+      </Link>
+    </div>
+  );
+}
+
+function MyDiagnosesCard({
+  diagnoses,
+}: {
+  diagnoses: CurriculumPlannerDiagnosis[];
+}) {
+  return (
+    <section className="rounded-xl border border-[var(--color-navy-border)] bg-[var(--color-navy-mid)] shadow-sm">
+      <div className="flex items-center justify-between border-b border-[var(--color-navy-border)] px-5 py-3.5">
+        <p className="text-[10px] font-medium uppercase tracking-[0.07em] text-[var(--color-slate)]">
+          My active diagnoses
+        </p>
+        <span className="text-[11px] text-[var(--color-slate)]">
+          {diagnoses.length} assigned
+        </span>
+      </div>
+      {diagnoses.length ? (
+        <div className="divide-y divide-white/[0.04] px-5">
+          {diagnoses.map((diagnosis, index) => (
+            <DiagnosisRow
+              key={diagnosis.diagnosisRegistryId}
+              diagnosis={diagnosis}
+              last={index === diagnoses.length - 1}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="px-5 py-4 text-sm text-[var(--color-slate)]">
+          No high or medium priority diagnoses are currently assigned.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function DiagnosisRow({
+  diagnosis,
+}: {
+  diagnosis: CurriculumPlannerDiagnosis;
+  last: boolean;
+}) {
+  const score = Math.round(diagnosis.priorityScore * 100);
+  const scoreColor =
+    score >= 80
+      ? 'var(--color-green)'
+      : score >= 55
+        ? 'var(--color-amber)'
+        : 'var(--color-rose)';
+
+  return (
+    <div className="flex items-center gap-3.5 py-2.5">
+      <div className="w-9 shrink-0 text-center">
+        <p className="font-editorial-num text-[17px]" style={{ color: scoreColor }}>
+          {score}
+        </p>
+        <p className="text-[8px] uppercase tracking-[0.05em] text-[var(--color-slate)]">
+          score
+        </p>
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-medium text-[var(--color-white-text)]">
+          {diagnosis.diagnosisName}
+        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          {diagnosis.specialty ? (
+            <span className="text-[10px] text-[var(--color-slate)]">
+              {diagnosis.specialty}
+            </span>
+          ) : null}
+          <Pill tone="slate">{formatLabel(diagnosis.track)}</Pill>
+          {diagnosis.blockers.length > 0 ? (
+            <Pill tone="rose">Blocked</Pill>
+          ) : null}
+          {diagnosis.priorityTier === 'high' ? (
+            <Pill tone="amber">High priority</Pill>
+          ) : null}
+        </div>
+      </div>
+      <Link to={diagnosis.targetUrl} className="btn-ghost shrink-0 text-[10px]">
+        Open &gt;
       </Link>
     </div>
   );

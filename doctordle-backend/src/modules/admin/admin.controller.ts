@@ -60,6 +60,8 @@ import {
 import { ReasoningDraftValidationService } from './reasoning-draft-validation.service';
 import {
   TargetedCaseGenerationService,
+  type ClueRevisionProposalPayload,
+  type TargetedDiscriminatorCasePayload,
   type TargetedCaseGenerationPayload,
 } from './targeted-case-generation.service';
 import { TeachingRulesAdminService } from './teaching-rules-admin.service';
@@ -132,6 +134,17 @@ type CaseEscalationAnnotationBody = {
   evidenceStrength?: number;
   reasoningPathId?: string | null;
   notes?: string | null;
+};
+
+type CaseClueDiscriminatorAnnotationBody = {
+  clueOrder?: number;
+  clueIndex?: number | null;
+  eliminatedDiagnosisId?: string | null;
+  eliminatedDiagnosisName?: string;
+  discriminator?: string;
+  reasoning?: string | null;
+  eliminationStrength?: 'weak' | 'moderate' | 'strong';
+  educationalValue?: 'low' | 'medium' | 'high';
 };
 
 type DiagnosisRegistryLifecycleActionBody = {
@@ -1151,6 +1164,40 @@ export class AdminController {
     };
   }
 
+  @Post('diagnosis-workspace/:diagnosisRegistryId/draft-actions/generate-discriminator-case')
+  @EditorialAccess()
+  async generateTargetedDiscriminatorCaseDraft(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: TargetedDiscriminatorCasePayload,
+  ) {
+    this.validateTargetedDiscriminatorPayload(body);
+
+    return this.targetedCaseGenerationService.generateTargetedDiscriminatorCase({
+      diagnosisRegistryId,
+      payload: body,
+      userId: request.user.id,
+    });
+  }
+
+  @Post('diagnosis-workspace/:diagnosisRegistryId/draft-actions/generate-clue-revision')
+  @EditorialAccess()
+  async generateClueRevisionProposalDraft(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: ClueRevisionProposalPayload,
+  ) {
+    this.validateClueRevisionPayload(body);
+
+    return this.targetedCaseGenerationService.generateClueRevisionProposal({
+      diagnosisRegistryId,
+      payload: body,
+      userId: request.user.id,
+    });
+  }
+
   @Post('diagnosis-workspace/:diagnosisRegistryId/draft-actions/repair-unsupported-claim')
   @EditorialAccess()
   async repairUnsupportedClaim(
@@ -1353,6 +1400,60 @@ export class AdminController {
       annotationId,
       userId: request.user.id,
     });
+  }
+
+  @Get('cases/:caseId/discriminator-annotations')
+  @EditorialAccess()
+  async listCaseDiscriminatorAnnotations(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+  ) {
+    return this.diagnosisEditorialWorkspaceService.listDiscriminatorAnnotationsForCase(
+      caseId,
+    );
+  }
+
+  @Post('cases/:caseId/discriminator-annotations')
+  @EditorialAccess()
+  async createCaseDiscriminatorAnnotation(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: CaseClueDiscriminatorAnnotationBody,
+  ) {
+    return this.diagnosisEditorialWorkspaceService.createDiscriminatorAnnotation(
+      caseId,
+      body,
+      request.user.id,
+    );
+  }
+
+  @Patch('cases/:caseId/discriminator-annotations/:annotationId')
+  @EditorialAccess()
+  async updateCaseDiscriminatorAnnotation(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+    @Param('annotationId', new ParseUUIDPipe()) annotationId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: CaseClueDiscriminatorAnnotationBody,
+  ) {
+    return this.diagnosisEditorialWorkspaceService.updateDiscriminatorAnnotation(
+      caseId,
+      annotationId,
+      body,
+      request.user.id,
+    );
+  }
+
+  @Delete('cases/:caseId/discriminator-annotations/:annotationId')
+  @EditorialAccess()
+  async deleteCaseDiscriminatorAnnotation(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+    @Param('annotationId', new ParseUUIDPipe()) annotationId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.diagnosisEditorialWorkspaceService.deleteDiscriminatorAnnotation(
+      caseId,
+      annotationId,
+      request.user.id,
+    );
   }
 
   @Post('diagnosis-workspace/:diagnosisRegistryId/draft-actions/strengthen-differential')
@@ -1630,6 +1731,33 @@ export class AdminController {
       ].includes(body.clueRevealStrategy)
     ) {
       throw new BadRequestException('Invalid clueRevealStrategy');
+    }
+  }
+
+  private validateTargetedDiscriminatorPayload(
+    body: TargetedDiscriminatorCasePayload,
+  ): void {
+    if (!body || typeof body !== 'object' || !body.target) {
+      throw new BadRequestException('target is required');
+    }
+    this.validateTargetedCasePayload({
+      difficulty: body.difficulty ?? 'MEDIUM',
+      teachingUnitIds: body.teachingUnitIds ?? [],
+      reasoningPathId: body.reasoningPathId,
+      clueRevealStrategy: body.clueRevealStrategy,
+      discriminatorTarget: body.target,
+    });
+  }
+
+  private validateClueRevisionPayload(body: ClueRevisionProposalPayload): void {
+    if (!body || typeof body !== 'object' || !body.target) {
+      throw new BadRequestException('target is required');
+    }
+    if (
+      body.desiredClueOrder !== undefined &&
+      (!Number.isInteger(body.desiredClueOrder) || body.desiredClueOrder < 1)
+    ) {
+      throw new BadRequestException('desiredClueOrder must be a positive integer');
     }
   }
 

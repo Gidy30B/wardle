@@ -393,23 +393,22 @@ export default function EditorialCoverageDashboardPage() {
                   <StatusBadge status={diagnosis.lifecycleState} />
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {diagnosisQueueIds(diagnosis).slice(0, 4).map((queueId) => (
-                  <span
-                    key={queueId}
-                    className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${queueChipClass(queueId)}`}
-                  >
-                    {formatLabel(queueId)}
-                  </span>
-                ))}
-                {diagnosis.weaknesses.slice(0, 5).map((weakness) => (
-                  <span
-                    key={weakness}
-                    className="rounded-full border border-[var(--color-navy-border)] bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-300"
-                  >
-                    {formatLabel(weakness)}
-                  </span>
-                ))}
+              <div className="mt-3">
+                <LimitedChipRow
+                  chips={[
+                    ...diagnosisQueueIds(diagnosis).map((queueId) => ({
+                      id: `queue-${queueId}`,
+                      label: formatLabel(queueId),
+                      className: queueChipClass(queueId),
+                    })),
+                    ...diagnosis.weaknesses.map((weakness) => ({
+                      id: `weakness-${weakness}`,
+                      label: formatLabel(weakness),
+                      className:
+                        'border-[var(--color-navy-border)] bg-white/5 text-slate-300',
+                    })),
+                  ]}
+                />
               </div>
               {triage?.recommendedNextAction ? (
                 <div className="mt-3 rounded-lg border border-[var(--color-navy-border)] bg-[var(--color-navy-mid)]/70 px-3 py-2">
@@ -485,19 +484,7 @@ export default function EditorialCoverageDashboardPage() {
                   ) : null}
                 </div>
               ) : null}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Link
-                  to={diagnosis.targetUrl}
-                  className="rounded-md border border-[var(--color-navy-border)] bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-[var(--color-teal)]/40 hover:bg-[var(--color-teal)]/10"
-                >
-                  Open workspace
-                </Link>
-                <Link
-                  to={targetUrl}
-                  className="rounded-md border border-[var(--color-teal)]/30 bg-[var(--color-teal)]/10 px-3 py-1.5 text-xs font-semibold text-[var(--color-teal)] transition hover:bg-[var(--color-teal)]/15"
-                >
-                  Open target tab
-                </Link>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 {firstClaimUrl ? (
                   <Link
                     to={firstClaimUrl}
@@ -505,14 +492,53 @@ export default function EditorialCoverageDashboardPage() {
                   >
                     Repair claim
                   </Link>
-                ) : null}
+                ) : (
+                  <Link
+                    to={targetUrl}
+                    className="rounded-md border border-[var(--color-teal)]/30 bg-[var(--color-teal)]/10 px-3 py-1.5 text-xs font-semibold text-[var(--color-teal)] transition hover:bg-[var(--color-teal)]/15"
+                  >
+                    Open target tab
+                  </Link>
+                )}
+                <details className="relative">
+                  <summary className="cursor-pointer list-none rounded-md border border-[var(--color-navy-border)] bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-white/10">
+                    More actions
+                  </summary>
+                  <div className="absolute left-0 z-20 mt-2 grid min-w-44 gap-2 rounded-lg border border-[var(--color-navy-border)] bg-[var(--color-navy-mid)] p-2 shadow-xl">
+                    <Link
+                      to={diagnosis.targetUrl}
+                      className="rounded-md px-2 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10"
+                    >
+                      Open workspace
+                    </Link>
+                    <Link
+                      to={targetUrl}
+                      className="rounded-md px-2 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10"
+                    >
+                      Open target tab
+                    </Link>
+                    {firstClaimUrl ? (
+                      <Link
+                        to={firstClaimUrl}
+                        className="rounded-md px-2 py-1.5 text-xs font-semibold text-[var(--color-rose)] transition hover:bg-white/10"
+                      >
+                        Repair claim
+                      </Link>
+                    ) : null}
+                  </div>
+                </details>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
-                <TinyMetric label="Rules" value={diagnosis.teaching.activeRuleCount} />
-                <TinyMetric label="Cases" value={diagnosis.inventory.playableCaseCount} />
-                <TinyMetric label="Diffs" value={diagnosis.differentials.linkedDifferentialCount} />
-                <TinyMetric label="Graph" value={diagnosis.graph.relationshipCount} />
-              </div>
+              <details className="mt-3 rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
+                <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  Coverage metrics
+                </summary>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+                  <TinyMetric label="Rules" value={diagnosis.teaching.activeRuleCount} />
+                  <TinyMetric label="Cases" value={diagnosis.inventory.playableCaseCount} />
+                  <TinyMetric label="Diffs" value={diagnosis.differentials.linkedDifferentialCount} />
+                  <TinyMetric label="Graph" value={diagnosis.graph.relationshipCount} />
+                </div>
+              </details>
               </article>
             );
           })}
@@ -828,6 +854,44 @@ function queueChipClass(queueId: string) {
     return 'border-[var(--color-teal)]/30 bg-[var(--color-teal)]/10 text-[var(--color-teal)]';
   }
   return 'border-[var(--color-amber)]/30 bg-[var(--color-amber)]/10 text-[var(--color-amber)]';
+}
+
+function LimitedChipRow({
+  chips,
+  limit = 3,
+}: {
+  chips: Array<{ id: string; label: string; className: string }>;
+  limit?: number;
+}) {
+  const visible = chips.slice(0, limit);
+  const hidden = chips.slice(limit);
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {visible.map((chip) => (
+        <span
+          key={chip.id}
+          className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${chip.className}`}
+        >
+          {chip.label}
+        </span>
+      ))}
+      {hidden.length ? (
+        <details className="relative">
+          <summary className="cursor-pointer list-none rounded-full border border-[var(--color-navy-border)] bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-400">
+            +{hidden.length}
+          </summary>
+          <div className="absolute left-0 z-20 mt-2 grid min-w-48 gap-1 rounded-lg border border-[var(--color-navy-border)] bg-[var(--color-navy-mid)] p-2 shadow-xl">
+            {hidden.map((chip) => (
+              <span key={chip.id} className="rounded-md bg-white/5 px-2 py-1 text-xs text-slate-300">
+                {chip.label}
+              </span>
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </div>
+  );
 }
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {

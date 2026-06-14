@@ -24,6 +24,18 @@ describe('AdminController generateCases', () => {
         .fn()
         .mockResolvedValue({ id: 'annotation-1' }),
       deleteCaseEscalationAnnotation: jest.fn().mockResolvedValue({ deleted: true }),
+      listDiscriminatorAnnotationsForCase: jest
+        .fn()
+        .mockResolvedValue([{ id: 'disc-1' }]),
+      createDiscriminatorAnnotation: jest
+        .fn()
+        .mockResolvedValue({ id: 'disc-1' }),
+      updateDiscriminatorAnnotation: jest
+        .fn()
+        .mockResolvedValue({ id: 'disc-1' }),
+      deleteDiscriminatorAnnotation: jest
+        .fn()
+        .mockResolvedValue({ deleted: true }),
     };
     const diagnosisWorkspaceQualityService = {};
     const teachingUnitCoverageService = {};
@@ -169,6 +181,67 @@ describe('AdminController generateCases', () => {
       diagnosisRegistryMergeExecutionService,
     };
   }
+
+  it('creates case discriminator annotations', async () => {
+    const { controller, diagnosisEditorialWorkspaceService } = buildController();
+    const request = { user: { id: 'editor-1' } };
+
+    await controller.createCaseDiscriminatorAnnotation(
+      '11111111-1111-4111-8111-111111111111',
+      request as never,
+      {
+        clueOrder: 2,
+        eliminatedDiagnosisName: 'GERD',
+        discriminator: 'Delayed post-meal timing',
+        eliminationStrength: 'moderate',
+        educationalValue: 'high',
+      },
+    );
+
+    expect(
+      diagnosisEditorialWorkspaceService.createDiscriminatorAnnotation,
+    ).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111',
+      expect.objectContaining({
+        eliminatedDiagnosisName: 'GERD',
+        discriminator: 'Delayed post-meal timing',
+      }),
+      'editor-1',
+    );
+  });
+
+  it('updates and deletes case discriminator annotations', async () => {
+    const { controller, diagnosisEditorialWorkspaceService } = buildController();
+    const request = { user: { id: 'editor-1' } };
+
+    await controller.updateCaseDiscriminatorAnnotation(
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+      request as never,
+      { discriminator: 'No reflux pattern' },
+    );
+    await controller.deleteCaseDiscriminatorAnnotation(
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+      request as never,
+    );
+
+    expect(
+      diagnosisEditorialWorkspaceService.updateDiscriminatorAnnotation,
+    ).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+      { discriminator: 'No reflux pattern' },
+      'editor-1',
+    );
+    expect(
+      diagnosisEditorialWorkspaceService.deleteDiscriminatorAnnotation,
+    ).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+      'editor-1',
+    );
+  });
 
   it('passes explicit diagnosisRegistryIds to case generation', async () => {
     const { caseGenerator, controller } = buildController();

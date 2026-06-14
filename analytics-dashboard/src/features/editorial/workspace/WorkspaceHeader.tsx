@@ -5,6 +5,7 @@ import type {
   WorkspaceLifecycle,
 } from '../../../api/admin';
 import { SpecialtyIcon } from '../../specialties/specialty-icons';
+import { Btn } from './EditorialPrimitives';
 import { formatLabel, formatScore } from './workspaceTransforms';
 import type { WorkspaceTab } from './workspaceTypes';
 import { WORKSPACE_TABS } from './workspaceTypes';
@@ -38,7 +39,7 @@ export function WorkspaceHeader({
             <p className="mt-2 text-xs font-semibold uppercase tracking-[0.24em] text-[var(--color-teal)]">
               Editorial Diagnosis Workspace
             </p>
-            <h2 className="mt-2 text-xl font-semibold leading-tight sm:text-[26px]">
+            <h2 className="font-display mt-2 text-xl leading-tight sm:text-[30px]">
               {workspace.diagnosis.displayLabel}
             </h2>
             {canonicalDifferent ? (
@@ -71,9 +72,13 @@ export function WorkspaceHeader({
               {workspace.diagnosis.id}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <HeaderPill label={formatLabel(workspace.workspaceSummary.status)} />
-            <HeaderPill label={formatLabel(workspace.lifecycle.ready)} />
+          <div className="flex flex-wrap items-start justify-end gap-2">
+            <Btn>Maturity history</Btn>
+            <Btn variant="primary">+ Add distinction</Btn>
+            <div className="flex w-full flex-wrap justify-end gap-2">
+              <HeaderPill label={formatLabel(workspace.workspaceSummary.status)} />
+              <HeaderPill label={formatLabel(workspace.lifecycle.ready)} />
+            </div>
           </div>
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -90,41 +95,7 @@ export function WorkspaceHeader({
         </div>
       </div>
 
-      {/* Lifecycle stage track - prototype-style maturity bar */}
-      <div className="flex overflow-x-auto border-t border-[var(--color-navy-border)]">
-        {lifecycleSteps.map((step, i) => {
-          const state = workspace.lifecycle[step.key];
-          const isDone = state === 'complete';
-          const isBlocked = state === 'blocked';
-          return (
-            <div
-              key={step.key}
-              className={[
-                'flex min-w-fit items-center gap-2 border-r border-[var(--color-navy-border)] px-3 py-2.5 text-xs font-medium sm:px-4',
-                isDone
-                  ? 'text-[var(--color-green)]'
-                  : isBlocked
-                    ? 'text-[var(--color-rose)]'
-                    : i === 0
-                      ? 'font-semibold text-white'
-                      : 'text-slate-500',
-              ].join(' ')}
-            >
-              <span
-                className={[
-                  'inline-block h-1.5 w-1.5 rounded-full',
-                  isDone
-                    ? 'bg-[var(--color-green)]'
-                    : isBlocked
-                      ? 'bg-[var(--color-rose)]'
-                      : 'bg-current',
-                ].join(' ')}
-              />
-              {step.label}
-            </div>
-          );
-        })}
-      </div>
+      <MaturityStageTrack lifecycle={workspace.lifecycle} />
     </section>
   );
 }
@@ -140,6 +111,50 @@ const lifecycleSteps: Array<{
   { key: 'graph', label: 'Graph' },
   { key: 'ready', label: 'Ready' },
 ];
+
+function MaturityStageTrack({ lifecycle }: { lifecycle: WorkspaceLifecycle }) {
+  const firstBlocked = lifecycleSteps.findIndex(
+    (step) => lifecycle[step.key] === 'blocked',
+  );
+  const firstIncomplete = lifecycleSteps.findIndex(
+    (step) => lifecycle[step.key] !== 'complete',
+  );
+  const currentIndex =
+    firstBlocked >= 0
+      ? firstBlocked
+      : firstIncomplete >= 0
+        ? firstIncomplete
+        : lifecycleSteps.length - 1;
+
+  return (
+    <div className="flex items-center overflow-x-auto border-t border-[var(--color-navy-border)]">
+      {lifecycleSteps.map((stage, index) => {
+        const done = index < currentIndex && lifecycle[stage.key] === 'complete';
+        const current = index === currentIndex;
+        const blocked = lifecycle[stage.key] === 'blocked';
+        return (
+          <div
+            key={stage.key}
+            className={[
+              'flex shrink-0 items-center gap-1.5 border-b-2 px-3.5 py-2.5 text-[11.5px] whitespace-nowrap',
+              done ? 'border-[var(--color-teal)] text-[var(--color-teal)]' : '',
+              current && !blocked
+                ? 'border-white font-medium text-[var(--color-white-text)]'
+                : '',
+              blocked ? 'border-transparent text-[var(--color-rose)]' : '',
+              !done && !current && !blocked
+                ? 'border-transparent text-[var(--color-slate)]'
+                : '',
+            ].join(' ')}
+          >
+            <span className="h-[5px] w-[5px] shrink-0 rounded-full bg-current" />
+            {stage.label}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function HeaderPill({ label }: { label: string }) {
   return (
@@ -161,7 +176,7 @@ function HeaderMetric({
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
         {label}
       </p>
-      <p className="mt-1 text-sm font-semibold text-white">
+      <p className="font-editorial-num mt-1 text-[22px] text-white">
         {value === null || value === undefined
           ? 'Unknown'
           : formatLabel(String(value))}

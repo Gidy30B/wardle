@@ -8,7 +8,9 @@ import type {
 import EditorialBriefCard from '../../../cases/education/EditorialBriefCard';
 import {
   CompactMetricGrid,
+  EditorialStream,
   ReasoningCard,
+  StreamDisclosure,
   TabNextStepCard,
 } from '../EditorialPrimitives';
 import { formatDate } from '../workspaceTransforms';
@@ -50,20 +52,41 @@ export function ObjectivesTab({
           disabled={pendingAction !== null}
         />
       ) : null}
-      <EditorialBriefSummaryCard workspace={workspace} />
-      <EditorialBriefCard
-        briefResponse={briefDetail}
-        teachingRules={teachingRules}
-        loading={loading}
-        error={error}
-        pendingAction={pendingAction}
-        onGenerate={onGenerate}
-        onCreate={onCreate}
-        onUpdate={onUpdate}
-        onReview={onReview}
-        canReviewBrief={canReviewBrief}
-        reviewDisabledReason={reviewDisabledReason}
-      />
+      <EditorialStream
+        eyebrow="Objectives"
+        title="Editorial intent stream"
+        subtitle="Keep learning goals, required mimics, pitfalls, and generation guidance pointed at one clinical teaching outcome."
+        action={
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={pendingAction !== null}
+            className="editorial-action editorial-action-primary disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Generate draft brief
+          </button>
+        }
+      >
+        <EditorialBriefSummaryCard workspace={workspace} />
+        <StreamDisclosure
+          title="Brief authoring and review"
+          summary="Create, edit, review, and activate the full editorial brief"
+        >
+          <EditorialBriefCard
+            briefResponse={briefDetail}
+            teachingRules={teachingRules}
+            loading={loading}
+            error={error}
+            pendingAction={pendingAction}
+            onGenerate={onGenerate}
+            onCreate={onCreate}
+            onUpdate={onUpdate}
+            onReview={onReview}
+            canReviewBrief={canReviewBrief}
+            reviewDisabledReason={reviewDisabledReason}
+          />
+        </StreamDisclosure>
+      </EditorialStream>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { createApiClient } from '../../api/client';
 import ErrorState from '../../components/ui/ErrorState';
 import StatusBadge from '../../components/ui/StatusBadge';
 import type { StatusBadgeTone } from '../../components/ui/statusBadgeMeta';
+import { Btn } from './workspace/EditorialPrimitives';
 
 type SeverityFilter = EditorialInboxSeverity | '';
 
@@ -224,17 +225,74 @@ function InboxRow({ item }: { item: EditorialInboxItem }) {
         </div>
       </div>
 
-      {/* Action */}
       <div className="flex items-center sm:justify-end">
-        <Link
-          to={item.targetUrl}
-          className="inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-        >
-          Open
-        </Link>
+        <InboxRowActions item={item} />
       </div>
     </div>
   );
+}
+
+function InboxRowActions({ item }: { item: EditorialInboxItem }) {
+  const reviewTypes: EditorialInboxItem['type'][] = [
+    'teachingRules',
+    'briefs',
+    'education',
+    'cases',
+    'graphCandidates',
+    'registryCandidates',
+  ];
+
+  if (reviewTypes.includes(item.type)) {
+    return (
+      <div className="flex flex-wrap justify-end gap-2">
+        <Btn>Decline</Btn>
+        <Link to={item.targetUrl} className="btn-ghost text-[12px] text-[var(--color-amber)]">
+          Review
+        </Link>
+        <Link to={diagnosisUrl(item)} className="btn-ghost text-[12px]">
+          Open dx &gt;
+        </Link>
+      </div>
+    );
+  }
+
+  if (item.type === 'mergeRisks' || item.type === 'differentials') {
+    return (
+      <div className="flex flex-wrap justify-end gap-2">
+        <Link to={item.targetUrl} className="btn-ghost text-[12px]">
+          View flag &gt;
+        </Link>
+        <Link to={diagnosisUrl(item)} className="btn-ghost text-[12px]">
+          Open dx &gt;
+        </Link>
+      </div>
+    );
+  }
+
+  if (item.type === 'onboarding') {
+    return (
+      <div className="flex flex-wrap justify-end gap-2">
+        <Link to={item.targetUrl} className="btn-ghost text-[12px]">
+          View &gt;
+        </Link>
+        <Link to={diagnosisUrl(item)} className="btn-ghost text-[12px]">
+          Open dx &gt;
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <Link to={item.targetUrl} className="btn-ghost text-[12px]">
+      Open &gt;
+    </Link>
+  );
+}
+
+function diagnosisUrl(item: EditorialInboxItem) {
+  return item.diagnosisRegistryId
+    ? `/editorial/diagnoses/${item.diagnosisRegistryId}`
+    : item.targetUrl;
 }
 
 function SummaryCard({

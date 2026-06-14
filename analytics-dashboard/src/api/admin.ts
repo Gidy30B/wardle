@@ -84,12 +84,16 @@ import type {
   EditorialStatusSummary,
   GenerateCasesPayload,
   GenerateCasesResult,
+  GenerateClueRevisionProposalPayload,
   GenerateTargetedCasePayload,
+  GenerateTargetedDiscriminatorCasePayload,
   GenerateTargetedCaseResult,
   CaseInventoryHealth,
   AiDraftDecisionAction,
   AiDraftRevisionAudit,
   CaseEscalationAnnotationPayload,
+  CaseClueDiscriminatorAnnotation,
+  CreateCaseClueDiscriminatorAnnotationPayload,
   CaseLearningGoalCoveragePayload,
   ClaimRepairResult,
   LinkCaseDiagnosisPayload,
@@ -111,6 +115,7 @@ import type {
   ReviewRegistryCandidatePayload,
   UnresolvedMimicCandidate,
   UpdateCaseDiagnosisPayload,
+  UpdateCaseClueDiscriminatorAnnotationPayload,
   UpdateDiagnosisRegistryMetadataPayload,
   UpsertDiagnosisEducationPayload,
   ValidationOutcomeSummary,
@@ -870,6 +875,28 @@ export function generateCaseFromUncoveredGoal(
   );
 }
 
+export function generateTargetedDiscriminatorCaseDraft(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  payload: GenerateTargetedDiscriminatorCasePayload,
+) {
+  return client.post<{ action: string; publicationStatus: 'draft'; result: GenerateTargetedCaseResult; audit: AiDraftRevisionAudit }>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/draft-actions/generate-discriminator-case`,
+    payload,
+  );
+}
+
+export function generateClueRevisionProposalDraft(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+  payload: GenerateClueRevisionProposalPayload,
+) {
+  return client.post<{ action: string; publicationStatus: 'draft'; proposal: unknown; audit: AiDraftRevisionAudit }>(
+    `/admin/diagnosis-workspace/${diagnosisRegistryId}/draft-actions/generate-clue-revision`,
+    payload,
+  );
+}
+
 export function repairUnsupportedClaimDraft(
   client: ApiClient,
   diagnosisRegistryId: string,
@@ -974,6 +1001,48 @@ export function deleteCaseEscalationAnnotation(
 ) {
   return client.delete(
     `/admin/diagnosis-workspace/${diagnosisRegistryId}/case-escalation-annotations/${annotationId}`,
+  );
+}
+
+export function listCaseDiscriminatorAnnotations(
+  client: ApiClient,
+  caseId: string,
+) {
+  return client.get<CaseClueDiscriminatorAnnotation[]>(
+    `/admin/cases/${caseId}/discriminator-annotations`,
+  );
+}
+
+export function createCaseDiscriminatorAnnotation(
+  client: ApiClient,
+  caseId: string,
+  payload: CreateCaseClueDiscriminatorAnnotationPayload,
+) {
+  return client.post<CaseClueDiscriminatorAnnotation>(
+    `/admin/cases/${caseId}/discriminator-annotations`,
+    payload,
+  );
+}
+
+export function updateCaseDiscriminatorAnnotation(
+  client: ApiClient,
+  caseId: string,
+  annotationId: string,
+  payload: UpdateCaseClueDiscriminatorAnnotationPayload,
+) {
+  return client.patch<CaseClueDiscriminatorAnnotation>(
+    `/admin/cases/${caseId}/discriminator-annotations/${annotationId}`,
+    payload,
+  );
+}
+
+export function deleteCaseDiscriminatorAnnotation(
+  client: ApiClient,
+  caseId: string,
+  annotationId: string,
+) {
+  return client.delete(
+    `/admin/cases/${caseId}/discriminator-annotations/${annotationId}`,
   );
 }
 

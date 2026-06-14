@@ -316,10 +316,12 @@ function QueueRow({ diagnosis }: { diagnosis: CurriculumPlannerDiagnosis }) {
               </span>{' '}
               playable
             </span>
-            {diagnosis.inventory.overused ? (
+          {diagnosis.inventory.overused ? (
               <StatusBadge status="Overused" tone="warning" />
             ) : null}
           </div>
+
+          <StageTrack currentStage={stageFromDiagnosis(diagnosis)} />
 
           {/* First blocker reason */}
           {diagnosis.blockers.length > 0 ? (
@@ -375,6 +377,68 @@ function SummaryMetric({
       <p className="mt-1 text-sm text-slate-500">{sub}</p>
     </div>
   );
+}
+
+const STAGES = ['Curriculum', 'Brief', 'Education', 'Cases', 'Graph', 'Ready'];
+
+function StageTrack({ currentStage }: { currentStage: string }) {
+  const currentIdx = Math.max(0, STAGES.indexOf(currentStage));
+  return (
+    <div className="mt-2.5 flex items-center overflow-x-auto">
+      {STAGES.map((stage, index) => {
+        const done = index < currentIdx;
+        const current = index === currentIdx;
+        return (
+          <div key={stage} className="flex items-center">
+            {index > 0 ? (
+              <div
+                className={`h-px w-4 ${
+                  done ? 'bg-[var(--color-teal)]' : 'bg-[var(--color-navy-border)]'
+                }`}
+              />
+            ) : null}
+            <div className="flex items-center gap-1">
+              <div
+                className={[
+                  'h-[6px] w-[6px] rounded-full',
+                  current
+                    ? 'bg-slate-900 ring-1 ring-slate-900'
+                    : done
+                      ? 'bg-[var(--color-teal)]'
+                      : 'bg-[var(--color-navy-border)]',
+                ].join(' ')}
+              />
+              {current ? (
+                <span className="whitespace-nowrap text-[9px] font-semibold text-slate-700">
+                  {stage}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function stageFromDiagnosis(diagnosis: CurriculumPlannerDiagnosis) {
+  const blockers = diagnosis.missingAreas.map((area) => area.toLowerCase());
+  if (blockers.some((area) => area.includes('brief') || area.includes('objective'))) {
+    return 'Brief';
+  }
+  if (blockers.some((area) => area.includes('education') || area.includes('teaching'))) {
+    return 'Education';
+  }
+  if (diagnosis.inventory.needsPlayableInventory || blockers.some((area) => area.includes('case'))) {
+    return 'Cases';
+  }
+  if (blockers.some((area) => area.includes('graph') || area.includes('evidence'))) {
+    return 'Graph';
+  }
+  if (diagnosis.blockers.length) {
+    return 'Curriculum';
+  }
+  return 'Ready';
 }
 
 function capitalize(value: string) {

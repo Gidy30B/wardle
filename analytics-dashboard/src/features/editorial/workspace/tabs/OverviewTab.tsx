@@ -13,14 +13,15 @@ import type {
 import StatusBadge from '../../../../components/ui/StatusBadge';
 import type { StatusBadgeTone } from '../../../../components/ui/statusBadgeMeta';
 import {
-  CollapsibleDetail,
   CompactPanel,
+  EditorialStream,
   EditorialRow,
   IssueSummaryStrip,
   MessageList,
   MetricGrid,
   PrototypeSectionHeader,
   SectionActionGroup,
+  StreamDisclosure,
   StatusStrip,
 } from '../EditorialPrimitives';
 import {
@@ -67,106 +68,108 @@ export function OverviewTab({
 
   return (
     <div className="space-y-4">
-      {/* Action queue */}
-      {hasIssues ? (
-        <section className="editorial-panel rounded-lg p-4">
-          <PrototypeSectionHeader
-            eyebrow="Action queue"
-            title="Resolve editorial blockers before maturity review"
-            subtitle="Highest-impact blockers and warnings from the workspace read model."
-          />
-          <div className="mt-3">
-            <IssueSummaryStrip blockers={blockers} warnings={warnings} />
+      <EditorialStream
+        eyebrow="Overview"
+        title="Publication readiness narrative"
+        subtitle="Read from blockers to highest-impact fixes, then open diagnostics only when the local decision needs it."
+      >
+        {hasIssues ? (
+          <div>
+            <PrototypeSectionHeader
+              eyebrow="Readiness blockers"
+              title="Resolve editorial blockers before maturity review"
+              subtitle="Highest-impact blockers and warnings from the workspace read model."
+            />
+            <div className="mt-3">
+              <IssueSummaryStrip blockers={blockers} warnings={warnings} />
+            </div>
           </div>
-        </section>
-      ) : null}
+        ) : (
+          <div className="rounded-lg border border-[var(--color-green)]/25 bg-[var(--color-green)]/10 px-3 py-2 text-sm font-semibold text-[var(--color-green)]">
+            No publication blockers are currently reported.
+          </div>
+        )}
 
-      {/* Summary metrics strip */}
-      <StatusStrip
-        items={[
-          {
-            label: 'Coverage',
-            value: formatScore(workspace.workspaceSummary.overallScore),
-            detail: `${workspace.coverageMatrix.filter((r) => r.fullCoverageStatus === 'covered').length}/${workspace.coverageMatrix.length} teaching rules covered`,
-            tone: scoreTone(workspace.workspaceSummary.overallScore),
-          },
-          {
-            label: 'Usable cases',
-            value: `${workspace.cases.summary.usable}/${workspace.cases.summary.total}`,
-            detail: 'Case inventory',
-            tone: workspace.cases.summary.usable ? 'success' : 'warning',
-          },
-          {
-            label: 'Clinical picture',
-            value: formatLabel(workspace.education.status),
-            detail: `Quality ${formatScore(workspace.workspaceSummary.educationScore)}`,
-            tone: scoreTone(workspace.workspaceSummary.educationScore),
-          },
-          {
-            label: 'Open actions',
-            value: workspace.recommendedActions.length,
-            detail: 'Recommended next moves',
-            tone: workspace.recommendedActions.length ? 'warning' : 'success',
-          },
-        ]}
-      />
-
-      {/* Recommended actions and coverage gaps */}
-      <div className="grid gap-4 lg:grid-cols-2">
         <RecommendedActionsCard
           actions={workspace.recommendedActions}
           onTabChange={onTabChange}
         />
-        <CoverageGapsCard gaps={workspace.coverageGaps} onGapSelect={onGapSelect} />
-      </div>
 
-      <CollapsibleDetail
-        title="Why this is not ready"
-        summary="Blockers, weak sections, coverage gaps, and lifecycle failures"
-        defaultOpen={hasIssues}
-      >
-        <ExplainabilityPanel
-          workspace={workspace}
-          onTabChange={onTabChange}
-          onGapSelect={onGapSelect}
-        />
-      </CollapsibleDetail>
+        <StreamDisclosure
+          title="Maturity and coverage diagnostics"
+          summary={`${workspace.coverageGaps.length} coverage gaps, ${workspace.readinessBreakdown.length} readiness signals`}
+        >
+          <div className="space-y-4">
+            <StatusStrip
+              items={[
+                {
+                  label: 'Coverage',
+                  value: formatScore(workspace.workspaceSummary.overallScore),
+                  detail: `${workspace.coverageMatrix.filter((r) => r.fullCoverageStatus === 'covered').length}/${workspace.coverageMatrix.length} teaching rules covered`,
+                  tone: scoreTone(workspace.workspaceSummary.overallScore),
+                },
+                {
+                  label: 'Usable cases',
+                  value: `${workspace.cases.summary.usable}/${workspace.cases.summary.total}`,
+                  detail: 'Case inventory',
+                  tone: workspace.cases.summary.usable ? 'success' : 'warning',
+                },
+                {
+                  label: 'Clinical picture',
+                  value: formatLabel(workspace.education.status),
+                  detail: `Quality ${formatScore(workspace.workspaceSummary.educationScore)}`,
+                  tone: scoreTone(workspace.workspaceSummary.educationScore),
+                },
+                {
+                  label: 'Open actions',
+                  value: workspace.recommendedActions.length,
+                  detail: 'Recommended next moves',
+                  tone: workspace.recommendedActions.length ? 'warning' : 'success',
+                },
+              ]}
+            />
+            <CoverageGapsCard
+              gaps={workspace.coverageGaps}
+              onGapSelect={onGapSelect}
+            />
+            <ExplainabilityPanel
+              workspace={workspace}
+              onTabChange={onTabChange}
+              onGapSelect={onGapSelect}
+            />
+            <CoverageMatrixCard
+              rows={workspace.coverageMatrix}
+              selectedRow={selectedRow}
+              onRowSelect={onRowSelect}
+            />
+          </div>
+        </StreamDisclosure>
 
-      {/* Coverage matrix */}
-      <CoverageMatrixCard
-        rows={workspace.coverageMatrix}
-        selectedRow={selectedRow}
-        onRowSelect={onRowSelect}
-      />
-
-      {/* Detail cards: governance, onboarding, readiness */}
-      <CollapsibleDetail
-        title="Registry onboarding"
-        summary="Progress, missing components, and setup recommendations"
-      >
-        <OnboardingCard workspace={workspace} onTabChange={onTabChange} />
-      </CollapsibleDetail>
-      <CollapsibleDetail
-        title="Readiness breakdown"
-        summary={`${workspace.readinessBreakdown.length} readiness signals`}
-      >
-        <ReadinessBreakdownCard
-          items={workspace.readinessBreakdown}
-          onTabChange={onTabChange}
-        />
-      </CollapsibleDetail>
-      <LifecycleGovernanceCard
-        lifecycle={workspace.lifecycleGovernance}
-        canRunSeniorActions={canRunSeniorActions}
-        seniorDisabledReason={seniorDisabledReason}
-        pendingAction={pendingAction}
-        onAction={onLifecycleAction}
-        onNormalizeLifecycleFlags={onNormalizeLifecycleFlags}
-      />
-      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <WorkspaceSummaryCard workspace={workspace} />
-        <CoverageScoreCard workspace={workspace} />
-      </div>
+        <StreamDisclosure
+          title="Embedded governance"
+          summary="Lifecycle, onboarding, readiness, and score details"
+        >
+          <div className="space-y-4">
+            <OnboardingCard workspace={workspace} onTabChange={onTabChange} />
+            <ReadinessBreakdownCard
+              items={workspace.readinessBreakdown}
+              onTabChange={onTabChange}
+            />
+            <LifecycleGovernanceCard
+              lifecycle={workspace.lifecycleGovernance}
+              canRunSeniorActions={canRunSeniorActions}
+              seniorDisabledReason={seniorDisabledReason}
+              pendingAction={pendingAction}
+              onAction={onLifecycleAction}
+              onNormalizeLifecycleFlags={onNormalizeLifecycleFlags}
+            />
+            <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+              <WorkspaceSummaryCard workspace={workspace} />
+              <CoverageScoreCard workspace={workspace} />
+            </div>
+          </div>
+        </StreamDisclosure>
+      </EditorialStream>
     </div>
   );
 }

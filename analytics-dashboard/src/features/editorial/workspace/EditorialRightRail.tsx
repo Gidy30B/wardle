@@ -20,7 +20,7 @@ import StatusBadge from '../../../components/ui/StatusBadge';
 import type { StatusBadgeTone } from '../../../components/ui/statusBadgeMeta';
 import { AuditTrailPanel } from './AuditTrailPanel';
 import { CoverageGapsCard } from './CoveragePanels';
-import { CompactPanel } from './EditorialPrimitives';
+import { CompactPanel, Pill } from './EditorialPrimitives';
 import {
   buildCopilotSuggestions,
   formatLabel,
@@ -56,6 +56,14 @@ export function EditorialRightRail({
       audit.reviewStatus === 'PENDING_REVIEW' ||
       audit.reviewStatus === 'REVIEW_REQUIRED',
   );
+  const pendingDiscriminatorDrafts = (
+    workspace.discriminatorDraftReviews ?? []
+  ).filter(
+    (draft) =>
+      draft.reviewStatus === 'PENDING_REVIEW' ||
+      draft.reviewStatus === 'REVIEW_REQUIRED' ||
+      draft.reviewStatus === 'NEEDS_CHANGES',
+  );
   const primaryFix =
     workspace.editorialPrioritization?.highestImpactFixes?.[0]?.label ??
     suggestions[0]?.title ??
@@ -87,6 +95,7 @@ export function EditorialRightRail({
             activeTab={activeTab}
             suggestions={suggestions}
             pendingAudits={pendingAudits}
+            pendingDiscriminatorDrafts={pendingDiscriminatorDrafts}
             onGapSelect={onGapSelect}
             onTabChange={onTabChange}
             onAiDraftDecision={onAiDraftDecision}
@@ -100,6 +109,7 @@ export function EditorialRightRail({
           activeTab={activeTab}
           suggestions={suggestions}
           pendingAudits={pendingAudits}
+          pendingDiscriminatorDrafts={pendingDiscriminatorDrafts}
           onGapSelect={onGapSelect}
           onTabChange={onTabChange}
           onAiDraftDecision={onAiDraftDecision}
@@ -114,6 +124,7 @@ function RightRailContent({
   activeTab,
   suggestions,
   pendingAudits,
+  pendingDiscriminatorDrafts,
   onGapSelect,
   onTabChange,
   onAiDraftDecision,
@@ -122,6 +133,9 @@ function RightRailContent({
   activeTab: WorkspaceTab;
   suggestions: CopilotSuggestion[];
   pendingAudits: NonNullable<DiagnosisEditorialWorkspace['aiDraftAuditTrail']>;
+  pendingDiscriminatorDrafts: NonNullable<
+    DiagnosisEditorialWorkspace['discriminatorDraftReviews']
+  >;
   onGapSelect: (gap: WorkspaceCoverageGap) => void;
   onTabChange: (tab: WorkspaceTab) => void;
   onAiDraftDecision: (
@@ -132,17 +146,26 @@ function RightRailContent({
 }) {
   return (
     <>
+      <MaturityRing workspace={workspace} />
       <PriorityDecisionCard
         workspace={workspace}
         activeTab={activeTab}
         onTabChange={onTabChange}
       />
-      <CopilotSnapshotCard workspace={workspace} />
+      <RailDetails title="Copilot diagnostics" summary="Signals behind the rail priority">
+        <CopilotSnapshotCard workspace={workspace} />
+      </RailDetails>
       <CopilotSuggestionsCard
         activeTab={activeTab}
         suggestions={suggestions}
         onTabChange={onTabChange}
       />
+      {pendingDiscriminatorDrafts.length ? (
+        <DiscriminatorDraftRailCard
+          drafts={pendingDiscriminatorDrafts}
+          onTabChange={onTabChange}
+        />
+      ) : null}
       {pendingAudits.length ? (
         <AuditTrailPanel
           audits={workspace.aiDraftAuditTrail ?? []}
@@ -190,6 +213,169 @@ function RightRailContent({
   );
 }
 
+function DiscriminatorDraftRailCard({
+  drafts,
+  onTabChange,
+}: {
+  drafts: NonNullable<DiagnosisEditorialWorkspace['discriminatorDraftReviews']>;
+  onTabChange: (tab: WorkspaceTab) => void;
+}) {
+  const primary = drafts[0];
+  const payload = primary.discriminatorDraftReview;
+  return (
+    <CompactPanel
+      title="Discriminator repairs"
+      subtitle={`${drafts.length} generated repair draft${drafts.length === 1 ? '' : 's'} waiting`}
+      action={<StatusBadge status={String(drafts.length)} tone="warning" />}
+    >
+      <p className="text-sm font-semibold text-slate-100">
+        {payload.mimicName}
+      </p>
+      <p className="mt-1 text-xs leading-5 text-slate-400">
+        {formatLabel(payload.generationIntent)} using {payload.discriminator}
+      </p>
+      <button
+        type="button"
+        className="editorial-action mt-3 w-full justify-center"
+        onClick={() => onTabChange('cases')}
+      >
+        Review in Cases
+      </button>
+    </CompactPanel>
+  );
+}
+
+function MaturityRing({ workspace }: { workspace: DiagnosisEditorialWorkspace }) {
+  const score = toPercent(workspace.workspaceSummary.overallScore);
+  const blockers =
+    workspace.workspaceSummary.blockers.length +
+    workspace.coverageGaps.filter((gap) => gap.severity === 'blocker').length;
+  const evidencePct = toPercent(
+    workspace.maturityBreakdown?.evidence ??
+      (workspace.evidenceCoverage?.coverageScore ?? null),
+  );
+  const discriminatorPct = toPercent(
+    workspace.maturityBreakdown?.differentialCoverage ??
+      (workspace.evidenceGraph.summary.discriminatorEvidence
+        ? Math.min(1, workspace.evidenceGraph.summary.discriminatorEvidence / 6)
+        : 0),
+  );
+  const casePct = toPercent(
+    workspace.maturityBreakdown?.caseCoverage ??
+      (workspace.cases.summary.total
+        ? workspace.cases.summary.usable / workspace.cases.summary.total
+        : 0),
+  );
+  const circumference = 2 * Math.PI * 27;
+  const offset = circumference * (1 - score / 100);
+
+  return (
+    <section className="editorial-panel overflow-hidden rounded-lg">
+      <div className="border-b border-[var(--color-navy-border)] p-4">
+        <p className="rail-label text-[10px] font-medium uppercase tracking-[0.07em] text-[var(--color-slate)]">
+          Diagnosis maturity
+        </p>
+        <div className="relative mx-auto mb-2.5 mt-3 h-[68px] w-[68px]">
+          <svg viewBox="0 0 68 68" className="h-full w-full -rotate-90">
+            <circle
+              cx="34"
+              cy="34"
+              r="27"
+              fill="none"
+              stroke="rgba(255,255,255,0.05)"
+              strokeWidth="5"
+            />
+            <circle
+              cx="34"
+              cy="34"
+              r="27"
+              fill="none"
+              stroke="var(--color-teal)"
+              strokeWidth="5"
+              strokeDasharray={circumference}
+              strokeDashoffset={offset}
+              strokeLinecap="round"
+            />
+          </svg>
+          <span className="font-editorial-num absolute inset-0 flex items-center justify-center text-[20px] text-[var(--color-teal)]">
+            {score}
+          </span>
+        </div>
+        <div className="flex flex-wrap justify-center gap-1.5">
+          <Pill tone={blockers ? 'amber' : 'green'}>
+            {blockers ? 'Not ready' : 'Ready'}
+          </Pill>
+          <Pill tone={blockers ? 'rose' : 'slate'}>
+            {blockers} blocker{blockers === 1 ? '' : 's'}
+          </Pill>
+        </div>
+        <div className="mt-3 space-y-2">
+          <CovBar label="Evidence coverage" pct={evidencePct} color="var(--color-teal)" />
+          <CovBar
+            label="Discriminator coverage"
+            pct={discriminatorPct}
+            color="var(--color-amber)"
+          />
+          <CovBar label="Case coverage" pct={casePct} color="var(--color-rose)" />
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-px bg-[var(--color-navy-border)]">
+        <GlanceCell label="Rules" value={workspace.teachingRules.summary.active} />
+        <GlanceCell label="Evidence" value={workspace.graph.factCount} />
+        <GlanceCell label="Cases" value={workspace.cases.summary.usable} />
+        <GlanceCell label="Claims" value={workspace.unsupportedClaimsBySection?.length ?? 0} />
+        <GlanceCell label="Gaps" value={workspace.coverageGaps.length} />
+        <GlanceCell label="Drafts" value={workspace.aiDraftAuditTrail?.length ?? 0} />
+      </div>
+    </section>
+  );
+}
+
+function CovBar({
+  label,
+  pct,
+  color,
+}: {
+  label: string;
+  pct: number;
+  color: string;
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex justify-between text-[10px] text-[var(--color-slate)]">
+        <span>{label}</span>
+        <span style={{ color }}>{pct}%</span>
+      </div>
+      <div className="h-1 overflow-hidden rounded-sm border border-[var(--color-navy-border)] bg-[var(--color-navy)]">
+        <div
+          className="h-full rounded-sm"
+          style={{ width: `${pct}%`, background: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function GlanceCell({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="bg-[var(--color-navy-mid)] px-2 py-2 text-center">
+      <p className="font-editorial-num text-[18px] text-[var(--color-white-text)]">
+        {value}
+      </p>
+      <p className="mt-1 text-[9px] uppercase tracking-[0.08em] text-[var(--color-slate)]">
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function toPercent(value: number | null | undefined) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return 0;
+  }
+  return Math.round(Math.max(0, Math.min(1, value)) * 100);
+}
+
 function PriorityDecisionCard({
   workspace,
   activeTab,
@@ -204,8 +390,7 @@ function PriorityDecisionCard({
   const queues = priority?.workflowQueues ?? priority?.queues ?? [];
   const visibleFixes = prioritizeForTab(fixes, activeTab);
   const primaryFix = visibleFixes[0] ?? null;
-  const secondaryFixes = visibleFixes.slice(1, 3);
-  const remainingFixes = visibleFixes.slice(3);
+  const remainingFixes = visibleFixes.slice(1);
 
   if (!priority) {
     return null;
@@ -236,17 +421,11 @@ function PriorityDecisionCard({
             onTabChange={onTabChange}
             primary
           />
-          {secondaryFixes.map((fix) => (
-            <ImpactFixButton
-              key={fix.id}
-              fix={fix}
-              onTabChange={onTabChange}
-            />
-          ))}
           {remainingFixes.length ? (
             <details className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
               <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Show all impact fixes
+                {remainingFixes.length} more impact fix
+                {remainingFixes.length === 1 ? '' : 'es'}
               </summary>
               <div className="mt-3 space-y-2">
                 {remainingFixes.map((fix) => (
@@ -570,8 +749,7 @@ function CopilotSuggestionsCard({
 }) {
   const uniqueSuggestions = dedupeSuggestions(suggestions);
   const primary = uniqueSuggestions[0] ?? null;
-  const secondary = uniqueSuggestions.slice(1, 4);
-  const remaining = uniqueSuggestions.slice(4);
+  const remaining = uniqueSuggestions.slice(1);
 
   return (
     <CompactPanel
@@ -585,17 +763,6 @@ function CopilotSuggestionsCard({
             onTabChange={onTabChange}
             primary
           />
-          {secondary.length ? (
-            <div className="space-y-2">
-              {secondary.map((suggestion) => (
-                <SuggestionButton
-                  key={suggestion.id}
-                  suggestion={suggestion}
-                  onTabChange={onTabChange}
-                />
-              ))}
-            </div>
-          ) : null}
           {remaining.length ? (
             <details className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
               <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types src/features/specialties/specialty-icon-registry.test.ts && node --experimental-strip-types src/features/editorial/coverageQueues.test.ts && node --experimental-strip-types src/features/editorial/workspace/workspaceDeepLinks.test.ts && node --experimental-strip-types src/features/editorial/workspace/acceptedRepairs.test.ts",
+    "test": "node --experimental-strip-types src/features/specialties/specialty-icon-registry.test.ts && node --experimental-strip-types src/features/editorial/coverageQueues.test.ts && node --experimental-strip-types src/features/editorial/workspace/workspaceDeepLinks.test.ts && node --experimental-strip-types src/features/editorial/workspace/acceptedRepairs.test.ts && node --experimental-strip-types src/features/editorial/workspace/mimicSurvival.test.ts",
     "qa:editorial-smoke": "npx playwright test -c playwright.local-qa.config.ts",
     "preview": "vite preview"
   },
