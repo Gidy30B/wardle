@@ -1,3 +1,4 @@
+import { Bell, Loader2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import WardleLogo from '../../../components/brand/WardleLogo'
 import Button from '../../../components/ui/Button'
@@ -7,6 +8,7 @@ import ReactClueCard from './ReactClueCard'
 import ReactGameProgress from './ReactGameProgress'
 import ReactGuessInput from './ReactGuessInput'
 import NotificationBell from '../../notifications/NotificationBell'
+import { useNextCaseReminder } from '../../notifications/useNextCaseReminder'
 import { getVisibleStreak } from '../../user-progress/streakVisibility'
 import type { RoundViewModel } from '../round.types'
 import type { AppIconSet } from '../../../theme/icons'
@@ -285,13 +287,9 @@ export default function ReactGamePlaySurface({
                 Next case
               </p>
               {roundViewModel.nextCaseAction.kind === 'countdown' ? (
-                <p className="mt-2 text-sm leading-6 text-white/62">
-                  New case unlocks in{' '}
-                  <span className="font-brand-mono font-bold text-[var(--wardle-color-mint)]">
-                    {roundViewModel.nextCaseAction.countdownText}
-                  </span>
-                  .
-                </p>
+                <NextCaseCountdownCard
+                  countdownText={roundViewModel.nextCaseAction.countdownText}
+                />
               ) : (
                 <div className="mt-3">
                   <Button type="button" onClick={onReload}>
@@ -322,6 +320,70 @@ export default function ReactGamePlaySurface({
           onMoveSuggestionHighlight={onMoveSuggestionHighlight}
           onSelectHighlightedSuggestion={onSelectHighlightedSuggestion}
         />
+      ) : null}
+    </div>
+  )
+}
+
+function NextCaseCountdownCard({ countdownText }: { countdownText: string }) {
+  const { enabled, permission, loading, error, enableReminder } =
+    useNextCaseReminder()
+  const notificationsDenied = permission === 'denied'
+
+  return (
+    <div className="mt-2 space-y-3">
+      <p className="text-sm leading-6 text-white/62">
+        New case unlocks in{' '}
+        <span className="font-brand-mono font-bold text-[var(--wardle-color-mint)]">
+          {countdownText}
+        </span>
+        .
+      </p>
+
+      {enabled ? (
+        <div className="mt-3 flex items-center gap-2 rounded-[14px] border border-[rgba(0,180,166,0.26)] bg-[rgba(0,180,166,0.10)] px-4 py-3 text-sm font-bold text-[var(--wardle-color-mint)]">
+          <Bell className="size-4 shrink-0" strokeWidth={2.5} />
+          <div>
+            <p>Reminder on</p>
+            <p className="mt-0.5 text-xs font-semibold text-white/56">
+              We&apos;ll notify you when the next case is ready.
+            </p>
+          </div>
+        </div>
+      ) : notificationsDenied ? (
+        <div className="mt-3 rounded-[14px] border border-[rgba(244,162,97,0.18)] bg-white/[0.025] px-4 py-3">
+          <p className="text-sm font-bold text-[var(--wardle-color-amber)]">
+            Notifications are off
+          </p>
+          <p className="mt-1 text-xs font-semibold leading-5 text-white/50">
+            Enable notifications in your phone settings to get next-case reminders.
+          </p>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-[14px] border border-[rgba(244,162,97,0.34)] bg-[rgba(244,162,97,0.10)] px-4 py-3 text-sm font-black text-[var(--wardle-color-amber)] transition hover:bg-[rgba(244,162,97,0.16)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+          disabled={loading}
+          onClick={() => {
+            void enableReminder()
+          }}
+        >
+          {loading ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              <span>Setting reminder...</span>
+            </>
+          ) : (
+            <>
+              <Bell className="size-4" strokeWidth={2.5} />
+              <span>Notify me when it&apos;s ready</span>
+            </>
+          )}
+        </button>
+      )}
+
+      {error && !notificationsDenied ? (
+        <p className="text-xs font-semibold text-[#ff9a9a]">{error}</p>
       ) : null}
     </div>
   )

@@ -35,6 +35,7 @@ import {
   searchDiagnosisAutocomplete,
   useDiagnosisDictionaryIndex,
 } from "../../../../diagnosis";
+import { useDiagnosisEducation } from "../../../../useDiagnosisEducation";
 
 export function AdaptiveRecallQueueController({
   queue,
@@ -836,6 +837,12 @@ export function RecallAnswerCard({
     () => splitReasoning(explanation?.reasoning ?? ""),
     [explanation?.reasoning],
   );
+  const diagnosisRegistryId = getRecallDiagnosisRegistryId(item);
+  const { education } = useDiagnosisEducation(diagnosisRegistryId);
+  const recallPrompts = useMemo(
+    () => normalizeRecallPrompts(education?.recallPrompts).slice(0, 3),
+    [education?.recallPrompts],
+  );
 
   const [showClues, setShowClues] = useState(false);
   const [showReasoning, setShowReasoning] = useState(false);
@@ -886,6 +893,10 @@ export function RecallAnswerCard({
           </p>
         )}
       </div>
+
+      {recallPrompts.length ? (
+        <QuickRecallSection prompts={recallPrompts} />
+      ) : null}
 
       {explanation?.keyFindings.length ? (
         <ReviewSection title="Key Findings" tone="teal">
@@ -1005,6 +1016,108 @@ export function RecallAnswerCard({
         onRate={onRateConfidence}
       />
     </section>
+  );
+}
+
+type NormalizedRecallPrompt = {
+  id: string;
+  prompt: string;
+  answer: string | null;
+};
+
+function getRecallDiagnosisRegistryId(item: LearnLibraryCase) {
+  return (
+    item.case.diagnosisRegistryId ??
+    (item as LearnLibraryCase & { diagnosisRegistryId?: string | null })
+      .diagnosisRegistryId ??
+    null
+  );
+}
+
+function normalizeRecallPrompts(value: unknown): NormalizedRecallPrompt[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item, index) => {
+      const prompt =
+        typeof item === "string"
+          ? item.trim()
+          : getRecallPromptString(item, "prompt") ??
+            getRecallPromptString(item, "question") ??
+            getRecallPromptString(item, "text") ??
+            "";
+      if (!prompt) return null;
+
+      const answer =
+        typeof item === "string"
+          ? null
+          : getRecallPromptString(item, "answer") ??
+            getRecallPromptString(item, "explanation");
+
+      return {
+        id: getRecallPromptString(item, "id") ?? `${index}-${prompt}`,
+        prompt,
+        answer,
+      };
+    })
+    .filter((item): item is NormalizedRecallPrompt => item !== null);
+}
+
+function getRecallPromptString(value: unknown, key: string) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const field = (value as Record<string, unknown>)[key];
+  if (typeof field !== "string") return null;
+  const trimmed = field.trim();
+  return trimmed || null;
+}
+
+export function QuickRecallSection({
+  prompts,
+}: {
+  prompts: NormalizedRecallPrompt[];
+}) {
+  return (
+    <ReviewSection title="Quick Recall" tone="teal">
+      <div className="rounded-[18px] border border-[rgba(0,180,166,0.16)] bg-[rgba(0,180,166,0.045)] px-4 py-4">
+        <p className="text-[13px] leading-6 text-white/48">
+          Lock in the teaching point before spacing this case.
+        </p>
+        <div className="mt-3 space-y-2">
+          {prompts.map((prompt, index) => (
+            <article
+              key={prompt.id}
+              className="rounded-[13px] border border-[rgba(0,180,166,0.13)] bg-[#121827]/72 px-3 py-3"
+            >
+              <div className="flex min-w-0 gap-2.5">
+                <span className="mt-[2px] flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] bg-[rgba(0,180,166,0.14)] font-brand-mono text-[9px] font-black text-[var(--wardle-color-teal)]">
+                  {index + 1}
+                </span>
+                <p className="min-w-0 break-words text-sm font-semibold leading-6 text-white/72">
+                  <span className="font-brand-mono text-[10px] font-black uppercase tracking-[0.12em] text-[var(--wardle-color-teal)]/70">
+                    Q:
+                  </span>{" "}
+                  {prompt.prompt}
+                </p>
+              </div>
+
+              {prompt.answer ? (
+                <details className="group mt-2 pl-7">
+                  <summary className="cursor-pointer list-none font-brand-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--wardle-color-teal)]/60 transition group-open:text-[var(--wardle-color-teal)]">
+                    Show answer
+                  </summary>
+                  <p className="mt-2 break-words rounded-[10px] border border-white/[0.05] bg-white/[0.03] px-3 py-2.5 text-xs leading-5 text-white/54">
+                    <span className="font-brand-mono text-[9px] font-black uppercase tracking-[0.12em] text-white/34">
+                      A:
+                    </span>{" "}
+                    {prompt.answer}
+                  </p>
+                </details>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      </div>
+    </ReviewSection>
   );
 }
 

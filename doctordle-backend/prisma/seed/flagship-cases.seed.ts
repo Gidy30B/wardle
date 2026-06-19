@@ -1,10 +1,20 @@
 import {
   PrismaClient,
   CaseEditorialStatus,
+  CaseSource,
+  DiagnosisAgeGroup,
+  DiagnosisAliasKind,
+  DiagnosisClinicalSetting,
+  DiagnosisDifficultyBand,
   DiagnosisEducationSource,
   DiagnosisEducationStatus,
   DiagnosisMappingMethod,
   DiagnosisMappingStatus,
+  DiagnosisRarityBand,
+  DiagnosisRegistryStatus,
+  DiagnosisUrgencyLevel,
+  PublishTrack,
+  ValidationOutcome,
 } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
@@ -12,9 +22,7 @@ import { Pool } from 'pg';
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error(
-    'DATABASE_URL is required to run the Elderly UTI flagship seed.',
-  );
+  throw new Error('DATABASE_URL is required to run Aortic stenosis seed.');
 }
 
 const pool = new Pool({ connectionString: databaseUrl });
@@ -29,47 +37,10 @@ function normalizeClinicalText(value: string): string {
     .replace(/\s+/g, ' ');
 }
 
-const now = new Date();
-const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 13, 12, 0, 0));
-const seedVersion = 'flagship-elderly-uti-v1';
-
 function addUtcDays(date: Date, days: number): Date {
   const next = new Date(date);
   next.setUTCDate(next.getUTCDate() + days);
   return next;
-}
-
-async function findAvailableInventoryPlaceholderDate(params: {
-  preferredDate: Date;
-  reusableCaseId?: string;
-  displayLabel: string;
-}): Promise<Date> {
-  const maxAttempts = 365;
-
-  for (let offset = 0; offset < maxAttempts; offset += 1) {
-    const candidateDate = addUtcDays(params.preferredDate, offset);
-
-    const owner = await prisma.case.findUnique({
-      where: { date: candidateDate },
-      select: {
-        id: true,
-        title: true,
-        dailyCases: { select: { id: true }, take: 1 },
-      },
-    });
-
-    if (!owner) {
-      return candidateDate;
-    }
-
-    if (params.reusableCaseId && owner.id === params.reusableCaseId) {
-      return candidateDate;
-    }
-  }
-
-  throw new Error(
-    `Cannot seed ${params.displayLabel}: no free inventory placeholder date found.`,
-  );
 }
 
 async function getNextCasePublicNumber(): Promise<number> {
@@ -82,643 +53,631 @@ async function getNextCasePublicNumber(): Promise<number> {
   return (latest?.publicNumber ?? 0) + 1;
 }
 
-// ─── Clues ────────────────────────────────────────────────────────────────────
+async function findAvailableInventoryPlaceholderDate(params: {
+  preferredDate: Date;
+  reusableCaseId?: string;
+  displayLabel: string;
+}): Promise<Date> {
+  for (let offset = 0; offset < 365; offset += 1) {
+    const candidateDate = addUtcDays(params.preferredDate, offset);
+
+    const owner = await prisma.case.findUnique({
+      where: { date: candidateDate },
+      select: {
+        id: true,
+        dailyCases: { select: { id: true }, take: 1 },
+      },
+    });
+
+    if (!owner) return candidateDate;
+    if (params.reusableCaseId && owner.id === params.reusableCaseId) {
+      return candidateDate;
+    }
+  }
+
+  throw new Error(`No free inventory placeholder date for ${params.displayLabel}.`);
+}
+
+const now = new Date();
+const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 17, 12, 0, 0));
+const seedVersion = 'flagship-aortic-stenosis-v1';
+
+const canonicalName = 'aortic stenosis';
+const displayLabel = 'Aortic Stenosis';
+const caseTitle = 'Severe Calcific Aortic Stenosis';
+
+const aliasTerms = [
+  'Aortic Stenosis',
+  'aortic stenosis',
+  'severe aortic stenosis',
+  'calcific aortic stenosis',
+  'valvular aortic stenosis',
+  'aortic valve stenosis',
+  'AS',
+];
 
 const clues = [
   {
     order: 0,
     type: 'history',
     value:
-      'An 82-year-old woman is brought to the emergency department because of worsening confusion and reduced oral intake over two days.',
+      'A 72-year-old man presents with progressive exertional breathlessness and reduced exercise tolerance over the past year.',
   },
   {
     order: 1,
     type: 'history',
     value:
-      'Her daughter reports new urinary frequency and foul-smelling urine, although the patient has not complained of dysuria.',
+      'He reports several episodes of dizziness while walking uphill and one brief episode of exertional syncope two months ago.',
   },
   {
     order: 2,
-    type: 'vital',
+    type: 'symptom',
     value:
-      'Temperature is 38.2°C, heart rate is 110/min, respiratory rate is 22/min, and blood pressure is 100/64 mmHg.',
+      'Over the last six months he has developed central chest discomfort during exertion that improves with rest.',
   },
   {
     order: 3,
     type: 'exam',
     value:
-      'Examination reveals suprapubic tenderness and mild dehydration, with no meningism or focal neurological deficit.',
+      'Cardiovascular examination reveals a slow-rising low-volume carotid pulse, narrow pulse pressure, and a sustained apical impulse.',
   },
   {
     order: 4,
-    type: 'lab',
+    type: 'exam',
     value:
-      'Urinalysis demonstrates positive nitrites, positive leukocyte esterase, pyuria, and bacteriuria.',
+      'A harsh crescendo-decrescendo systolic murmur is heard best at the right second intercostal space and radiates to both carotid arteries.',
   },
   {
     order: 5,
     type: 'investigation',
     value:
-      'Urine culture grows Escherichia coli sensitive to ceftriaxone.',
+      'Transthoracic echocardiography demonstrates a heavily calcified aortic valve with valve area 0.7 cm², mean gradient 48 mmHg, peak velocity 4.3 m/s, and preserved left ventricular ejection fraction.',
   },
 ] as const;
 
 const differentials = [
-  'Delirium secondary to dehydration',
-  'Community-acquired pneumonia',
-  'Acute pyelonephritis',
-  'Stroke',
-  'Asymptomatic bacteriuria',
+  'Hypertrophic Cardiomyopathy',
+  'Coronary Artery Disease',
+  'Mitral Regurgitation',
+  'Heart Failure with Preserved Ejection Fraction',
+  'Aortic Sclerosis',
 ];
 
-// ─── Explanation ─────────────────────────────────────────────────────────────
-
 const explanation = {
-  diagnosis: 'Urinary Tract Infection presenting with delirium in an elderly patient',
-
+  diagnosis: displayLabel,
   summary:
-    'This is urinary tract infection in an elderly patient: acute delirium, reduced oral intake, urinary frequency, fever, suprapubic tenderness, pyuria, bacteriuria, and urine culture growing Escherichia coli. The case highlights that older adults may present atypically without prominent dysuria.',
-
-  keyEvidence: [
-    'Acute confusion over two days',
-    'Reduced oral intake',
-    'New urinary frequency',
-    'Foul-smelling urine',
-    'Fever and tachycardia',
-    'Suprapubic tenderness',
-    'Positive nitrites and leukocyte esterase',
-    'Pyuria and bacteriuria',
-    'Urine culture growing Escherichia coli',
-  ],
-
+    'Progressive exertional dyspnea, angina, exertional syncope, slow-rising low-volume pulse, harsh ejection systolic murmur radiating to the carotids, and echocardiographic severe valve obstruction support severe calcific aortic stenosis.',
   reasoning: [
-    'Acute confusion in an elderly patient suggests delirium and should prompt a search for infection, dehydration, medication effects, metabolic disturbance, and neurological causes.',
-    'New urinary frequency and foul-smelling urine provide a urinary source, even though dysuria may be absent in older adults.',
-    'Fever, tachycardia, and mild hypotension support systemic inflammatory response rather than simple asymptomatic bacteriuria.',
-    'Suprapubic tenderness supports lower urinary tract involvement.',
-    'Positive nitrites, leukocyte esterase, pyuria, and bacteriuria support urinary infection when paired with compatible symptoms.',
-    'Urine culture growing Escherichia coli confirms the causative organism and guides antibiotic choice.',
-    'The absence of focal neurological deficits makes stroke less likely as the primary cause of confusion.',
-    'The absence of respiratory symptoms or chest findings makes pneumonia less likely.',
+    'Progressive exertional dyspnea in an older adult suggests a cardiac limitation to forward flow or filling.',
+    'Exertional syncope is a danger symptom in fixed left ventricular outflow obstruction because cardiac output cannot increase adequately during activity.',
+    'Exertional angina can occur in severe aortic stenosis even without primary coronary disease because left ventricular hypertrophy increases oxygen demand.',
+    'A slow-rising low-volume carotid pulse is classic for severe fixed left ventricular outflow obstruction.',
+    'A harsh crescendo-decrescendo systolic murmur at the right upper sternal border radiating to the carotids localizes the lesion to the aortic valve.',
+    'Valve area 0.7 cm², mean gradient 48 mmHg, and peak velocity 4.3 m/s confirm severe aortic stenosis.',
   ],
-
   keyFindings: [
-    'Elderly patient',
-    'Delirium',
-    'Reduced oral intake',
-    'Urinary frequency',
-    'Foul-smelling urine',
-    'Fever',
-    'Suprapubic tenderness',
-    'Positive nitrites',
-    'Pyuria',
-    'E. coli urine culture',
+    'Older adult',
+    'Progressive exertional dyspnea',
+    'Reduced exercise tolerance',
+    'Exertional dizziness',
+    'Exertional syncope',
+    'Exertional angina',
+    'Slow-rising low-volume carotid pulse',
+    'Narrow pulse pressure',
+    'Sustained apical impulse',
+    'Harsh crescendo-decrescendo systolic murmur',
+    'Murmur maximal at right second intercostal space',
+    'Carotid radiation',
+    'Calcified aortic valve',
+    'Valve area 0.7 cm²',
+    'Mean gradient 48 mmHg',
+    'Peak velocity 4.3 m/s',
+    'Preserved left ventricular ejection fraction',
   ],
-
   differentials,
-
-  whyNotOthers: [
-    {
-      diagnosis: 'Delirium secondary to dehydration',
-      reason:
-        'Dehydration contributes to delirium, but fever, urinary symptoms, pyuria, bacteriuria, and positive urine culture identify UTI as the precipitating cause.',
-    },
-    {
-      diagnosis: 'Community-acquired pneumonia',
-      reason:
-        'Pneumonia can cause delirium in older adults, but this case lacks respiratory symptoms or focal chest findings and has strong urinary evidence.',
-    },
-    {
-      diagnosis: 'Acute pyelonephritis',
-      reason:
-        'Systemic symptoms can occur in pyelonephritis, but there is no flank pain or costovertebral angle tenderness; this presentation is more consistent with lower UTI causing delirium.',
-    },
-    {
-      diagnosis: 'Stroke',
-      reason:
-        'Stroke can cause acute confusion, but the absence of focal neurological signs and the presence of infection evidence make UTI-associated delirium more likely.',
-    },
-    {
-      diagnosis: 'Asymptomatic bacteriuria',
-      reason:
-        'Asymptomatic bacteriuria is common in older adults, but this patient has fever, delirium, urinary frequency, and suprapubic tenderness, making true infection more likely.',
-    },
-  ],
-
-  managementPearl:
-    'In older adults, diagnose UTI only when urinary or systemic symptoms support infection; avoid treating asymptomatic bacteriuria. When infection is likely, assess delirium severity, hydration, sepsis risk, renal function, and local antibiotic guidance while awaiting culture sensitivities.',
-
   differentialAnalysis: [
     {
-      diagnosis: 'Delirium secondary to dehydration',
+      diagnosis: 'Hypertrophic Cardiomyopathy',
       whyPlausibleEarly:
-        'Reduced oral intake and confusion commonly occur with dehydration in elderly patients.',
+        'Exertional syncope, angina, dyspnea, and a systolic murmur can resemble obstructive hypertrophic cardiomyopathy.',
       ruledOutByClues: [
-        {
-          clueOrder: 1,
-          evidence: 'new urinary frequency and foul-smelling urine',
-          reason:
-            'These symptoms suggest a urinary trigger rather than isolated dehydration.',
-        },
-        {
-          clueOrder: 2,
-          evidence: 'temperature 38.2°C and heart rate 110/min',
-          reason:
-            'Fever and tachycardia support infection or systemic inflammation.',
-        },
         {
           clueOrder: 4,
-          evidence: 'positive nitrites, leukocyte esterase, pyuria, and bacteriuria',
+          evidence:
+            'harsh crescendo-decrescendo systolic murmur radiating to both carotid arteries',
           reason:
-            'Urinalysis supports urinary infection when paired with compatible symptoms.',
-        },
-      ],
-      finalReasonLessLikely:
-        'Dehydration may contribute, but UTI is the better unifying diagnosis.',
-    },
-    {
-      diagnosis: 'Community-acquired pneumonia',
-      whyPlausibleEarly:
-        'Pneumonia may present atypically with delirium and fever in older adults.',
-      ruledOutByClues: [
-        {
-          clueOrder: 1,
-          evidence: 'urinary frequency and foul-smelling urine',
-          reason:
-            'The symptom cluster points toward the urinary tract rather than respiratory tract.',
-        },
-        {
-          clueOrder: 3,
-          evidence: 'no focal neurological deficit and suprapubic tenderness',
-          reason:
-            'Suprapubic tenderness supports a urinary source; no respiratory signs are given.',
+            'Carotid radiation and right upper sternal border maximal intensity favor valvular aortic stenosis over dynamic left ventricular outflow obstruction.',
         },
         {
           clueOrder: 5,
-          evidence: 'urine culture grows Escherichia coli',
+          evidence:
+            'heavily calcified aortic valve with valve area 0.7 cm² and mean gradient 48 mmHg',
           reason:
-            'Culture confirms a urinary pathogen compatible with UTI.',
+            'Echocardiography confirms fixed valvular obstruction rather than dynamic septal obstruction.',
         },
       ],
       finalReasonLessLikely:
-        'There are no respiratory symptoms or chest findings to support pneumonia.',
+        'The obstruction is clearly valvular and calcific, not dynamic hypertrophic cardiomyopathy.',
     },
     {
-      diagnosis: 'Acute pyelonephritis',
+      diagnosis: 'Coronary Artery Disease',
       whyPlausibleEarly:
-        'Fever with UTI findings can represent upper urinary tract infection.',
+        'Exertional central chest discomfort that improves with rest commonly suggests stable angina from coronary artery disease.',
       ruledOutByClues: [
         {
           clueOrder: 3,
-          evidence: 'suprapubic tenderness without flank pain or focal renal angle tenderness',
+          evidence: 'slow-rising low-volume carotid pulse',
           reason:
-            'Lower abdominal suprapubic tenderness favors cystitis/lower UTI over pyelonephritis.',
-        },
-      ],
-      finalReasonLessLikely:
-        'Upper tract involvement is not strongly supported by the available examination findings.',
-    },
-    {
-      diagnosis: 'Stroke',
-      whyPlausibleEarly:
-        'Acute confusion in an elderly patient can be caused by cerebrovascular disease.',
-      ruledOutByClues: [
-        {
-          clueOrder: 3,
-          evidence: 'no focal neurological deficit',
-          reason:
-            'Stroke is less likely without focal neurological signs.',
+            'This pulse character indicates fixed left ventricular outflow obstruction rather than isolated coronary ischemia.',
         },
         {
           clueOrder: 4,
-          evidence: 'urinalysis demonstrates pyuria and bacteriuria',
+          evidence:
+            'ejection systolic murmur radiating to both carotid arteries',
           reason:
-            'The investigation supports an infective delirium trigger.',
+            'Coronary artery disease alone does not explain a classic aortic stenosis murmur.',
         },
       ],
       finalReasonLessLikely:
-        'The presentation is better explained by infection-associated delirium.',
+        'Coronary disease may coexist, but it does not explain the pulse, murmur, and severe valve gradient.',
     },
     {
-      diagnosis: 'Asymptomatic bacteriuria',
+      diagnosis: 'Mitral Regurgitation',
       whyPlausibleEarly:
-        'Bacteriuria is common in older adults and can be detected incidentally.',
+        'Dyspnea and a systolic murmur can suggest mitral regurgitation.',
       ruledOutByClues: [
         {
-          clueOrder: 0,
-          evidence: 'worsening confusion and reduced oral intake',
+          clueOrder: 4,
+          evidence:
+            'murmur best heard at the right second intercostal space with carotid radiation',
           reason:
-            'The patient has an acute systemic clinical change rather than an incidental urine result.',
-        },
-        {
-          clueOrder: 1,
-          evidence: 'new urinary frequency',
-          reason:
-            'New urinary symptoms support symptomatic infection.',
-        },
-        {
-          clueOrder: 2,
-          evidence: 'fever and tachycardia',
-          reason:
-            'Systemic signs make asymptomatic bacteriuria less likely.',
+            'Mitral regurgitation is usually a pansystolic murmur maximal at the apex and radiating to the axilla.',
         },
       ],
       finalReasonLessLikely:
-        'This is symptomatic infection, not incidental bacteriuria alone.',
+        'The auscultation pattern and echocardiography localize the disease to the aortic valve.',
+    },
+    {
+      diagnosis: 'Heart Failure with Preserved Ejection Fraction',
+      whyPlausibleEarly:
+        'An older adult with exertional dyspnea and preserved ejection fraction may initially suggest HFpEF.',
+      ruledOutByClues: [
+        {
+          clueOrder: 4,
+          evidence:
+            'classic carotid-radiating ejection systolic murmur',
+          reason:
+            'This identifies a structural valve cause for exertional symptoms.',
+        },
+        {
+          clueOrder: 5,
+          evidence:
+            'severe aortic valve narrowing with high gradient and preserved ejection fraction',
+          reason:
+            'The primary pathology is severe aortic stenosis, which can cause secondary heart failure symptoms.',
+        },
+      ],
+      finalReasonLessLikely:
+        'HFpEF may be a physiologic consequence, but severe aortic stenosis is the unifying diagnosis.',
+    },
+    {
+      diagnosis: 'Aortic Sclerosis',
+      whyPlausibleEarly:
+        'Older adults can have a systolic ejection murmur from a calcified aortic valve without severe obstruction.',
+      ruledOutByClues: [
+        {
+          clueOrder: 1,
+          evidence: 'exertional syncope',
+          reason:
+            'Syncope suggests hemodynamically significant obstruction rather than benign sclerosis.',
+        },
+        {
+          clueOrder: 5,
+          evidence:
+            'valve area 0.7 cm², mean gradient 48 mmHg, and peak velocity 4.3 m/s',
+          reason:
+            'These echocardiographic values confirm severe stenosis, not sclerosis.',
+        },
+      ],
+      finalReasonLessLikely:
+        'Aortic sclerosis does not produce severe obstruction, high gradients, or the classic symptom triad.',
     },
   ],
-
+  managementPearl:
+    'Symptomatic severe aortic stenosis has a poor prognosis without valve intervention. Confirm severity, assess procedural risk, avoid excessive preload reduction, and refer urgently for aortic valve replacement or transcatheter aortic valve implantation.',
   generationQuality: {
     contentTier: 'FLAGSHIP',
-    humanReviewed: true,
     seedVersion,
+    humanReviewed: true,
+    discriminatorStrength: 'HIGH',
+    expectedTeachingPoints: [
+      'Severe aortic stenosis classically presents with syncope, angina, and dyspnea',
+      'A slow-rising low-volume pulse supports fixed left ventricular outflow obstruction',
+      'A harsh ejection systolic murmur radiating to the carotids localizes disease to the aortic valve',
+      'Echocardiography confirms severity using valve area, gradient, and peak velocity',
+      'Symptomatic severe aortic stenosis requires valve intervention evaluation',
+    ],
+    competencyDomains: [
+      'Cardiology',
+      'Valvular Heart Disease',
+      'Internal Medicine',
+      'Clinical Reasoning',
+    ],
   },
 };
 
-// ─── Education ────────────────────────────────────────────────────────────────
-
 const educationForFrontend = {
-  title: 'Urinary Tract Infection',
-
+  title: displayLabel,
   summary: {
     definition:
-      'Urinary tract infection is infection of the urinary tract, most commonly caused by ascending bacteria such as Escherichia coli. In older adults it may present with atypical features such as delirium, falls, or functional decline.',
+      'Aortic stenosis is narrowing of the aortic valve causing fixed left ventricular outflow obstruction, most commonly from degenerative calcification in older adults.',
     highYieldTakeaway:
-      'Think UTI in an older adult with acute delirium plus urinary symptoms, fever, suprapubic tenderness, pyuria, and bacteriuria — but avoid treating asymptomatic bacteriuria without compatible symptoms.',
+      'Think severe aortic stenosis in an older adult with exertional dyspnea, angina, syncope, slow-rising pulse, and a harsh ejection systolic murmur radiating to the carotids.',
   },
-
   recognitionPattern: [
     {
-      pattern: 'Atypical UTI presentation in older adults',
+      pattern: 'Symptomatic severe aortic stenosis',
       whyItMatters:
-        'Older adults may not report classic dysuria and can present with delirium, reduced intake, weakness, or falls.',
+        'The onset of exertional dyspnea, angina, or syncope marks clinically important disease and should trigger urgent valve assessment.',
       progression:
-        'Urinary infection → systemic inflammatory response → delirium, dehydration, functional decline, and possible sepsis.',
+        'Aortic valve calcification -> fixed outflow obstruction -> left ventricular pressure overload -> concentric hypertrophy -> impaired cardiac output reserve -> exertional dyspnea, angina, syncope, heart failure, and sudden death risk.',
       discriminator:
-        'Delirium plus urinary symptoms and inflammatory signs supports infection rather than incidental bacteriuria.',
+        'The combination of exertional symptoms, slow-rising pulse, and carotid-radiating ejection systolic murmur is highly characteristic.',
       commonTrap:
-        'Do not diagnose UTI from a positive urine dipstick alone in an older adult.',
+        'Do not attribute exertional symptoms in an older adult only to age, coronary disease, or deconditioning when the pulse and murmur suggest valve obstruction.',
     },
     {
-      pattern: 'Lower urinary tract infection',
+      pattern: 'The SAD symptom triad',
       whyItMatters:
-        'Frequency, suprapubic tenderness, pyuria, nitrites, and bacteriuria support cystitis/lower UTI.',
+        'Syncope, angina, and dyspnea are the classic symptom cluster of severe aortic stenosis.',
       discriminator:
-        'Absence of flank pain or costovertebral angle tenderness makes pyelonephritis less likely.',
+        'SAD symptoms become especially specific when paired with a right upper sternal border murmur radiating to the carotids.',
       commonTrap:
-        'Foul-smelling urine alone is not enough to diagnose UTI.',
+        'Angina in aortic stenosis may occur even without obstructive coronary artery disease.',
     },
     {
-      pattern: 'Culture-confirmed bacterial UTI',
+      pattern: 'Fixed left ventricular outflow obstruction',
       whyItMatters:
-        'Urine culture identifies the organism and antibiotic sensitivities, especially important in older adults with comorbidity or recent antibiotic exposure.',
+        'A severely narrowed aortic valve prevents the heart from increasing output during exertion.',
       discriminator:
-        'E. coli is the most common pathogen in uncomplicated and many complicated UTIs.',
+        'Slow-rising low-volume carotid pulse separates severe aortic stenosis from many other systolic murmurs.',
       commonTrap:
-        'Do not ignore local resistance patterns or renal function when choosing antibiotics.',
+        'A loud murmur alone does not grade severity; symptoms and echocardiographic values determine severity.',
     },
   ],
-
   keySymptoms: [
     {
-      symptom: 'Acute confusion',
+      symptom: 'Exertional dyspnea',
       significance:
-        'May represent delirium triggered by infection, dehydration, medication effects, or metabolic disturbance in older adults.',
+        'Often reflects elevated left ventricular filling pressures and reduced cardiac reserve.',
     },
     {
-      symptom: 'Reduced oral intake',
+      symptom: 'Exertional angina',
       significance:
-        'May worsen dehydration and delirium and can accompany systemic infection.',
+        'May occur because hypertrophied myocardium has high oxygen demand and reduced subendocardial perfusion.',
     },
     {
-      symptom: 'Urinary frequency',
+      symptom: 'Exertional syncope',
       significance:
-        'Supports lower urinary tract involvement when new or clearly worse than baseline.',
+        'Suggests severe fixed obstruction and inability to increase cardiac output during activity.',
     },
     {
-      symptom: 'Absent dysuria',
+      symptom: 'Reduced exercise tolerance',
       significance:
-        'Does not exclude UTI in older adults, who may present atypically.',
+        'May be the earliest practical clue that valve obstruction has become symptomatic.',
+    },
+    {
+      symptom: 'Dizziness or presyncope',
+      significance:
+        'A warning symptom when triggered by exertion in suspected aortic stenosis.',
     },
   ],
-
   keySigns: [
     {
-      finding: 'Fever and tachycardia',
+      finding: 'Slow-rising low-volume carotid pulse',
       significance:
-        'Support systemic infection rather than incidental bacteriuria.',
+        'Classic peripheral sign of severe fixed left ventricular outflow obstruction.',
       discriminator:
-        'Systemic signs increase concern for clinically significant infection.',
+        'Helps distinguish severe aortic stenosis from benign flow murmurs and many regurgitant lesions.',
     },
     {
-      finding: 'Suprapubic tenderness',
+      finding: 'Harsh ejection systolic murmur',
       significance:
-        'Supports lower urinary tract inflammation.',
+        'Typical murmur of turbulent flow across a narrowed aortic valve.',
       discriminator:
-        'Flank tenderness would increase suspicion for pyelonephritis.',
+        'Maximal intensity at the right upper sternal border favors aortic valve disease.',
     },
     {
-      finding: 'No focal neurological deficit',
+      finding: 'Carotid radiation',
       significance:
-        'Makes stroke less likely as the primary cause of acute confusion.',
+        'Radiation to the carotids is a key auscultatory clue for aortic stenosis.',
+      discriminator:
+        'Mitral regurgitation typically radiates to the axilla rather than the carotids.',
     },
     {
-      finding: 'Mild dehydration',
+      finding: 'Sustained apical impulse',
       significance:
-        'Common in elderly infection and may worsen delirium.',
+        'Reflects left ventricular pressure overload and hypertrophy.',
+    },
+    {
+      finding: 'Narrow pulse pressure',
+      significance:
+        'May occur in severe obstruction because stroke volume cannot rise normally.',
     },
   ],
-
   examPearls: [
     {
-      type: 'physical',
-      title: 'Delirium needs a trigger search',
+      type: 'DISCRIMINATOR',
+      title: 'Carotid radiation localizes the murmur',
       content:
-        'Acute confusion in an elderly patient should prompt evaluation for infection, dehydration, medication toxicity, metabolic disturbance, and neurological disease.',
+        'A harsh crescendo-decrescendo systolic murmur at the right upper sternal border that radiates to the carotids is the classic auscultatory pattern of aortic stenosis.',
       whyItMatters:
-        'UTI is common, but it should not be assumed without compatible urinary or systemic evidence.',
+        'This finding moves the diagnosis away from nonspecific dyspnea or isolated coronary disease toward structural valve obstruction.',
       discriminator:
-        'Urinary symptoms, suprapubic tenderness, fever, pyuria, and bacteriuria make UTI more likely.',
+        'Mitral regurgitation is usually apical and radiates to the axilla; hypertrophic cardiomyopathy is dynamic and often changes with preload.',
       trapAvoided:
-        'Avoid anchoring on a positive urine dipstick alone.',
+        'Do not label all systolic murmurs as mitral regurgitation or innocent flow murmurs.',
     },
     {
-      type: 'lab_reasoning',
-      title: 'Pyuria is supportive, not diagnostic alone',
+      type: 'DISCRIMINATOR',
+      title: 'Pulse character reflects severity',
       content:
-        'Pyuria and bacteriuria support UTI only when symptoms or systemic signs indicate infection.',
+        'A slow-rising low-volume carotid pulse, also called pulsus parvus et tardus, supports severe fixed outflow obstruction.',
       whyItMatters:
-        'Asymptomatic bacteriuria is common in older adults and does not always require antibiotics.',
+        'The carotid pulse can reveal hemodynamic severity before echocardiography is available.',
       discriminator:
-        'Fever, new urinary symptoms, and delirium strengthen the diagnosis of true infection.',
+        'Aortic sclerosis may produce a murmur but should not cause a clearly slow-rising low-volume pulse.',
       trapAvoided:
-        'Do not overtreat colonization or asymptomatic bacteriuria.',
-    },
-    {
-      type: 'lab_reasoning',
-      title: 'Culture turns suspicion into targeted therapy',
-      content:
-        'Urine culture identifies the organism and sensitivities, allowing antibiotics to be narrowed.',
-      whyItMatters:
-        'Older adults are more likely to have resistant organisms, comorbidity, or renal impairment affecting antibiotic choice.',
-      managementImplication:
-        'Review culture results and de-escalate antibiotics when possible.',
+        'Do not rely on murmur loudness alone to estimate severity.',
     },
     {
       type: 'MNEMONIC',
-      title: 'ELDER UTI checklist',
+      title: 'SAD predicts symptomatic severe disease',
       content:
-        'ELDER — Elderly delirium; Lower urinary symptoms; Dipstick supports; Evaluate sepsis; Review culture.',
+        'SAD means Syncope, Angina, and Dyspnea.',
       whyItMatters:
-        'Keeps diagnosis anchored on clinical infection plus urine evidence.',
+        'These are the classic symptoms of severe aortic stenosis and signal a major change in prognosis.',
       discriminator:
-        'The key separator is symptomatic infection rather than incidental bacteriuria.',
+        'The mnemonic is most useful when the symptoms are exertional and accompanied by a carotid-radiating ejection systolic murmur.',
       trapAvoided:
-        'Mnemonic content belongs here only; scoringSystems is intentionally reserved for formal tools.',
+        'Do not place SAD under scoringSystems; it is a diagnostic mnemonic, not a formal validated score.',
     },
   ],
-
   scoringSystems: [],
-
   investigations: [
     {
-      test: 'Urinalysis',
+      test: 'Transthoracic echocardiography',
       interpretation:
-        'Nitrites, leukocyte esterase, pyuria, and bacteriuria support UTI when symptoms or systemic signs are present.',
+        'Severe aortic stenosis is supported by valve area less than 1.0 cm², mean gradient at least 40 mmHg, or peak velocity at least 4.0 m/s.',
       whyItMatters:
-        'Rapidly supports diagnosis but must be interpreted clinically.',
+        'Confirms diagnosis, grades severity, assesses left ventricular function, and guides intervention planning.',
     },
     {
-      test: 'Urine culture',
+      test: 'Electrocardiogram',
       interpretation:
-        'Identifies the causative organism and antibiotic sensitivities.',
+        'May show left ventricular hypertrophy, strain pattern, conduction disease, or arrhythmia.',
       whyItMatters:
-        'Guides targeted therapy, especially in older adults or suspected complicated infection.',
+        'Supports chronic pressure overload and identifies rhythm problems that may worsen symptoms.',
     },
     {
-      test: 'Full blood count and inflammatory markers',
+      test: 'Chest X-ray',
       interpretation:
-        'May show leukocytosis or raised inflammatory markers but can be nonspecific.',
+        'May show valve calcification, post-stenotic aortic dilatation, pulmonary congestion, or cardiac enlargement.',
       whyItMatters:
-        'Helps assess systemic illness and alternative sources of infection.',
+        'Provides supportive evidence and screens for heart failure or alternative pulmonary causes of dyspnea.',
     },
     {
-      test: 'Renal function and electrolytes',
+      test: 'Coronary assessment when intervention is planned',
       interpretation:
-        'Assesses dehydration, kidney injury, and safe antibiotic dosing.',
+        'Coronary angiography or CT coronary assessment may identify coexisting coronary artery disease.',
       whyItMatters:
-        'Older adults are vulnerable to AKI and medication toxicity.',
+        'Older patients with valve disease may also require coronary planning before valve replacement.',
     },
     {
-      test: 'Blood cultures',
+      test: 'CT aortic valve and vascular planning',
       interpretation:
-        'Consider if febrile, septic, hypotensive, or clinically unstable.',
+        'Defines valve calcification, annulus size, aortic root anatomy, and vascular access for transcatheter procedures.',
       whyItMatters:
-        'Detects bacteremia and supports escalation decisions.',
+        'Essential when transcatheter aortic valve implantation is being considered.',
     },
     {
-      test: 'Imaging',
+      test: 'Exercise testing in selected apparently asymptomatic patients',
       interpretation:
-        'Renal tract imaging is considered for obstruction, recurrent infection, poor response, stones, or suspected pyelonephritis complications.',
+        'May reveal symptoms, blood pressure drop, or limited exercise capacity.',
       whyItMatters:
-        'Identifies complicated UTI or obstruction requiring source control.',
+        'Helps uncover concealed symptoms, but should be used cautiously and only in appropriate supervised settings.',
     },
   ],
-
-  pitfalls: [
-    {
-      pitfall: 'Treating asymptomatic bacteriuria',
-      consequence:
-        'Unnecessary antibiotics increase resistance, adverse effects, and C. difficile risk.',
-    },
-    {
-      pitfall: 'Assuming absence of dysuria excludes UTI',
-      consequence:
-        'Older adults may present atypically with delirium or functional decline.',
-    },
-    {
-      pitfall: 'Ignoring sepsis risk',
-      consequence:
-        'Elderly patients can deteriorate quickly and may need early escalation.',
-    },
-    {
-      pitfall: 'Forgetting medication and metabolic causes of delirium',
-      consequence:
-        'Delirium may be multifactorial; missing other triggers delays recovery.',
-    },
-    {
-      pitfall: 'Not reviewing culture sensitivities',
-      consequence:
-        'Broad or ineffective antibiotics may be continued unnecessarily.',
-    },
-  ],
-
   managementOverview: [
     {
-      step: 'Confirm symptomatic infection',
+      step: 'Confirm severity with echocardiography',
       rationale:
-        'Use urinary symptoms, systemic signs, examination, urinalysis, and culture rather than urine dipstick alone.',
+        'Valve area, mean gradient, peak velocity, and ventricular function determine whether disease is severe and guide urgency.',
     },
     {
-      step: 'Assess delirium and sepsis severity',
+      step: 'Assess symptom status carefully',
       rationale:
-        'Check mental state, hydration, vital signs, oxygenation, lactate if indicated, and organ dysfunction.',
+        'Exertional dyspnea, angina, syncope, or heart failure symptoms indicate symptomatic severe disease.',
     },
     {
-      step: 'Start empiric antibiotics when UTI is clinically likely',
+      step: 'Refer urgently to cardiology or a heart valve team',
       rationale:
-        'Choose treatment based on severity, local guidelines, renal function, allergy history, and resistance risk.',
+        'Symptomatic severe aortic stenosis requires evaluation for definitive valve intervention.',
     },
     {
-      step: 'Hydrate carefully',
+      step: 'Choose valve intervention strategy',
       rationale:
-        'Correct dehydration while monitoring for fluid overload in frail or cardiac patients.',
+        'Surgical aortic valve replacement or transcatheter aortic valve implantation is selected based on age, anatomy, surgical risk, comorbidities, and patient goals.',
     },
     {
-      step: 'Review culture and narrow therapy',
+      step: 'Treat congestion cautiously while awaiting intervention',
       rationale:
-        'Targeted therapy reduces resistance and adverse effects.',
+        'Diuretics may relieve pulmonary congestion, but excessive preload reduction can worsen cardiac output in severe fixed obstruction.',
     },
     {
-      step: 'Address delirium care',
+      step: 'Avoid uncontrolled vasodilation and hypotension',
       rationale:
-        'Reorientation, mobilization, hydration, sleep support, sensory aids, and medication review improve recovery.',
+        'Patients with severe aortic stenosis depend on adequate preload and perfusion pressure.',
     },
     {
-      step: 'Look for complications or alternative sources',
+      step: 'Evaluate for coexisting coronary disease',
       rationale:
-        'Persistent fever, flank pain, obstruction, recurrent infection, or poor response should prompt broader assessment.',
+        'Coronary disease can coexist with calcific valve disease and may affect procedural planning.',
     },
   ],
-
   differentialDistinguishers: [
     {
-      diagnosis: 'Delirium secondary to dehydration',
+      diagnosis: 'Hypertrophic Cardiomyopathy',
       whyConfused:
-        'Reduced intake and confusion are common in elderly dehydration.',
+        'Both can cause exertional syncope, angina, dyspnea, and a systolic murmur.',
       distinguishingPoint:
-        'UTI is supported by urinary symptoms, fever, suprapubic tenderness, pyuria, bacteriuria, and positive culture.',
+        'Aortic stenosis has a fixed calcified valve obstruction with carotid radiation; hypertrophic cardiomyopathy has dynamic obstruction and septal hypertrophy.',
       keySeparator:
-        'Infection evidence identifies the precipitating cause.',
+        'Echocardiography shows severe aortic valve narrowing rather than dynamic left ventricular outflow tract obstruction.',
       classicTrap:
-        'Treating dehydration alone while missing infection.',
+        'Assuming any exertional syncope with a systolic murmur is hypertrophic cardiomyopathy without localizing the murmur.',
     },
     {
-      diagnosis: 'Community-acquired pneumonia',
+      diagnosis: 'Coronary Artery Disease',
       whyConfused:
-        'Pneumonia may present with delirium and fever in older adults.',
+        'Exertional angina relieved by rest can look like stable ischemic heart disease.',
       distinguishingPoint:
-        'Respiratory symptoms, hypoxia, crackles, or chest imaging would support pneumonia.',
+        'Aortic stenosis adds syncope, slow-rising pulse, and a carotid-radiating ejection systolic murmur.',
       keySeparator:
-        'This case has a urinary symptom cluster and culture-confirmed E. coli UTI.',
-    },
-    {
-      diagnosis: 'Acute pyelonephritis',
-      whyConfused:
-        'Fever and UTI findings may indicate upper tract infection.',
-      distinguishingPoint:
-        'Flank pain, costovertebral angle tenderness, vomiting, or marked systemic illness favors pyelonephritis.',
-      keySeparator:
-        'Suprapubic tenderness without flank signs favors lower UTI.',
-    },
-    {
-      diagnosis: 'Stroke',
-      whyConfused:
-        'Acute confusion in an elderly patient may be neurological.',
-      distinguishingPoint:
-        'Focal neurological deficits, acute speech disturbance, unilateral weakness, or visual symptoms support stroke.',
-      keySeparator:
-        'No focal deficit and strong infection evidence favor delirium from UTI.',
-    },
-    {
-      diagnosis: 'Asymptomatic bacteriuria',
-      whyConfused:
-        'Bacteriuria is common in elderly patients.',
-      distinguishingPoint:
-        'Asymptomatic bacteriuria lacks urinary symptoms or systemic signs attributable to infection.',
-      keySeparator:
-        'This patient has delirium, fever, urinary frequency, suprapubic tenderness, and culture evidence.',
+        'Valve gradient and valve area on echocardiography confirm the primary diagnosis.',
       classicTrap:
-        'Overtreating bacteriuria when no symptoms are present.',
+        'Treating angina alone and missing the valve lesion that changes prognosis and management.',
+    },
+    {
+      diagnosis: 'Mitral Regurgitation',
+      whyConfused:
+        'Both can cause dyspnea and a systolic murmur.',
+      distinguishingPoint:
+        'Mitral regurgitation is typically pansystolic, maximal at the apex, and radiates to the axilla.',
+      keySeparator:
+        'Right upper sternal border ejection murmur with carotid radiation favors aortic stenosis.',
+      classicTrap:
+        'Calling any systolic murmur mitral regurgitation without checking radiation and timing.',
+    },
+    {
+      diagnosis: 'Heart Failure with Preserved Ejection Fraction',
+      whyConfused:
+        'Older patients may present with exertional dyspnea and preserved ejection fraction.',
+      distinguishingPoint:
+        'Aortic stenosis produces a characteristic murmur, pulse abnormality, and high transvalvular gradient.',
+      keySeparator:
+        'Severe valve obstruction explains the heart failure physiology.',
+      classicTrap:
+        'Labeling exertional dyspnea as HFpEF without auscultation and echocardiography.',
+    },
+    {
+      diagnosis: 'Aortic Sclerosis',
+      whyConfused:
+        'Both may occur in older adults with a calcified aortic valve and systolic ejection murmur.',
+      distinguishingPoint:
+        'Aortic sclerosis does not cause severe obstruction, high gradients, syncope, or a markedly slow-rising pulse.',
+      keySeparator:
+        'Valve area 0.7 cm², mean gradient 48 mmHg, and peak velocity 4.3 m/s prove severe stenosis.',
+      classicTrap:
+        'Reassuring the patient because the murmur is presumed to be benign age-related sclerosis.',
     },
   ],
-
   complications: [
     {
-      complication: 'Delirium and functional decline',
+      complication: 'Heart failure',
       whyItMatters:
-        'UTI can precipitate acute cognitive and functional deterioration in older adults.',
+        'Pressure overload eventually causes elevated filling pressures, pulmonary congestion, and reduced functional reserve.',
     },
     {
-      complication: 'Sepsis',
+      complication: 'Syncope and injury',
       whyItMatters:
-        'Older adults can progress rapidly to hypotension, organ dysfunction, or bacteremia.',
+        'Fixed cardiac output can cause exertional collapse and trauma.',
     },
     {
-      complication: 'Acute kidney injury',
+      complication: 'Sudden cardiac death',
       whyItMatters:
-        'Dehydration, infection, and nephrotoxic medications increase AKI risk.',
+        'Risk increases after symptoms develop, especially in severe untreated disease.',
     },
     {
-      complication: 'Pyelonephritis',
+      complication: 'Arrhythmias',
       whyItMatters:
-        'Ascending infection can involve the kidneys and require escalation.',
+        'Left ventricular hypertrophy and atrial pressure overload can predispose to atrial fibrillation and other rhythm problems.',
     },
     {
-      complication: 'Recurrent UTI',
+      complication: 'Pulmonary edema',
       whyItMatters:
-        'Recurrent infection should prompt assessment for urinary retention, stones, atrophic vaginitis, catheter use, or structural abnormality.',
+        'Decompensation can occur when the hypertrophied ventricle can no longer maintain filling and output.',
+    },
+    {
+      complication: 'Cardiogenic shock',
+      whyItMatters:
+        'Severe obstruction can become life-threatening during acute decompensation, sepsis, bleeding, or hypotension.',
     },
   ],
-
+  pitfalls: [
+    {
+      pitfall: 'Attributing exertional symptoms to aging',
+      consequence:
+        'Delays recognition of symptomatic severe valve disease.',
+    },
+    {
+      pitfall: 'Treating angina as isolated coronary disease',
+      consequence:
+        'Misses severe aortic stenosis, where valve intervention may be the key life-prolonging treatment.',
+    },
+    {
+      pitfall: 'Using murmur loudness alone to judge severity',
+      consequence:
+        'Severe disease can have a softer murmur when cardiac output falls; echocardiography is needed.',
+    },
+    {
+      pitfall: 'Over-diuresis or excessive vasodilation',
+      consequence:
+        'Can precipitate hypotension because severe aortic stenosis is preload and perfusion-pressure dependent.',
+    },
+    {
+      pitfall: 'Putting the SAD mnemonic under scoringSystems',
+      consequence:
+        'Pollutes scoringSystems with a mnemonic rather than reserving it for formal validated scores.',
+    },
+  ],
   recallPrompts: [
     {
-      prompt: 'Why can UTI present atypically in elderly patients?',
-      answer:
-        'Older adults may have blunted local symptoms and present with delirium, reduced intake, falls, weakness, or functional decline.',
+      prompt: 'What are the classic symptoms of severe aortic stenosis?',
+      answer: 'Syncope, Angina, and Dyspnea.',
     },
     {
-      prompt: 'Why should asymptomatic bacteriuria not be treated routinely?',
-      answer:
-        'Because bacteriuria is common in older adults and unnecessary antibiotics cause resistance, adverse effects, and C. difficile risk without benefit.',
+      prompt: 'What pulse finding supports severe aortic stenosis?',
+      answer: 'A slow-rising low-volume carotid pulse, also called pulsus parvus et tardus.',
     },
     {
-      prompt: 'What urine findings support UTI?',
+      prompt: 'What murmur is characteristic of aortic stenosis?',
       answer:
-        'Positive nitrites, leukocyte esterase, pyuria, bacteriuria, and a compatible urine culture support UTI when symptoms or systemic signs are present.',
+        'A harsh crescendo-decrescendo systolic murmur best heard at the right upper sternal border and radiating to the carotids.',
     },
     {
-      prompt: 'What features would suggest pyelonephritis rather than lower UTI?',
+      prompt: 'What echocardiographic values support severe aortic stenosis?',
       answer:
-        'Flank pain, costovertebral angle tenderness, vomiting, higher fever, or more severe systemic illness suggest pyelonephritis.',
+        'Valve area less than 1.0 cm², mean gradient at least 40 mmHg, or peak velocity at least 4.0 m/s.',
     },
     {
-      prompt: 'What should be assessed in an elderly patient with UTI-associated delirium?',
+      prompt: 'What is the definitive treatment for symptomatic severe aortic stenosis?',
       answer:
-        'Assess sepsis severity, hydration, renal function, medications, alternative infection sources, and delirium safety risks.',
+        'Aortic valve replacement or transcatheter aortic valve implantation after valve-team assessment.',
     },
   ],
-
-  references: [],
+  references: [
+    { citation: 'ESC/EACTS Guidelines for the management of valvular heart disease.' },
+    { citation: 'ACC/AHA Guideline for the Management of Patients With Valvular Heart Disease.' },
+    { citation: 'Braunwald Heart Disease: A Textbook of Cardiovascular Medicine.' },
+  ],
 };
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+async function ensureRegistry() {
+  const normalizedTerms = aliasTerms.map(normalizeClinicalText);
+  const canonicalNormalized = normalizeClinicalText(canonicalName);
 
-async function main() {
-  const canonicalName = 'urinary tract infection';
-  const displayLabel = 'Urinary Tract Infection';
-  const caseTitle = 'Urinary Tract Infection in an Elderly Patient';
-
-  const normalizedTerms = [
-    canonicalName,
-    displayLabel,
-    'uti',
-    'urinary infection',
-    'lower urinary tract infection',
-    'cystitis',
-  ].map(normalizeClinicalText);
-
-  const registry = await prisma.diagnosisRegistry.findFirst({
+  const existing = await prisma.diagnosisRegistry.findFirst({
     where: {
       OR: [
         { canonicalNormalized: { in: normalizedTerms } },
@@ -732,70 +691,172 @@ async function main() {
         },
       ],
     },
-    select: {
-      id: true,
-      canonicalName: true,
-      canonicalNormalized: true,
-      displayLabel: true,
-      active: true,
-      status: true,
-      isPlayable: true,
-      isGeneratable: true,
-    },
+    select: { id: true },
   });
 
-  if (!registry) {
-    throw new Error(
-      'Cannot seed elderly UTI case: existing Urinary Tract Infection registry entry was not found. Do not create a duplicate elderly-specific registry.',
-    );
+  const registry = existing
+    ? await prisma.diagnosisRegistry.update({
+        where: { id: existing.id },
+        data: {
+          canonicalName,
+          canonicalNormalized,
+          displayLabel,
+          status: DiagnosisRegistryStatus.ACTIVE,
+          active: true,
+          isPlayable: true,
+          isGeneratable: true,
+          specialty: 'Cardiology',
+          subspecialty: 'Valvular Heart Disease',
+          category: 'Valvular Disease',
+          bodySystem: 'Cardiovascular',
+          organSystem: 'Heart',
+          difficultyBand: DiagnosisDifficultyBand.INTERMEDIATE,
+          rarityBand: DiagnosisRarityBand.COMMON,
+          clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
+          ageGroup: DiagnosisAgeGroup.ADULT,
+          urgencyLevel: DiagnosisUrgencyLevel.URGENT,
+          preferredClueTypes: [
+            'history',
+            'symptom',
+            'exam',
+            'investigation',
+          ],
+          notes:
+            'Seeded flagship aortic stenosis case with valvular heart disease teaching metadata.',
+        },
+        select: {
+          id: true,
+          displayLabel: true,
+        },
+      })
+    : await prisma.diagnosisRegistry.create({
+        data: {
+          canonicalName,
+          canonicalNormalized,
+          displayLabel,
+          status: DiagnosisRegistryStatus.ACTIVE,
+          active: true,
+          isPlayable: true,
+          isGeneratable: true,
+          specialty: 'Cardiology',
+          subspecialty: 'Valvular Heart Disease',
+          category: 'Valvular Disease',
+          bodySystem: 'Cardiovascular',
+          organSystem: 'Heart',
+          difficultyBand: DiagnosisDifficultyBand.INTERMEDIATE,
+          rarityBand: DiagnosisRarityBand.COMMON,
+          clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
+          ageGroup: DiagnosisAgeGroup.ADULT,
+          urgencyLevel: DiagnosisUrgencyLevel.URGENT,
+          preferredClueTypes: [
+            'history',
+            'symptom',
+            'exam',
+            'investigation',
+          ],
+          notes:
+            'Seeded flagship aortic stenosis case with valvular heart disease teaching metadata.',
+        },
+        select: {
+          id: true,
+          displayLabel: true,
+        },
+      });
+
+  for (const [rank, term] of aliasTerms.entries()) {
+    await prisma.diagnosisAlias.upsert({
+      where: {
+        diagnosisRegistryId_normalizedTerm: {
+          diagnosisRegistryId: registry.id,
+          normalizedTerm: normalizeClinicalText(term),
+        },
+      },
+      update: {
+        term,
+        active: true,
+        acceptedForMatch: true,
+        rank,
+        kind:
+          rank === 0
+            ? DiagnosisAliasKind.CANONICAL
+            : DiagnosisAliasKind.ACCEPTED,
+      },
+      create: {
+        diagnosisRegistryId: registry.id,
+        term,
+        normalizedTerm: normalizeClinicalText(term),
+        active: true,
+        acceptedForMatch: true,
+        rank,
+        kind:
+          rank === 0
+            ? DiagnosisAliasKind.CANONICAL
+            : DiagnosisAliasKind.ACCEPTED,
+        source: seedVersion,
+      },
+    });
   }
 
-  const education = await prisma.diagnosisEducation.upsert({
-    where: { diagnosisRegistryId: registry.id },
-    update: {
-      title: educationForFrontend.title,
-      summary: educationForFrontend.summary,
-      clinicalPattern: educationForFrontend.recognitionPattern,
-      keySymptoms: educationForFrontend.keySymptoms,
-      keySigns: educationForFrontend.keySigns,
-      examPearls: educationForFrontend.examPearls,
-      scoringSystems: educationForFrontend.scoringSystems,
-      investigations: educationForFrontend.investigations,
-      differentials: educationForFrontend.differentialDistinguishers,
-      management: educationForFrontend.managementOverview,
-      complications: educationForFrontend.complications,
-      pitfalls: educationForFrontend.pitfalls,
-      recallPrompts: educationForFrontend.recallPrompts,
-      references: educationForFrontend.references,
-      editorialStatus: DiagnosisEducationStatus.PUBLISHED,
-      source: DiagnosisEducationSource.MANUAL,
-      reviewedAt: now,
-      publishedAt: now,
-      version: { increment: 1 },
-    },
-    create: {
-      diagnosisRegistryId: registry.id,
-      title: educationForFrontend.title,
-      summary: educationForFrontend.summary,
-      clinicalPattern: educationForFrontend.recognitionPattern,
-      keySymptoms: educationForFrontend.keySymptoms,
-      keySigns: educationForFrontend.keySigns,
-      examPearls: educationForFrontend.examPearls,
-      scoringSystems: educationForFrontend.scoringSystems,
-      investigations: educationForFrontend.investigations,
-      differentials: educationForFrontend.differentialDistinguishers,
-      management: educationForFrontend.managementOverview,
-      complications: educationForFrontend.complications,
-      pitfalls: educationForFrontend.pitfalls,
-      recallPrompts: educationForFrontend.recallPrompts,
-      references: educationForFrontend.references,
-      editorialStatus: DiagnosisEducationStatus.PUBLISHED,
-      source: DiagnosisEducationSource.MANUAL,
-      reviewedAt: now,
-      publishedAt: now,
-      version: 1,
-    },
+  return registry;
+}
+
+async function upsertEducation(diagnosisRegistryId: string) {
+  const existing = await prisma.diagnosisEducation.findUnique({
+    where: { diagnosisRegistryId },
+    select: { id: true, version: true },
   });
+
+  const education = existing
+    ? await prisma.diagnosisEducation.update({
+        where: { id: existing.id },
+        data: {
+          title: educationForFrontend.title,
+          summary: educationForFrontend.summary,
+          clinicalPattern: educationForFrontend.recognitionPattern,
+          keySymptoms: educationForFrontend.keySymptoms,
+          keySigns: educationForFrontend.keySigns,
+          examPearls: educationForFrontend.examPearls,
+          scoringSystems: educationForFrontend.scoringSystems,
+          investigations: educationForFrontend.investigations,
+          differentials: educationForFrontend.differentialDistinguishers,
+          management: educationForFrontend.managementOverview,
+          complications: educationForFrontend.complications,
+          pitfalls: educationForFrontend.pitfalls,
+          recallPrompts: educationForFrontend.recallPrompts,
+          references: educationForFrontend.references,
+          editorialStatus: DiagnosisEducationStatus.PUBLISHED,
+          source: DiagnosisEducationSource.MANUAL,
+          reviewedAt: now,
+          publishedAt: now,
+          version: { increment: 1 },
+        },
+        select: { id: true, version: true },
+      })
+    : await prisma.diagnosisEducation.create({
+        data: {
+          diagnosisRegistryId,
+          title: educationForFrontend.title,
+          summary: educationForFrontend.summary,
+          clinicalPattern: educationForFrontend.recognitionPattern,
+          keySymptoms: educationForFrontend.keySymptoms,
+          keySigns: educationForFrontend.keySigns,
+          examPearls: educationForFrontend.examPearls,
+          scoringSystems: educationForFrontend.scoringSystems,
+          investigations: educationForFrontend.investigations,
+          differentials: educationForFrontend.differentialDistinguishers,
+          management: educationForFrontend.managementOverview,
+          complications: educationForFrontend.complications,
+          pitfalls: educationForFrontend.pitfalls,
+          recallPrompts: educationForFrontend.recallPrompts,
+          references: educationForFrontend.references,
+          editorialStatus: DiagnosisEducationStatus.PUBLISHED,
+          source: DiagnosisEducationSource.MANUAL,
+          reviewedAt: now,
+          publishedAt: now,
+          version: 1,
+        },
+        select: { id: true, version: true },
+      });
 
   await prisma.diagnosisEducationRevision.create({
     data: {
@@ -814,16 +875,20 @@ async function main() {
     },
   });
 
-  const history =
-    clues.find((clue) => clue.type === 'history')?.value ?? caseTitle;
+  return education;
+}
 
-  const symptoms = clues
-    .filter((clue) => clue.type === 'symptom')
-    .map((clue) => clue.value);
+async function upsertCase(params: {
+  diagnosisRegistryId: string;
+  registryDisplayLabel: string;
+  educationId: string;
+}) {
+  const history = clues[0].value;
+  const symptoms = [clues[1].value];
 
   const existingCases = await prisma.case.findMany({
     where: {
-      diagnosisRegistryId: registry.id,
+      diagnosisRegistryId: params.diagnosisRegistryId,
       title: caseTitle,
     },
     orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
@@ -832,39 +897,33 @@ async function main() {
       currentRevisionId: true,
       publicNumber: true,
       title: true,
+      date: true,
       dailyCases: { select: { id: true }, take: 1 },
     },
   });
 
-  const reusableCase = existingCases.find(
-    (caseRecord) => caseRecord.dailyCases.length === 0,
-  );
+  const reusableCase = existingCases.find((c) => c.dailyCases.length === 0);
+  const scheduledCase = existingCases.find((c) => c.dailyCases.length > 0);
 
-  const scheduledDuplicate = existingCases.find(
-    (caseRecord) => caseRecord.dailyCases.length > 0,
-  );
-
-  if (!reusableCase && scheduledDuplicate) {
-    throw new Error(
-      `Cannot seed ${caseTitle}: a scheduled case already exists for this case variant (${scheduledDuplicate.id}, ${scheduledDuplicate.title}). Refusing to create a duplicate flagship inventory case.`,
-    );
+  if (scheduledCase) {
+    console.log('Skipped existing scheduled Aortic stenosis case:', scheduledCase);
+    return;
   }
+
+  const assignedDate = await findAvailableInventoryPlaceholderDate({
+    preferredDate: inventoryPlaceholderDate,
+    reusableCaseId: reusableCase?.id,
+    displayLabel: caseTitle,
+  });
 
   const publicNumber =
     reusableCase?.publicNumber ?? (await getNextCasePublicNumber());
 
-  const assignedInventoryPlaceholderDate =
-    await findAvailableInventoryPlaceholderDate({
-      preferredDate: inventoryPlaceholderDate,
-      reusableCaseId: reusableCase?.id,
-      displayLabel: caseTitle,
-    });
-
   const caseData = {
     title: caseTitle,
     publicNumber,
-    date: assignedInventoryPlaceholderDate,
-    difficulty: 'medium',
+    date: assignedDate,
+    difficulty: 'intermediate',
     history,
     symptoms,
     clues: clues as unknown as object,
@@ -873,13 +932,13 @@ async function main() {
     editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
     approvedAt: now,
     publishedAt: null,
-    diagnosisRegistryId: registry.id,
+    diagnosisRegistryId: params.diagnosisRegistryId,
     proposedDiagnosisText: displayLabel,
     diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Seeded elderly-presentation UTI flagship inventory case linked to existing Urinary Tract Infection registry. No duplicate elderly-specific registry was created.',
+      'Seeded complete frontend-aligned flagship Aortic stenosis case with education.',
   };
 
   const seededCase = reusableCase
@@ -893,48 +952,36 @@ async function main() {
         select: { id: true },
       });
 
-  const revisionData = {
-    source: 'MANUAL' as const,
-    publishTrack: 'DAILY' as const,
-    title: caseTitle,
-    date: assignedInventoryPlaceholderDate,
-    difficulty: 'medium',
-    history,
-    symptoms,
-    clues: clues as unknown as object,
-    explanation: explanation as object,
-    differentials,
-    diagnosisRegistryId: registry.id,
-    proposedDiagnosisText: displayLabel,
-    diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
-    diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
-    diagnosisMappingConfidence: 1,
-    diagnosisEditorialNote:
-      'Frontend-aligned flagship elderly UTI inventory revision using existing registry lookup and duplicate-safe case reuse.',
-  };
+  const latestRevision = await prisma.caseRevision.findFirst({
+    where: { caseId: seededCase.id },
+    orderBy: { revisionNumber: 'desc' },
+    select: { revisionNumber: true },
+  });
 
-  const revision = reusableCase?.currentRevisionId
-    ? await prisma.caseRevision.update({
-        where: { id: reusableCase.currentRevisionId },
-        data: revisionData,
-        select: { id: true },
-      })
-    : await (async () => {
-        const latestRevision = await prisma.caseRevision.findFirst({
-          where: { caseId: seededCase.id },
-          orderBy: { revisionNumber: 'desc' },
-          select: { revisionNumber: true },
-        });
-
-        return prisma.caseRevision.create({
-          data: {
-            caseId: seededCase.id,
-            revisionNumber: (latestRevision?.revisionNumber ?? 0) + 1,
-            ...revisionData,
-          },
-          select: { id: true },
-        });
-      })();
+  const revision = await prisma.caseRevision.create({
+    data: {
+      caseId: seededCase.id,
+      revisionNumber: (latestRevision?.revisionNumber ?? 0) + 1,
+      source: CaseSource.MANUAL,
+      publishTrack: PublishTrack.DAILY,
+      title: caseTitle,
+      date: assignedDate,
+      difficulty: 'intermediate',
+      history,
+      symptoms,
+      clues: clues as unknown as object,
+      explanation: explanation as object,
+      differentials,
+      diagnosisRegistryId: params.diagnosisRegistryId,
+      proposedDiagnosisText: displayLabel,
+      diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
+      diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
+      diagnosisMappingConfidence: 1,
+      diagnosisEditorialNote:
+        'Created complete Aortic stenosis revision with education-aligned explanation.',
+    },
+    select: { id: true },
+  });
 
   await prisma.case.update({
     where: { id: seededCase.id },
@@ -945,29 +992,40 @@ async function main() {
     data: {
       caseId: seededCase.id,
       revisionId: revision.id,
-      source: 'MANUAL',
-      publishTrack: 'DAILY',
-      outcome: 'PASSED',
-      validatorVersion: 'flagship-human-review:elderly-uti-v1',
+      source: CaseSource.MANUAL,
+      publishTrack: PublishTrack.DAILY,
+      outcome: ValidationOutcome.PASSED,
+      validatorVersion: 'flagship-human-review:aortic-stenosis-v1',
       summary: {
         contentTier: 'FLAGSHIP',
         seedVersion,
         humanReviewed: true,
         note:
-          'Manual frontend-aligned elderly UTI case seeded against existing Urinary Tract Infection registry with supported clue types and duplicate-safe case reuse.',
+          'Complete Aortic stenosis flagship seed with playable clue types and full education payload.',
       },
       findings: [],
       completedAt: now,
     },
   });
 
-  console.log('Seeded frontend-aligned elderly UTI case:', {
-    registryId: registry.id,
-    registryDisplayLabel: registry.displayLabel,
+  console.log('Seeded Aortic Stenosis:', {
+    registryId: params.diagnosisRegistryId,
     caseId: seededCase.id,
+    revisionId: revision.id,
     publicNumber,
+    educationId: params.educationId,
+    clueTypes: clues.map((c) => c.type),
+  });
+}
+
+async function main() {
+  const registry = await ensureRegistry();
+  const education = await upsertEducation(registry.id);
+
+  await upsertCase({
+    diagnosisRegistryId: registry.id,
+    registryDisplayLabel: registry.displayLabel,
     educationId: education.id,
-    inventoryPlaceholderDate: assignedInventoryPlaceholderDate.toISOString(),
   });
 }
 

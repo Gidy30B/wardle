@@ -474,7 +474,12 @@ function LearnDetailTabContent({
   }
 
   if (activeTab === "diagnosis") {
-    return <DiagnosisTab educationState={educationState} mobile={mobile} />;
+    return (
+      <DiagnosisTab
+        educationState={educationState}
+        mobile={mobile}
+      />
+    );
   }
 
   return (
@@ -780,17 +785,34 @@ export function DiagnosisTab({
         .slice(0, 3),
     [education?.recognitionPattern],
   );
+  const recallPrompts = normalizeRecallPracticePrompts(
+    education?.recallPrompts,
+  ).slice(0, 5);
+  const recallPractice = (
+    <RecallPracticeSection
+      prompts={recallPrompts}
+      mobile={mobile}
+    />
+  );
 
   if (loading) {
-    return <InlineNotice tone="muted" copy="Loading diagnosis teaching..." />;
+    return (
+      <div className="min-w-0 space-y-5">
+        <InlineNotice tone="muted" copy="Loading diagnosis teaching..." />
+        {recallPractice}
+      </div>
+    );
   }
 
   if (!enabled || error || !education || !teachingObjects) {
     return (
-      <InlineNotice
-        tone="muted"
-        copy="Reviewed diagnosis teaching is not available yet."
-      />
+      <div className="min-w-0 space-y-5">
+        <InlineNotice
+          tone="muted"
+          copy="Reviewed diagnosis teaching is not available yet."
+        />
+        {recallPractice}
+      </div>
     );
   }
 
@@ -812,10 +834,13 @@ export function DiagnosisTab({
 
   if (!hasAnyKeyFacts) {
     return (
-      <InlineNotice
-        tone="muted"
-        copy="Reviewed key facts are not available yet."
-      />
+      <div className="min-w-0 space-y-5">
+        <InlineNotice
+          tone="muted"
+          copy="Reviewed key facts are not available yet."
+        />
+        {recallPractice}
+      </div>
     );
   }
 
@@ -859,8 +884,296 @@ export function DiagnosisTab({
         />
       ) : null}
       <ReferencesSection references={teachingObjects.references} mobile={mobile} />
+      {recallPractice}
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// RECALL PRACTICE — flashcard-style self-review
+//
+// One prompt in focus at a time, with a tappable dot-progress row and a
+// self-grade step (Got it / Missed it) after revealing the answer. This
+// replaces the old flat list of always-expandable Q/A rows: that version
+// read like a printed quiz sheet, this one behaves like an actual recall
+// drill and gives a sense of progress through the set.
+//
+// No review-state plumbing here — this section only renders the prompts
+// (or an empty-state notice). Grades are local UI state, not persisted;
+// see note at the end of this block if that needs to change.
+// ─────────────────────────────────────────────────────────────────────────
+
+type RecallPracticePrompt = {
+  id: string;
+  prompt: string;
+  answer: string | null;
+};
+
+type CardGrade = "got-it" | "missed" | null;
+
+function RecallPracticeSection({
+  prompts,
+  mobile,
+}: {
+  prompts: RecallPracticePrompt[];
+  mobile: boolean;
+}) {
+  const hasPrompts = prompts.length > 0;
+
+  return (
+    <ResponsiveSection
+      number="10"
+      title="Recall Practice"
+      tone="teal"
+      mobile={mobile}
+    >
+      <article className="min-w-0 rounded-[15px] border border-[var(--wardle-color-teal)]/14 bg-[var(--wardle-color-teal)]/[0.038] px-4 py-3.5">
+        {hasPrompts ? (
+          <FlashcardDeck prompts={prompts} />
+        ) : (
+          <div className="rounded-[13px] border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+            <p className="break-words text-sm leading-6 text-white/48">
+              No recall questions have been added for this diagnosis yet.
+            </p>
+          </div>
+        )}
+      </article>
+    </ResponsiveSection>
+  );
+}
+
+function FlashcardDeck({ prompts }: { prompts: RecallPracticePrompt[] }) {
+  const [index, setIndex] = useState(0);
+  const [revealed, setRevealed] = useState(false);
+  const [grades, setGrades] = useState<Record<string, CardGrade>>({});
+
+  const total = prompts.length;
+  const current = prompts[index];
+  const isLast = index === total - 1;
+  const doneCount = Object.values(grades).filter(Boolean).length;
+  const allGraded = doneCount === total;
+
+  function goTo(nextIndex: number) {
+    setIndex(Math.max(0, Math.min(total - 1, nextIndex)));
+    setRevealed(false);
+  }
+
+  function grade(value: CardGrade) {
+    if (!current) return;
+    setGrades((prev) => ({ ...prev, [current.id]: value }));
+    if (!isLast) {
+      window.setTimeout(() => goTo(index + 1), 150);
+    }
+  }
+
+  function restart() {
+    setGrades({});
+    goTo(0);
+  }
+
+  if (!current) return null;
+
+  return (
+    <div className="min-w-0">
+      <p className="mb-3 break-words text-sm leading-6 text-white/58">
+        Quick questions to test the key teaching points.
+      </p>
+
+      <DeckProgress
+        total={total}
+        index={index}
+        grades={grades}
+        promptIds={prompts.map((p) => p.id)}
+        onJump={goTo}
+      />
+
+      <article
+        key={current.id}
+        className="mt-3 rounded-[13px] border border-[rgba(0,180,166,0.13)] bg-[#121827]/72 px-4 py-4"
+      >
+        <p className="font-brand-mono text-[9px] font-black uppercase tracking-[0.14em] text-[var(--wardle-color-teal)]/65">
+          Question {index + 1} of {total}
+        </p>
+        <p className="mt-2 break-words text-[15px] font-semibold leading-6 text-white/82">
+          {current.prompt}
+        </p>
+
+        {revealed && current.answer ? (
+          <div className="mt-3 rounded-[10px] border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
+            <p className="font-brand-mono text-[9px] font-black uppercase tracking-[0.12em] text-white/34">
+              Answer
+            </p>
+            <p className="mt-1 break-words text-[13px] leading-5 text-white/62">
+              {current.answer}
+            </p>
+          </div>
+        ) : null}
+
+        <div className="mt-3.5">
+          {!revealed ? (
+            <button
+              type="button"
+              onClick={() => setRevealed(true)}
+              disabled={!current.answer}
+              className="flex w-full items-center justify-center rounded-[11px] border border-[rgba(0,180,166,0.24)] bg-[rgba(0,180,166,0.1)] px-4 py-2.5 text-sm font-black text-[var(--wardle-color-teal)] transition active:scale-[0.98] disabled:opacity-40"
+            >
+              {current.answer ? "Reveal answer" : "No answer recorded"}
+            </button>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => grade("missed")}
+                className="flex items-center justify-center rounded-[11px] border border-rose-400/[0.22] bg-rose-400/[0.07] px-3 py-2.5 text-sm font-black text-rose-300/85 transition active:scale-[0.98]"
+              >
+                Missed it
+              </button>
+              <button
+                type="button"
+                onClick={() => grade("got-it")}
+                className="flex items-center justify-center rounded-[11px] border border-[rgba(0,180,166,0.28)] bg-[rgba(0,180,166,0.12)] px-3 py-2.5 text-sm font-black text-[var(--wardle-color-teal)] transition active:scale-[0.98]"
+              >
+                Got it
+              </button>
+            </div>
+          )}
+        </div>
+      </article>
+
+      <div className="mt-2.5 flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => goTo(index - 1)}
+          disabled={index === 0}
+          className="font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/32 transition hover:text-white/55 disabled:opacity-30 disabled:hover:text-white/32"
+        >
+          ‹ Previous
+        </button>
+
+        {allGraded ? (
+          <DeckSummary grades={grades} onRestart={restart} />
+        ) : (
+          <button
+            type="button"
+            onClick={() => goTo(index + 1)}
+            disabled={isLast}
+            className="font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/32 transition hover:text-white/55 disabled:opacity-30 disabled:hover:text-white/32"
+          >
+            Skip ›
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DeckProgress({
+  total,
+  index,
+  grades,
+  promptIds,
+  onJump,
+}: {
+  total: number;
+  index: number;
+  grades: Record<string, CardGrade>;
+  promptIds: string[];
+  onJump: (index: number) => void;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      {promptIds.map((id, i) => {
+        const grade = grades[id];
+        const isActive = i === index;
+        const dotClass = isActive
+          ? "bg-[var(--wardle-color-teal)] scale-125"
+          : grade === "got-it"
+            ? "bg-[var(--wardle-color-teal)]/55"
+            : grade === "missed"
+              ? "bg-rose-400/55"
+              : "bg-white/[0.12]";
+
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onJump(i)}
+            aria-label={`Go to question ${i + 1} of ${total}`}
+            aria-current={isActive}
+            className="flex h-5 flex-1 items-center justify-center"
+          >
+            <span
+              className={`h-1.5 w-full rounded-full transition-all duration-150 ${dotClass}`}
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function DeckSummary({
+  grades,
+  onRestart,
+}: {
+  grades: Record<string, CardGrade>;
+  onRestart: () => void;
+}) {
+  const values = Object.values(grades);
+  const gotItCount = values.filter((g) => g === "got-it").length;
+
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/40">
+        {gotItCount}/{values.length} solid
+      </span>
+      <button
+        type="button"
+        onClick={onRestart}
+        className="font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--wardle-color-teal)]/75 transition hover:text-[var(--wardle-color-teal)]"
+      >
+        Restart ↺
+      </button>
+    </div>
+  );
+}
+
+function normalizeRecallPracticePrompts(value: unknown): RecallPracticePrompt[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item, index) => {
+      const prompt =
+        typeof item === "string"
+          ? item.trim()
+          : getRecallPracticePromptString(item, "prompt") ??
+            getRecallPracticePromptString(item, "question") ??
+            getRecallPracticePromptString(item, "text") ??
+            "";
+
+      if (!prompt) return null;
+
+      const answer =
+        typeof item === "string"
+          ? null
+          : getRecallPracticePromptString(item, "answer") ??
+            getRecallPracticePromptString(item, "explanation");
+
+      return {
+        id: getRecallPracticePromptString(item, "id") ?? `${index}-${prompt}`,
+        prompt,
+        answer,
+      };
+    })
+    .filter((item): item is RecallPracticePrompt => item !== null);
+}
+
+function getRecallPracticePromptString(value: unknown, key: string) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const field = (value as Record<string, unknown>)[key];
+  if (typeof field !== "string") return null;
+  const trimmed = field.trim();
+  return trimmed || null;
 }
 
 function DefinitionSection({
