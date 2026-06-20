@@ -714,7 +714,7 @@ export function SpecialtyRail({
         aria-hidden="true"
         className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-[var(--wardle-color-charcoal)] to-transparent"
       />
-      <div className="min-w-0 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="min-w-0 overflow-x-auto">
         <div className="flex w-max gap-px pr-10">
           <SpecialtyPill
             label="All"

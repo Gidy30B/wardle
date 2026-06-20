@@ -6,6 +6,7 @@ const FIREBASE_MESSAGING_SW_PATH = '/firebase-messaging-sw.js'
 export type WebPushUnsupportedReason =
   | 'config_missing'
   | 'browser_unsupported'
+  | 'ios_requires_home_screen_pwa'
   | 'service_worker_unavailable'
   | 'firebase_unsupported'
   | 'permission_denied'
@@ -25,10 +26,23 @@ type FirebaseWebConfig = {
 }
 
 export async function getWebPushCapability(): Promise<WebPushCapability> {
+  const isIosWeb = isIosWebBrowser()
+  const isStandalonePwa = isStandaloneWebApp()
   devLog('support check started')
+  devLog('isIosWeb', isIosWeb)
+  devLog('isStandalonePwa', isStandalonePwa)
   devLog('has Notification', hasNotificationApi())
   devLog('has serviceWorker', hasServiceWorkerApi())
   devLog('has PushManager', hasPushManagerApi())
+
+  if (isIosWeb && !isStandalonePwa) {
+    const capability = {
+      supported: false,
+      reason: 'ios_requires_home_screen_pwa',
+    } as const
+    devLog('final capability', capability)
+    return capability
+  }
 
   if (!canUseBrowserPush()) {
     const capability = {
@@ -93,6 +107,12 @@ export async function getWebPushCapability(): Promise<WebPushCapability> {
 }
 
 export async function registerWebPushToken(): Promise<string> {
+  if (isIosWebBrowser() && !isStandaloneWebApp()) {
+    throw new Error(
+      'On iPhone, install Wardle to your Home Screen first, then open it from the Home Screen icon to enable notifications.',
+    )
+  }
+
   if (!canUseBrowserPush()) {
     throw new Error('Push notifications are not supported in this browser.')
   }
@@ -153,6 +173,37 @@ function hasServiceWorkerApi() {
 
 function hasPushManagerApi() {
   return typeof window !== 'undefined' && 'PushManager' in window
+}
+
+export function isIosWebBrowser() {
+  if (typeof navigator === 'undefined') {
+    return false
+  }
+
+  const userAgent = navigator.userAgent
+  const platform = navigator.platform
+  const maxTouchPoints = navigator.maxTouchPoints ?? 0
+  const isiPhoneOrIpod = /iPhone|iPod/i.test(userAgent)
+  const isiPad = /iPad/i.test(userAgent)
+  const isiPadOsDesktopMode =
+    platform === 'MacIntel' && maxTouchPoints > 1 && /Safari/i.test(userAgent)
+
+  return isiPhoneOrIpod || isiPad || isiPadOsDesktopMode
+}
+
+export function isStandaloneWebApp() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  const navigatorWithStandalone = window.navigator as Navigator & {
+    standalone?: boolean
+  }
+
+  return (
+    window.matchMedia?.('(display-mode: standalone)').matches === true ||
+    navigatorWithStandalone.standalone === true
+  )
 }
 
 async function isServiceWorkerReachable() {

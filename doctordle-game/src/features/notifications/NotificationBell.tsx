@@ -415,7 +415,7 @@ export default function NotificationBell({ compact = false }: NotificationBellPr
             </header>
 
             {/* Scrollable body — mirrors the main scroll container */}
-            <div className="flex-1 overflow-y-auto scrollbar-none">
+            <div className="flex-1 overflow-y-auto">
               <div className="mx-auto w-full max-w-3xl px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+2rem)] sm:px-5">
                 {loading ? (
                   // Skeleton — uses StateCard shape: rounded-[22px] border bg-gradient
@@ -530,8 +530,6 @@ export default function NotificationBell({ compact = false }: NotificationBellPr
         .wardle-notif-item {
           animation: wardle-notif-item-in 240ms cubic-bezier(0.22,1,0.36,1) both;
         }
-        .scrollbar-none::-webkit-scrollbar { display: none; }
-        .scrollbar-none { scrollbar-width: none; }
       `}</style>
     </>
   );

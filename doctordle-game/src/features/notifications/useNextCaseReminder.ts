@@ -20,6 +20,8 @@ const NOTIFICATION_PREFERENCES_QUERY_KEY = [
 ] as const
 const NEXT_CASE_REMINDER_CATEGORY = 'GAMEPLAY' as const
 const DENIED_MESSAGE = 'Notifications are off. Enable them in settings.'
+const IOS_HOME_SCREEN_PUSH_MESSAGE =
+  'On iPhone, install Wardle to your Home Screen first, then open it from the Home Screen icon to enable notifications.'
 
 export function useNextCaseReminder() {
   const { isLoaded, isSignedIn } = useAuth()
@@ -91,7 +93,11 @@ export function useNextCaseReminder() {
 
       if (latestCapability.supported === false) {
         setPermission('unknown')
-        setError('Notifications are not available on this device yet.')
+        setError(
+          latestCapability.reason === 'ios_requires_home_screen_pwa'
+            ? IOS_HOME_SCREEN_PUSH_MESSAGE
+            : 'Notifications are not available on this device yet.',
+        )
         return
       }
 

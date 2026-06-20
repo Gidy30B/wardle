@@ -43,6 +43,15 @@ const PUSH_CATEGORY_DISABLES: NotificationPreferenceUpdate[] = [
   { category: 'GAMEPLAY', pushEnabled: false },
   { category: 'STREAK', pushEnabled: false },
 ]
+const IOS_HOME_SCREEN_PUSH_COPY =
+  'On iPhone, install Wardle to your Home Screen first, then open it from the Home Screen icon to enable notifications.'
+const IOS_HOME_SCREEN_STEPS = [
+  'Open Wardle in Safari',
+  'Tap Share',
+  'Tap Add to Home Screen',
+  'Open Wardle from the Home Screen icon',
+  'Enable notifications',
+]
 
 export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
   const { isLoaded, isSignedIn } = useAuth()
@@ -192,6 +201,9 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
     pushCapability === null ||
     pushCapability.supported === false ||
     pushPermissionDenied
+  const requiresIosHomeScreenPwa =
+    pushCapability?.supported === false &&
+    pushCapability.reason === 'ios_requires_home_screen_pwa'
   const pushSublabel =
     pushStatusMessage ??
     (pushCapability === null
@@ -256,10 +268,15 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
           iconBg="rgba(0,180,166,0.15)"
           label="Push notifications"
           sublabel={pushSublabel}
-          on={pushEnabled}
+          on={requiresIosHomeScreenPwa ? false : pushEnabled}
           onToggle={() => void togglePushNotifications()}
-          disabled={pushDisabled || pushPreferencesMutation.isPending}
+          disabled={
+            requiresIosHomeScreenPwa ||
+            pushDisabled ||
+            pushPreferencesMutation.isPending
+          }
         />
+        {requiresIosHomeScreenPwa ? <IosHomeScreenPushHelp /> : null}
         <SettingsToggleRow
           icon="🔥"
           iconBg="rgba(244,162,97,0.15)"
@@ -298,6 +315,31 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
   )
 }
 
+function IosHomeScreenPushHelp() {
+  return (
+    <div className="border-b border-white/[0.04] px-4 pb-4 pt-1">
+      <div className="rounded-[16px] border border-[rgba(0,180,166,0.16)] bg-[rgba(0,180,166,0.055)] px-4 py-3">
+        <p className="text-[12px] leading-5 text-white/58">
+          {IOS_HOME_SCREEN_PUSH_COPY}
+        </p>
+        <ol className="mt-3 space-y-1.5">
+          {IOS_HOME_SCREEN_STEPS.map((step, index) => (
+            <li
+              key={step}
+              className="grid grid-cols-[20px_minmax(0,1fr)] gap-2 text-[12px] leading-5 text-white/52"
+            >
+              <span className="font-brand-mono text-[10px] font-black text-[var(--wardle-color-teal)]/70">
+                {index + 1}
+              </span>
+              <span>{step}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </div>
+  )
+}
+
 function mergePushPreferencePatches(
   preferences: NotificationPreferencesResponse['preferences'],
   patches: NotificationPreferenceUpdate[],
@@ -330,6 +372,8 @@ function getPushUnsupportedSublabel(
   switch (reason) {
     case 'config_missing':
       return 'Notifications are not configured for this build.'
+    case 'ios_requires_home_screen_pwa':
+      return IOS_HOME_SCREEN_PUSH_COPY
     case 'browser_unsupported':
     case 'firebase_unsupported':
       return 'Push notifications are not supported in this browser.'
