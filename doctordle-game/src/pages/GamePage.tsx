@@ -59,6 +59,12 @@ export default function GamePage() {
     typeof game.roundViewModel.hud.xpTotal === 'number'
       ? game.roundViewModel.hud.xpTotal
       : null
+  const hasCompletedAnyCase = Boolean(
+    game.latestResult?.gameOver ||
+      game.latestPlayedLearningResult?.gameOver ||
+      (userStats.report?.totals.casesCompleted ?? 0) > 0 ||
+      (learnLibrary.library?.cases.length ?? 0) > 0,
+  )
 
   const resultModalKey = useMemo(() => {
     if (
@@ -128,6 +134,7 @@ export default function GamePage() {
       activeTab={activeTab}
       canOpenLearn
       onChangeTab={setActiveTab}
+      hasCompletedAnyCase={hasCompletedAnyCase}
       streak={currentStreak}
       xpTotal={shellXpTotal}
       organizationName={organizationName}

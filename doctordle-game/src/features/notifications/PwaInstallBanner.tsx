@@ -1,11 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { usePwaInstallPrompt } from './pwaInstall'
+import type { AppGameTab } from '../game/react/AppBottomNav'
 
 const DISMISS_STORAGE_KEY = 'wardle.pwaInstallBannerDismissedAt'
 const DISMISS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000
 
-export function PwaInstallBanner({ completed }: { completed: boolean }) {
+export function PwaInstallBanner({
+  activeTab,
+  completed,
+}: {
+  activeTab: AppGameTab
+  completed: boolean
+}) {
   const pwaInstall = usePwaInstallPrompt()
+  const [learnTabDelayElapsed, setLearnTabDelayElapsed] = useState(
+    activeTab !== 'learn',
+  )
   const [dismissedAt, setDismissedAt] = useState<number | null>(() =>
     getStoredDismissedAt(),
   )
@@ -15,28 +25,49 @@ export function PwaInstallBanner({ completed }: { completed: boolean }) {
     return Date.now() - dismissedAt < DISMISS_COOLDOWN_MS
   }, [dismissedAt])
 
+  useEffect(() => {
+    if (activeTab !== 'learn') {
+      setLearnTabDelayElapsed(true)
+      return
+    }
+
+    setLearnTabDelayElapsed(false)
+    const timeout = window.setTimeout(() => {
+      setLearnTabDelayElapsed(true)
+    }, 4000)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [activeTab])
+
   const visible =
     completed &&
     pwaInstall.shouldShowInstallButton &&
     !pwaInstall.isIos &&
     !pwaInstall.isNative &&
     !pwaInstall.isStandalone &&
-    !dismissedRecently
+    !dismissedRecently &&
+    learnTabDelayElapsed
 
   useEffect(() => {
     console.log('[pwa-install] post-case card visibility', {
+      activeTab,
       completed,
       canPromptInstall: pwaInstall.canPromptInstall,
       isStandalone: pwaInstall.isStandalone,
       dismissedRecently,
+      learnTabDelayElapsed,
     })
 
     if (visible) {
       console.log('[pwa-install] banner shown')
     }
   }, [
+    activeTab,
     completed,
     dismissedRecently,
+    learnTabDelayElapsed,
     pwaInstall.canPromptInstall,
     pwaInstall.isStandalone,
     visible,
@@ -61,7 +92,7 @@ export function PwaInstallBanner({ completed }: { completed: boolean }) {
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[80] px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] sm:px-4">
-      <div className="pointer-events-auto mx-auto flex max-w-[400px] items-start gap-3 overflow-hidden rounded-2xl border border-white/[0.07] border-l-[3px] border-l-[var(--wardle-color-teal)]/60 bg-[var(--wardle-surface-sticky-solid)] p-4 shadow-[0_14px_36px_rgba(0,0,0,0.32)]">
+      <div className="pointer-events-auto mx-auto flex max-w-[400px] items-start gap-3 overflow-hidden rounded-2xl border border-white/[0.07] border-l-[3px] border-l-[var(--wardle-color-teal)]/60 bg-[var(--wardle-surface-sticky-solid)] p-4 shadow-[0_24px_60px_rgba(0,0,0,0.24)]">
         <img
           src="/wardle-icon.png"
           alt=""

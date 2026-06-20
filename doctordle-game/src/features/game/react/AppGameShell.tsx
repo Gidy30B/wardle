@@ -3,12 +3,14 @@ import AppBottomNav, { appNavItems, type AppGameTab } from './AppBottomNav'
 import { APP_ICONS } from '../../../theme/icons'
 import WardleLogo from '../../../components/brand/WardleLogo'
 import { getVisibleStreak } from '../../user-progress/streakVisibility'
+import { PwaInstallBanner } from '../../notifications/PwaInstallBanner'
 
 type AppGameShellProps = {
   activeTab: AppGameTab
   canOpenLearn: boolean
   onChangeTab: (tab: AppGameTab) => void
   children: ReactNode
+  hasCompletedAnyCase: boolean
   streak: number | null
   xpTotal: number | null
   organizationName?: string | null
@@ -19,6 +21,7 @@ export default function AppGameShell({
   canOpenLearn,
   onChangeTab,
   children,
+  hasCompletedAnyCase,
   streak,
   xpTotal,
   organizationName,
@@ -113,6 +116,10 @@ export default function AppGameShell({
           </footer>
         </main>
       </div>
+      <PwaInstallBanner
+        activeTab={activeTab}
+        completed={hasCompletedAnyCase}
+      />
     </div>
   )
 }
