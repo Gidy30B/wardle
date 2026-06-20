@@ -1,16 +1,8 @@
 import { Capacitor } from '@capacitor/core'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-type BeforeInstallPromptChoice = {
-  outcome: 'accepted' | 'dismissed'
-  platform: string
-}
-
-type BeforeInstallPromptEvent = Event & {
-  platforms?: string[]
-  userChoice: Promise<BeforeInstallPromptChoice>
-  prompt: () => Promise<void>
-}
+const PWA_SERVICE_WORKER_PATH = '/firebase-messaging-sw.js'
+const PWA_SERVICE_WORKER_SCOPE = '/'
 
 export type PwaInstallState = {
   isNative: boolean
@@ -18,8 +10,14 @@ export type PwaInstallState = {
   isSafari: boolean
   isStandalone: boolean
   canPrompt: boolean
+  canPromptInstall: boolean
+  shouldShowInstallButton: boolean
   isAndroidChrome: boolean
 }
+
+let installed = false
+let listenersMounted = false
+const subscribers = new Set<() => void>()
 
 export function isIos() {
   if (typeof navigator === 'undefined') return false
@@ -57,98 +55,118 @@ export function isStandalonePwa() {
   )
 }
 
-export function canPromptInstall(event?: BeforeInstallPromptEvent | null) {
-  return Boolean(event)
+export function canPromptInstall() {
+  return false
 }
 
-export function getPwaInstallState(
-  installPromptEvent?: BeforeInstallPromptEvent | null,
-): PwaInstallState {
+export function getPwaInstallState(): PwaInstallState {
   const userAgent =
     typeof navigator === 'undefined' ? '' : navigator.userAgent
   const isAndroidChrome =
-    /Android/i.test(userAgent) && /Chrome/i.test(userAgent) && !/Edg|OPR/i.test(userAgent)
+    /Android/i.test(userAgent) &&
+    /Chrome/i.test(userAgent) &&
+    !/Edg|OPR/i.test(userAgent)
+  const isNative = Capacitor.isNativePlatform()
+  const standalone = installed || isStandalonePwa()
+  const promptAvailable = canPromptInstall()
 
   return {
-    isNative: Capacitor.isNativePlatform(),
+    isNative,
     isIos: isIos(),
     isSafari: isSafari(),
-    isStandalone: isStandalonePwa(),
-    canPrompt: canPromptInstall(installPromptEvent),
+    isStandalone: standalone,
+    canPrompt: promptAvailable,
+    canPromptInstall: promptAvailable,
+    shouldShowInstallButton: false,
     isAndroidChrome,
   }
 }
 
+export function initPwaInstallPrompt() {
+  if (
+    listenersMounted ||
+    Capacitor.isNativePlatform() ||
+    typeof window === 'undefined'
+  ) {
+    return
+  }
+
+  listenersMounted = true
+  installed = isStandalonePwa()
+
+  const handleBeforeInstallPrompt = () => {
+    console.log(
+      '[pwa-install] beforeinstallprompt fired; allowing browser native prompt',
+    )
+    notifyPwaInstallSubscribers()
+  }
+
+  const handleAppInstalled = () => {
+    installed = true
+    notifyPwaInstallSubscribers()
+  }
+
+  window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+  window.addEventListener('appinstalled', handleAppInstalled)
+
+  const mediaQuery = window.matchMedia?.('(display-mode: standalone)')
+  mediaQuery?.addEventListener?.('change', () => {
+    installed = isStandalonePwa()
+    notifyPwaInstallSubscribers()
+  })
+
+  void registerPwaServiceWorker()
+}
+
+export async function promptPwaInstall() {
+  return null
+}
+
 export function usePwaInstallPrompt() {
-  const [installPromptEvent, setInstallPromptEvent] =
-    useState<BeforeInstallPromptEvent | null>(null)
-  const [installed, setInstalled] = useState(isStandalonePwa)
+  const [snapshot, setSnapshot] = useState(getPwaInstallState)
 
   useEffect(() => {
-    if (Capacitor.isNativePlatform() || typeof window === 'undefined') {
-      return
-    }
-
-    const handleBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault()
-      setInstallPromptEvent(event as BeforeInstallPromptEvent)
-    }
-
-    const handleAppInstalled = () => {
-      setInstalled(true)
-      setInstallPromptEvent(null)
-    }
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-    window.addEventListener('appinstalled', handleAppInstalled)
-
+    initPwaInstallPrompt()
+    const handleChange = () => setSnapshot(getPwaInstallState())
+    subscribers.add(handleChange)
+    handleChange()
     return () => {
-      window.removeEventListener(
-        'beforeinstallprompt',
-        handleBeforeInstallPrompt,
-      )
-      window.removeEventListener('appinstalled', handleAppInstalled)
+      subscribers.delete(handleChange)
     }
   }, [])
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    const mediaQuery = window.matchMedia?.('(display-mode: standalone)')
-    if (!mediaQuery) return
-
-    const handleChange = () => setInstalled(isStandalonePwa())
-    mediaQuery.addEventListener?.('change', handleChange)
-
-    return () => {
-      mediaQuery.removeEventListener?.('change', handleChange)
-    }
-  }, [])
-
-  const state = useMemo(() => {
-    const nextState = getPwaInstallState(installPromptEvent)
-    return {
-      ...nextState,
-      isStandalone: installed || nextState.isStandalone,
-    }
-  }, [installPromptEvent, installed])
+  const state = useMemo(() => snapshot, [snapshot])
 
   const promptInstall = useCallback(async () => {
-    if (!installPromptEvent) return null
-
-    await installPromptEvent.prompt()
-    const choice = await installPromptEvent.userChoice
-    setInstallPromptEvent(null)
-
-    if (choice.outcome === 'accepted') {
-      setInstalled(true)
-    }
-
-    return choice
-  }, [installPromptEvent])
+    return promptPwaInstall()
+  }, [])
 
   return {
     ...state,
     promptInstall,
   }
+}
+
+async function registerPwaServiceWorker() {
+  if (
+    typeof window === 'undefined' ||
+    typeof navigator === 'undefined' ||
+    !('serviceWorker' in navigator) ||
+    !window.isSecureContext
+  ) {
+    return
+  }
+
+  try {
+    await navigator.serviceWorker.register(
+      PWA_SERVICE_WORKER_PATH,
+      { scope: PWA_SERVICE_WORKER_SCOPE },
+    )
+  } catch (error) {
+    console.warn('[pwa-install] service worker registration failed', error)
+  }
+}
+
+function notifyPwaInstallSubscribers() {
+  subscribers.forEach((listener) => listener())
 }

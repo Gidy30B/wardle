@@ -17,6 +17,10 @@ import {
   type PushCapability,
 } from '../../../../notifications/pushRegistration'
 import { usePwaInstallPrompt } from '../../../../notifications/pwaInstall'
+import {
+  getWebPushDiagnostics,
+  type WebPushDiagnostics,
+} from '../../../../notifications/webPushRegistration'
 import { SettingsBackHeader } from '../components/SettingsBackHeader'
 import { SettingsSection, SettingsSubHero } from '../components/SettingsSection'
 import { SettingsShell } from '../components/SettingsShell'
@@ -66,21 +70,33 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
   const [pushStatusMessage, setPushStatusMessage] = useState<string | null>(
     null,
   )
+  const [pushDiagnostics, setPushDiagnostics] =
+    useState<WebPushDiagnostics | null>(null)
 
   useEffect(() => {
     let mounted = true
 
-    void getPushCapability()
-      .then((capability) => {
+    async function refreshPushCapability() {
+      try {
+        const capability = await getPushCapability()
         if (mounted) {
           setPushCapability(capability)
         }
-      })
-      .catch(() => {
+
+        if (!capability.supported || capability.platform === 'web') {
+          const diagnostics = await getWebPushDiagnostics()
+          if (mounted) {
+            setPushDiagnostics(diagnostics)
+          }
+        }
+      } catch (_) {
         if (mounted) {
           setPushCapability({ supported: false, reason: 'unsupported' })
         }
-      })
+      }
+    }
+
+    void refreshPushCapability()
 
     return () => {
       mounted = false
@@ -205,19 +221,21 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
   const requiresIosHomeScreenPwa =
     pushCapability?.supported === false &&
     pushCapability.reason === 'ios_requires_home_screen_pwa'
+  const installedIosFirebaseUnsupported =
+    pushCapability?.supported === false &&
+    pushCapability.reason === 'firebase_unsupported' &&
+    pwaInstall.isIos &&
+    pwaInstall.isStandalone
   const showIosInstallPrompt =
     requiresIosHomeScreenPwa && !pwaInstall.isNative && !pwaInstall.isStandalone
-  const showBrowserInstallPrompt =
-    !showIosInstallPrompt &&
-    !pwaInstall.isNative &&
-    !pwaInstall.isStandalone &&
-    pwaInstall.canPrompt
   const pushSublabel =
     pushStatusMessage ??
     (pushCapability === null
       ? 'Checking mobile support...'
         : pushCapability.supported === false
-        ? getPushUnsupportedSublabel(pushCapability.reason)
+        ? installedIosFirebaseUnsupported
+          ? 'Wardle is installed, but Firebase Messaging did not initialize on this iOS web app.'
+          : getPushUnsupportedSublabel(pushCapability.reason)
         : pushPermissionDenied
           ? pushCapability.platform === 'web'
             ? 'Notifications are blocked in this browser'
@@ -272,7 +290,7 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
       />
       <SettingsSection>
         {showIosInstallPrompt ? (
-          <PwaInstallCard variant="ios" />
+          <PwaInstallCard />
         ) : (
           <SettingsToggleRow
           icon="📲"
@@ -288,11 +306,8 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
           }
           />
         )}
-        {showBrowserInstallPrompt ? (
-          <PwaInstallCard
-            variant="prompt"
-            onInstall={() => void pwaInstall.promptInstall()}
-          />
+        {import.meta.env.DEV && pushDiagnostics ? (
+          <PushDiagnosticsPanel diagnostics={pushDiagnostics} />
         ) : null}
         <SettingsToggleRow
           icon="🔥"
@@ -332,51 +347,84 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
   )
 }
 
-function PwaInstallCard({
-  variant,
-  onInstall,
+function PushDiagnosticsPanel({
+  diagnostics,
 }: {
-  variant: 'ios' | 'prompt'
-  onInstall?: () => void
+  diagnostics: WebPushDiagnostics
 }) {
-  const isIos = variant === 'ios'
+  const rows: Array<[string, string]> = [
+    ['iOS web', String(diagnostics.isIosWeb)],
+    ['Standalone PWA', String(diagnostics.isStandalonePwa)],
+    ['Secure context', String(diagnostics.isSecureContext)],
+    ['Notification API', String(diagnostics.hasNotification)],
+    ['Service worker API', String(diagnostics.hasServiceWorker)],
+    ['PushManager API', String(diagnostics.hasPushManager)],
+    ['Permission', diagnostics.notificationPermission],
+    ['Firebase config', String(diagnostics.firebaseConfigPresent)],
+    ['SW path', diagnostics.serviceWorkerPath],
+    ['Expected SW scope', diagnostics.expectedServiceWorkerScope],
+    ['Active SW scope', diagnostics.activeServiceWorkerScope ?? 'none'],
+    [
+      'SW reachable',
+      diagnostics.serviceWorkerReachable === null
+        ? 'not checked'
+        : String(diagnostics.serviceWorkerReachable),
+    ],
+    [
+      'Firebase supported',
+      diagnostics.firebaseMessagingSupported === null
+        ? 'not checked'
+        : String(diagnostics.firebaseMessagingSupported),
+    ],
+    ['Provider', diagnostics.recommendedProvider ?? 'none'],
+    ['Final reason', diagnostics.finalReason ?? 'supported'],
+  ]
 
+  return (
+    <details className="border-b border-white/[0.04] px-4 py-3">
+      <summary className="cursor-pointer text-[11px] font-black uppercase tracking-[0.14em] text-white/36">
+        Push diagnostics
+      </summary>
+      <div className="mt-2 grid gap-1.5 rounded-[12px] border border-white/[0.06] bg-white/[0.025] px-3 py-2">
+        {rows.map(([label, value]) => (
+          <div
+            key={label}
+            className="grid grid-cols-[120px_minmax(0,1fr)] gap-2 text-[11px] leading-5"
+          >
+            <span className="font-brand-mono uppercase tracking-[0.1em] text-white/28">
+              {label}
+            </span>
+            <span className="break-words text-white/54">{value}</span>
+          </div>
+        ))}
+      </div>
+    </details>
+  )
+}
+
+function PwaInstallCard() {
   return (
     <div className="border-b border-white/[0.04] px-4 pb-4 pt-1">
       <div className="rounded-[16px] border border-[rgba(0,180,166,0.16)] bg-[rgba(0,180,166,0.055)] px-4 py-3">
         <p className="text-[13px] font-black text-[var(--wardle-color-mint)]">
-          {isIos
-            ? 'Install Wardle to enable notifications'
-            : 'Install Wardle'}
+          Install Wardle to enable notifications
         </p>
         <p className="text-[12px] leading-5 text-white/58">
-          {isIos
-            ? IOS_HOME_SCREEN_PUSH_COPY
-            : 'Add Wardle to your device for a faster app-like experience.'}
+          {IOS_HOME_SCREEN_PUSH_COPY}
         </p>
-        {isIos ? (
-          <ol className="mt-3 space-y-1.5">
-            {IOS_HOME_SCREEN_STEPS.map((step, index) => (
-              <li
-                key={step}
-                className="grid grid-cols-[20px_minmax(0,1fr)] gap-2 text-[12px] leading-5 text-white/52"
-              >
-                <span className="font-brand-mono text-[10px] font-black text-[var(--wardle-color-teal)]/70">
-                  {index + 1}
-                </span>
-                <span>{step}</span>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <button
-            type="button"
-            onClick={onInstall}
-            className="mt-3 rounded-full border border-[var(--wardle-color-teal)]/24 bg-[var(--wardle-color-teal)]/10 px-4 py-2 text-[12px] font-black text-[var(--wardle-color-teal)] transition hover:border-[var(--wardle-color-teal)]/36 hover:bg-[var(--wardle-color-teal)]/14"
-          >
-            Install Wardle
-          </button>
-        )}
+        <ol className="mt-3 space-y-1.5">
+          {IOS_HOME_SCREEN_STEPS.map((step, index) => (
+            <li
+              key={step}
+              className="grid grid-cols-[20px_minmax(0,1fr)] gap-2 text-[12px] leading-5 text-white/52"
+            >
+              <span className="font-brand-mono text-[10px] font-black text-[var(--wardle-color-teal)]/70">
+                {index + 1}
+              </span>
+              <span>{step}</span>
+            </li>
+          ))}
+        </ol>
       </div>
     </div>
   )

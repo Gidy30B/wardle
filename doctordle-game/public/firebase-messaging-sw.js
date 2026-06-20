@@ -1,3 +1,16 @@
+self.addEventListener('install', () => {
+  self.skipWaiting()
+})
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim())
+})
+
+self.addEventListener('fetch', () => {
+  // The app handles navigation/data fetching itself; this makes the service
+  // worker eligible to control pages without changing response behavior.
+})
+
 self.addEventListener('push', (event) => {
   const payload = event.data ? event.data.json() : {}
   const notification = payload.notification ?? {}

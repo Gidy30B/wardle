@@ -14,6 +14,7 @@ import {
   isClerkOAuthCallbackPath,
   shouldBounceOAuthCallbackToNativeApp,
 } from '../features/auth/authRedirects'
+import { initPwaInstallPrompt } from '../features/notifications/pwaInstall'
 
 type EntryScreen = 'loading' | 'profile-onboarding' | 'signed-in' | 'signed-out'
 
@@ -22,6 +23,10 @@ export default function App() {
   const userOnboarding = useUserOnboarding()
   const isOAuthCallback = isClerkOAuthCallbackPath(window.location.pathname)
   const shouldBounceToNative = shouldBounceOAuthCallbackToNativeApp()
+
+  useEffect(() => {
+    initPwaInstallPrompt()
+  }, [])
 
   useEffect(() => {
     if (import.meta.env.DEV) {

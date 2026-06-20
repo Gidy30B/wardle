@@ -3,6 +3,7 @@ import { getMessaging, getToken, isSupported } from 'firebase/messaging'
 import { isIos, isStandalonePwa } from './pwaInstall'
 
 const FIREBASE_MESSAGING_SW_PATH = '/firebase-messaging-sw.js'
+const FIREBASE_MESSAGING_SW_SCOPE = '/'
 
 export type WebPushUnsupportedReason =
   | 'config_missing'
@@ -17,6 +18,26 @@ type WebPushCapability =
   | { supported: false; reason: WebPushUnsupportedReason }
   | { supported: true; permission: NotificationPermission; platform: 'web' }
 
+export type WebPushProvider = 'firebase_fcm' | 'web_push_vapid'
+
+export type WebPushDiagnostics = {
+  isIosWeb: boolean
+  isStandalonePwa: boolean
+  isSecureContext: boolean
+  hasNotification: boolean
+  hasServiceWorker: boolean
+  hasPushManager: boolean
+  notificationPermission: NotificationPermission | 'unavailable'
+  firebaseConfigPresent: boolean
+  serviceWorkerPath: string
+  expectedServiceWorkerScope: string
+  activeServiceWorkerScope: string | null
+  serviceWorkerReachable: boolean | null
+  firebaseMessagingSupported: boolean | null
+  recommendedProvider: WebPushProvider | null
+  finalReason: WebPushUnsupportedReason | null
+}
+
 type FirebaseWebConfig = {
   apiKey: string
   authDomain: string
@@ -27,16 +48,10 @@ type FirebaseWebConfig = {
 }
 
 export async function getWebPushCapability(): Promise<WebPushCapability> {
-  const isIosWeb = isIosWebBrowser()
-  const isStandalonePwa = isStandaloneWebApp()
-  devLog('support check started')
-  devLog('isIosWeb', isIosWeb)
-  devLog('isStandalonePwa', isStandalonePwa)
-  devLog('has Notification', hasNotificationApi())
-  devLog('has serviceWorker', hasServiceWorkerApi())
-  devLog('has PushManager', hasPushManagerApi())
+  const diagnostics = await getWebPushDiagnostics()
+  devLog('support diagnostics', diagnostics)
 
-  if (isIosWeb && !isStandalonePwa) {
+  if (diagnostics.finalReason === 'ios_requires_home_screen_pwa') {
     const capability = {
       supported: false,
       reason: 'ios_requires_home_screen_pwa',
@@ -45,7 +60,7 @@ export async function getWebPushCapability(): Promise<WebPushCapability> {
     return capability
   }
 
-  if (!canUseBrowserPush()) {
+  if (diagnostics.finalReason === 'browser_unsupported') {
     const capability = {
       supported: false,
       reason: 'browser_unsupported',
@@ -54,9 +69,7 @@ export async function getWebPushCapability(): Promise<WebPushCapability> {
     return capability
   }
 
-  const firebaseConfig = getFirebaseWebConfig()
-  devLog('firebase config present', Boolean(firebaseConfig))
-  if (!firebaseConfig) {
+  if (diagnostics.finalReason === 'config_missing') {
     const capability = {
       supported: false,
       reason: 'config_missing',
@@ -65,9 +78,7 @@ export async function getWebPushCapability(): Promise<WebPushCapability> {
     return capability
   }
 
-  const serviceWorkerReachable = await isServiceWorkerReachable()
-  devLog('service worker reachable', serviceWorkerReachable)
-  if (!serviceWorkerReachable) {
+  if (diagnostics.finalReason === 'service_worker_unavailable') {
     const capability = {
       supported: false,
       reason: 'service_worker_unavailable',
@@ -76,10 +87,7 @@ export async function getWebPushCapability(): Promise<WebPushCapability> {
     return capability
   }
 
-  const supported = await isSupported().catch(() => false)
-  devLog('firebase messaging isSupported result', supported)
-
-  if (!supported) {
+  if (diagnostics.finalReason === 'firebase_unsupported') {
     const capability = {
       supported: false,
       reason: 'firebase_unsupported',
@@ -88,7 +96,7 @@ export async function getWebPushCapability(): Promise<WebPushCapability> {
     return capability
   }
 
-  if (Notification.permission === 'denied') {
+  if (diagnostics.finalReason === 'permission_denied') {
     const capability = {
       supported: false,
       reason: 'permission_denied',
@@ -125,6 +133,12 @@ export async function registerWebPushToken(): Promise<string> {
 
   const supported = await isSupported().catch(() => false)
   if (!supported) {
+    if (isIosWebBrowser() && isStandaloneWebApp()) {
+      throw new Error(
+        'Wardle is installed, but Firebase Messaging did not initialize on this iOS web app. Browser push diagnostics can confirm whether a Web Push fallback is needed.',
+      )
+    }
+
     throw new Error('Push notifications are not supported in this browser.')
   }
 
@@ -139,7 +153,9 @@ export async function registerWebPushToken(): Promise<string> {
 
   const serviceWorkerRegistration = await navigator.serviceWorker.register(
     FIREBASE_MESSAGING_SW_PATH,
+    { scope: FIREBASE_MESSAGING_SW_SCOPE },
   )
+  devLog('service worker registration scope', serviceWorkerRegistration.scope)
   const app = getFirebaseApp(firebaseConfig)
   const messaging = getMessaging(app)
   const token = await getToken(messaging, {
@@ -182,6 +198,97 @@ export function isIosWebBrowser() {
 
 export function isStandaloneWebApp() {
   return isStandalonePwa()
+}
+
+export async function getWebPushDiagnostics(): Promise<WebPushDiagnostics> {
+  const isIosWeb = isIosWebBrowser()
+  const isStandalonePwa = isStandaloneWebApp()
+  const isSecureContext =
+    typeof window !== 'undefined' && window.isSecureContext
+  const hasNotification = hasNotificationApi()
+  const hasServiceWorker = hasServiceWorkerApi()
+  const hasPushManager = hasPushManagerApi()
+  const notificationPermission: WebPushDiagnostics['notificationPermission'] =
+    hasNotification ? Notification.permission : 'unavailable'
+  const firebaseConfigPresent = Boolean(getFirebaseWebConfig())
+  const expectedServiceWorkerScope =
+    typeof window !== 'undefined'
+      ? new URL(FIREBASE_MESSAGING_SW_SCOPE, window.location.origin).href
+      : FIREBASE_MESSAGING_SW_SCOPE
+  const activeServiceWorkerScope = await getActiveServiceWorkerScope()
+  let serviceWorkerReachable: boolean | null = null
+  let firebaseMessagingSupported: boolean | null = null
+  let recommendedProvider: WebPushProvider | null = null
+  let finalReason: WebPushUnsupportedReason | null = null
+
+  if (isIosWeb && !isStandalonePwa) {
+    finalReason = 'ios_requires_home_screen_pwa'
+  } else if (
+    !isSecureContext ||
+    !hasNotification ||
+    !hasServiceWorker ||
+    !hasPushManager
+  ) {
+    finalReason = 'browser_unsupported'
+  } else if (!firebaseConfigPresent) {
+    finalReason = 'config_missing'
+  } else {
+    serviceWorkerReachable = await isServiceWorkerReachable()
+
+    if (!serviceWorkerReachable) {
+      finalReason = 'service_worker_unavailable'
+    } else {
+      firebaseMessagingSupported = await isSupported().catch(() => false)
+
+      if (firebaseMessagingSupported) {
+        recommendedProvider = 'firebase_fcm'
+      } else if (isIosWeb && isStandalonePwa) {
+        recommendedProvider = 'web_push_vapid'
+      }
+
+      if (!firebaseMessagingSupported) {
+        finalReason = 'firebase_unsupported'
+      } else if (notificationPermission === 'denied') {
+        finalReason = 'permission_denied'
+      }
+    }
+  }
+
+  const diagnostics: WebPushDiagnostics = {
+    isIosWeb,
+    isStandalonePwa,
+    isSecureContext,
+    hasNotification,
+    hasServiceWorker,
+    hasPushManager,
+    notificationPermission,
+    firebaseConfigPresent,
+    serviceWorkerPath: FIREBASE_MESSAGING_SW_PATH,
+    expectedServiceWorkerScope,
+    activeServiceWorkerScope,
+    serviceWorkerReachable,
+    firebaseMessagingSupported,
+    recommendedProvider,
+    finalReason,
+  }
+
+  devLog('diagnostics result', diagnostics)
+  return diagnostics
+}
+
+async function getActiveServiceWorkerScope() {
+  if (!hasServiceWorkerApi()) {
+    return null
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.getRegistration(
+      FIREBASE_MESSAGING_SW_PATH,
+    )
+    return registration?.scope ?? null
+  } catch (_) {
+    return null
+  }
 }
 
 async function isServiceWorkerReachable() {
