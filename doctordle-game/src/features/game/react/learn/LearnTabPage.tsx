@@ -3,6 +3,8 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import type { LearnLibraryCase } from "../../game.types";
 import type {
   DetailTab,
+  LearnFilterOptions,
+  LearnFilters,
   LearnReviewState,
   LearnTabPageProps,
 } from "./learn.types";
@@ -13,30 +15,86 @@ import { useReviewPersistence } from "./hooks/useReviewPersistence";
 import { useSelectedLearnCase } from "./hooks/useSelectedLearnCase";
 import {
   ArchiveEmptyState,
-  DesktopLearnHeader,
   MobileCaseArchive,
   MobileLearnHeader,
   MobileSpecialtyCasesScreen,
   MobileStatsBar,
   SpecialtyRail,
 } from "./archive";
-import { DifficultyBadge, TrackBadge } from "./archive/shared";
 import { CaseDetail, MobileCaseDetail } from "./detail";
 import { AdaptiveRecallQueueController } from "./recall/components";
 import {
   buildAdaptiveRecallQueue,
   createEmptyLearnReviewState,
   filterLearnCases,
-  formatArchiveCaseLabel,
-  formatStudyTime,
   getCaseSpecialty,
   getCaseDiagnosisLabel,
   getLearnReviewCaseKey,
-  groupLearnCasesBySpecialty,
   mergeLatestPlayedCase,
   titleCase,
 } from "./domain/learnDomain";
 import { ALL_FILTERS } from "./learn.constants";
+
+const DESKTOP_DETAIL_TABS: Array<{ id: DetailTab; label: string }> = [
+  { id: "case", label: "Breakdown" },
+  { id: "compare", label: "Differentials" },
+  { id: "diagnosis", label: "Key Facts" },
+];
+
+function normalizeDiagnosisKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getLearnCasePublicNumberLabel(item: LearnLibraryCase) {
+  const publicNumber = item.casePublicNumber ?? item.case.publicNumber;
+  return publicNumber ? `Case ${publicNumber}` : formatArchiveFallbackCaseLabel(item);
+}
+
+function formatArchiveFallbackCaseLabel(item: LearnLibraryCase) {
+  return item.displayLabel ?? item.case.displayLabel ?? `Case ${item.sequenceIndex}`;
+}
+
+function getActualCaseDateValue(item: LearnLibraryCase) {
+  const value = Date.parse(item.case.date || item.completedAt || "");
+  return Number.isFinite(value) ? value : 0;
+}
+
+function sortByNewestCaseDate(cases: LearnLibraryCase[]) {
+  return [...cases].sort(
+    (left, right) => getActualCaseDateValue(right) - getActualCaseDateValue(left),
+  );
+}
+
+function buildDiagnosisPickerItems(cases: LearnLibraryCase[]): DiagnosisPickerItem[] {
+  const groups = new Map<string, { diagnosis: string; cases: LearnLibraryCase[] }>();
+
+  cases.forEach((item) => {
+    const diagnosis = getCaseDiagnosisLabel(item);
+    const id = normalizeDiagnosisKey(diagnosis);
+    if (!id) return;
+    const group = groups.get(id) ?? { diagnosis, cases: [] };
+    group.cases.push(item);
+    groups.set(id, group);
+  });
+
+  return Array.from(groups.entries())
+    .map(([id, group]) => {
+      const sortedCases = sortByNewestCaseDate(group.cases);
+      return {
+        id,
+        diagnosis: group.diagnosis,
+        latestCase: sortedCases[0],
+        cases: sortedCases,
+      };
+    })
+    .filter((item): item is DiagnosisPickerItem => Boolean(item.latestCase))
+    .sort((left, right) => left.diagnosis.localeCompare(right.diagnosis));
+}
 
 // ─── Empty State Components ────────────────────────────────────────────────────
 
@@ -225,44 +283,46 @@ function DesktopArchiveEmptyState({
   return <DesktopFilteredEmptyState onClearFilters={onClearFilters} />;
 }
 
-function CasePickerDropdown({
-  cases,
-  selectedCase,
-  onSelectCase,
-}: {
+type DiagnosisPickerItem = {
+  id: string;
+  diagnosis: string;
+  latestCase: LearnLibraryCase;
   cases: LearnLibraryCase[];
-  selectedCase: LearnLibraryCase | null;
-  onSelectCase: (dailyCaseId: string) => void;
+};
+
+function DiagnosisPickerDropdown({
+  diagnoses,
+  selectedDiagnosisId,
+  onSelectDiagnosis,
+}: {
+  diagnoses: DiagnosisPickerItem[];
+  selectedDiagnosisId: string | null;
+  onSelectDiagnosis: (diagnosis: DiagnosisPickerItem) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const selectedIndex = selectedCase
-    ? cases.findIndex((item) => item.dailyCaseId === selectedCase.dailyCaseId)
-    : -1;
-  const selectedDiagnosis = selectedCase
-    ? getCaseDiagnosisLabel(selectedCase)
-    : "No case selected";
-  const positionLabel =
-    selectedIndex >= 0 ? `${selectedIndex + 1}/${cases.length}` : `0/${cases.length}`;
-  const groupedCases = groupLearnCasesBySpecialty(cases);
+  const selectedDiagnosis =
+    diagnoses.find((diagnosis) => diagnosis.id === selectedDiagnosisId) ??
+    diagnoses[0] ??
+    null;
 
   return (
     <div className="relative min-w-0 shrink-0">
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        disabled={!cases.length}
+        disabled={!diagnoses.length}
         aria-expanded={open}
-        className="flex min-h-[46px] w-[min(420px,38vw)] min-w-[260px] items-center justify-between gap-3 rounded-[16px] border border-[rgba(0,180,166,0.22)] bg-[rgba(0,180,166,0.08)] px-4 py-2 text-left transition hover:bg-[rgba(0,180,166,0.12)] disabled:cursor-not-allowed disabled:opacity-45"
+        className="flex min-h-[38px] w-[280px] max-w-[28vw] min-w-[220px] items-center justify-between gap-3 rounded-[12px] border border-white/[0.09] bg-white/[0.035] px-3.5 py-2 text-left transition hover:border-white/[0.14] hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45"
       >
         <span className="min-w-0">
-          <span className="block truncate text-sm font-black text-[var(--wardle-color-mint)]">
-            {selectedDiagnosis}
+          <span className="block truncate text-sm font-bold text-[var(--wardle-color-mint)]">
+            {selectedDiagnosis?.diagnosis ?? "No diagnosis selected"}
           </span>
-          <span className="mt-0.5 block font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--wardle-color-teal)]/62">
-            {positionLabel}
+          <span className="mt-0.5 block font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/28">
+            Diagnosis
           </span>
         </span>
-        <span className="shrink-0 text-[var(--wardle-color-teal)]/80">
+        <span className="shrink-0 text-white/36">
           {open ? (
             <ChevronUp className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />
           ) : (
@@ -272,68 +332,228 @@ function CasePickerDropdown({
       </button>
 
       {open ? (
-        <div className="absolute right-0 z-50 mt-2 max-h-[min(540px,calc(100dvh-180px))] w-[min(560px,calc(100vw-320px))] min-w-[360px] overflow-y-auto rounded-[18px] border border-white/[0.09] bg-[var(--wardle-surface-sticky-solid)] p-2 shadow-[0_28px_70px_rgba(0,0,0,0.42)]">
-          {groupedCases.map((group) => (
-            <div key={group.specialty.key} className="py-1.5">
-              <div className="mb-1 flex items-baseline gap-2 px-2">
-                <p className="font-brand-mono text-[9px] font-black uppercase tracking-[0.16em] text-white/32">
-                  {group.specialty.label}
-                </p>
-                <span className="font-brand-mono text-[10px] text-white/22">
-                  {group.cases.length}
-                </span>
-              </div>
-              <div className="space-y-1">
-                {group.cases.map((item) => {
-                  const diagnosis = getCaseDiagnosisLabel(item);
-                  const selected = item.dailyCaseId === selectedCase?.dailyCaseId;
-                  const timeLabel =
-                    item.playerResult.timeSecs !== null
-                      ? formatStudyTime(item.playerResult.timeSecs)
-                      : null;
+        <div className="absolute right-0 z-50 mt-2 max-h-[min(420px,calc(100dvh-150px))] w-[360px] overflow-y-auto rounded-[16px] border border-white/[0.09] bg-[var(--wardle-surface-sticky-solid)] p-2 shadow-2xl">
+          <div className="space-y-1">
+            {diagnoses.map((diagnosis) => {
+              const selected = diagnosis.id === selectedDiagnosisId;
+              const resultTone = diagnosis.latestCase.playerResult.solved
+                ? "bg-[var(--wardle-color-teal)]/75"
+                : "bg-rose-400/70";
 
-                  return (
-                    <button
-                      key={item.dailyCaseId}
-                      type="button"
-                      onClick={() => {
-                        onSelectCase(item.dailyCaseId);
-                        setOpen(false);
-                      }}
-                      className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-[13px] border px-3 py-2.5 text-left transition ${
-                        selected
-                          ? "border-[rgba(0,180,166,0.32)] bg-[rgba(0,180,166,0.12)]"
-                          : "border-transparent bg-white/[0.025] hover:border-white/[0.08] hover:bg-white/[0.045]"
-                      }`}
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span
-                          className={`block truncate text-[13px] font-extrabold ${
-                            selected
-                              ? "text-[var(--wardle-color-mint)]"
-                              : "text-white/72"
-                          }`}
-                        >
-                          {diagnosis}
-                        </span>
-                        <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
-                          <TrackBadge track={item.track} />
-                          <DifficultyBadge difficulty={item.case.difficulty} />
-                          <span className="font-brand-mono text-[10px] text-white/30">
-                            {formatArchiveCaseLabel(item)}
-                            {timeLabel ? ` · ${timeLabel}` : ""}
-                          </span>
-                        </span>
-                      </span>
-                      {selected ? (
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--wardle-color-teal)]" />
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+              return (
+                <button
+                  key={diagnosis.id}
+                  type="button"
+                  onClick={() => {
+                    onSelectDiagnosis(diagnosis);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full min-w-0 items-center gap-3 rounded-[13px] border px-3 py-2.5 text-left transition ${
+                    selected
+                      ? "border-[rgba(0,180,166,0.32)] bg-[rgba(0,180,166,0.12)]"
+                      : "border-transparent hover:border-white/[0.08] hover:bg-white/[0.045]"
+                  }`}
+                >
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${resultTone}`} />
+                  <span
+                    className={`min-w-0 flex-1 truncate text-[13px] font-bold ${
+                      selected
+                        ? "text-[var(--wardle-color-mint)]"
+                        : "text-white/78"
+                    }`}
+                  >
+                    {diagnosis.diagnosis}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DesktopLearnControlHeader({
+  filterOptions,
+  filters,
+  archiveCaseCount,
+  activeCase,
+  diagnoses,
+  selectedDiagnosisId,
+  activeDiagnosisCases,
+  activeTab,
+  onChangeTab,
+  onSelectSpecialty,
+  onSelectDiagnosis,
+  onSelectCase,
+}: {
+  filterOptions: LearnFilterOptions;
+  filters: LearnFilters;
+  archiveCaseCount: number;
+  activeCase: LearnLibraryCase | null;
+  diagnoses: DiagnosisPickerItem[];
+  selectedDiagnosisId: string | null;
+  activeDiagnosisCases: LearnLibraryCase[];
+  activeTab: DetailTab;
+  onChangeTab: (tab: DetailTab) => void;
+  onSelectSpecialty: (specialty: string) => void;
+  onSelectDiagnosis: (diagnosis: DiagnosisPickerItem) => void;
+  onSelectCase: (dailyCaseId: string) => void;
+}) {
+  return (
+    <header className="sticky top-0 z-40 -mx-1 border-b border-white/[0.06] bg-[var(--wardle-surface-sticky)] backdrop-blur-xl sm:-mx-2">
+      <div className="flex min-w-0 items-center gap-3 px-5 py-3">
+        <div className="mr-0.5 shrink-0 border-r border-white/[0.08] pr-4">
+          <p className="text-sm font-black tracking-tight text-[var(--wardle-color-mint)]">
+            Learn
+          </p>
+        </div>
+        <div className="min-w-0 flex-1">
+          <SpecialtyRail
+            filterOptions={filterOptions}
+            activeSpecialty={filters.specialty}
+            completedCount={archiveCaseCount}
+            onSelect={onSelectSpecialty}
+          />
+        </div>
+        <DiagnosisPickerDropdown
+          diagnoses={diagnoses}
+          selectedDiagnosisId={selectedDiagnosisId}
+          onSelectDiagnosis={onSelectDiagnosis}
+        />
+      </div>
+      <div className="flex min-w-0 items-center justify-between gap-4 border-t border-white/[0.04] px-5 py-2.5">
+        <DesktopLearnTabs activeTab={activeTab} onChangeTab={onChangeTab} />
+        <DesktopDiagnosisCasePicker
+          item={activeCase}
+          diagnosisCases={activeDiagnosisCases}
+          onSelectCase={onSelectCase}
+        />
+      </div>
+    </header>
+  );
+}
+
+function DesktopLearnTabs({
+  activeTab,
+  onChangeTab,
+}: {
+  activeTab: DetailTab;
+  onChangeTab: (tab: DetailTab) => void;
+}) {
+  return (
+    <div className="inline-grid grid-cols-3 gap-1 rounded-[14px] bg-white/[0.05] p-1">
+      {DESKTOP_DETAIL_TABS.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => onChangeTab(tab.id)}
+          className={`rounded-[11px] px-3.5 py-2 text-xs font-bold transition ${
+            activeTab === tab.id
+              ? "bg-[var(--wardle-color-teal)] text-[var(--wardle-color-charcoal)]"
+              : "text-white/40 hover:text-white/65"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DesktopDiagnosisCasePicker({
+  item,
+  diagnosisCases,
+  onSelectCase,
+}: {
+  item: LearnLibraryCase | null;
+  diagnosisCases: LearnLibraryCase[];
+  onSelectCase: (dailyCaseId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (!item) return null;
+
+  const currentIndex = Math.max(
+    0,
+    diagnosisCases.findIndex((caseItem) => caseItem.dailyCaseId === item.dailyCaseId),
+  );
+  const caseLabel = getLearnCasePublicNumberLabel(item);
+  const resultTone = item.playerResult.solved
+    ? "bg-[var(--wardle-color-teal)]/75"
+    : "bg-rose-400/70";
+
+  if (diagnosisCases.length < 2) {
+    return (
+      <div className="flex min-w-0 shrink-0 items-center gap-2 text-right">
+        <span className={`h-2 w-2 shrink-0 rounded-full ${resultTone}`} />
+        <span className="font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/34">
+          {caseLabel}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative min-w-0 shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-expanded={open}
+        className="flex min-w-0 items-center gap-2 rounded-full border border-[var(--wardle-color-teal)]/24 bg-[var(--wardle-color-teal)]/10 px-3 py-1.5 text-left font-brand-mono text-[10px] font-black uppercase tracking-[0.12em] text-[var(--wardle-color-teal)] transition hover:border-[var(--wardle-color-teal)]/36 hover:bg-[var(--wardle-color-teal)]/14"
+      >
+        <span className={`h-2 w-2 shrink-0 rounded-full ${resultTone}`} />
+        <span className="min-w-0 truncate">
+          {caseLabel} - {currentIndex + 1} of {diagnosisCases.length} cases
+        </span>
+        <ChevronDown
+          className={`h-3.5 w-3.5 shrink-0 transition ${open ? "rotate-180" : ""}`}
+          strokeWidth={2.25}
+          aria-hidden="true"
+        />
+      </button>
+
+      {open ? (
+        <div className="absolute right-0 z-50 mt-2 max-h-[min(360px,calc(100dvh-160px))] w-[280px] overflow-y-auto rounded-[16px] border border-white/[0.09] bg-[var(--wardle-surface-sticky-solid)] p-2 shadow-2xl">
+          <p className="px-2 pb-2 pt-1 font-brand-mono text-[9px] font-black uppercase tracking-[0.16em] text-white/32">
+            {diagnosisCases.length} cases of {getCaseDiagnosisLabel(item)}
+          </p>
+          <div className="space-y-1">
+            {diagnosisCases.map((caseItem) => {
+              const selected = caseItem.dailyCaseId === item.dailyCaseId;
+              const caseResultTone = caseItem.playerResult.solved
+                ? "bg-[var(--wardle-color-teal)]/75"
+                : "bg-rose-400/70";
+
+              return (
+                <button
+                  key={caseItem.dailyCaseId}
+                  type="button"
+                  onClick={() => {
+                    onSelectCase(caseItem.dailyCaseId);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full min-w-0 items-center gap-3 rounded-[12px] border px-3 py-2 text-left transition ${
+                    selected
+                      ? "border-[rgba(0,180,166,0.32)] bg-[rgba(0,180,166,0.12)]"
+                      : "border-transparent hover:border-white/[0.08] hover:bg-white/[0.045]"
+                  }`}
+                >
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${caseResultTone}`} />
+                  <span
+                    className={`min-w-0 flex-1 truncate text-[12px] font-bold ${
+                      selected
+                        ? "text-[var(--wardle-color-mint)]"
+                        : "text-white/72"
+                    }`}
+                  >
+                    {getLearnCasePublicNumberLabel(caseItem)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       ) : null}
     </div>
@@ -549,6 +769,21 @@ export default function LearnTabPage({
     setStudyQueueIndex,
   });
 
+  const diagnosisPickerItems = useMemo(
+    () => buildDiagnosisPickerItems(filteredCases),
+    [filteredCases],
+  );
+  const activeDiagnosisId = activeCase
+    ? normalizeDiagnosisKey(getCaseDiagnosisLabel(activeCase))
+    : null;
+  const activeDiagnosisCases = useMemo(() => {
+    if (!activeDiagnosisId) return [];
+    return (
+      diagnosisPickerItems.find((diagnosis) => diagnosis.id === activeDiagnosisId)
+        ?.cases ?? []
+    );
+  }, [activeDiagnosisId, diagnosisPickerItems]);
+
   const selectCase = (dailyCaseId: string) => {
     setStudyQueueCaseIds(null);
     setStudyQueueIndex(0);
@@ -580,6 +815,10 @@ export default function LearnTabPage({
     setStudyQueueIndex(0);
     setSelectedCaseId(null);
     setActiveTab("case");
+  };
+
+  const selectDiagnosis = (diagnosis: DiagnosisPickerItem) => {
+    selectCase(diagnosis.latestCase.dailyCaseId);
   };
 
   const exitStudyQueue = () => {
@@ -698,58 +937,59 @@ export default function LearnTabPage({
       </main>
 
       {/* ── Desktop ── */}
-      <main className="hidden h-full min-h-0 w-full max-w-full flex-1 basis-0 flex-col overflow-x-hidden overflow-y-auto overscroll-contain px-1 pb-6 pt-1 sm:px-2 lg:flex">
-        <div className="min-w-0 max-w-full space-y-3 overflow-x-hidden">
-          {hasAnyCompletedCases ? (
-            <DesktopLearnHeader summary={displayedSummary} />
-          ) : null}
-
+      <main className="hidden h-full min-h-0 w-full max-w-full flex-1 basis-0 flex-col overflow-x-hidden overflow-y-auto overscroll-contain lg:flex">
+        <div className="min-w-0 max-w-full overflow-x-hidden">
           {hasArchiveCases && !libraryLoading && !libraryError ? (
-            <div className="min-w-0 space-y-4">
-              <div className="sticky top-0 z-40 rounded-[18px] border border-white/[0.06] bg-[var(--wardle-surface-sticky)] px-3 py-3 backdrop-blur-xl">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="min-w-0 flex-1">
-                    <SpecialtyRail
-                      filterOptions={filterOptions}
-                      activeSpecialty={filters.specialty}
-                      completedCount={archiveCaseCount}
-                      onSelect={(specialty) =>
-                        updateFilters({ ...filters, specialty })
-                      }
-                    />
-                  </div>
-                  <CasePickerDropdown
-                    cases={filteredCases}
-                    selectedCase={activeCase}
-                    onSelectCase={selectCase}
+            <div className="min-w-0">
+              <DesktopLearnControlHeader
+                filterOptions={filterOptions}
+                filters={filters}
+                archiveCaseCount={archiveCaseCount}
+                activeCase={activeCase}
+                diagnoses={diagnosisPickerItems}
+                selectedDiagnosisId={activeDiagnosisId}
+                activeDiagnosisCases={activeDiagnosisCases}
+                activeTab={activeTab}
+                onChangeTab={setActiveTab}
+                onSelectSpecialty={(specialty) =>
+                  updateFilters({ ...filters, specialty })
+                }
+                onSelectDiagnosis={selectDiagnosis}
+                onSelectCase={selectCase}
+              />
+              {filteredCases.length > 0 ? (
+                <div className="mx-[22px] mb-5 mt-[18px]">
+                  <CaseDetail
+                    className="!rounded-[22px] !border-white/[0.06] !bg-[var(--wardle-surface-card-compact)] !p-0 !shadow-none"
+                    item={activeCase}
+                    activeTab={activeTab}
+                    onChangeTab={setActiveTab}
+                    onBack={clearSelectedCase}
+                    showDesktopTabs={false}
                   />
                 </div>
-              </div>
-              {filteredCases.length > 0 ? (
-                <CaseDetail
-                  item={activeCase}
-                  activeTab={activeTab}
-                  onChangeTab={setActiveTab}
-                  onBack={clearSelectedCase}
-                />
               ) : (
-                <DesktopArchiveEmptyState
-                  completedCount={archiveCaseCount}
-                  loading={false}
-                  error={false}
-                  onRetry={onRetryLibrary}
-                  onClearFilters={() => updateFilters(ALL_FILTERS)}
-                />
+                <div className="mx-[22px] mt-[18px]">
+                  <DesktopArchiveEmptyState
+                    completedCount={archiveCaseCount}
+                    loading={false}
+                    error={false}
+                    onRetry={onRetryLibrary}
+                    onClearFilters={() => updateFilters(ALL_FILTERS)}
+                  />
+                </div>
               )}
             </div>
           ) : (
-            <DesktopArchiveEmptyState
-              completedCount={hasAnyCompletedCases ? archiveCaseCount : 0}
-              loading={libraryLoading}
-              error={Boolean(libraryError)}
-              onRetry={onRetryLibrary}
-              onClearFilters={() => updateFilters(ALL_FILTERS)}
-            />
+            <div className="p-4">
+              <DesktopArchiveEmptyState
+                completedCount={hasAnyCompletedCases ? archiveCaseCount : 0}
+                loading={libraryLoading}
+                error={Boolean(libraryError)}
+                onRetry={onRetryLibrary}
+                onClearFilters={() => updateFilters(ALL_FILTERS)}
+              />
+            </div>
           )}
         </div>
       </main>

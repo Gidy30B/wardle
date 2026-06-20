@@ -329,12 +329,14 @@ export function CaseDetail({
   activeTab,
   onChangeTab,
   onBack,
+  showDesktopTabs = true,
 }: {
   className?: string;
   item: LearnLibraryCase | null;
   activeTab: DetailTab;
   onChangeTab: (tab: DetailTab) => void;
   onBack: () => void;
+  showDesktopTabs?: boolean;
 }) {
   const diagnosisRegistryId = item ? getDiagnosisRegistryId(item) : null;
   const educationState = useDiagnosisEducation(diagnosisRegistryId);
@@ -348,7 +350,7 @@ export function CaseDetail({
     <SurfaceCard
       className={`min-w-0 max-w-full overflow-visible ${className ?? ""}`}
     >
-      <div className="min-w-0 space-y-5">
+      <div className={`min-w-0 ${showDesktopTabs ? "space-y-5" : ""}`}>
         <div className="flex min-w-0 items-center justify-between gap-3 lg:hidden">
           <button
             type="button"
@@ -362,25 +364,41 @@ export function CaseDetail({
           </span>
         </div>
 
-        <div className="sticky top-[82px] z-30 -mx-4 -mt-4 rounded-t-[24px] rounded-b-[18px] border border-white/[0.08] bg-[var(--wardle-surface-sticky-solid)] px-4 py-3 shadow-[0_16px_36px_rgba(0,0,0,0.24)] md:-mx-5 md:-mt-5 md:px-5 lg:-mx-6 lg:-mt-6 lg:px-6">
-          <div className="flex min-w-0 flex-col gap-2 min-[760px]:flex-row min-[760px]:items-center min-[760px]:justify-between">
-            <div className="min-w-0 flex-1">
-              <LearnDetailTabSwitcher
-                activeTab={activeTab}
-                onChangeTab={onChangeTab}
-              />
+        {showDesktopTabs ? (
+          <div className="sticky top-[82px] z-30 -mx-4 -mt-4 rounded-t-[24px] rounded-b-[18px] border border-white/[0.08] bg-[var(--wardle-surface-sticky-solid)] px-4 py-3 shadow-[0_16px_36px_rgba(0,0,0,0.24)] md:-mx-5 md:-mt-5 md:px-5 lg:-mx-6 lg:-mt-6 lg:px-6">
+            <div className="flex min-w-0 flex-col gap-2 min-[760px]:flex-row min-[760px]:items-center min-[760px]:justify-between">
+              <div className="min-w-0 flex-1">
+                <LearnDetailTabSwitcher
+                  activeTab={activeTab}
+                  onChangeTab={onChangeTab}
+                />
+              </div>
+              <DesktopAttemptBadge item={item} />
             </div>
-            <DesktopAttemptBadge item={item} />
           </div>
-        </div>
+        ) : null}
 
-        <LearningHeader
-          diagnosis={diagnosis}
-          explanation={explanation}
-          showEyebrow={false}
-        />
+        {showDesktopTabs ? (
+          <LearningHeader
+            diagnosis={diagnosis}
+            explanation={explanation}
+            showEyebrow={false}
+          />
+        ) : (
+          <div className="border-b border-white/[0.05] bg-white/[0.015] px-6 py-5 lg:px-[30px] lg:pb-[18px] lg:pt-6">
+            <LearningHeader
+              diagnosis={diagnosis}
+              explanation={explanation}
+              showEyebrow={false}
+            />
+          </div>
+        )}
 
-        <div className="min-w-0">
+        <div
+          className={`min-w-0 ${
+            showDesktopTabs ? "" : "px-6 pb-9 pt-6 lg:px-[30px] lg:pb-9"
+          }`}
+        >
           <LearnDetailTabContent
             activeTab={activeTab}
             item={item}
