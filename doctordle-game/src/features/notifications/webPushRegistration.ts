@@ -1,5 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app'
 import { getMessaging, getToken, isSupported } from 'firebase/messaging'
+import { isIos, isStandalonePwa } from './pwaInstall'
 
 const FIREBASE_MESSAGING_SW_PATH = '/firebase-messaging-sw.js'
 
@@ -176,34 +177,11 @@ function hasPushManagerApi() {
 }
 
 export function isIosWebBrowser() {
-  if (typeof navigator === 'undefined') {
-    return false
-  }
-
-  const userAgent = navigator.userAgent
-  const platform = navigator.platform
-  const maxTouchPoints = navigator.maxTouchPoints ?? 0
-  const isiPhoneOrIpod = /iPhone|iPod/i.test(userAgent)
-  const isiPad = /iPad/i.test(userAgent)
-  const isiPadOsDesktopMode =
-    platform === 'MacIntel' && maxTouchPoints > 1 && /Safari/i.test(userAgent)
-
-  return isiPhoneOrIpod || isiPad || isiPadOsDesktopMode
+  return isIos()
 }
 
 export function isStandaloneWebApp() {
-  if (typeof window === 'undefined') {
-    return false
-  }
-
-  const navigatorWithStandalone = window.navigator as Navigator & {
-    standalone?: boolean
-  }
-
-  return (
-    window.matchMedia?.('(display-mode: standalone)').matches === true ||
-    navigatorWithStandalone.standalone === true
-  )
+  return isStandalonePwa()
 }
 
 async function isServiceWorkerReachable() {

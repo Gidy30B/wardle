@@ -16,6 +16,7 @@ import {
   hasRegisteredPushToken,
   type PushCapability,
 } from '../../../../notifications/pushRegistration'
+import { usePwaInstallPrompt } from '../../../../notifications/pwaInstall'
 import { SettingsBackHeader } from '../components/SettingsBackHeader'
 import { SettingsSection, SettingsSubHero } from '../components/SettingsSection'
 import { SettingsShell } from '../components/SettingsShell'
@@ -44,19 +45,19 @@ const PUSH_CATEGORY_DISABLES: NotificationPreferenceUpdate[] = [
   { category: 'STREAK', pushEnabled: false },
 ]
 const IOS_HOME_SCREEN_PUSH_COPY =
-  'On iPhone, install Wardle to your Home Screen first, then open it from the Home Screen icon to enable notifications.'
+  'On iPhone, notifications work after Wardle is added to your Home Screen.'
 const IOS_HOME_SCREEN_STEPS = [
-  'Open Wardle in Safari',
   'Tap Share',
   'Tap Add to Home Screen',
-  'Open Wardle from the Home Screen icon',
-  'Enable notifications',
+  'Open Wardle from the new icon',
+  'Return here and enable notifications',
 ]
 
 export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
   const { isLoaded, isSignedIn } = useAuth()
   const { request } = useApi()
   const queryClient = useQueryClient()
+  const pwaInstall = usePwaInstallPrompt()
   const [pushCapability, setPushCapability] =
     useState<PushCapability | null>(null)
   const [hasLocalPushToken, setHasLocalPushToken] = useState(
@@ -204,6 +205,13 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
   const requiresIosHomeScreenPwa =
     pushCapability?.supported === false &&
     pushCapability.reason === 'ios_requires_home_screen_pwa'
+  const showIosInstallPrompt =
+    requiresIosHomeScreenPwa && !pwaInstall.isNative && !pwaInstall.isStandalone
+  const showBrowserInstallPrompt =
+    !showIosInstallPrompt &&
+    !pwaInstall.isNative &&
+    !pwaInstall.isStandalone &&
+    pwaInstall.canPrompt
   const pushSublabel =
     pushStatusMessage ??
     (pushCapability === null
@@ -263,7 +271,10 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
         desc="Control when and how Wardle reaches you"
       />
       <SettingsSection>
-        <SettingsToggleRow
+        {showIosInstallPrompt ? (
+          <PwaInstallCard variant="ios" />
+        ) : (
+          <SettingsToggleRow
           icon="📲"
           iconBg="rgba(0,180,166,0.15)"
           label="Push notifications"
@@ -275,8 +286,14 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
             pushDisabled ||
             pushPreferencesMutation.isPending
           }
-        />
-        {requiresIosHomeScreenPwa ? <IosHomeScreenPushHelp /> : null}
+          />
+        )}
+        {showBrowserInstallPrompt ? (
+          <PwaInstallCard
+            variant="prompt"
+            onInstall={() => void pwaInstall.promptInstall()}
+          />
+        ) : null}
         <SettingsToggleRow
           icon="🔥"
           iconBg="rgba(244,162,97,0.15)"
@@ -315,26 +332,51 @@ export function NotificationSettingsScreen({ onBack }: { onBack: () => void }) {
   )
 }
 
-function IosHomeScreenPushHelp() {
+function PwaInstallCard({
+  variant,
+  onInstall,
+}: {
+  variant: 'ios' | 'prompt'
+  onInstall?: () => void
+}) {
+  const isIos = variant === 'ios'
+
   return (
     <div className="border-b border-white/[0.04] px-4 pb-4 pt-1">
       <div className="rounded-[16px] border border-[rgba(0,180,166,0.16)] bg-[rgba(0,180,166,0.055)] px-4 py-3">
-        <p className="text-[12px] leading-5 text-white/58">
-          {IOS_HOME_SCREEN_PUSH_COPY}
+        <p className="text-[13px] font-black text-[var(--wardle-color-mint)]">
+          {isIos
+            ? 'Install Wardle to enable notifications'
+            : 'Install Wardle'}
         </p>
-        <ol className="mt-3 space-y-1.5">
-          {IOS_HOME_SCREEN_STEPS.map((step, index) => (
-            <li
-              key={step}
-              className="grid grid-cols-[20px_minmax(0,1fr)] gap-2 text-[12px] leading-5 text-white/52"
-            >
-              <span className="font-brand-mono text-[10px] font-black text-[var(--wardle-color-teal)]/70">
-                {index + 1}
-              </span>
-              <span>{step}</span>
-            </li>
-          ))}
-        </ol>
+        <p className="text-[12px] leading-5 text-white/58">
+          {isIos
+            ? IOS_HOME_SCREEN_PUSH_COPY
+            : 'Add Wardle to your device for a faster app-like experience.'}
+        </p>
+        {isIos ? (
+          <ol className="mt-3 space-y-1.5">
+            {IOS_HOME_SCREEN_STEPS.map((step, index) => (
+              <li
+                key={step}
+                className="grid grid-cols-[20px_minmax(0,1fr)] gap-2 text-[12px] leading-5 text-white/52"
+              >
+                <span className="font-brand-mono text-[10px] font-black text-[var(--wardle-color-teal)]/70">
+                  {index + 1}
+                </span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <button
+            type="button"
+            onClick={onInstall}
+            className="mt-3 rounded-full border border-[var(--wardle-color-teal)]/24 bg-[var(--wardle-color-teal)]/10 px-4 py-2 text-[12px] font-black text-[var(--wardle-color-teal)] transition hover:border-[var(--wardle-color-teal)]/36 hover:bg-[var(--wardle-color-teal)]/14"
+          >
+            Install Wardle
+          </button>
+        )}
       </div>
     </div>
   )
