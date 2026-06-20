@@ -11,6 +11,7 @@ type AppGameShellProps = {
   onChangeTab: (tab: AppGameTab) => void
   children: ReactNode
   showPwaInstallBannerAfterCase: boolean
+  pwaInstallResetKey?: number
   streak: number | null
   xpTotal: number | null
   organizationName?: string | null
@@ -22,6 +23,7 @@ export default function AppGameShell({
   onChangeTab,
   children,
   showPwaInstallBannerAfterCase,
+  pwaInstallResetKey,
   streak,
   xpTotal,
   organizationName,
@@ -119,6 +121,7 @@ export default function AppGameShell({
       <PwaInstallBanner
         activeTab={activeTab}
         completed={showPwaInstallBannerAfterCase}
+        resetKey={pwaInstallResetKey}
       />
     </div>
   )

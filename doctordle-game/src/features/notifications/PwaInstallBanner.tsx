@@ -1,23 +1,31 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePwaInstallPrompt } from './pwaInstall'
 import type { AppGameTab } from '../game/react/AppBottomNav'
 
 const DISMISS_STORAGE_KEY = 'wardle.pwaInstallBannerDismissedAt'
 const DISMISS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000
+const POST_CASE_ELIGIBLE_STORAGE_KEY = 'wardle.pwaInstall.postCaseEligibleAt'
 
 export function PwaInstallBanner({
   activeTab,
   completed,
   delayMs = 1500,
+  resetKey,
 }: {
   activeTab: AppGameTab
   completed: boolean
   delayMs?: number
+  resetKey?: number
 }) {
   const pwaInstall = usePwaInstallPrompt()
+  const previousCompletedRef = useRef(completed)
+  const previousResetKeyRef = useRef(resetKey)
   const [delayElapsed, setDelayElapsed] = useState(false)
   const [dismissedAt, setDismissedAt] = useState<number | null>(() =>
     getStoredDismissedAt(),
+  )
+  const [postCaseEligibleAt, setPostCaseEligibleAt] = useState<string | null>(
+    () => getStoredPostCaseEligibleAt(),
   )
 
   const dismissedRecently = useMemo(() => {
@@ -25,13 +33,52 @@ export function PwaInstallBanner({
     return Date.now() - dismissedAt < DISMISS_COOLDOWN_MS
   }, [dismissedAt])
 
+  const postCaseEligible = postCaseEligibleAt !== null
   const eligible =
-    completed &&
+    postCaseEligible &&
     pwaInstall.shouldShowInstallButton &&
     !pwaInstall.isIos &&
     !pwaInstall.isNative &&
     !pwaInstall.isStandalone &&
     !dismissedRecently
+
+  useEffect(() => {
+    const completedNow = completed && !previousCompletedRef.current
+    previousCompletedRef.current = completed
+
+    if (!completedNow) return
+
+    const timestamp = String(Date.now())
+    try {
+      sessionStorage.setItem(POST_CASE_ELIGIBLE_STORAGE_KEY, timestamp)
+    } catch (_) {
+      // Storage can be blocked in some privacy modes; keep this tab eligible.
+    }
+    setPostCaseEligibleAt(timestamp)
+    console.log('[pwa-install] post-case eligibility set')
+  }, [completed])
+
+  useEffect(() => {
+    if (previousResetKeyRef.current === resetKey) return
+
+    previousResetKeyRef.current = resetKey
+    if (resetKey === undefined || !postCaseEligible) return
+
+    clearPostCaseEligibility()
+    setPostCaseEligibleAt(null)
+  }, [postCaseEligible, resetKey])
+
+  useEffect(() => {
+    if (!postCaseEligible || dismissedRecently || pwaInstall.isStandalone) {
+      if (postCaseEligible && (dismissedRecently || pwaInstall.isStandalone)) {
+        clearPostCaseEligibility()
+        setPostCaseEligibleAt(null)
+      }
+      return
+    }
+
+    console.log('[pwa-install] post-case eligibility detected')
+  }, [dismissedRecently, postCaseEligible, pwaInstall.isStandalone])
 
   useEffect(() => {
     if (!eligible) {
@@ -55,12 +102,13 @@ export function PwaInstallBanner({
         console.log('[pwa-install] post-case card delay cancelled')
       }
     }
-  }, [activeTab, delayMs, eligible])
+  }, [delayMs, eligible])
 
   const visible = eligible && delayElapsed
 
   useEffect(() => {
-    console.log('[pwa-install] post-case card visibility', {
+    console.log('[pwa-install] shell banner visibility', {
+      postCaseEligible,
       activeTab,
       completed,
       canPromptInstall: pwaInstall.canPromptInstall,
@@ -79,6 +127,7 @@ export function PwaInstallBanner({
     delayElapsed,
     delayMs,
     dismissedRecently,
+    postCaseEligible,
     pwaInstall.canPromptInstall,
     pwaInstall.isStandalone,
     visible,
@@ -87,7 +136,11 @@ export function PwaInstallBanner({
   if (!visible) return null
 
   async function install() {
-    await pwaInstall.promptInstall()
+    const choice = await pwaInstall.promptInstall()
+    if (choice?.outcome === 'accepted') {
+      clearPostCaseEligibility()
+      setPostCaseEligibleAt(null)
+    }
   }
 
   function dismiss() {
@@ -98,6 +151,8 @@ export function PwaInstallBanner({
       // Storage can be blocked in some privacy modes; still hide for this tab.
     }
     setDismissedAt(timestamp)
+    clearPostCaseEligibility()
+    setPostCaseEligibleAt(null)
     console.log('[pwa-install] banner dismissed')
   }
 
@@ -138,6 +193,25 @@ export function PwaInstallBanner({
       </div>
     </div>
   )
+}
+
+function getStoredPostCaseEligibleAt() {
+  if (typeof sessionStorage === 'undefined') return null
+
+  try {
+    return sessionStorage.getItem(POST_CASE_ELIGIBLE_STORAGE_KEY)
+  } catch (_) {
+    return null
+  }
+}
+
+function clearPostCaseEligibility() {
+  try {
+    sessionStorage.removeItem(POST_CASE_ELIGIBLE_STORAGE_KEY)
+  } catch (_) {
+    // Storage can be blocked in some privacy modes; local state still clears.
+  }
+  console.log('[pwa-install] post-case eligibility cleared')
 }
 
 function getStoredDismissedAt() {

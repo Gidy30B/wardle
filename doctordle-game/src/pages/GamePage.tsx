@@ -45,6 +45,7 @@ export default function GamePage() {
   const [leaderboardMode, setLeaderboardMode] = useState<LeaderboardMode>('daily')
   const [isResultModalOpen, setIsResultModalOpen] = useState(false)
   const [learnOpenIntent, setLearnOpenIntent] = useState<LearnOpenIntent | null>(null)
+  const [pwaInstallResetKey, setPwaInstallResetKey] = useState(0)
   const lastResultModalKeyRef = useRef<string | null>(null)
   const learnOpenIntentCounterRef = useRef(0)
   const game = useGameEngine()
@@ -59,9 +60,6 @@ export default function GamePage() {
     typeof game.roundViewModel.hud.xpTotal === 'number'
       ? game.roundViewModel.hud.xpTotal
       : null
-  const showPwaInstallBannerAfterCase =
-    activeTab === 'play' && isResultModalOpen
-
   const resultModalKey = useMemo(() => {
     if (
       !game.isFinalFeedback ||
@@ -82,6 +80,7 @@ export default function GamePage() {
     game.isFinalFeedback,
     game.latestResult,
   ])
+  const showPwaInstallBannerAfterCase = resultModalKey !== null
 
   useEffect(() => {
     if (!resultModalKey) {
@@ -131,6 +130,7 @@ export default function GamePage() {
       canOpenLearn
       onChangeTab={setActiveTab}
       showPwaInstallBannerAfterCase={showPwaInstallBannerAfterCase}
+      pwaInstallResetKey={pwaInstallResetKey}
       streak={currentStreak}
       xpTotal={shellXpTotal}
       organizationName={organizationName}
@@ -158,9 +158,13 @@ export default function GamePage() {
           onSubmit={game.submitGuess}
           onContinue={() => {
             setIsResultModalOpen(false)
+            setPwaInstallResetKey((current) => current + 1)
             game.continueGame()
           }}
-          onReload={game.reloadSession}
+          onReload={() => {
+            setPwaInstallResetKey((current) => current + 1)
+            game.reloadSession()
+          }}
           onCloseResultModal={() => setIsResultModalOpen(false)}
           onReviewLearning={() => {
             learnOpenIntentCounterRef.current += 1
