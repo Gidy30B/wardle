@@ -8,14 +8,14 @@ const DISMISS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000
 export function PwaInstallBanner({
   activeTab,
   completed,
+  delayMs = 1500,
 }: {
   activeTab: AppGameTab
   completed: boolean
+  delayMs?: number
 }) {
   const pwaInstall = usePwaInstallPrompt()
-  const [learnTabDelayElapsed, setLearnTabDelayElapsed] = useState(
-    activeTab !== 'learn',
-  )
+  const [delayElapsed, setDelayElapsed] = useState(false)
   const [dismissedAt, setDismissedAt] = useState<number | null>(() =>
     getStoredDismissedAt(),
   )
@@ -25,30 +25,39 @@ export function PwaInstallBanner({
     return Date.now() - dismissedAt < DISMISS_COOLDOWN_MS
   }, [dismissedAt])
 
-  useEffect(() => {
-    if (activeTab !== 'learn') {
-      setLearnTabDelayElapsed(true)
-      return
-    }
-
-    setLearnTabDelayElapsed(false)
-    const timeout = window.setTimeout(() => {
-      setLearnTabDelayElapsed(true)
-    }, 4000)
-
-    return () => {
-      window.clearTimeout(timeout)
-    }
-  }, [activeTab])
-
-  const visible =
+  const eligible =
     completed &&
     pwaInstall.shouldShowInstallButton &&
     !pwaInstall.isIos &&
     !pwaInstall.isNative &&
     !pwaInstall.isStandalone &&
-    !dismissedRecently &&
-    learnTabDelayElapsed
+    !dismissedRecently
+
+  useEffect(() => {
+    if (!eligible) {
+      setDelayElapsed(false)
+      return
+    }
+
+    let completedDelay = false
+    setDelayElapsed(false)
+    console.log('[pwa-install] post-case card delay started')
+
+    const timeout = window.setTimeout(() => {
+      completedDelay = true
+      setDelayElapsed(true)
+      console.log('[pwa-install] post-case card delay completed')
+    }, delayMs)
+
+    return () => {
+      window.clearTimeout(timeout)
+      if (!completedDelay) {
+        console.log('[pwa-install] post-case card delay cancelled')
+      }
+    }
+  }, [activeTab, delayMs, eligible])
+
+  const visible = eligible && delayElapsed
 
   useEffect(() => {
     console.log('[pwa-install] post-case card visibility', {
@@ -57,7 +66,8 @@ export function PwaInstallBanner({
       canPromptInstall: pwaInstall.canPromptInstall,
       isStandalone: pwaInstall.isStandalone,
       dismissedRecently,
-      learnTabDelayElapsed,
+      delayElapsed,
+      delayMs,
     })
 
     if (visible) {
@@ -66,8 +76,9 @@ export function PwaInstallBanner({
   }, [
     activeTab,
     completed,
+    delayElapsed,
+    delayMs,
     dismissedRecently,
-    learnTabDelayElapsed,
     pwaInstall.canPromptInstall,
     pwaInstall.isStandalone,
     visible,
@@ -92,7 +103,7 @@ export function PwaInstallBanner({
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[80] px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] max-lg:bottom-[var(--wardle-bottom-nav-height)] sm:px-4 lg:bottom-0">
-      <div className="pointer-events-auto mx-auto flex max-w-[400px] items-start gap-3 overflow-hidden rounded-2xl border border-white/[0.07] border-l-[3px] border-l-[var(--wardle-color-teal)]/60 bg-[var(--wardle-surface-sticky-solid)] p-4">
+      <div className="pointer-events-auto mx-auto flex max-w-[300px] items-start gap-3 overflow-hidden rounded-2xl border border-white/[0.07] border-l-[3px] bg-[var(--wardle-surface-sticky-solid)] p-4">
         <img
           src="/wardle-icon.png"
           alt=""

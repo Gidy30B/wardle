@@ -10,7 +10,7 @@ type AppGameShellProps = {
   canOpenLearn: boolean
   onChangeTab: (tab: AppGameTab) => void
   children: ReactNode
-  hasCompletedAnyCase: boolean
+  showPwaInstallBannerAfterCase: boolean
   streak: number | null
   xpTotal: number | null
   organizationName?: string | null
@@ -21,7 +21,7 @@ export default function AppGameShell({
   canOpenLearn,
   onChangeTab,
   children,
-  hasCompletedAnyCase,
+  showPwaInstallBannerAfterCase,
   streak,
   xpTotal,
   organizationName,
@@ -118,7 +118,7 @@ export default function AppGameShell({
       </div>
       <PwaInstallBanner
         activeTab={activeTab}
-        completed={hasCompletedAnyCase}
+        completed={showPwaInstallBannerAfterCase}
       />
     </div>
   )
