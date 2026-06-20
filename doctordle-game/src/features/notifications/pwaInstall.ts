@@ -4,6 +4,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 const PWA_SERVICE_WORKER_PATH = '/firebase-messaging-sw.js'
 const PWA_SERVICE_WORKER_SCOPE = '/'
 
+type BeforeInstallPromptChoice = {
+  outcome: 'accepted' | 'dismissed'
+  platform: string
+}
+
+type BeforeInstallPromptEvent = Event & {
+  platforms?: string[]
+  userChoice: Promise<BeforeInstallPromptChoice>
+  prompt: () => Promise<void>
+}
+
 export type PwaInstallState = {
   isNative: boolean
   isIos: boolean
@@ -15,6 +26,7 @@ export type PwaInstallState = {
   isAndroidChrome: boolean
 }
 
+let deferredPrompt: BeforeInstallPromptEvent | null = null
 let installed = false
 let listenersMounted = false
 const subscribers = new Set<() => void>()
@@ -56,7 +68,7 @@ export function isStandalonePwa() {
 }
 
 export function canPromptInstall() {
-  return false
+  return Boolean(deferredPrompt)
 }
 
 export function getPwaInstallState(): PwaInstallState {
@@ -69,15 +81,17 @@ export function getPwaInstallState(): PwaInstallState {
   const isNative = Capacitor.isNativePlatform()
   const standalone = installed || isStandalonePwa()
   const promptAvailable = canPromptInstall()
+  const ios = isIos()
 
   return {
     isNative,
-    isIos: isIos(),
+    isIos: ios,
     isSafari: isSafari(),
     isStandalone: standalone,
     canPrompt: promptAvailable,
     canPromptInstall: promptAvailable,
-    shouldShowInstallButton: false,
+    shouldShowInstallButton:
+      !isNative && !standalone && !ios && promptAvailable,
     isAndroidChrome,
   }
 }
@@ -94,15 +108,16 @@ export function initPwaInstallPrompt() {
   listenersMounted = true
   installed = isStandalonePwa()
 
-  const handleBeforeInstallPrompt = () => {
-    console.log(
-      '[pwa-install] beforeinstallprompt fired; allowing browser native prompt',
-    )
+  const handleBeforeInstallPrompt = (event: Event) => {
+    event.preventDefault()
+    deferredPrompt = event as BeforeInstallPromptEvent
+    console.log('[pwa-install] beforeinstallprompt captured')
     notifyPwaInstallSubscribers()
   }
 
   const handleAppInstalled = () => {
     installed = true
+    deferredPrompt = null
     notifyPwaInstallSubscribers()
   }
 
@@ -119,7 +134,20 @@ export function initPwaInstallPrompt() {
 }
 
 export async function promptPwaInstall() {
-  return null
+  if (!deferredPrompt) return null
+
+  console.log('[pwa-install] install clicked')
+  await deferredPrompt.prompt()
+  const choice = await deferredPrompt.userChoice
+  console.log(`[pwa-install] user choice ${choice.outcome}`)
+  deferredPrompt = null
+
+  if (choice.outcome === 'accepted') {
+    installed = true
+  }
+
+  notifyPwaInstallSubscribers()
+  return choice
 }
 
 export function usePwaInstallPrompt() {
