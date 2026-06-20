@@ -6,6 +6,7 @@ import { shareScoreCard } from '../../share/share.service'
 import type { ShareImageResult } from '../../share/shareImage'
 import type { RoundViewModel } from '../round.types'
 import type { AppIconSet } from '../../../theme/icons'
+import { PwaInstallBanner } from '../../notifications/PwaInstallBanner'
 
 type ShareUiState =
   | 'idle'
@@ -70,6 +71,9 @@ export default function ReactResultModal({
 
   const shareButtonDisabled =
     !shareCardData || shareState === 'preparing' || shareState === 'sharing'
+  const caseCompleted =
+    roundViewModel.loopState === 'round_complete' ||
+    roundViewModel.latestResult?.gameOver === true
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(2,6,12,0.78)] p-3 backdrop-blur-sm sm:items-center sm:p-6">
@@ -119,6 +123,7 @@ export default function ReactResultModal({
           </Button>
         </div>
       </div>
+      <PwaInstallBanner completed={caseCompleted} />
     </div>
   )
 }

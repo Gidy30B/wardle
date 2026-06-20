@@ -15,7 +15,6 @@ import {
   shouldBounceOAuthCallbackToNativeApp,
 } from '../features/auth/authRedirects'
 import { initPwaInstallPrompt } from '../features/notifications/pwaInstall'
-import { PwaInstallBanner } from '../features/notifications/PwaInstallBanner'
 
 type EntryScreen = 'loading' | 'profile-onboarding' | 'signed-in' | 'signed-out'
 
@@ -90,49 +89,46 @@ export default function App() {
           : 'signed-in'
 
   return (
-    <>
-      <AnimatePresence initial={false}>
-        {isOAuthCallback && shouldBounceToNative ? (
-          <AnimatedScreen screenKey="oauth-native-bounce">
-            <WardleLoadingScreen />
-          </AnimatedScreen>
-        ) : isOAuthCallback ? (
-          <AnimatedScreen screenKey="oauth-callback">
-            <WardleLoadingScreen />
-            <AuthenticateWithRedirectCallback
-              signInFallbackRedirectUrl={ROOT_PATH}
-              signUpFallbackRedirectUrl={ROOT_PATH}
-              signInForceRedirectUrl={ROOT_PATH}
-              signUpForceRedirectUrl={ROOT_PATH}
-              signInUrl={ROOT_PATH}
-              signUpUrl={ROOT_PATH}
-              continueSignUpUrl={ROOT_PATH}
-              verifyEmailAddressUrl={ROOT_PATH}
-            />
-          </AnimatedScreen>
-        ) : screen === 'loading' ? (
-          <AnimatedScreen screenKey="loading">
-            <WardleLoadingScreen />
-          </AnimatedScreen>
-        ) : screen === 'signed-out' ? (
-          <AnimatedScreen screenKey="signed-out">
-            <LandingScreen />
-          </AnimatedScreen>
-        ) : screen === 'profile-onboarding' ? (
-          <AnimatedScreen screenKey="profile-onboarding">
-            <ProfileOnboardingScreen
-              suggestedUsername={userOnboarding.suggestedUsername}
-              onboardingStatus={userOnboarding.onboarding?.onboardingStatus ?? 'PROFILE_REQUIRED'}
-              onComplete={userOnboarding.saveProfile}
-            />
-          </AnimatedScreen>
-        ) : (
-          <AnimatedScreen screenKey="signed-in">
-            <GamePage />
-          </AnimatedScreen>
-        )}
-      </AnimatePresence>
-      <PwaInstallBanner />
-    </>
+    <AnimatePresence initial={false}>
+      {isOAuthCallback && shouldBounceToNative ? (
+        <AnimatedScreen screenKey="oauth-native-bounce">
+          <WardleLoadingScreen />
+        </AnimatedScreen>
+      ) : isOAuthCallback ? (
+        <AnimatedScreen screenKey="oauth-callback">
+          <WardleLoadingScreen />
+          <AuthenticateWithRedirectCallback
+            signInFallbackRedirectUrl={ROOT_PATH}
+            signUpFallbackRedirectUrl={ROOT_PATH}
+            signInForceRedirectUrl={ROOT_PATH}
+            signUpForceRedirectUrl={ROOT_PATH}
+            signInUrl={ROOT_PATH}
+            signUpUrl={ROOT_PATH}
+            continueSignUpUrl={ROOT_PATH}
+            verifyEmailAddressUrl={ROOT_PATH}
+          />
+        </AnimatedScreen>
+      ) : screen === 'loading' ? (
+        <AnimatedScreen screenKey="loading">
+          <WardleLoadingScreen />
+        </AnimatedScreen>
+      ) : screen === 'signed-out' ? (
+        <AnimatedScreen screenKey="signed-out">
+          <LandingScreen />
+        </AnimatedScreen>
+      ) : screen === 'profile-onboarding' ? (
+        <AnimatedScreen screenKey="profile-onboarding">
+          <ProfileOnboardingScreen
+            suggestedUsername={userOnboarding.suggestedUsername}
+            onboardingStatus={userOnboarding.onboarding?.onboardingStatus ?? 'PROFILE_REQUIRED'}
+            onComplete={userOnboarding.saveProfile}
+          />
+        </AnimatedScreen>
+      ) : (
+        <AnimatedScreen screenKey="signed-in">
+          <GamePage />
+        </AnimatedScreen>
+      )}
+    </AnimatePresence>
   )
 }
