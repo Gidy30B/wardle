@@ -12,9 +12,9 @@ import { useDiagnosisEducation } from "../../../useDiagnosisEducation";
 import type { DetailTab } from "../learn.types";
 import {
   buildAttemptPips,
-  formatArchiveCaseLabel,
   formatStudyTime,
   getCaseDiagnosisLabel,
+  getCaseSpecialty,
   splitReasoning,
 } from "../domain/learnDomain";
 import {
@@ -26,7 +26,7 @@ import {
   type MnemonicCard as TeachingMnemonicCard,
   type ScoringSystemCard as TeachingScoringSystemCard,
 } from "./domain/teachingObjects";
-import { DifficultyBadge, InlineNotice, TrackBadge } from "../archive/shared";
+import { InlineNotice } from "../archive/shared";
 import { ReviewSection } from "./shared";
 
 type StructuredExplanation = ReturnType<typeof coerceStructuredExplanation>;
@@ -346,9 +346,9 @@ export function CaseDetail({
 
   return (
     <SurfaceCard
-      className={`min-w-0 max-w-full overflow-hidden ${className ?? ""}`}
+      className={`min-w-0 max-w-full overflow-visible ${className ?? ""}`}
     >
-      <div className="min-w-0 space-y-4">
+      <div className="min-w-0 space-y-5">
         <div className="flex min-w-0 items-center justify-between gap-3 lg:hidden">
           <button
             type="button"
@@ -362,26 +362,31 @@ export function CaseDetail({
           </span>
         </div>
 
-        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(190px,0.42fr)_minmax(0,1fr)]">
-          <aside className="min-w-0 space-y-3 rounded-[16px] border border-white/[0.07] bg-white/[0.025] p-4">
-            <LearningHeader diagnosis={diagnosis} explanation={explanation} />
-            <LearnDetailTabSwitcher
-              activeTab={activeTab}
-              onChangeTab={onChangeTab}
-              vertical
-            />
-            <DesktopCaseMeta item={item} />
-            <AttemptSummary item={item} />
-          </aside>
-
-          <div className="min-w-0">
-            <LearnDetailTabContent
-              activeTab={activeTab}
-              item={item}
-              explanation={explanation}
-              educationState={educationState}
-            />
+        <div className="sticky top-[82px] z-30 -mx-4 -mt-4 rounded-t-[24px] rounded-b-[18px] border border-white/[0.08] bg-[var(--wardle-surface-sticky-solid)] px-4 py-3 shadow-[0_16px_36px_rgba(0,0,0,0.24)] md:-mx-5 md:-mt-5 md:px-5 lg:-mx-6 lg:-mt-6 lg:px-6">
+          <div className="flex min-w-0 flex-col gap-2 min-[760px]:flex-row min-[760px]:items-center min-[760px]:justify-between">
+            <div className="min-w-0 flex-1">
+              <LearnDetailTabSwitcher
+                activeTab={activeTab}
+                onChangeTab={onChangeTab}
+              />
+            </div>
+            <DesktopAttemptBadge item={item} />
           </div>
+        </div>
+
+        <LearningHeader
+          diagnosis={diagnosis}
+          explanation={explanation}
+          showEyebrow={false}
+        />
+
+        <div className="min-w-0">
+          <LearnDetailTabContent
+            activeTab={activeTab}
+            item={item}
+            explanation={explanation}
+            educationState={educationState}
+          />
         </div>
       </div>
     </SurfaceCard>
@@ -391,16 +396,20 @@ export function CaseDetail({
 function LearningHeader({
   diagnosis,
   explanation,
+  showEyebrow = true,
 }: {
   diagnosis: string;
   explanation: StructuredExplanation;
+  showEyebrow?: boolean;
 }) {
   return (
     <header className="min-w-0 space-y-2">
-      <p className="font-brand-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--wardle-color-teal)]/55">
-        Diagnosis
-      </p>
-      <h1 className="break-words text-[22px] font-black leading-[1.15] tracking-tight text-[var(--wardle-color-mint)] lg:text-2xl">
+      {showEyebrow ? (
+        <p className="font-brand-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--wardle-color-teal)]/55">
+          Diagnosis
+        </p>
+      ) : null}
+      <h1 className="break-words text-[22px] font-black leading-[1.15] tracking-tight text-[var(--wardle-color-mint)] lg:text-3xl">
         {diagnosis}
       </h1>
       {explanation?.summary ? (
@@ -416,19 +425,13 @@ function LearnDetailTabSwitcher({
   activeTab,
   onChangeTab,
   mobile = false,
-  vertical = false,
 }: {
   activeTab: DetailTab;
   onChangeTab: (tab: DetailTab) => void;
   mobile?: boolean;
-  vertical?: boolean;
 }) {
-  const wrapperClass = vertical
-    ? "space-y-1 rounded-[16px] bg-white/[0.04] p-1"
-    : "grid grid-cols-3 gap-1 rounded-[18px] bg-white/[0.05] p-1";
-
   return (
-    <div className={wrapperClass}>
+    <div className="grid grid-cols-3 gap-1 rounded-[18px] bg-white/[0.05] p-1">
       {DETAIL_TABS.map((tab) => (
         <button
           key={tab.id}
@@ -2086,19 +2089,33 @@ function InsightDetailRow({
   );
 }
 
-function DesktopCaseMeta({ item }: { item: LearnLibraryCase }) {
+function DesktopAttemptBadge({ item }: { item: LearnLibraryCase }) {
+  const specialty = getCaseSpecialty(item);
+  const timeLabel =
+    item.playerResult.timeSecs !== null
+      ? formatStudyTime(item.playerResult.timeSecs)
+      : null;
+  const solved = item.playerResult.solved;
+  const attemptText = [
+    `${item.playerResult.attemptsUsed} clues`,
+    timeLabel,
+    solved ? "Solved" : "Unsolved",
+  ].filter((value): value is string => Boolean(value));
+
   return (
-    <div className="rounded-[12px] border border-white/[0.06] bg-white/[0.02] px-3 py-3">
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <TrackBadge track={item.track} />
-        <DifficultyBadge difficulty={item.case.difficulty} />
-      </div>
-      <p className="mt-2 font-brand-mono text-[10px] text-white/30">
-        {formatArchiveCaseLabel(item)}
+    <div className="flex min-w-0 shrink-0 items-center justify-end gap-2">
+      <p className="hidden min-w-0 max-w-[220px] truncate text-right font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/28 min-[920px]:block">
+        {specialty.label} · {item.case.date || item.completedAt.slice(0, 10)}
       </p>
-      <p className="mt-1 font-brand-mono text-[10px] text-white/24">
-        {item.case.date || item.completedAt.slice(0, 10)}
-      </p>
+      <span
+        className={`shrink-0 rounded-full border px-3 py-1.5 font-brand-mono text-[10px] font-black uppercase tracking-[0.12em] ${
+          solved
+            ? "border-[rgba(0,180,166,0.24)] bg-[rgba(0,180,166,0.1)] text-[var(--wardle-color-teal)]"
+            : "border-rose-400/[0.22] bg-rose-400/[0.08] text-rose-300/86"
+        }`}
+      >
+        {attemptText.join(" · ")}
+      </span>
     </div>
   );
 }

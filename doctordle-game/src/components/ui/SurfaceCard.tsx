@@ -21,7 +21,7 @@ export default function SurfaceCard({
     <Component
       {...props}
       className={[
-        'rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(26,60,94,0.2),rgba(30,30,44,0.88))] p-4 shadow-[0_24px_60px_rgba(0,0,0,0.24)] backdrop-blur-xl md:p-5 lg:p-6',
+        'rounded-[24px] border border-white/10 bg-[var(--wardle-surface-card)] p-4 shadow-[0_24px_60px_rgba(0,0,0,0.24)] backdrop-blur-xl md:p-5 lg:p-6',
         className ?? '',
       ]
         .filter(Boolean)

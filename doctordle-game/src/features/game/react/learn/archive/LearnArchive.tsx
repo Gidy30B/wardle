@@ -13,8 +13,10 @@ import {
   DIFFICULTY_ACTIVE_STYLES,
   TRACK_LABEL,
 } from "../learn.constants";
+import { DifficultyBadge, TrackBadge } from "./shared";
 import { MobileSpecialtyIcon } from "../../specialties/SpecialtyIcon";
 import {
+  buildAttemptPips,
   formatArchiveCaseLabel,
   formatAverageClues,
   formatPercent,
@@ -554,23 +556,21 @@ export function MobileCaseCard({
 
 export function DesktopLearnHeader({ summary }: { summary: LearnPerformanceSummary }) {
   return (
-    <section className="overflow-hidden rounded-[22px] border border-white/[0.06] bg-[rgba(18,18,28,0.8)] px-6 py-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <WardleLogo size="sm" subtitle="Explanation Library" />
-        <span className="rounded-full border border-white/[0.07] bg-white/[0.04] px-3 py-1.5 font-brand-mono text-[11px] text-white/40">
-          LEARN
-        </span>
-      </div>
-      <h1 className="mt-5 text-2xl font-black tracking-tight text-[var(--wardle-color-mint)] md:text-3xl">
-        Learn
-      </h1>
-      <p className="mt-1.5 max-w-2xl text-sm leading-6 text-white/40">
-        Review completed cases, saved explanations, clue trails, and specialty performance.
-      </p>
-      <div className="mt-5 grid max-w-xl grid-cols-3 overflow-hidden rounded-[18px] border border-white/[0.08] bg-white/[0.03]">
-        <StatCard label="cases done" value={String(summary.casesDone)} tone="neutral" />
-        <StatCard label="accuracy" value={formatPercent(summary.accuracyPct)} tone="teal" />
-        <StatCard label="avg clues" value={formatAverageClues(summary.averageCluesUsed)} sub="/6" tone="amber" />
+    <section className="overflow-hidden rounded-[18px] border border-white/[0.06] bg-[var(--wardle-surface-card-compact)] px-4 py-3">
+      <div className="flex min-w-0 flex-col gap-3 min-[820px]:flex-row min-[820px]:items-center min-[820px]:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-lg font-black leading-tight tracking-tight text-[var(--wardle-color-mint)]">
+            Learn
+          </h1>
+          <p className="mt-0.5 truncate text-[13px] leading-5 text-white/40">
+            Review completed cases, clue trails, and specialty performance.
+          </p>
+        </div>
+        <div className="grid shrink-0 grid-cols-3 overflow-hidden rounded-[14px] border border-white/[0.08] bg-white/[0.03]">
+          <StatCard label="cases" value={String(summary.casesDone)} tone="neutral" />
+          <StatCard label="accuracy" value={formatPercent(summary.accuracyPct)} tone="teal" />
+          <StatCard label="avg clues" value={formatAverageClues(summary.averageCluesUsed)} sub="/6" tone="amber" />
+        </div>
       </div>
     </section>
   );
@@ -595,14 +595,14 @@ export function StatCard({
         : "text-[var(--wardle-color-mint)]";
 
   return (
-    <div className="min-w-0 px-4 py-4 text-center [&+&]:border-l [&+&]:border-white/[0.08]">
-      <p className={`font-brand-mono text-[24px] font-black leading-none ${valueClass}`}>
+    <div className="min-w-0 px-3 py-2 text-center [&+&]:border-l [&+&]:border-white/[0.08]">
+      <p className={`font-brand-mono text-[18px] font-black leading-none ${valueClass}`}>
         {value}
         {sub && (
-          <span className="ml-0.5 text-[13px] font-semibold text-white/36">{sub}</span>
+          <span className="ml-0.5 text-[11px] font-semibold text-white/36">{sub}</span>
         )}
       </p>
-      <p className="mt-1.5 text-[11px] font-semibold lowercase tracking-[0.02em] text-white/34">
+      <p className="mt-1 text-[10px] font-semibold lowercase tracking-[0.02em] text-white/34">
         {label}
       </p>
     </div>
@@ -912,16 +912,18 @@ export function CaseLibraryList({
 }) {
   return (
     <section className={`min-w-0 max-w-full overflow-hidden ${className ?? ""}`}>
-      <div className="min-w-0 space-y-6">
+      <div className="min-w-0 space-y-4">
         {groupLearnCasesBySpecialty(cases).map((group) => (
           <div key={group.specialty.key} className="space-y-2">
             <div className="flex items-baseline gap-2 px-0.5">
-              <h3 className="text-sm font-bold text-white/70">{group.specialty.label}</h3>
+              <h3 className="font-brand-mono text-[10px] font-bold uppercase tracking-[0.16em] text-white/42">
+                {group.specialty.label}
+              </h3>
               <span className="font-brand-mono text-[11px] text-white/30">
                 {group.cases.length}
               </span>
             </div>
-            <div className="flex flex-wrap gap-1">
+            <div className="space-y-1">
               {group.cases.map((item) => (
                 <CaseLibraryCard
                   key={item.dailyCaseId}
@@ -950,42 +952,96 @@ export function CaseLibraryCard({
   const diagnosis = getCaseDiagnosisLabel(item);
   const specialty = getCaseSpecialty(item);
   const solved = item.playerResult.solved;
+  const caseLabel = formatArchiveCaseLabel(item);
+  const pips = buildAttemptPips(item.playerResult);
+  const timeLabel =
+    item.playerResult.timeSecs !== null
+      ? formatStudyTime(item.playerResult.timeSecs)
+      : null;
+  const attemptMeta = [
+    `${item.playerResult.attemptsUsed} clues`,
+    timeLabel,
+  ].filter((value): value is string => Boolean(value));
 
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`relative flex w-full min-w-0 items-center gap-3 rounded-[11px] px-4 py-3 text-left transition-all duration-150 ${
-        selected ? "bg-[rgba(0,180,166,0.08)]" : "hover:bg-white/[0.03]"
+      className={`group relative w-full min-w-0 rounded-[12px] border px-3 py-2.5 text-left transition-all duration-150 ${
+        selected
+          ? "border-[rgba(0,180,166,0.28)] bg-[rgba(0,180,166,0.11)] shadow-[0_10px_26px_rgba(0,180,166,0.06)]"
+          : "border-white/[0.045] bg-white/[0.018] hover:border-white/[0.08] hover:bg-white/[0.035]"
       }`}
     >
       {selected && (
         <span
           aria-hidden="true"
-          className="absolute left-0 h-5 w-[2px] rounded-r-full bg-[var(--wardle-color-teal)]"
+          className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-[var(--wardle-color-teal)]"
         />
       )}
-      <span
-        className={`h-1.5 w-1.5 shrink-0 rounded-full ${solved ? "bg-[var(--wardle-color-teal)]/60" : "bg-rose-400/60"}`}
-      />
-      <div className="min-w-0 flex-1">
-        <p
-          className={`truncate text-[13px] font-bold transition-colors ${
-            selected ? "text-[var(--wardle-color-mint)]" : "text-white/64"
-          }`}
-        >
-          {diagnosis}
-        </p>
-        <p className="mt-0.5 font-brand-mono text-[11px] text-white/28">
-          {specialty.label}
-        </p>
+
+      <div className="min-w-0 space-y-2 pl-1">
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p
+              className={`truncate text-[13px] font-extrabold leading-5 transition-colors ${
+                selected
+                  ? "text-[var(--wardle-color-mint)]"
+                  : "text-white/70 group-hover:text-white/82"
+              }`}
+            >
+              {diagnosis}
+            </p>
+            <p className="mt-0.5 truncate text-[11px] font-medium text-white/34">
+              {specialty.label} <span className="text-white/18">·</span>{" "}
+              {caseLabel}
+            </p>
+          </div>
+          <span
+            className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
+              solved ? "bg-[var(--wardle-color-teal)]/70" : "bg-rose-400/70"
+            }`}
+          />
+        </div>
+
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <TrackBadge track={item.track} />
+          <DifficultyBadge difficulty={item.case.difficulty} />
+        </div>
+
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <AttemptPips pips={pips} />
+          <span className="shrink-0 truncate font-brand-mono text-[10px] font-bold uppercase tracking-[0.1em] text-white/34">
+            {attemptMeta.join(" · ")}
+          </span>
+        </div>
       </div>
-      <span
-        className={`shrink-0 text-xs transition-colors ${selected ? "text-[var(--wardle-color-teal)]/50" : "text-white/14"}`}
-      >
-        ›
-      </span>
     </button>
+  );
+}
+
+function AttemptPips({
+  pips,
+}: {
+  pips: Array<"correct" | "used" | "missed" | "empty">;
+}) {
+  return (
+    <span className="flex min-w-0 flex-1 gap-1" aria-hidden="true">
+      {pips.map((pip, index) => (
+        <span
+          key={`${pip}-${index}`}
+          className={`h-1.5 min-w-0 flex-1 rounded-full ${
+            pip === "correct"
+              ? "bg-[var(--wardle-color-teal)]"
+              : pip === "used"
+                ? "bg-[rgba(0,180,166,0.3)]"
+                : pip === "missed"
+                  ? "bg-rose-400/60"
+                  : "bg-white/[0.08]"
+          }`}
+        />
+      ))}
+    </span>
   );
 }
 

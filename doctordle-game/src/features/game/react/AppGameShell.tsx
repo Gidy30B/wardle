@@ -24,6 +24,8 @@ export default function AppGameShell({
   organizationName,
 }: AppGameShellProps) {
   const visibleStreak = getVisibleStreak(streak)
+  const contentWidthClass =
+    activeTab === 'learn' ? 'max-w-none' : 'max-w-5xl'
 
   return (
     <div className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[var(--wardle-color-charcoal)] text-[var(--wardle-color-mint)]">
@@ -95,7 +97,9 @@ export default function AppGameShell({
 
         <main className="flex min-w-0 flex-1 basis-0 flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 basis-0 items-stretch overflow-hidden px-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] sm:px-3 sm:pt-[calc(env(safe-area-inset-top)+0.75rem)] lg:px-6 lg:pb-6 lg:pt-[calc(env(safe-area-inset-top)+1.5rem)]">
-            <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 basis-0 items-stretch overflow-hidden">
+            <div
+              className={`mx-auto flex min-h-0 w-full ${contentWidthClass} flex-1 basis-0 items-stretch overflow-hidden`}
+            >
               {children}
             </div>
           </div>

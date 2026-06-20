@@ -15,6 +15,10 @@
   --wardle-color-red: #E05C5C;
   --wardle-color-gray: #8A9BB0;
   --wardle-color-gray-light: #C8D6E5;
+  --wardle-surface-card: linear-gradient(180deg, rgba(26, 60, 94, 0.2), rgba(30, 30, 44, 0.88));
+  --wardle-surface-card-compact: rgba(30, 30, 44, 0.92);
+  --wardle-surface-sticky: rgba(30, 30, 44, 0.98);
+  --wardle-surface-sticky-solid: #1E1E2C;
   --wardle-native-status-bar: #1E1E2C;
   --wardle-native-nav-bar: #1E1E2C;
 }

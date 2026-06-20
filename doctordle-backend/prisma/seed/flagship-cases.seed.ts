@@ -22,7 +22,7 @@ import { Pool } from 'pg';
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error('DATABASE_URL is required to run Aortic stenosis seed.');
+  throw new Error('DATABASE_URL is required to run Kawasaki disease seed.');
 }
 
 const pool = new Pool({ connectionString: databaseUrl });
@@ -80,20 +80,19 @@ async function findAvailableInventoryPlaceholderDate(params: {
 
 const now = new Date();
 const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 17, 12, 0, 0));
-const seedVersion = 'flagship-aortic-stenosis-v1';
+const seedVersion = 'flagship-kawasaki-disease-v1';
 
-const canonicalName = 'aortic stenosis';
-const displayLabel = 'Aortic Stenosis';
-const caseTitle = 'Severe Calcific Aortic Stenosis';
+const canonicalName = 'kawasaki disease';
+const displayLabel = 'Kawasaki Disease';
+const caseTitle = 'Kawasaki Disease with Coronary Artery Dilatation';
 
 const aliasTerms = [
-  'Aortic Stenosis',
-  'aortic stenosis',
-  'severe aortic stenosis',
-  'calcific aortic stenosis',
-  'valvular aortic stenosis',
-  'aortic valve stenosis',
-  'AS',
+  'Kawasaki Disease',
+  'kawasaki disease',
+  'kawasaki syndrome',
+  'mucocutaneous lymph node syndrome',
+  'acute febrile mucocutaneous lymph node syndrome',
+  'incomplete kawasaki disease',
 ];
 
 const clues = [
@@ -101,206 +100,205 @@ const clues = [
     order: 0,
     type: 'history',
     value:
-      'A 72-year-old man presents with progressive exertional breathlessness and reduced exercise tolerance over the past year.',
+      'A 3-year-old child is brought to the emergency department with persistent high fever for six days despite regular antipyretics.',
   },
   {
     order: 1,
-    type: 'history',
+    type: 'symptom',
     value:
-      'He reports several episodes of dizziness while walking uphill and one brief episode of exertional syncope two months ago.',
+      'The parents report marked irritability, poor feeding, and reduced playfulness, with no prominent cough, diarrhea, dysuria, or focal source of infection.',
   },
   {
     order: 2,
-    type: 'symptom',
+    type: 'exam',
     value:
-      'Over the last six months he has developed central chest discomfort during exertion that improves with rest.',
+      'Examination reveals bilateral non-purulent conjunctival injection and cracked erythematous lips with a red strawberry tongue.',
   },
   {
     order: 3,
     type: 'exam',
     value:
-      'Cardiovascular examination reveals a slow-rising low-volume carotid pulse, narrow pulse pressure, and a sustained apical impulse.',
+      'A diffuse polymorphous rash is present over the trunk, and a tender 2 cm unilateral cervical lymph node is palpable on the left side of the neck.',
   },
   {
     order: 4,
     type: 'exam',
     value:
-      'A harsh crescendo-decrescendo systolic murmur is heard best at the right second intercostal space and radiates to both carotid arteries.',
+      'The hands and feet are swollen with erythema of the palms and soles, and the child remains febrile and unusually irritable during the assessment.',
   },
   {
     order: 5,
     type: 'investigation',
     value:
-      'Transthoracic echocardiography demonstrates a heavily calcified aortic valve with valve area 0.7 cm², mean gradient 48 mmHg, peak velocity 4.3 m/s, and preserved left ventricular ejection fraction.',
+      'Inflammatory markers are markedly elevated with thrombocytosis on repeat blood count, and echocardiography demonstrates mild dilation of the coronary arteries.',
   },
 ] as const;
 
 const differentials = [
-  'Hypertrophic Cardiomyopathy',
-  'Coronary Artery Disease',
-  'Mitral Regurgitation',
-  'Heart Failure with Preserved Ejection Fraction',
-  'Aortic Sclerosis',
+  'Scarlet Fever',
+  'Measles',
+  'Adenovirus Infection',
+  'Toxic Shock Syndrome',
+  'Systemic Juvenile Idiopathic Arthritis',
 ];
 
 const explanation = {
   diagnosis: displayLabel,
   summary:
-    'Progressive exertional dyspnea, angina, exertional syncope, slow-rising low-volume pulse, harsh ejection systolic murmur radiating to the carotids, and echocardiographic severe valve obstruction support severe calcific aortic stenosis.',
+    'Fever for more than five days with bilateral non-purulent conjunctivitis, oral mucosal changes, polymorphous rash, cervical lymphadenopathy, extremity swelling and erythema, raised inflammatory markers, thrombocytosis, and coronary artery dilation supports Kawasaki disease.',
   reasoning: [
-    'Progressive exertional dyspnea in an older adult suggests a cardiac limitation to forward flow or filling.',
-    'Exertional syncope is a danger symptom in fixed left ventricular outflow obstruction because cardiac output cannot increase adequately during activity.',
-    'Exertional angina can occur in severe aortic stenosis even without primary coronary disease because left ventricular hypertrophy increases oxygen demand.',
-    'A slow-rising low-volume carotid pulse is classic for severe fixed left ventricular outflow obstruction.',
-    'A harsh crescendo-decrescendo systolic murmur at the right upper sternal border radiating to the carotids localizes the lesion to the aortic valve.',
-    'Valve area 0.7 cm², mean gradient 48 mmHg, and peak velocity 4.3 m/s confirm severe aortic stenosis.',
+    'Persistent fever beyond five days in a young child should raise concern for inflammatory disease when no focal infection is found.',
+    'Marked irritability is common in Kawasaki disease and helps separate it from many simple viral illnesses.',
+    'Bilateral non-purulent conjunctival injection with cracked lips and strawberry tongue provides the mucocutaneous pattern.',
+    'Polymorphous rash plus unilateral cervical lymphadenopathy adds two further classic diagnostic features.',
+    'Swollen erythematous hands and feet complete the extremity-change component of Kawasaki disease.',
+    'Elevated inflammatory markers with thrombocytosis and coronary artery dilation strongly support Kawasaki disease and highlight the major complication.',
   ],
   keyFindings: [
-    'Older adult',
-    'Progressive exertional dyspnea',
-    'Reduced exercise tolerance',
-    'Exertional dizziness',
-    'Exertional syncope',
-    'Exertional angina',
-    'Slow-rising low-volume carotid pulse',
-    'Narrow pulse pressure',
-    'Sustained apical impulse',
-    'Harsh crescendo-decrescendo systolic murmur',
-    'Murmur maximal at right second intercostal space',
-    'Carotid radiation',
-    'Calcified aortic valve',
-    'Valve area 0.7 cm²',
-    'Mean gradient 48 mmHg',
-    'Peak velocity 4.3 m/s',
-    'Preserved left ventricular ejection fraction',
+    'Age 3 years',
+    'Fever for six days',
+    'No clear focal infection',
+    'Marked irritability',
+    'Bilateral non-purulent conjunctival injection',
+    'Cracked erythematous lips',
+    'Strawberry tongue',
+    'Polymorphous truncal rash',
+    'Tender unilateral cervical lymphadenopathy',
+    'Swollen hands and feet',
+    'Palmar and plantar erythema',
+    'Markedly elevated inflammatory markers',
+    'Thrombocytosis on repeat blood count',
+    'Mild coronary artery dilation',
   ],
   differentials,
   differentialAnalysis: [
     {
-      diagnosis: 'Hypertrophic Cardiomyopathy',
+      diagnosis: 'Scarlet Fever',
       whyPlausibleEarly:
-        'Exertional syncope, angina, dyspnea, and a systolic murmur can resemble obstructive hypertrophic cardiomyopathy.',
+        'Fever, rash, strawberry tongue, and cervical lymphadenopathy can suggest scarlet fever from group A streptococcal infection.',
       ruledOutByClues: [
         {
-          clueOrder: 4,
+          clueOrder: 2,
           evidence:
-            'harsh crescendo-decrescendo systolic murmur radiating to both carotid arteries',
+            'bilateral non-purulent conjunctival injection with cracked erythematous lips',
           reason:
-            'Carotid radiation and right upper sternal border maximal intensity favor valvular aortic stenosis over dynamic left ventricular outflow obstruction.',
+            'Non-purulent conjunctivitis and broad mucocutaneous involvement are more characteristic of Kawasaki disease than uncomplicated scarlet fever.',
         },
         {
           clueOrder: 5,
-          evidence:
-            'heavily calcified aortic valve with valve area 0.7 cm² and mean gradient 48 mmHg',
+          evidence: 'coronary artery dilation on echocardiography',
           reason:
-            'Echocardiography confirms fixed valvular obstruction rather than dynamic septal obstruction.',
+            'Coronary artery involvement is a hallmark complication of Kawasaki disease and is not explained by scarlet fever.',
         },
       ],
       finalReasonLessLikely:
-        'The obstruction is clearly valvular and calcific, not dynamic hypertrophic cardiomyopathy.',
+        'Scarlet fever does not explain the full CRASH pattern with extremity changes and coronary artery dilation.',
     },
     {
-      diagnosis: 'Coronary Artery Disease',
+      diagnosis: 'Measles',
       whyPlausibleEarly:
-        'Exertional central chest discomfort that improves with rest commonly suggests stable angina from coronary artery disease.',
-      ruledOutByClues: [
-        {
-          clueOrder: 3,
-          evidence: 'slow-rising low-volume carotid pulse',
-          reason:
-            'This pulse character indicates fixed left ventricular outflow obstruction rather than isolated coronary ischemia.',
-        },
-        {
-          clueOrder: 4,
-          evidence:
-            'ejection systolic murmur radiating to both carotid arteries',
-          reason:
-            'Coronary artery disease alone does not explain a classic aortic stenosis murmur.',
-        },
-      ],
-      finalReasonLessLikely:
-        'Coronary disease may coexist, but it does not explain the pulse, murmur, and severe valve gradient.',
-    },
-    {
-      diagnosis: 'Mitral Regurgitation',
-      whyPlausibleEarly:
-        'Dyspnea and a systolic murmur can suggest mitral regurgitation.',
-      ruledOutByClues: [
-        {
-          clueOrder: 4,
-          evidence:
-            'murmur best heard at the right second intercostal space with carotid radiation',
-          reason:
-            'Mitral regurgitation is usually a pansystolic murmur maximal at the apex and radiating to the axilla.',
-        },
-      ],
-      finalReasonLessLikely:
-        'The auscultation pattern and echocardiography localize the disease to the aortic valve.',
-    },
-    {
-      diagnosis: 'Heart Failure with Preserved Ejection Fraction',
-      whyPlausibleEarly:
-        'An older adult with exertional dyspnea and preserved ejection fraction may initially suggest HFpEF.',
-      ruledOutByClues: [
-        {
-          clueOrder: 4,
-          evidence:
-            'classic carotid-radiating ejection systolic murmur',
-          reason:
-            'This identifies a structural valve cause for exertional symptoms.',
-        },
-        {
-          clueOrder: 5,
-          evidence:
-            'severe aortic valve narrowing with high gradient and preserved ejection fraction',
-          reason:
-            'The primary pathology is severe aortic stenosis, which can cause secondary heart failure symptoms.',
-        },
-      ],
-      finalReasonLessLikely:
-        'HFpEF may be a physiologic consequence, but severe aortic stenosis is the unifying diagnosis.',
-    },
-    {
-      diagnosis: 'Aortic Sclerosis',
-      whyPlausibleEarly:
-        'Older adults can have a systolic ejection murmur from a calcified aortic valve without severe obstruction.',
+        'Fever, conjunctivitis, and rash can resemble measles early in the illness.',
       ruledOutByClues: [
         {
           clueOrder: 1,
-          evidence: 'exertional syncope',
+          evidence: 'no prominent cough or diarrhea',
           reason:
-            'Syncope suggests hemodynamically significant obstruction rather than benign sclerosis.',
+            'Measles usually has a prominent viral prodrome with cough, coryza, conjunctivitis, and systemic respiratory symptoms.',
+        },
+        {
+          clueOrder: 4,
+          evidence: 'swollen erythematous hands and feet',
+          reason:
+            'Extremity swelling and palm or sole erythema favor Kawasaki disease over measles.',
+        },
+      ],
+      finalReasonLessLikely:
+        'There are no Koplik spots or classic cephalocaudal measles progression, and coronary involvement points away from measles.',
+    },
+    {
+      diagnosis: 'Adenovirus Infection',
+      whyPlausibleEarly:
+        'Adenovirus can cause fever, conjunctivitis, pharyngitis, and a viral-appearing rash in children.',
+      ruledOutByClues: [
+        {
+          clueOrder: 2,
+          evidence: 'non-purulent conjunctivitis with cracked lips and strawberry tongue',
+          reason:
+            'The mucosal pattern is broader than typical adenoviral conjunctivitis or pharyngitis.',
         },
         {
           clueOrder: 5,
           evidence:
-            'valve area 0.7 cm², mean gradient 48 mmHg, and peak velocity 4.3 m/s',
+            'thrombocytosis and mild dilation of the coronary arteries',
           reason:
-            'These echocardiographic values confirm severe stenosis, not sclerosis.',
+            'Coronary artery changes and subacute thrombocytosis support Kawasaki disease rather than uncomplicated adenovirus.',
         },
       ],
       finalReasonLessLikely:
-        'Aortic sclerosis does not produce severe obstruction, high gradients, or the classic symptom triad.',
+        'Adenovirus does not explain the complete mucocutaneous pattern with coronary artery involvement.',
+    },
+    {
+      diagnosis: 'Toxic Shock Syndrome',
+      whyPlausibleEarly:
+        'Fever, rash, mucosal involvement, and systemic illness can suggest toxic shock syndrome.',
+      ruledOutByClues: [
+        {
+          clueOrder: 1,
+          evidence: 'no diarrhea or focal source of infection',
+          reason:
+            'Toxic shock often has prominent systemic toxicity, gastrointestinal symptoms, hypotension, or an identifiable staphylococcal or streptococcal source.',
+        },
+        {
+          clueOrder: 5,
+          evidence: 'coronary artery dilation on echocardiography',
+          reason:
+            'Coronary artery inflammation is a Kawasaki disease complication rather than a feature of toxic shock syndrome.',
+        },
+      ],
+      finalReasonLessLikely:
+        'The child has a classic Kawasaki mucocutaneous pattern without shock or multiorgan failure features.',
+    },
+    {
+      diagnosis: 'Systemic Juvenile Idiopathic Arthritis',
+      whyPlausibleEarly:
+        'Persistent fever, rash, and high inflammatory markers can suggest systemic juvenile idiopathic arthritis.',
+      ruledOutByClues: [
+        {
+          clueOrder: 2,
+          evidence: 'cracked lips, strawberry tongue, and non-purulent conjunctivitis',
+          reason:
+            'Prominent mucocutaneous findings are more typical of Kawasaki disease.',
+        },
+        {
+          clueOrder: 5,
+          evidence: 'coronary artery dilation',
+          reason:
+            'Coronary arteritis or dilation strongly favors Kawasaki disease.',
+        },
+      ],
+      finalReasonLessLikely:
+        'Systemic JIA usually has quotidian fever, evanescent rash, arthritis, serositis, or hepatosplenomegaly rather than the classic CRASH pattern.',
     },
   ],
   managementPearl:
-    'Symptomatic severe aortic stenosis has a poor prognosis without valve intervention. Confirm severity, assess procedural risk, avoid excessive preload reduction, and refer urgently for aortic valve replacement or transcatheter aortic valve implantation.',
+    'Kawasaki disease is a pediatric inflammatory vasculitis with risk of coronary artery aneurysms. Treat promptly with intravenous immunoglobulin and aspirin, obtain echocardiography, and involve pediatric cardiology when coronary changes or high-risk features are present.',
   generationQuality: {
     contentTier: 'FLAGSHIP',
     seedVersion,
     humanReviewed: true,
     discriminatorStrength: 'HIGH',
     expectedTeachingPoints: [
-      'Severe aortic stenosis classically presents with syncope, angina, and dyspnea',
-      'A slow-rising low-volume pulse supports fixed left ventricular outflow obstruction',
-      'A harsh ejection systolic murmur radiating to the carotids localizes disease to the aortic valve',
-      'Echocardiography confirms severity using valve area, gradient, and peak velocity',
-      'Symptomatic severe aortic stenosis requires valve intervention evaluation',
+      'Kawasaki disease should be considered in fever lasting more than five days with mucocutaneous findings',
+      'The CRASH and burn pattern helps identify the major diagnostic features',
+      'Coronary artery aneurysm or dilation is the feared complication',
+      'Echocardiography is essential at diagnosis and follow-up',
+      'Early intravenous immunoglobulin reduces coronary complications',
     ],
     competencyDomains: [
-      'Cardiology',
-      'Valvular Heart Disease',
-      'Internal Medicine',
+      'Paediatrics',
+      'Paediatric Cardiology',
+      'Rheumatology',
+      'Emergency Medicine',
       'Clinical Reasoning',
     ],
   },
@@ -310,366 +308,356 @@ const educationForFrontend = {
   title: displayLabel,
   summary: {
     definition:
-      'Aortic stenosis is narrowing of the aortic valve causing fixed left ventricular outflow obstruction, most commonly from degenerative calcification in older adults.',
+      'Kawasaki disease is an acute self-limited medium-vessel vasculitis of childhood, classically affecting the coronary arteries and presenting with prolonged fever plus mucocutaneous inflammation.',
     highYieldTakeaway:
-      'Think severe aortic stenosis in an older adult with exertional dyspnea, angina, syncope, slow-rising pulse, and a harsh ejection systolic murmur radiating to the carotids.',
+      'Think Kawasaki disease in a young child with fever for at least five days plus non-purulent conjunctivitis, oral changes, rash, cervical lymphadenopathy, extremity changes, and elevated inflammatory markers.',
   },
   recognitionPattern: [
     {
-      pattern: 'Symptomatic severe aortic stenosis',
+      pattern: 'Prolonged fever with mucocutaneous inflammation',
       whyItMatters:
-        'The onset of exertional dyspnea, angina, or syncope marks clinically important disease and should trigger urgent valve assessment.',
+        'Fever lasting more than five days with multiple mucocutaneous signs should trigger Kawasaki disease assessment because treatment is time-sensitive.',
       progression:
-        'Aortic valve calcification -> fixed outflow obstruction -> left ventricular pressure overload -> concentric hypertrophy -> impaired cardiac output reserve -> exertional dyspnea, angina, syncope, heart failure, and sudden death risk.',
+        'Systemic vascular inflammation -> persistent fever and irritability -> conjunctival, oral, skin, lymph node, and extremity findings -> coronary arteritis and possible aneurysm formation.',
       discriminator:
-        'The combination of exertional symptoms, slow-rising pulse, and carotid-radiating ejection systolic murmur is highly characteristic.',
+        'The combination of non-purulent conjunctivitis, oral changes, polymorphous rash, extremity changes, and cervical lymphadenopathy is more specific than fever and rash alone.',
       commonTrap:
-        'Do not attribute exertional symptoms in an older adult only to age, coronary disease, or deconditioning when the pulse and murmur suggest valve obstruction.',
+        'Do not dismiss persistent fever and rash as a viral illness when the child has red eyes, cracked lips, swollen hands or feet, and marked irritability.',
     },
     {
-      pattern: 'The SAD symptom triad',
+      pattern: 'Coronary-risk vasculitis',
       whyItMatters:
-        'Syncope, angina, and dyspnea are the classic symptom cluster of severe aortic stenosis.',
+        'Kawasaki disease is important because untreated coronary artery inflammation can lead to aneurysm, thrombosis, myocardial ischemia, or sudden death later.',
       discriminator:
-        'SAD symptoms become especially specific when paired with a right upper sternal border murmur radiating to the carotids.',
+        'Coronary artery dilation on echocardiography separates Kawasaki disease from most routine infectious rashes.',
       commonTrap:
-        'Angina in aortic stenosis may occur even without obstructive coronary artery disease.',
+        'Do not wait for coronary abnormalities before treating if the clinical syndrome is convincing.',
     },
     {
-      pattern: 'Fixed left ventricular outflow obstruction',
+      pattern: 'Incomplete Kawasaki disease',
       whyItMatters:
-        'A severely narrowed aortic valve prevents the heart from increasing output during exertion.',
+        'Some children do not meet all classic criteria but still have coronary risk, especially infants and young children with persistent unexplained fever and inflammation.',
       discriminator:
-        'Slow-rising low-volume carotid pulse separates severe aortic stenosis from many other systolic murmurs.',
+        'High inflammatory markers, thrombocytosis, sterile pyuria, transaminitis, hypoalbuminaemia, or coronary changes can support the diagnosis when criteria are incomplete.',
       commonTrap:
-        'A loud murmur alone does not grade severity; symptoms and echocardiographic values determine severity.',
+        'Do not exclude Kawasaki disease solely because all five classic clinical features are not present at the first assessment.',
     },
   ],
   keySymptoms: [
     {
-      symptom: 'Exertional dyspnea',
+      symptom: 'Fever for at least five days',
       significance:
-        'Often reflects elevated left ventricular filling pressures and reduced cardiac reserve.',
+        'Persistent fever is the anchor feature and should prompt evaluation for Kawasaki disease when mucocutaneous signs are present.',
     },
     {
-      symptom: 'Exertional angina',
+      symptom: 'Marked irritability',
       significance:
-        'May occur because hypertrophied myocardium has high oxygen demand and reduced subendocardial perfusion.',
+        'Children with Kawasaki disease are often strikingly irritable, sometimes more than expected for a simple viral illness.',
     },
     {
-      symptom: 'Exertional syncope',
+      symptom: 'Poor feeding or reduced playfulness',
       significance:
-        'Suggests severe fixed obstruction and inability to increase cardiac output during activity.',
-    },
-    {
-      symptom: 'Reduced exercise tolerance',
-      significance:
-        'May be the earliest practical clue that valve obstruction has become symptomatic.',
-    },
-    {
-      symptom: 'Dizziness or presyncope',
-      significance:
-        'A warning symptom when triggered by exertion in suspected aortic stenosis.',
+        'Nonspecific systemic symptoms reflect inflammatory illness and help distinguish the child from a well-appearing viral exanthem.',
     },
   ],
   keySigns: [
     {
-      finding: 'Slow-rising low-volume carotid pulse',
+      finding: 'Bilateral non-purulent conjunctival injection',
       significance:
-        'Classic peripheral sign of severe fixed left ventricular outflow obstruction.',
+        'A major clinical criterion and a key separator from bacterial conjunctivitis.',
       discriminator:
-        'Helps distinguish severe aortic stenosis from benign flow murmurs and many regurgitant lesions.',
+        'Non-purulent red eyes with fever and mucosal changes favor Kawasaki disease over isolated conjunctivitis.',
     },
     {
-      finding: 'Harsh ejection systolic murmur',
+      finding: 'Cracked red lips or strawberry tongue',
       significance:
-        'Typical murmur of turbulent flow across a narrowed aortic valve.',
+        'Oral mucosal inflammation is a classic Kawasaki disease feature.',
       discriminator:
-        'Maximal intensity at the right upper sternal border favors aortic valve disease.',
+        'Oral changes combined with conjunctivitis and extremity swelling are more suggestive than any single finding alone.',
     },
     {
-      finding: 'Carotid radiation',
+      finding: 'Polymorphous rash',
       significance:
-        'Radiation to the carotids is a key auscultatory clue for aortic stenosis.',
+        'A variable rash is common and may mimic viral exanthem, scarlet fever, or drug eruption.',
+    },
+    {
+      finding: 'Unilateral cervical lymphadenopathy',
+      significance:
+        'A cervical node at least 1.5 cm is one of the diagnostic clinical features.',
+    },
+    {
+      finding: 'Extremity erythema and swelling',
+      significance:
+        'Swelling or erythema of palms and soles is a strong clue and may later progress to periungual desquamation.',
       discriminator:
-        'Mitral regurgitation typically radiates to the axilla rather than the carotids.',
-    },
-    {
-      finding: 'Sustained apical impulse',
-      significance:
-        'Reflects left ventricular pressure overload and hypertrophy.',
-    },
-    {
-      finding: 'Narrow pulse pressure',
-      significance:
-        'May occur in severe obstruction because stroke volume cannot rise normally.',
+        'Extremity changes are less typical of measles, adenovirus, or uncomplicated scarlet fever.',
     },
   ],
   examPearls: [
     {
       type: 'DISCRIMINATOR',
-      title: 'Carotid radiation localizes the murmur',
+      title: 'Non-purulent conjunctivitis plus oral changes is a major clue',
       content:
-        'A harsh crescendo-decrescendo systolic murmur at the right upper sternal border that radiates to the carotids is the classic auscultatory pattern of aortic stenosis.',
+        'Bilateral red eyes without discharge, cracked lips, and strawberry tongue in a persistently febrile child should immediately raise Kawasaki disease.',
       whyItMatters:
-        'This finding moves the diagnosis away from nonspecific dyspnea or isolated coronary disease toward structural valve obstruction.',
+        'These findings shift the diagnosis from nonspecific infection toward systemic vasculitis.',
       discriminator:
-        'Mitral regurgitation is usually apical and radiates to the axilla; hypertrophic cardiomyopathy is dynamic and often changes with preload.',
+        'Bacterial conjunctivitis is usually purulent; measles usually has cough, coryza, Koplik spots, and a characteristic rash pattern.',
       trapAvoided:
-        'Do not label all systolic murmurs as mitral regurgitation or innocent flow murmurs.',
+        'Do not treat each mucocutaneous feature as a separate minor infection.',
     },
     {
       type: 'DISCRIMINATOR',
-      title: 'Pulse character reflects severity',
+      title: 'Extremity changes are high-yield',
       content:
-        'A slow-rising low-volume carotid pulse, also called pulsus parvus et tardus, supports severe fixed outflow obstruction.',
+        'Swollen erythematous hands and feet during the acute illness strongly support Kawasaki disease and may be followed by peeling around the nails.',
       whyItMatters:
-        'The carotid pulse can reveal hemodynamic severity before echocardiography is available.',
+        'Extremity findings are often the clue that separates Kawasaki disease from common viral exanthems.',
       discriminator:
-        'Aortic sclerosis may produce a murmur but should not cause a clearly slow-rising low-volume pulse.',
+        'Simple viral infections rarely produce the full combination of persistent fever, red eyes, oral changes, rash, lymphadenopathy, and extremity swelling.',
       trapAvoided:
-        'Do not rely on murmur loudness alone to estimate severity.',
+        'Do not wait for desquamation; peeling may occur later after the acute phase.',
     },
     {
       type: 'MNEMONIC',
-      title: 'SAD predicts symptomatic severe disease',
+      title: 'CRASH and burn',
       content:
-        'SAD means Syncope, Angina, and Dyspnea.',
+        'CRASH means Conjunctivitis, Rash, Adenopathy, Strawberry tongue or oral changes, and Hand or foot changes; burn is the persistent fever.',
       whyItMatters:
-        'These are the classic symptoms of severe aortic stenosis and signal a major change in prognosis.',
+        'The mnemonic organizes the classic diagnostic features around the fever anchor.',
       discriminator:
-        'The mnemonic is most useful when the symptoms are exertional and accompanied by a carotid-radiating ejection systolic murmur.',
+        'It helps distinguish Kawasaki disease from isolated fever-rash illnesses by requiring a constellation of mucocutaneous findings.',
       trapAvoided:
-        'Do not place SAD under scoringSystems; it is a diagnostic mnemonic, not a formal validated score.',
+        'Do not place CRASH under scoringSystems; it is a memory aid, not a formal severity score.',
     },
   ],
   scoringSystems: [],
   investigations: [
     {
-      test: 'Transthoracic echocardiography',
+      test: 'Inflammatory markers',
       interpretation:
-        'Severe aortic stenosis is supported by valve area less than 1.0 cm², mean gradient at least 40 mmHg, or peak velocity at least 4.0 m/s.',
+        'Elevated CRP and ESR support systemic inflammation and are useful when Kawasaki disease is suspected.',
       whyItMatters:
-        'Confirms diagnosis, grades severity, assesses left ventricular function, and guides intervention planning.',
+        'High inflammatory markers help distinguish Kawasaki disease from mild viral illness and support incomplete Kawasaki disease evaluation.',
     },
     {
-      test: 'Electrocardiogram',
+      test: 'Full blood count',
       interpretation:
-        'May show left ventricular hypertrophy, strain pattern, conduction disease, or arrhythmia.',
+        'Leukocytosis may occur early; thrombocytosis is common after the first week.',
       whyItMatters:
-        'Supports chronic pressure overload and identifies rhythm problems that may worsen symptoms.',
+        'Thrombocytosis in the subacute phase supports the diagnosis and reflects ongoing inflammation.',
     },
     {
-      test: 'Chest X-ray',
+      test: 'Echocardiography',
       interpretation:
-        'May show valve calcification, post-stenotic aortic dilatation, pulmonary congestion, or cardiac enlargement.',
+        'Assesses coronary artery dilation or aneurysm, ventricular function, myocarditis, pericardial effusion, and valvular involvement.',
       whyItMatters:
-        'Provides supportive evidence and screens for heart failure or alternative pulmonary causes of dyspnea.',
+        'Coronary assessment is central because prevention of coronary complications is the main reason for urgent treatment.',
     },
     {
-      test: 'Coronary assessment when intervention is planned',
+      test: 'Liver function tests and albumin',
       interpretation:
-        'Coronary angiography or CT coronary assessment may identify coexisting coronary artery disease.',
+        'May show transaminitis or hypoalbuminaemia in more inflammatory disease.',
       whyItMatters:
-        'Older patients with valve disease may also require coronary planning before valve replacement.',
+        'Supportive laboratory abnormalities can strengthen the diagnosis in incomplete presentations.',
     },
     {
-      test: 'CT aortic valve and vascular planning',
+      test: 'Urinalysis',
       interpretation:
-        'Defines valve calcification, annulus size, aortic root anatomy, and vascular access for transcatheter procedures.',
+        'Sterile pyuria may be present.',
       whyItMatters:
-        'Essential when transcatheter aortic valve implantation is being considered.',
+        'Sterile pyuria can support Kawasaki disease and prevents mislabeling the illness as a simple urinary tract infection without culture evidence.',
     },
     {
-      test: 'Exercise testing in selected apparently asymptomatic patients',
+      test: 'Targeted infectious testing when indicated',
       interpretation:
-        'May reveal symptoms, blood pressure drop, or limited exercise capacity.',
+        'Testing for streptococcal infection, measles, adenovirus, or sepsis may be needed depending on exposure and local epidemiology.',
       whyItMatters:
-        'Helps uncover concealed symptoms, but should be used cautiously and only in appropriate supervised settings.',
+        'Kawasaki disease is a clinical diagnosis, but important mimics should be considered and treated appropriately.',
     },
   ],
   managementOverview: [
     {
-      step: 'Confirm severity with echocardiography',
+      step: 'Admit or urgently assess suspected Kawasaki disease',
       rationale:
-        'Valve area, mean gradient, peak velocity, and ventricular function determine whether disease is severe and guide urgency.',
+        'Children require timely evaluation, inflammatory markers, echocardiography planning, and treatment to reduce coronary risk.',
     },
     {
-      step: 'Assess symptom status carefully',
+      step: 'Give intravenous immunoglobulin',
       rationale:
-        'Exertional dyspnea, angina, syncope, or heart failure symptoms indicate symptomatic severe disease.',
+        'IVIG given early, ideally within the first 10 days of illness, reduces the risk of coronary artery aneurysms.',
     },
     {
-      step: 'Refer urgently to cardiology or a heart valve team',
+      step: 'Use aspirin according to local protocol',
       rationale:
-        'Symptomatic severe aortic stenosis requires evaluation for definitive valve intervention.',
+        'Aspirin is used for anti-inflammatory and antiplatelet effects, with dosing adjusted as fever and inflammation resolve.',
     },
     {
-      step: 'Choose valve intervention strategy',
+      step: 'Perform echocardiography and arrange follow-up imaging',
       rationale:
-        'Surgical aortic valve replacement or transcatheter aortic valve implantation is selected based on age, anatomy, surgical risk, comorbidities, and patient goals.',
+        'Initial and follow-up echocardiography detect coronary artery dilation, aneurysm, or evolving cardiac involvement.',
     },
     {
-      step: 'Treat congestion cautiously while awaiting intervention',
+      step: 'Consult paediatrics and cardiology when high-risk features exist',
       rationale:
-        'Diuretics may relieve pulmonary congestion, but excessive preload reduction can worsen cardiac output in severe fixed obstruction.',
+        'Coronary changes, very young age, shock, IVIG resistance, or severe inflammation require specialist input.',
     },
     {
-      step: 'Avoid uncontrolled vasodilation and hypotension',
+      step: 'Escalate treatment for IVIG-resistant disease',
       rationale:
-        'Patients with severe aortic stenosis depend on adequate preload and perfusion pressure.',
+        'Persistent or recrudescent fever after IVIG may require additional therapy such as repeat IVIG, corticosteroids, or biologic agents depending on protocol.',
     },
     {
-      step: 'Evaluate for coexisting coronary disease',
+      step: 'Give vaccine counselling after IVIG',
       rationale:
-        'Coronary disease can coexist with calcific valve disease and may affect procedural planning.',
+        'Live vaccines may need to be delayed after IVIG because passive antibodies can reduce vaccine response.',
     },
   ],
   differentialDistinguishers: [
     {
-      diagnosis: 'Hypertrophic Cardiomyopathy',
+      diagnosis: 'Scarlet Fever',
       whyConfused:
-        'Both can cause exertional syncope, angina, dyspnea, and a systolic murmur.',
+        'Both can cause fever, rash, strawberry tongue, and cervical lymphadenopathy.',
       distinguishingPoint:
-        'Aortic stenosis has a fixed calcified valve obstruction with carotid radiation; hypertrophic cardiomyopathy has dynamic obstruction and septal hypertrophy.',
+        'Kawasaki disease has non-purulent conjunctivitis, extremity changes, persistent inflammation, and possible coronary involvement.',
       keySeparator:
-        'Echocardiography shows severe aortic valve narrowing rather than dynamic left ventricular outflow tract obstruction.',
+        'Coronary artery dilation and the full CRASH pattern favor Kawasaki disease.',
       classicTrap:
-        'Assuming any exertional syncope with a systolic murmur is hypertrophic cardiomyopathy without localizing the murmur.',
+        'Treating as scarlet fever alone and missing echocardiography or IVIG when Kawasaki features are present.',
     },
     {
-      diagnosis: 'Coronary Artery Disease',
+      diagnosis: 'Measles',
       whyConfused:
-        'Exertional angina relieved by rest can look like stable ischemic heart disease.',
+        'Measles can present with fever, conjunctivitis, and rash.',
       distinguishingPoint:
-        'Aortic stenosis adds syncope, slow-rising pulse, and a carotid-radiating ejection systolic murmur.',
+        'Measles usually has cough, coryza, Koplik spots, and a cephalocaudal rash spread rather than extremity swelling and coronary changes.',
       keySeparator:
-        'Valve gradient and valve area on echocardiography confirm the primary diagnosis.',
+        'Extremity changes and coronary dilation point toward Kawasaki disease.',
       classicTrap:
-        'Treating angina alone and missing the valve lesion that changes prognosis and management.',
+        'Assuming every febrile conjunctivitis-rash illness is measles without checking oral, extremity, and coronary clues.',
     },
     {
-      diagnosis: 'Mitral Regurgitation',
+      diagnosis: 'Adenovirus Infection',
       whyConfused:
-        'Both can cause dyspnea and a systolic murmur.',
+        'Adenovirus may cause prolonged fever, conjunctivitis, pharyngitis, and rash.',
       distinguishingPoint:
-        'Mitral regurgitation is typically pansystolic, maximal at the apex, and radiates to the axilla.',
+        'Kawasaki disease produces a broader mucocutaneous syndrome with extremity changes and coronary risk.',
       keySeparator:
-        'Right upper sternal border ejection murmur with carotid radiation favors aortic stenosis.',
+        'Coronary artery dilation and thrombocytosis after the first week strongly support Kawasaki disease.',
       classicTrap:
-        'Calling any systolic murmur mitral regurgitation without checking radiation and timing.',
+        'Stopping at a viral diagnosis when persistent fever and extremity findings suggest vasculitis.',
     },
     {
-      diagnosis: 'Heart Failure with Preserved Ejection Fraction',
+      diagnosis: 'Toxic Shock Syndrome',
       whyConfused:
-        'Older patients may present with exertional dyspnea and preserved ejection fraction.',
+        'Both can cause fever, rash, mucosal changes, and systemic illness.',
       distinguishingPoint:
-        'Aortic stenosis produces a characteristic murmur, pulse abnormality, and high transvalvular gradient.',
+        'Toxic shock usually has shock, multiorgan involvement, prominent toxicity, and an infectious toxin source.',
       keySeparator:
-        'Severe valve obstruction explains the heart failure physiology.',
+        'Kawasaki disease is favored by the classic CRASH pattern and coronary artery involvement without shock.',
       classicTrap:
-        'Labeling exertional dyspnea as HFpEF without auscultation and echocardiography.',
+        'Missing Kawasaki disease because the child appears very irritable and systemically unwell.',
     },
     {
-      diagnosis: 'Aortic Sclerosis',
+      diagnosis: 'Systemic Juvenile Idiopathic Arthritis',
       whyConfused:
-        'Both may occur in older adults with a calcified aortic valve and systolic ejection murmur.',
+        'Both can cause prolonged fever, rash, and raised inflammatory markers.',
       distinguishingPoint:
-        'Aortic sclerosis does not cause severe obstruction, high gradients, syncope, or a markedly slow-rising pulse.',
+        'Systemic JIA more often has quotidian fever, evanescent rash, arthritis, hepatosplenomegaly, or serositis.',
       keySeparator:
-        'Valve area 0.7 cm², mean gradient 48 mmHg, and peak velocity 4.3 m/s prove severe stenosis.',
+        'Non-purulent conjunctivitis, oral changes, extremity swelling, and coronary dilation favor Kawasaki disease.',
       classicTrap:
-        'Reassuring the patient because the murmur is presumed to be benign age-related sclerosis.',
+        'Labeling persistent fever as rheumatologic without recognizing time-sensitive coronary-risk vasculitis.',
     },
   ],
   complications: [
     {
-      complication: 'Heart failure',
+      complication: 'Coronary artery aneurysm',
       whyItMatters:
-        'Pressure overload eventually causes elevated filling pressures, pulmonary congestion, and reduced functional reserve.',
+        'The most feared complication and the major reason for urgent IVIG treatment and echocardiographic surveillance.',
     },
     {
-      complication: 'Syncope and injury',
+      complication: 'Coronary thrombosis or myocardial infarction',
       whyItMatters:
-        'Fixed cardiac output can cause exertional collapse and trauma.',
+        'Large aneurysms can thrombose and cause ischemia even in young children.',
     },
     {
-      complication: 'Sudden cardiac death',
+      complication: 'Myocarditis',
       whyItMatters:
-        'Risk increases after symptoms develop, especially in severe untreated disease.',
+        'Can contribute to tachycardia, reduced ventricular function, or shock-like presentations.',
     },
     {
-      complication: 'Arrhythmias',
+      complication: 'Pericardial effusion',
       whyItMatters:
-        'Left ventricular hypertrophy and atrial pressure overload can predispose to atrial fibrillation and other rhythm problems.',
+        'Reflects cardiac inflammation and may be detected on echocardiography.',
     },
     {
-      complication: 'Pulmonary edema',
+      complication: 'Valvular regurgitation',
       whyItMatters:
-        'Decompensation can occur when the hypertrophied ventricle can no longer maintain filling and output.',
+        'Inflammation can affect cardiac valves and contribute to follow-up needs.',
     },
     {
-      complication: 'Cardiogenic shock',
+      complication: 'Kawasaki disease shock syndrome',
       whyItMatters:
-        'Severe obstruction can become life-threatening during acute decompensation, sepsis, bleeding, or hypotension.',
+        'A severe form with hypotension or poor perfusion requiring urgent escalation.',
     },
   ],
   pitfalls: [
     {
-      pitfall: 'Attributing exertional symptoms to aging',
+      pitfall: 'Calling it a viral exanthem too early',
       consequence:
-        'Delays recognition of symptomatic severe valve disease.',
+        'Delays IVIG and increases the risk of coronary artery complications.',
     },
     {
-      pitfall: 'Treating angina as isolated coronary disease',
+      pitfall: 'Waiting for all classic criteria to appear',
       consequence:
-        'Misses severe aortic stenosis, where valve intervention may be the key life-prolonging treatment.',
+        'Incomplete Kawasaki disease can still cause coronary artery aneurysms.',
     },
     {
-      pitfall: 'Using murmur loudness alone to judge severity',
+      pitfall: 'Ignoring extremity swelling or erythema',
       consequence:
-        'Severe disease can have a softer murmur when cardiac output falls; echocardiography is needed.',
+        'Misses one of the strongest discriminators from routine viral illness.',
     },
     {
-      pitfall: 'Over-diuresis or excessive vasodilation',
+      pitfall: 'Forgetting echocardiography',
       consequence:
-        'Can precipitate hypotension because severe aortic stenosis is preload and perfusion-pressure dependent.',
+        'Misses coronary artery dilation, myocarditis, or evolving aneurysm formation.',
     },
     {
-      pitfall: 'Putting the SAD mnemonic under scoringSystems',
+      pitfall: 'Putting CRASH mnemonic under scoringSystems',
       consequence:
         'Pollutes scoringSystems with a mnemonic rather than reserving it for formal validated scores.',
     },
   ],
   recallPrompts: [
     {
-      prompt: 'What are the classic symptoms of severe aortic stenosis?',
-      answer: 'Syncope, Angina, and Dyspnea.',
-    },
-    {
-      prompt: 'What pulse finding supports severe aortic stenosis?',
-      answer: 'A slow-rising low-volume carotid pulse, also called pulsus parvus et tardus.',
-    },
-    {
-      prompt: 'What murmur is characteristic of aortic stenosis?',
+      prompt: 'What fever duration should raise concern for Kawasaki disease?',
       answer:
-        'A harsh crescendo-decrescendo systolic murmur best heard at the right upper sternal border and radiating to the carotids.',
+        'Fever lasting at least five days, especially with mucocutaneous features.',
     },
     {
-      prompt: 'What echocardiographic values support severe aortic stenosis?',
+      prompt: 'What are the CRASH features of Kawasaki disease?',
       answer:
-        'Valve area less than 1.0 cm², mean gradient at least 40 mmHg, or peak velocity at least 4.0 m/s.',
+        'Conjunctivitis, Rash, Adenopathy, Strawberry tongue or oral changes, and Hand or foot changes.',
     },
     {
-      prompt: 'What is the definitive treatment for symptomatic severe aortic stenosis?',
+      prompt: 'What is the most feared cardiovascular complication of Kawasaki disease?',
+      answer: 'Coronary artery aneurysm or dilation.',
+    },
+    {
+      prompt: 'What treatment reduces the risk of coronary artery aneurysms?',
+      answer: 'Early intravenous immunoglobulin, usually with aspirin according to local protocol.',
+    },
+    {
+      prompt: 'Why is echocardiography performed in suspected Kawasaki disease?',
       answer:
-        'Aortic valve replacement or transcatheter aortic valve implantation after valve-team assessment.',
+        'To assess coronary artery dilation or aneurysm and other cardiac involvement such as myocarditis or effusion.',
     },
   ],
   references: [
-    { citation: 'ESC/EACTS Guidelines for the management of valvular heart disease.' },
-    { citation: 'ACC/AHA Guideline for the Management of Patients With Valvular Heart Disease.' },
-    { citation: 'Braunwald Heart Disease: A Textbook of Cardiovascular Medicine.' },
+    { citation: 'American Heart Association scientific statement on diagnosis, treatment, and long-term management of Kawasaki disease.' },
+    { citation: 'Nelson Textbook of Pediatrics.' },
+    { citation: 'RCPCH and paediatric cardiology guidance on Kawasaki disease and paediatric inflammatory vasculitis.' },
   ],
 };
 
@@ -705,15 +693,15 @@ async function ensureRegistry() {
           active: true,
           isPlayable: true,
           isGeneratable: true,
-          specialty: 'Cardiology',
-          subspecialty: 'Valvular Heart Disease',
-          category: 'Valvular Disease',
-          bodySystem: 'Cardiovascular',
-          organSystem: 'Heart',
+          specialty: 'Paediatrics',
+          subspecialty: 'Paediatric Cardiology',
+          category: 'Vasculitis',
+          bodySystem: 'Multisystem',
+          organSystem: 'Coronary Arteries',
           difficultyBand: DiagnosisDifficultyBand.INTERMEDIATE,
-          rarityBand: DiagnosisRarityBand.COMMON,
-          clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
-          ageGroup: DiagnosisAgeGroup.ADULT,
+          rarityBand: DiagnosisRarityBand.UNCOMMON,
+          clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
+          ageGroup: DiagnosisAgeGroup.PEDIATRIC,
           urgencyLevel: DiagnosisUrgencyLevel.URGENT,
           preferredClueTypes: [
             'history',
@@ -722,7 +710,7 @@ async function ensureRegistry() {
             'investigation',
           ],
           notes:
-            'Seeded flagship aortic stenosis case with valvular heart disease teaching metadata.',
+            'Seeded flagship Kawasaki disease case with paediatric vasculitis teaching metadata.',
         },
         select: {
           id: true,
@@ -738,15 +726,15 @@ async function ensureRegistry() {
           active: true,
           isPlayable: true,
           isGeneratable: true,
-          specialty: 'Cardiology',
-          subspecialty: 'Valvular Heart Disease',
-          category: 'Valvular Disease',
-          bodySystem: 'Cardiovascular',
-          organSystem: 'Heart',
+          specialty: 'Paediatrics',
+          subspecialty: 'Paediatric Cardiology',
+          category: 'Vasculitis',
+          bodySystem: 'Multisystem',
+          organSystem: 'Coronary Arteries',
           difficultyBand: DiagnosisDifficultyBand.INTERMEDIATE,
-          rarityBand: DiagnosisRarityBand.COMMON,
-          clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
-          ageGroup: DiagnosisAgeGroup.ADULT,
+          rarityBand: DiagnosisRarityBand.UNCOMMON,
+          clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
+          ageGroup: DiagnosisAgeGroup.PEDIATRIC,
           urgencyLevel: DiagnosisUrgencyLevel.URGENT,
           preferredClueTypes: [
             'history',
@@ -755,7 +743,7 @@ async function ensureRegistry() {
             'investigation',
           ],
           notes:
-            'Seeded flagship aortic stenosis case with valvular heart disease teaching metadata.',
+            'Seeded flagship Kawasaki disease case with paediatric vasculitis teaching metadata.',
         },
         select: {
           id: true,
@@ -906,7 +894,7 @@ async function upsertCase(params: {
   const scheduledCase = existingCases.find((c) => c.dailyCases.length > 0);
 
   if (scheduledCase) {
-    console.log('Skipped existing scheduled Aortic stenosis case:', scheduledCase);
+    console.log('Skipped existing scheduled Kawasaki disease case:', scheduledCase);
     return;
   }
 
@@ -938,7 +926,7 @@ async function upsertCase(params: {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Seeded complete frontend-aligned flagship Aortic stenosis case with education.',
+      'Seeded complete frontend-aligned flagship Kawasaki disease case with education.',
   };
 
   const seededCase = reusableCase
@@ -978,7 +966,7 @@ async function upsertCase(params: {
       diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
       diagnosisMappingConfidence: 1,
       diagnosisEditorialNote:
-        'Created complete Aortic stenosis revision with education-aligned explanation.',
+        'Created complete Kawasaki disease revision with education-aligned explanation.',
     },
     select: { id: true },
   });
@@ -995,20 +983,20 @@ async function upsertCase(params: {
       source: CaseSource.MANUAL,
       publishTrack: PublishTrack.DAILY,
       outcome: ValidationOutcome.PASSED,
-      validatorVersion: 'flagship-human-review:aortic-stenosis-v1',
+      validatorVersion: 'flagship-human-review:kawasaki-disease-v1',
       summary: {
         contentTier: 'FLAGSHIP',
         seedVersion,
         humanReviewed: true,
         note:
-          'Complete Aortic stenosis flagship seed with playable clue types and full education payload.',
+          'Complete Kawasaki disease flagship seed with playable clue types and full education payload.',
       },
       findings: [],
       completedAt: now,
     },
   });
 
-  console.log('Seeded Aortic Stenosis:', {
+  console.log('Seeded Kawasaki Disease:', {
     registryId: params.diagnosisRegistryId,
     caseId: seededCase.id,
     revisionId: revision.id,

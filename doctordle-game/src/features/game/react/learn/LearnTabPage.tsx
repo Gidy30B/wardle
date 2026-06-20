@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import type { LearnLibraryCase } from "../../game.types";
 import type {
   DetailTab,
@@ -11,23 +12,27 @@ import { useRecallQueue } from "./hooks/useRecallQueue";
 import { useReviewPersistence } from "./hooks/useReviewPersistence";
 import { useSelectedLearnCase } from "./hooks/useSelectedLearnCase";
 import {
-  ArchiveControls,
   ArchiveEmptyState,
-  CaseLibraryList,
   DesktopLearnHeader,
   MobileCaseArchive,
   MobileLearnHeader,
   MobileSpecialtyCasesScreen,
   MobileStatsBar,
+  SpecialtyRail,
 } from "./archive";
+import { DifficultyBadge, TrackBadge } from "./archive/shared";
 import { CaseDetail, MobileCaseDetail } from "./detail";
 import { AdaptiveRecallQueueController } from "./recall/components";
 import {
   buildAdaptiveRecallQueue,
   createEmptyLearnReviewState,
   filterLearnCases,
+  formatArchiveCaseLabel,
+  formatStudyTime,
   getCaseSpecialty,
+  getCaseDiagnosisLabel,
   getLearnReviewCaseKey,
+  groupLearnCasesBySpecialty,
   mergeLatestPlayedCase,
   titleCase,
 } from "./domain/learnDomain";
@@ -40,21 +45,32 @@ import { ALL_FILTERS } from "./learn.constants";
  */
 function DesktopLoadingSkeleton() {
   return (
-    <div className="grid grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] gap-4 animate-pulse">
-      <div className="space-y-2">
-        {Array.from({ length: 6 }).map((_, i) => (
+    <div className="space-y-4 animate-pulse">
+      <div className="flex items-center justify-between gap-4 rounded-[18px] border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+        <div className="flex min-w-0 flex-1 gap-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-9 min-w-20 flex-1 rounded-full bg-white/5"
+              style={{ opacity: 1 - i * 0.12 }}
+            />
+          ))}
+        </div>
+        <div className="h-11 w-72 rounded-[16px] bg-white/5" />
+      </div>
+      <div className="rounded-[24px] border border-white/10 bg-white/[0.025] p-6">
+        <div className="h-9 w-1/2 rounded-md bg-white/5" />
+        <div className="mt-3 h-4 w-full rounded bg-white/[0.04]" />
+        <div className="mt-2 h-4 w-5/6 rounded bg-white/[0.04]" />
+        <div className="mt-5 grid gap-3 min-[760px]:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className="h-14 rounded-lg bg-white/5"
+            className="h-28 rounded-lg bg-white/5"
             style={{ opacity: 1 - i * 0.12 }}
           />
         ))}
-      </div>
-      <div className="space-y-3">
-        <div className="h-8 w-2/3 rounded-md bg-white/5" />
-        <div className="h-4 w-full rounded bg-white/[0.04]" />
-        <div className="h-4 w-5/6 rounded bg-white/[0.04]" />
-        <div className="mt-4 h-32 rounded-lg bg-white/5" />
+        </div>
       </div>
     </div>
   );
@@ -209,6 +225,121 @@ function DesktopArchiveEmptyState({
   return <DesktopFilteredEmptyState onClearFilters={onClearFilters} />;
 }
 
+function CasePickerDropdown({
+  cases,
+  selectedCase,
+  onSelectCase,
+}: {
+  cases: LearnLibraryCase[];
+  selectedCase: LearnLibraryCase | null;
+  onSelectCase: (dailyCaseId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedIndex = selectedCase
+    ? cases.findIndex((item) => item.dailyCaseId === selectedCase.dailyCaseId)
+    : -1;
+  const selectedDiagnosis = selectedCase
+    ? getCaseDiagnosisLabel(selectedCase)
+    : "No case selected";
+  const positionLabel =
+    selectedIndex >= 0 ? `${selectedIndex + 1}/${cases.length}` : `0/${cases.length}`;
+  const groupedCases = groupLearnCasesBySpecialty(cases);
+
+  return (
+    <div className="relative min-w-0 shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        disabled={!cases.length}
+        aria-expanded={open}
+        className="flex min-h-[46px] w-[min(420px,38vw)] min-w-[260px] items-center justify-between gap-3 rounded-[16px] border border-[rgba(0,180,166,0.22)] bg-[rgba(0,180,166,0.08)] px-4 py-2 text-left transition hover:bg-[rgba(0,180,166,0.12)] disabled:cursor-not-allowed disabled:opacity-45"
+      >
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-black text-[var(--wardle-color-mint)]">
+            {selectedDiagnosis}
+          </span>
+          <span className="mt-0.5 block font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--wardle-color-teal)]/62">
+            {positionLabel}
+          </span>
+        </span>
+        <span className="shrink-0 text-[var(--wardle-color-teal)]/80">
+          {open ? (
+            <ChevronUp className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />
+          ) : (
+            <ChevronDown className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />
+          )}
+        </span>
+      </button>
+
+      {open ? (
+        <div className="absolute right-0 z-50 mt-2 max-h-[min(540px,calc(100dvh-180px))] w-[min(560px,calc(100vw-320px))] min-w-[360px] overflow-y-auto rounded-[18px] border border-white/[0.09] bg-[var(--wardle-surface-sticky-solid)] p-2 shadow-[0_28px_70px_rgba(0,0,0,0.42)]">
+          {groupedCases.map((group) => (
+            <div key={group.specialty.key} className="py-1.5">
+              <div className="mb-1 flex items-baseline gap-2 px-2">
+                <p className="font-brand-mono text-[9px] font-black uppercase tracking-[0.16em] text-white/32">
+                  {group.specialty.label}
+                </p>
+                <span className="font-brand-mono text-[10px] text-white/22">
+                  {group.cases.length}
+                </span>
+              </div>
+              <div className="space-y-1">
+                {group.cases.map((item) => {
+                  const diagnosis = getCaseDiagnosisLabel(item);
+                  const selected = item.dailyCaseId === selectedCase?.dailyCaseId;
+                  const timeLabel =
+                    item.playerResult.timeSecs !== null
+                      ? formatStudyTime(item.playerResult.timeSecs)
+                      : null;
+
+                  return (
+                    <button
+                      key={item.dailyCaseId}
+                      type="button"
+                      onClick={() => {
+                        onSelectCase(item.dailyCaseId);
+                        setOpen(false);
+                      }}
+                      className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-[13px] border px-3 py-2.5 text-left transition ${
+                        selected
+                          ? "border-[rgba(0,180,166,0.32)] bg-[rgba(0,180,166,0.12)]"
+                          : "border-transparent bg-white/[0.025] hover:border-white/[0.08] hover:bg-white/[0.045]"
+                      }`}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={`block truncate text-[13px] font-extrabold ${
+                            selected
+                              ? "text-[var(--wardle-color-mint)]"
+                              : "text-white/72"
+                          }`}
+                        >
+                          {diagnosis}
+                        </span>
+                        <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+                          <TrackBadge track={item.track} />
+                          <DifficultyBadge difficulty={item.case.difficulty} />
+                          <span className="font-brand-mono text-[10px] text-white/30">
+                            {formatArchiveCaseLabel(item)}
+                            {timeLabel ? ` · ${timeLabel}` : ""}
+                          </span>
+                        </span>
+                      </span>
+                      {selected ? (
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--wardle-color-teal)]" />
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function MobileNeverPlayedState() {
   return (
     <div className="wardle-learn-slide-up mx-4 mt-3 overflow-hidden rounded-[22px] border border-white/[0.08] bg-white/[0.025] shadow-[0_18px_46px_rgba(0,0,0,0.22)]">
@@ -312,8 +443,7 @@ export default function LearnTabPage({
     setSelectedMobileSpecialty(null);
   };
 
-  const { filters, setShowArchiveFilters, showArchiveFilters, updateFilters } =
-    useLearnFilters(resetLearnSelection);
+  const { filters, updateFilters } = useLearnFilters(resetLearnSelection);
 
   const completedCases = useMemo(
     () =>
@@ -569,38 +699,48 @@ export default function LearnTabPage({
 
       {/* ── Desktop ── */}
       <main className="hidden h-full min-h-0 w-full max-w-full flex-1 basis-0 flex-col overflow-x-hidden overflow-y-auto overscroll-contain px-1 pb-6 pt-1 sm:px-2 lg:flex">
-        <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden">
+        <div className="min-w-0 max-w-full space-y-3 overflow-x-hidden">
           {hasAnyCompletedCases ? (
             <DesktopLearnHeader summary={displayedSummary} />
           ) : null}
 
-          {/* Controls are always shown when there are completed cases,
-              even if filtered results are empty, so users can adjust filters. */}
-          {hasArchiveCases && !libraryLoading && !libraryError && (
-            <ArchiveControls
-              visibleCount={filteredCases.length}
-              completedCount={archiveCaseCount}
-              filterOptions={filterOptions}
-              filters={filters}
-              showAdvancedFilters={showArchiveFilters}
-              onChangeFilters={updateFilters}
-              onToggleAdvancedFilters={() => setShowArchiveFilters((v) => !v)}
-            />
-          )}
-
-          {filteredCases.length > 0 ? (
-            <div className="grid min-w-0 grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] gap-4">
-              <CaseLibraryList
-                cases={filteredCases}
-                selectedCaseId={activeCase?.dailyCaseId ?? null}
-                onSelectCase={selectCase}
-              />
-              <CaseDetail
-                item={activeCase}
-                activeTab={activeTab}
-                onChangeTab={setActiveTab}
-                onBack={clearSelectedCase}
-              />
+          {hasArchiveCases && !libraryLoading && !libraryError ? (
+            <div className="min-w-0 space-y-4">
+              <div className="sticky top-0 z-40 rounded-[18px] border border-white/[0.06] bg-[var(--wardle-surface-sticky)] px-3 py-3 backdrop-blur-xl">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <SpecialtyRail
+                      filterOptions={filterOptions}
+                      activeSpecialty={filters.specialty}
+                      completedCount={archiveCaseCount}
+                      onSelect={(specialty) =>
+                        updateFilters({ ...filters, specialty })
+                      }
+                    />
+                  </div>
+                  <CasePickerDropdown
+                    cases={filteredCases}
+                    selectedCase={activeCase}
+                    onSelectCase={selectCase}
+                  />
+                </div>
+              </div>
+              {filteredCases.length > 0 ? (
+                <CaseDetail
+                  item={activeCase}
+                  activeTab={activeTab}
+                  onChangeTab={setActiveTab}
+                  onBack={clearSelectedCase}
+                />
+              ) : (
+                <DesktopArchiveEmptyState
+                  completedCount={archiveCaseCount}
+                  loading={false}
+                  error={false}
+                  onRetry={onRetryLibrary}
+                  onClearFilters={() => updateFilters(ALL_FILTERS)}
+                />
+              )}
             </div>
           ) : (
             <DesktopArchiveEmptyState
