@@ -19,6 +19,7 @@
   --wardle-surface-card-compact: rgba(30, 30, 44, 0.92);
   --wardle-surface-sticky: rgba(30, 30, 44, 0.98);
   --wardle-surface-sticky-solid: #1E1E2C;
+  --wardle-bottom-nav-height: calc(10px + 36px + 3px + 12px + 20px);
   --wardle-native-status-bar: #1E1E2C;
   --wardle-native-nav-bar: #1E1E2C;
 }
@@ -100,6 +101,7 @@ textarea {
 .wardle-bottom-nav {
   display: flex;
   width: 100%;
+  min-height: var(--wardle-bottom-nav-height);
   background: rgba(28, 28, 40, 0.96);
   padding: 10px 0 20px;
 }

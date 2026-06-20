@@ -91,8 +91,8 @@ export function PwaInstallBanner({
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[80] px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] sm:px-4">
-      <div className="pointer-events-auto mx-auto flex max-w-[400px] items-start gap-3 overflow-hidden rounded-2xl border border-white/[0.07] border-l-[3px] border-l-[var(--wardle-color-teal)]/60 bg-[var(--wardle-surface-sticky-solid)] p-4 shadow-[0_24px_60px_rgba(0,0,0,0.24)]">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[80] px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] max-lg:bottom-[var(--wardle-bottom-nav-height)] sm:px-4 lg:bottom-0">
+      <div className="pointer-events-auto mx-auto flex max-w-[400px] items-start gap-3 overflow-hidden rounded-2xl border border-white/[0.07] border-l-[3px] border-l-[var(--wardle-color-teal)]/60 bg-[var(--wardle-surface-sticky-solid)] p-4">
         <img
           src="/wardle-icon.png"
           alt=""
@@ -100,15 +100,11 @@ export function PwaInstallBanner({
         />
 
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[var(--wardle-color-teal)]">
-            ✓ Case solved
-          </p>
-          <p className="mt-1 text-[13px] font-black leading-[1.3] text-[var(--wardle-color-mint)]">
-            Keep the streak going — install Wardle
+          <p className="text-[13px] font-black leading-[1.3] text-[var(--wardle-color-mint)]">
+            Install Wardle
           </p>
           <p className="mt-1 text-[12px] leading-[1.4] text-white/52">
-            One tap from your home screen, with reminders so you never miss
-            a day.
+            Keep your streak going.
           </p>
 
           <div className="mt-3 flex items-center gap-3">
