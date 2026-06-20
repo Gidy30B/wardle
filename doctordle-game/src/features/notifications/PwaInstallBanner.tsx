@@ -46,33 +46,34 @@ export function PwaInstallBanner() {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[80] px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] sm:px-4">
-      <div className="pointer-events-auto mx-auto flex max-w-[440px] items-center gap-3 rounded-[18px] border border-white/[0.08] bg-[var(--wardle-surface-sticky-solid)] px-3.5 py-3 shadow-[0_18px_50px_rgba(0,0,0,0.36)] backdrop-blur">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[80] px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] sm:px-4">
+      {/*
+        Lighter "toast" treatment, not a modal-adjacent card: smaller icon,
+        tighter padding, a quiet border instead of backdrop-blur + heavy
+        shadow, and "Install" as plain text rather than a competing pill
+        so the row reads as one quick line, not two stacked decisions.
+      */}
+      <div className="pointer-events-auto mx-auto flex max-w-[380px] items-center gap-2.5 rounded-2xl border border-white/[0.06] bg-[var(--wardle-surface-sticky-solid)] px-3 py-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.28)]">
         <img
           src="/wardle-icon.png"
           alt=""
-          className="h-10 w-10 shrink-0 rounded-[12px]"
+          className="h-7 w-7 shrink-0 rounded-[8px]"
         />
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-black leading-4 text-[var(--wardle-color-mint)]">
-            Install Wardle
-          </p>
-          <p className="mt-0.5 break-words text-[12px] leading-4 text-white/56">
-            Get daily cases and reminders from your home screen.
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <p className="min-w-0 flex-1 truncate text-[12px] font-bold text-[var(--wardle-color-mint)]">
+          Install Wardle for quicker daily access
+        </p>
+        <div className="flex shrink-0 items-center gap-2.5">
           <button
             type="button"
             onClick={dismiss}
-            className="rounded-full px-2.5 py-2 text-[11px] font-black text-white/44 transition hover:text-white/68"
+            className="text-[11px] font-bold text-white/40 transition hover:text-white/64"
           >
             Not now
           </button>
           <button
             type="button"
             onClick={() => void install()}
-            className="rounded-full border border-[var(--wardle-color-teal)]/24 bg-[var(--wardle-color-teal)]/12 px-3 py-2 text-[11px] font-black text-[var(--wardle-color-teal)] transition hover:border-[var(--wardle-color-teal)]/36 hover:bg-[var(--wardle-color-teal)]/16"
+            className="text-[11px] font-bold text-[var(--wardle-color-teal)] transition hover:text-[var(--wardle-color-teal)]/80"
           >
             Install
           </button>
