@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  canonicalizeSpecialtyLabel,
   getSpecialtyIconKey,
   normalizeSpecialtyName,
 } from './specialty-icon-registry.ts';
@@ -48,9 +49,19 @@ describe('specialty icon registry', () => {
     assert.equal(getSpecialtyIconKey('Pediatrics'), 'baby');
     assert.equal(getSpecialtyIconKey('Paediatrics'), 'baby');
     assert.equal(getSpecialtyIconKey('Orthopedics'), 'bone');
+    assert.equal(getSpecialtyIconKey('Orthopedic'), 'bone');
     assert.equal(getSpecialtyIconKey('Orthopaedics'), 'bone');
+    assert.equal(getSpecialtyIconKey('Orthopaedic'), 'bone');
     assert.equal(getSpecialtyIconKey('Hematology'), 'microscope');
     assert.equal(getSpecialtyIconKey('Haematology'), 'microscope');
+  });
+
+  it('canonicalizes orthopaedic display variants', () => {
+    assert.equal(canonicalizeSpecialtyLabel('Orthopedics'), 'Orthopaedics');
+    assert.equal(canonicalizeSpecialtyLabel('Orthopedic'), 'Orthopaedics');
+    assert.equal(canonicalizeSpecialtyLabel('Orthopaedic'), 'Orthopaedics');
+    assert.equal(canonicalizeSpecialtyLabel('Orthopaedics'), 'Orthopaedics');
+    assert.equal(canonicalizeSpecialtyLabel('  Cardiology  '), 'Cardiology');
   });
 
   it('resolves combined specialty labels', () => {

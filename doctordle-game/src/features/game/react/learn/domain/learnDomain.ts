@@ -6,6 +6,7 @@ import type {
   LearnLibraryResponse,
 } from "../../../game.types";
 import type { RoundViewModel } from "../../../round.types";
+import { canonicalizeSpecialtyLabel } from "../../specialties/specialty-icon-registry";
 import { LEARN_REVIEW_STORAGE_KEY } from "../learn.constants";
 import type {
   LearnConfidence,
@@ -513,7 +514,9 @@ export function getCaseSpecialty(item: LearnLibraryCase) {
     getStringValue(itemRecord.specialtyKey) ??
     getStringValue(itemRecord.categoryKey) ??
     rawLabel;
-  return { key: normalizeFilterKey(rawKey), label: rawLabel };
+  const label = canonicalizeSpecialtyLabel(rawLabel) ?? rawLabel;
+  const key = label === rawLabel ? rawKey : label;
+  return { key: normalizeFilterKey(key), label };
 }
 
 export function getCaseDiagnosisLabel(item: LearnLibraryCase) {

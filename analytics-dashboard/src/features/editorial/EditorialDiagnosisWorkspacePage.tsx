@@ -101,6 +101,14 @@ import {
   hasClaimTarget,
   normalizeWorkspaceTab,
 } from './workspace/workspaceDeepLinks';
+import {
+  focusWorkspaceSection,
+  getCurrentWorkspaceHashTarget,
+  markWorkspaceSectionReached,
+  replaceWorkspaceHash,
+  WORKSPACE_SECTION_IDS_BY_TAB,
+  type WorkspaceSectionTarget,
+} from './workspace/workspaceSectionNavigation';
 
 export default function EditorialDiagnosisWorkspacePage() {
   const { diagnosisRegistryId } = useParams<{ diagnosisRegistryId: string }>();
@@ -111,7 +119,7 @@ export default function EditorialDiagnosisWorkspacePage() {
   const claimTarget = useMemo(() => getClaimTarget(searchParams), [searchParams]);
   const hasExplicitClaimTarget = hasClaimTarget(claimTarget);
   const activeTab: WorkspaceTab = normalizeWorkspaceTab(searchParams.get('tab'));
-  const setActiveTab = (tab: WorkspaceTab) => {
+  const setActiveTab = useCallback((tab: WorkspaceTab) => {
     const next = new URLSearchParams(searchParams);
     if (tab === 'overview') {
       next.delete('tab');
@@ -119,7 +127,10 @@ export default function EditorialDiagnosisWorkspacePage() {
       next.set('tab', tab);
     }
     setSearchParams(next, { replace: true });
-  };
+  }, [searchParams, setSearchParams]);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  const [pendingSectionTarget, setPendingSectionTarget] =
+    useState<WorkspaceSectionTarget | null>(null);
   const [selectedCoverageKey, setSelectedCoverageKey] = useState<string | null>(
     null,
   );
@@ -231,6 +242,16 @@ export default function EditorialDiagnosisWorkspacePage() {
     setActiveTab('teaching-rules');
   }
 
+  const navigateToWorkspaceSection = useCallback(
+    (target: WorkspaceSectionTarget) => {
+      setPendingSectionTarget(target);
+      if (target.tab !== activeTab) {
+        setActiveTab(target.tab);
+      }
+    },
+    [activeTab, setActiveTab],
+  );
+
   const refreshWorkspace = useCallback(async () => {
     if (!diagnosisRegistryId) {
       setWorkspace(null);
@@ -280,11 +301,29 @@ export default function EditorialDiagnosisWorkspacePage() {
   }, [refreshWorkspace]);
 
   useEffect(() => {
+    function syncHashTarget() {
+      const target = getCurrentWorkspaceHashTarget();
+      if (!target) {
+        return;
+      }
+
+      setPendingSectionTarget(target);
+      if (target.tab !== activeTab) {
+        setActiveTab(target.tab);
+      }
+    }
+
+    syncHashTarget();
+    window.addEventListener('hashchange', syncHashTarget);
+    return () => window.removeEventListener('hashchange', syncHashTarget);
+  }, [activeTab, diagnosisRegistryId, setActiveTab]);
+
+  useEffect(() => {
     if (!diagnosisRegistryId) {
       return;
     }
     const key = `editorial-workspace-scroll:${diagnosisRegistryId}:${activeTab}`;
-    if (hasExplicitClaimTarget) {
+    if (hasExplicitClaimTarget || getCurrentWorkspaceHashTarget()) {
       return;
     }
     const saved = Number(sessionStorage.getItem(key) ?? 0);
@@ -296,6 +335,96 @@ export default function EditorialDiagnosisWorkspacePage() {
       sessionStorage.setItem(key, String(window.scrollY));
     };
   }, [activeTab, diagnosisRegistryId, hasExplicitClaimTarget]);
+
+  useEffect(() => {
+    if (!pendingSectionTarget || pendingSectionTarget.tab !== activeTab) {
+      return;
+    }
+
+    let cancelled = false;
+    let attempt = 0;
+    let timeout: number | null = null;
+
+    function scrollWhenReady() {
+      if (cancelled || !pendingSectionTarget) {
+        return;
+      }
+
+      attempt += 1;
+      const didScroll = focusWorkspaceSection(
+        pendingSectionTarget.sectionId,
+        'smooth',
+      );
+
+      if (didScroll) {
+        replaceWorkspaceHash(pendingSectionTarget.sectionId);
+        markWorkspaceSectionReached(pendingSectionTarget.sectionId);
+        setActiveSectionId(pendingSectionTarget.sectionId);
+        setPendingSectionTarget(null);
+        return;
+      }
+
+      if (attempt < 8) {
+        timeout = window.setTimeout(scrollWhenReady, 80);
+      }
+    }
+
+    timeout = window.setTimeout(scrollWhenReady, 80);
+
+    return () => {
+      cancelled = true;
+      if (timeout !== null) {
+        window.clearTimeout(timeout);
+      }
+    };
+  }, [activeTab, pendingSectionTarget]);
+
+  useEffect(() => {
+    const sectionIds = WORKSPACE_SECTION_IDS_BY_TAB[activeTab];
+    const elements = sectionIds
+      .map((sectionId) => document.getElementById(sectionId))
+      .filter((element): element is HTMLElement => element !== null);
+
+    if (!elements.length) {
+      setActiveSectionId(null);
+      return;
+    }
+
+    let rafId: number | null = null;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visibleEntries = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((left, right) => left.boundingClientRect.top - right.boundingClientRect.top);
+
+        if (!visibleEntries.length) {
+          return;
+        }
+
+        const nextId = visibleEntries[0].target.id;
+        if (rafId !== null) {
+          window.cancelAnimationFrame(rafId);
+        }
+        rafId = window.requestAnimationFrame(() => {
+          setActiveSectionId((current) => (current === nextId ? current : nextId));
+        });
+      },
+      {
+        root: null,
+        rootMargin: '-120px 0px -60% 0px',
+        threshold: [0, 0.1, 0.35],
+      },
+    );
+
+    elements.forEach((element) => observer.observe(element));
+
+    return () => {
+      observer.disconnect();
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+    };
+  }, [activeTab, workspace]);
 
   useEffect(() => {
     closeRuleDrawer();
@@ -1008,7 +1137,7 @@ export default function EditorialDiagnosisWorkspacePage() {
             <OverviewTab
               workspace={workspace}
               onGapSelect={openCoverageGap}
-              onTabChange={setActiveTab}
+              onSectionNavigate={navigateToWorkspaceSection}
               canRunSeniorActions={canRunSeniorActions}
               seniorDisabledReason={seniorDisabledReason}
               pendingAction={pendingAction}
@@ -1126,7 +1255,8 @@ export default function EditorialDiagnosisWorkspacePage() {
           <EditorialRightRail
             workspace={workspace}
             activeTab={activeTab}
-            onTabChange={setActiveTab}
+            activeSectionId={activeSectionId}
+            onSectionNavigate={navigateToWorkspaceSection}
           />
         </div>
       </div>

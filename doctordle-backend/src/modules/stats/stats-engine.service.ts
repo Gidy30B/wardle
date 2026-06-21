@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../core/db/prisma.service';
 import { RankService } from '../gameplay/rank.service';
 import { XpService } from '../gameplay/xp.service';
+import { normalizeSpecialtyDisplayName } from '../diagnosis-registry/diagnosis-registry-specialty';
 import type {
   StatsDimensionSummary,
   StatsDimensionType,
@@ -382,10 +383,13 @@ export class StatsEngineService {
   }
 
   private resolveSpecialtyLabel(session: CompletedSession): string {
-    return this.normalizeLabel(
+    const rawSpecialty =
       session.case.diagnosisRegistry?.specialty ??
-        session.case.diagnosisRegistry?.category,
-      'General',
+      session.case.diagnosisRegistry?.category;
+
+    return (
+      normalizeSpecialtyDisplayName(rawSpecialty) ??
+      this.normalizeLabel(rawSpecialty, 'General')
     );
   }
 

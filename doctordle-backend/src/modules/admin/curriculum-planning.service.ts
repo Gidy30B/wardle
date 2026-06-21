@@ -11,6 +11,7 @@ import {
   EditorialCoverageDashboardService,
   type EditorialCoverageQuery,
 } from './editorial-coverage-dashboard.service';
+import { normalizeSpecialtyDisplayName } from '../diagnosis-registry/diagnosis-registry-specialty';
 
 type CoverageDiagnosis = Awaited<
   ReturnType<EditorialCoverageDashboardService['getDiagnoses']>
@@ -653,7 +654,8 @@ export class CurriculumPlanningService {
 
     const bySpecialty = new Map<string, typeof registries>();
     for (const registry of registries) {
-      const specialty = registry.specialty ?? 'Unassigned';
+      const specialty =
+        normalizeSpecialtyDisplayName(registry.specialty) ?? 'Unassigned';
       bySpecialty.set(specialty, [
         ...(bySpecialty.get(specialty) ?? []),
         registry,
@@ -898,7 +900,7 @@ export class CurriculumPlanningService {
 
   private normalizeQuery(query: CurriculumPlannerQuery): CurriculumPlannerQuery {
     return {
-      specialty: query.specialty?.trim() || undefined,
+      specialty: normalizeSpecialtyDisplayName(query.specialty) ?? undefined,
       lifecycleState: query.lifecycleState?.trim() || undefined,
       lifecycleReadiness: query.lifecycleReadiness?.trim() || undefined,
       onboardingState:

@@ -21,6 +21,7 @@ import {
 import { createApiClient } from '../../api/client';
 import ActionFeedback from '../../components/ui/ActionFeedback';
 import StatusBadge from '../../components/ui/StatusBadge';
+import { canonicalizeSpecialtyLabel } from '../specialties/specialty-icon-registry';
 import { useActionFeedback } from '../../hooks/useActionFeedback';
 
 type CreatedResult = Extract<GenerateCaseResultItem, { status: 'created' }>;
@@ -111,7 +112,7 @@ function formatPlannerStatus(slot: PlannedGenerationSlot) {
 }
 
 function normalizeForSearch(value: string | null | undefined) {
-  return (value ?? '').trim().toLowerCase();
+  return (canonicalizeSpecialtyLabel(value) ?? value ?? '').trim().toLowerCase();
 }
 
 function getUniqueOptions(
@@ -121,7 +122,11 @@ function getUniqueOptions(
   return Array.from(
     new Set(
       items
-        .map((item) => item[field])
+        .map((item) =>
+          field === 'specialty'
+            ? canonicalizeSpecialtyLabel(item[field])
+            : item[field],
+        )
         .filter((value): value is string => Boolean(value)),
     ),
   ).sort((left, right) => left.localeCompare(right));

@@ -83,21 +83,22 @@ export function TeachingLearningTab({
           disabled={pendingAction !== null}
         />
       ) : null}
-      <EditorialStream
-        eyebrow="Teaching & learning"
-        title="Clinical distinction stream"
-        subtitle={`Focus: ${focusDetail}. Curate distinctions that drive education, cases, and differential graph coverage.`}
-        action={
-          <button
-            type="button"
-            onClick={onGenerateCandidates}
-            disabled={pendingAction !== null}
-            className="editorial-action editorial-action-primary disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Generate candidates
-          </button>
-        }
-      >
+      <div id="teaching-rules-stream" className="scroll-mt-24" tabIndex={-1}>
+        <EditorialStream
+          eyebrow="Teaching & learning"
+          title="Clinical distinction stream"
+          subtitle={`Focus: ${focusDetail}. Curate distinctions that drive education, cases, and differential graph coverage.`}
+          action={
+            <button
+              type="button"
+              onClick={onGenerateCandidates}
+              disabled={pendingAction !== null}
+              className="editorial-action editorial-action-primary disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Generate candidates
+            </button>
+          }
+        >
         <CoverageStateStrip
           items={[
             {
@@ -307,7 +308,11 @@ export function TeachingLearningTab({
           title="Rule editor and coverage matrix"
           summary={`${workspace.coverageMatrix.length} coverage rows, full create/edit tooling preserved`}
         >
-          <div className="space-y-3">
+          <div
+            id="teaching-coverage-matrix"
+            className="scroll-mt-24 space-y-3"
+            tabIndex={-1}
+          >
             <TeachingRulesCard
               rules={rules}
               loading={loading}
@@ -328,7 +333,8 @@ export function TeachingLearningTab({
             />
           </div>
         </StreamDisclosure>
-      </EditorialStream>
+        </EditorialStream>
+      </div>
     </div>
   );
 }

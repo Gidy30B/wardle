@@ -41,11 +41,15 @@ import {
   scoreTone,
   severityRank,
 } from '../workspaceTransforms';
-import type { WorkspaceTab } from '../workspaceTypes';
+import {
+  getDefaultWorkspaceSectionForTab,
+  getWorkspaceSectionForEducationSection,
+  type WorkspaceSectionTarget,
+} from '../workspaceSectionNavigation';
 export function OverviewTab({
   workspace,
   onGapSelect,
-  onTabChange,
+  onSectionNavigate,
   canRunSeniorActions,
   seniorDisabledReason,
   pendingAction,
@@ -54,7 +58,7 @@ export function OverviewTab({
 }: {
   workspace: DiagnosisEditorialWorkspace;
   onGapSelect: (gap: WorkspaceCoverageGap) => void;
-  onTabChange: (tab: WorkspaceTab) => void;
+  onSectionNavigate: (target: WorkspaceSectionTarget) => void;
   canRunSeniorActions: boolean;
   seniorDisabledReason: string;
   pendingAction: string | null;
@@ -63,11 +67,17 @@ export function OverviewTab({
 }) {
   const blockers = workspace.workspaceSummary.blockers;
   const warnings = workspace.workspaceSummary.warnings;
-  const story = buildOverviewStory(workspace, onTabChange, onGapSelect);
+  const story = buildOverviewStory(workspace, onSectionNavigate, onGapSelect);
   const primaryAction = story.primaryAction;
 
   return (
     <div className="space-y-4">
+      <DiagnosisHealthPanel
+        workspace={workspace}
+        onGapSelect={onGapSelect}
+        onSectionNavigate={onSectionNavigate}
+      />
+
       <EditorialStream
         eyebrow="Overview"
         title="Publication readiness narrative"
@@ -84,7 +94,8 @@ export function OverviewTab({
               <button
                 type="button"
                 disabled={!primaryAction.enabled}
-                onClick={() => onTabChange(primaryAction.targetTab)}
+                aria-disabled={!primaryAction.enabled}
+                onClick={() => onSectionNavigate(primaryAction.target)}
                 className="editorial-action editorial-action-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {primaryAction.label}
@@ -206,7 +217,8 @@ export function OverviewTab({
                 <button
                   type="button"
                   disabled={!primaryAction.enabled}
-                  onClick={() => onTabChange(primaryAction.targetTab)}
+                  aria-disabled={!primaryAction.enabled}
+                  onClick={() => onSectionNavigate(primaryAction.target)}
                   className="editorial-action editorial-action-primary px-2.5 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {primaryAction.label}
@@ -235,7 +247,7 @@ export function OverviewTab({
           <div className="space-y-4">
             <RecommendedActionsCard
               actions={workspace.recommendedActions}
-              onTabChange={onTabChange}
+              onSectionNavigate={onSectionNavigate}
             />
             <CoverageGapsCard
               gaps={workspace.coverageGaps}
@@ -251,7 +263,7 @@ export function OverviewTab({
           <div className="space-y-4">
             <ExplainabilityPanel
               workspace={workspace}
-              onTabChange={onTabChange}
+              onSectionNavigate={onSectionNavigate}
               onGapSelect={onGapSelect}
             />
           </div>
@@ -262,10 +274,15 @@ export function OverviewTab({
           summary="Lifecycle, onboarding, readiness, and score details"
         >
           <div className="space-y-4">
-            <OnboardingCard workspace={workspace} onTabChange={onTabChange} />
+            <OnboardingCard
+              workspace={workspace}
+              onSectionNavigate={onSectionNavigate}
+            />
             <ReadinessBreakdownCard
               items={workspace.readinessBreakdown}
-              onTabChange={onTabChange}
+              onSectionNavigate={(item) =>
+                onSectionNavigate(getDefaultWorkspaceSectionForTab(item.targetTab))
+              }
             />
             <LifecycleGovernanceCard
               lifecycle={workspace.lifecycleGovernance}
@@ -293,8 +310,9 @@ type OverviewStory = {
   currentState: string;
   primaryAction: {
     label: string;
-    targetTab: WorkspaceTab;
+    target: WorkspaceSectionTarget;
     enabled: boolean;
+    disabledReason?: string | null;
   } | null;
   blocker: {
     title: string;
@@ -328,6 +346,254 @@ type OverviewStory = {
   };
 };
 
+function DiagnosisHealthPanel({
+  workspace,
+  onGapSelect,
+  onSectionNavigate,
+}: {
+  workspace: DiagnosisEditorialWorkspace;
+  onGapSelect: (gap: WorkspaceCoverageGap) => void;
+  onSectionNavigate: (target: WorkspaceSectionTarget) => void;
+}) {
+  const sectionBlockers = workspace.education.sectionHealth.filter(
+    (section) => section.blockers.length > 0,
+  ).length;
+  const sectionWarnings = workspace.education.sectionHealth.filter(
+    (section) => section.warnings.length > 0,
+  ).length;
+  const difficultySummary = buildDifficultySummary(workspace);
+  const graphReady =
+    workspace.graph.readiness === 'fact_ready' ||
+    workspace.graph.readiness === 'ready';
+  const firstGap = workspace.coverageGaps[0] ?? null;
+  const nextActions = workspace.recommendedActions.slice(0, 3);
+
+  return (
+    <section
+      id="workspace-diagnosis-health"
+      className="rounded-lg border border-[var(--color-navy-border)] bg-white/[0.03] p-4"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="editorial-eyebrow">Diagnosis health</p>
+          <h2 className="mt-1 text-base font-semibold text-slate-100">
+            Coverage, risks, and next best actions
+          </h2>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+            A compact production view over registry metadata, education,
+            playable cases, graph readiness, and open quality gaps.
+          </p>
+        </div>
+        <StatusBadge
+          status={formatLabel(workspace.workspaceSummary.status)}
+          tone={scoreTone(workspace.workspaceSummary.overallScore)}
+        />
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        <HealthMetricCard
+          label="Registry"
+          value={formatLabel(workspace.lifecycle.curriculum)}
+          detail={[
+            workspace.diagnosis.specialty
+              ? formatLabel(workspace.diagnosis.specialty)
+              : null,
+            `${workspace.diagnosis.aliases.length} alias${
+              workspace.diagnosis.aliases.length === 1 ? '' : 'es'
+            }`,
+          ]
+            .filter(Boolean)
+            .join(' - ')}
+          tone={
+            workspace.lifecycle.curriculum === 'blocked'
+              ? 'danger'
+              : workspace.lifecycle.curriculum === 'complete'
+                ? 'success'
+                : 'warning'
+          }
+        />
+        <HealthMetricCard
+          label="Education"
+          value={formatLabel(workspace.education.status)}
+          detail={`${sectionBlockers} section blockers - ${sectionWarnings} warnings`}
+          tone={
+            sectionBlockers
+              ? 'danger'
+              : sectionWarnings
+                ? 'warning'
+                : 'success'
+          }
+        />
+        <HealthMetricCard
+          label="Cases"
+          value={`${workspace.cases.summary.usable}/${workspace.cases.summary.total}`}
+          detail={difficultySummary}
+          tone={workspace.cases.summary.usable ? 'success' : 'warning'}
+        />
+        <HealthMetricCard
+          label="Graph"
+          value={formatLabel(workspace.graph.readiness)}
+          detail={`${workspace.graph.factCount} facts - ${workspace.graph.reviewableCandidateCount} candidates`}
+          tone={graphReady ? 'success' : 'warning'}
+        />
+        <HealthMetricCard
+          label="Coverage"
+          value={`${workspace.coverageGaps.length} gap${
+            workspace.coverageGaps.length === 1 ? '' : 's'
+          }`}
+          detail={`${workspace.coverageMatrix.length} mapped teaching units`}
+          tone={workspace.coverageGaps.length ? 'warning' : 'success'}
+        />
+        <HealthMetricCard
+          label="Quality"
+          value={formatScore(workspace.workspaceSummary.overallScore)}
+          detail={`${workspace.workspaceSummary.blockers.length} blockers - ${workspace.workspaceSummary.warnings.length} warnings`}
+          tone={scoreTone(workspace.workspaceSummary.overallScore)}
+        />
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.55fr)]">
+        <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Next best actions
+            </p>
+            <StatusBadge
+              status={`${nextActions.length} queued`}
+              tone={nextActions.length ? 'warning' : 'success'}
+            />
+          </div>
+          {nextActions.length ? (
+            <div className="mt-3 grid gap-2">
+              {nextActions.map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  disabled={!action.enabled}
+                  aria-disabled={!action.enabled}
+                  onClick={() =>
+                    onSectionNavigate(
+                      getDefaultWorkspaceSectionForTab(action.targetTab),
+                    )
+                  }
+                  className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-2 text-left transition hover:border-[var(--color-teal)]/40 hover:bg-[var(--color-teal)]/10 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold leading-5 text-slate-100">
+                      {action.label}
+                    </p>
+                    <StatusBadge
+                      status={formatLabel(action.severity ?? 'info')}
+                      tone={
+                        action.severity === 'blocker'
+                          ? 'danger'
+                          : action.severity === 'warning'
+                            ? 'warning'
+                            : 'info'
+                      }
+                    />
+                  </div>
+                  {action.disabledReason ? (
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      {action.disabledReason}
+                    </p>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              No recommended actions are currently reported.
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Priority coverage gap
+            </p>
+            <StatusBadge
+              status={firstGap ? formatLabel(firstGap.severity) : 'Clear'}
+              tone={
+                firstGap?.severity === 'blocker'
+                  ? 'danger'
+                  : firstGap
+                    ? 'warning'
+                    : 'success'
+              }
+            />
+          </div>
+          {firstGap ? (
+            <button
+              type="button"
+              onClick={() => onGapSelect(firstGap)}
+              className="mt-3 w-full rounded-lg border border-[var(--color-amber)]/25 bg-[var(--color-amber)]/10 px-3 py-2 text-left transition hover:bg-[var(--color-amber)]/15"
+            >
+              <p className="text-sm font-semibold text-slate-100">
+                {firstGap.title}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-400">
+                {firstGap.recommendedAction}
+              </p>
+            </button>
+          ) : (
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              Education, cases, and graph coverage are aligned for mapped
+              teaching units.
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function HealthMetricCard({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  detail: string;
+  tone: StatusBadgeTone;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 px-3 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          {label}
+        </p>
+        <StatusBadge status={String(value)} tone={tone} />
+      </div>
+      <p className="mt-2 text-xs leading-5 text-slate-400">{detail}</p>
+    </div>
+  );
+}
+
+function buildDifficultySummary(workspace: DiagnosisEditorialWorkspace) {
+  const byDifficulty = workspace.cases.items.reduce<Record<string, number>>(
+    (acc, item) => {
+      const difficulty = formatLabel(item.difficulty || 'unknown');
+      acc[difficulty] = (acc[difficulty] ?? 0) + 1;
+      return acc;
+    },
+    {},
+  );
+  const entries = Object.entries(byDifficulty);
+
+  if (!entries.length) {
+    return 'No cases mapped yet';
+  }
+
+  return entries
+    .slice(0, 3)
+    .map(([difficulty, count]) => `${difficulty} ${count}`)
+    .join(' - ');
+}
+
 function StoryMarker({ children }: { children: string }) {
   return (
     <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -338,7 +604,7 @@ function StoryMarker({ children }: { children: string }) {
 
 function buildOverviewStory(
   workspace: DiagnosisEditorialWorkspace,
-  onTabChange: (tab: WorkspaceTab) => void,
+  onSectionNavigate: (target: WorkspaceSectionTarget) => void,
   onGapSelect: (gap: WorkspaceCoverageGap) => void,
 ): OverviewStory {
   const blockers = workspace.workspaceSummary.blockers;
@@ -370,14 +636,15 @@ function buildOverviewStory(
   const primaryAction = primaryFix
     ? {
         label: primaryFix.label,
-        targetTab: normalizeOverviewTargetTab(primaryFix.targetTab),
+        target: getDefaultWorkspaceSectionForTab(primaryFix.targetTab),
         enabled: true,
       }
     : recommendedAction
       ? {
           label: recommendedAction.label,
-          targetTab: normalizeOverviewTargetTab(recommendedAction.targetTab),
+          target: getDefaultWorkspaceSectionForTab(recommendedAction.targetTab),
           enabled: recommendedAction.enabled,
+          disabledReason: recommendedAction.disabledReason,
         }
       : null;
   const tone: StatusBadgeTone = blockers.length
@@ -442,7 +709,7 @@ function buildOverviewStory(
         tone: firstClaim.blocksPublication
           ? ('danger' as StatusBadgeTone)
           : ('warning' as StatusBadgeTone),
-        action: () => onTabChange('integrity'),
+        action: () => onSectionNavigate(getDefaultWorkspaceSectionForTab('integrity')),
       }
     : firstGap
       ? {
@@ -462,7 +729,7 @@ function buildOverviewStory(
               'Create or review a playable case before treating this diagnosis as learner-ready.',
             badge: 'Case gap',
             tone: 'warning' as StatusBadgeTone,
-            action: () => onTabChange('cases'),
+            action: () => onSectionNavigate(getDefaultWorkspaceSectionForTab('cases')),
           }
         : unresolvedDifferentials > 0
           ? {
@@ -471,7 +738,7 @@ function buildOverviewStory(
                 'Resolve discriminator and mimic mapping so learners can safely distinguish this diagnosis.',
               badge: 'Discriminator gap',
               tone: 'warning' as StatusBadgeTone,
-              action: () => onTabChange('graph'),
+              action: () => onSectionNavigate(getDefaultWorkspaceSectionForTab('graph')),
             }
           : {
               title: 'No claim, case, or discriminator gap is currently first in line.',
@@ -557,21 +824,6 @@ function buildOverviewStory(
   };
 }
 
-function normalizeOverviewTargetTab(tab: string | null | undefined): WorkspaceTab {
-  if (
-    tab === 'overview' ||
-    tab === 'teaching-rules' ||
-    tab === 'editorial-brief' ||
-    tab === 'education' ||
-    tab === 'cases' ||
-    tab === 'graph' ||
-    tab === 'integrity'
-  ) {
-    return tab;
-  }
-  return 'overview';
-}
-
 function severityTone(severity?: string | null): StatusBadgeTone {
   if (severity === 'blocker') return 'danger';
   if (severity === 'warning') return 'warning';
@@ -587,10 +839,10 @@ function riskTierTone(tier?: string | null): StatusBadgeTone {
 
 function OnboardingCard({
   workspace,
-  onTabChange,
+  onSectionNavigate,
 }: {
   workspace: DiagnosisEditorialWorkspace;
-  onTabChange: (tab: WorkspaceTab) => void;
+  onSectionNavigate: (target: WorkspaceSectionTarget) => void;
 }) {
   const onboarding = workspace.onboarding;
   if (!onboarding) {
@@ -651,7 +903,11 @@ function OnboardingCard({
                   <button
                     key={action.id}
                     type="button"
-                    onClick={() => onTabChange(action.targetTab)}
+                    onClick={() =>
+                      onSectionNavigate(
+                        getDefaultWorkspaceSectionForTab(action.targetTab),
+                      )
+                    }
                     className="editorial-action"
                     title={action.reason}
                   >
@@ -912,11 +1168,11 @@ function ReadinessMeter({
 
 function ExplainabilityPanel({
   workspace,
-  onTabChange,
+  onSectionNavigate,
   onGapSelect,
 }: {
   workspace: DiagnosisEditorialWorkspace;
-  onTabChange: (tab: WorkspaceTab) => void;
+  onSectionNavigate: (target: WorkspaceSectionTarget) => void;
   onGapSelect: (gap: WorkspaceCoverageGap) => void;
 }) {
   const weakSections = workspace.education.sectionHealth.filter(
@@ -951,7 +1207,9 @@ function ExplainabilityPanel({
               causedBy={message}
               action="Review the source tab and clear the blocking issue before lifecycle promotion."
               tone="danger"
-              onOpen={() => onTabChange('overview')}
+              onOpen={() =>
+                onSectionNavigate(getDefaultWorkspaceSectionForTab('overview'))
+              }
             />
           ))}
           {workspace.workspaceSummary.warnings.slice(0, 3).map((message, index) => (
@@ -961,7 +1219,9 @@ function ExplainabilityPanel({
               causedBy={message}
               action="Inspect the warning and decide whether to revise or accept the residual risk."
               tone="warning"
-              onOpen={() => onTabChange('overview')}
+              onOpen={() =>
+                onSectionNavigate(getDefaultWorkspaceSectionForTab('overview'))
+              }
             />
           ))}
           {weakSections.slice(0, 4).map((section) => (
@@ -976,7 +1236,11 @@ function ExplainabilityPanel({
               }
               action="Regenerate the weak section as a draft, then review before accepting."
               tone={section.blockers.length ? 'danger' : 'warning'}
-              onOpen={() => onTabChange('education')}
+              onOpen={() =>
+                onSectionNavigate(
+                  getWorkspaceSectionForEducationSection(section.section),
+                )
+              }
             />
           ))}
           {workspace.coverageGaps.slice(0, 5).map((gap, index) => (
@@ -996,7 +1260,9 @@ function ExplainabilityPanel({
               causedBy={item.message}
               action={`Open ${formatLabel(item.targetTab)} and complete the indicated editorial work.`}
               tone={item.severity === 'blocker' ? 'danger' : 'warning'}
-              onOpen={() => onTabChange(item.targetTab)}
+              onOpen={() =>
+                onSectionNavigate(getDefaultWorkspaceSectionForTab(item.targetTab))
+              }
             />
           ))}
           {lifecycleFailures.slice(0, 3).map((failure, index) => (
@@ -1006,7 +1272,9 @@ function ExplainabilityPanel({
               causedBy={failure}
               action="Clear the lifecycle readiness item before changing active/playable/generatable state."
               tone={workspace.lifecycleGovernance?.blockers.includes(failure) ? 'danger' : 'warning'}
-              onOpen={() => onTabChange('overview')}
+              onOpen={() =>
+                onSectionNavigate(getDefaultWorkspaceSectionForTab('overview'))
+              }
             />
           ))}
         </div>
@@ -1162,10 +1430,10 @@ function MaturityExplanationCard({
 
 function RecommendedActionsCard({
   actions,
-  onTabChange,
+  onSectionNavigate,
 }: {
   actions: WorkspaceRecommendedAction[];
-  onTabChange: (tab: WorkspaceTab) => void;
+  onSectionNavigate: (target: WorkspaceSectionTarget) => void;
 }) {
   return (
     <CompactPanel title="Recommended actions">
@@ -1196,7 +1464,12 @@ function RecommendedActionsCard({
                 <button
                   type="button"
                   disabled={!action.enabled}
-                  onClick={() => onTabChange(action.targetTab)}
+                  aria-disabled={!action.enabled}
+                  onClick={() =>
+                    onSectionNavigate(
+                      getDefaultWorkspaceSectionForTab(action.targetTab),
+                    )
+                  }
                   className="editorial-action disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Open

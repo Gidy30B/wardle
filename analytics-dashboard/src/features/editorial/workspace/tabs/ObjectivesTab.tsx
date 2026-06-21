@@ -52,26 +52,30 @@ export function ObjectivesTab({
           disabled={pendingAction !== null}
         />
       ) : null}
-      <EditorialStream
-        eyebrow="Objectives"
-        title="Editorial intent stream"
-        subtitle="Keep learning goals, required mimics, pitfalls, and generation guidance pointed at one clinical teaching outcome."
-        action={
-          <button
-            type="button"
-            onClick={onGenerate}
-            disabled={pendingAction !== null}
-            className="editorial-action editorial-action-primary disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Generate draft brief
-          </button>
-        }
-      >
-        <EditorialBriefSummaryCard workspace={workspace} />
+      <div id="brief-status" className="scroll-mt-24" tabIndex={-1}>
+        <EditorialStream
+          eyebrow="Objectives"
+          title="Editorial intent stream"
+          subtitle="Keep learning goals, required mimics, pitfalls, and generation guidance pointed at one clinical teaching outcome."
+          action={
+            <button
+              type="button"
+              onClick={onGenerate}
+              disabled={pendingAction !== null}
+              className="editorial-action editorial-action-primary disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Generate draft brief
+            </button>
+          }
+        >
+        <div id="brief-objectives" className="scroll-mt-24" tabIndex={-1}>
+          <EditorialBriefSummaryCard workspace={workspace} />
+        </div>
         <StreamDisclosure
           title="Brief authoring and review"
           summary="Create, edit, review, and activate the full editorial brief"
         >
+          <div id="brief-recommendations" className="scroll-mt-24" tabIndex={-1}>
           <EditorialBriefCard
             briefResponse={briefDetail}
             teachingRules={teachingRules}
@@ -85,8 +89,10 @@ export function ObjectivesTab({
             canReviewBrief={canReviewBrief}
             reviewDisabledReason={reviewDisabledReason}
           />
+          </div>
         </StreamDisclosure>
-      </EditorialStream>
+        </EditorialStream>
+      </div>
     </div>
   );
 }

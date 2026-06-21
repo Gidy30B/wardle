@@ -1,15 +1,16 @@
-import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useMemo } from 'react';
 
 import type { DiagnosisEditorialWorkspace } from '../../../../api/admin';
 import StatusBadge from '../../../../components/ui/StatusBadge';
 import type { StatusBadgeTone } from '../../../../components/ui/statusBadgeMeta';
 import {
+  CompactMetricGrid,
   EditorialEntity,
   EditorialRow,
   EditorialStream,
   EmptyGuidance,
   ReasoningThread,
-  SidebarDetailLayout,
   StreamDisclosure,
   TabNextStepCard,
 } from '../EditorialPrimitives';
@@ -21,7 +22,7 @@ import {
   buildRecognitionAnchor,
 } from '../clinicalRecognition';
 import { mimicSurvivalStateMeta } from '../mimicSurvival';
-import { formatLabel } from '../workspaceTransforms';
+import { formatDate, formatLabel, formatScore } from '../workspaceTransforms';
 
 type ClinicalSectionId =
   | 'presentation'
@@ -44,11 +45,11 @@ export function ClinicalPictureTab({
 }: {
   workspace: DiagnosisEditorialWorkspace;
 }) {
-  const [activeSectionId, setActiveSectionId] =
-    useState<ClinicalSectionId>('presentation');
   const sections = useMemo(() => buildClinicalSections(workspace), [workspace]);
-  const activeSection =
-    sections.find((section) => section.id === activeSectionId) ?? sections[0];
+  const summarySection = sections[0];
+  const investigationSection = sections.find((section) => section.id === 'investigation');
+  const pitfallSection = sections.find((section) => section.id === 'pearls');
+  const managementSection = sections.find((section) => section.id === 'management');
 
   return (
     <div className="space-y-4">
@@ -58,100 +59,229 @@ export function ClinicalPictureTab({
           description="Generate or draft education content so the recognition narrative can be reviewed and shaped."
         />
       ) : null}
-      <EditorialStream
-        eyebrow="Clinical picture"
-        title="Clinician recognition cockpit"
-        subtitle="What it looks like, what it is confused with, what separates it, and when to worry."
-      >
-        <SidebarDetailLayout
-          sidebar={
-            <ClinicalSectionSelector
-              sections={sections}
-              activeSectionId={activeSection.id}
-              onSelect={setActiveSectionId}
-            />
-          }
-          sidebarWidth={220}
-          detail={<ClinicalSectionDetail section={activeSection} />}
-        />
-      </EditorialStream>
+
+      <div id="education-summary" className="scroll-mt-24" tabIndex={-1}>
+        <EditorialStream
+          eyebrow="Clinical picture"
+          title="Education cockpit"
+          subtitle="The operator view of definition, recognition pattern, work-up, management, traps, and publication state."
+        >
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.45fr)]">
+            <EducationSummaryCard workspace={workspace} section={summarySection} />
+            <PublicationStateCard workspace={workspace} />
+          </div>
+
+          <div className="grid gap-3 xl:grid-cols-2">
+            {summarySection ? (
+              <ClinicalSignalCard
+                section={summarySection}
+                anchorId="education-clinical-pattern"
+                eyebrow="Clinical pattern"
+              />
+            ) : null}
+            {investigationSection ? (
+              <ClinicalSignalCard
+                section={investigationSection}
+                anchorId="education-investigations"
+                eyebrow="Investigations"
+              />
+            ) : null}
+            {managementSection ? (
+              <ClinicalSignalCard
+                section={managementSection}
+                anchorId="education-management"
+                eyebrow="Management"
+              />
+            ) : null}
+            {pitfallSection ? (
+              <ClinicalSignalCard
+                section={pitfallSection}
+                anchorId="education-pitfalls"
+                eyebrow="Pitfalls"
+              />
+            ) : null}
+          </div>
+
+          <RepairsPointerCard workspace={workspace} />
+        </EditorialStream>
+      </div>
     </div>
   );
 }
 
-function ClinicalSectionSelector({
-  sections,
-  activeSectionId,
-  onSelect,
+function EducationSummaryCard({
+  workspace,
+  section,
 }: {
-  sections: ClinicalSection[];
-  activeSectionId: ClinicalSectionId;
-  onSelect: (section: ClinicalSectionId) => void;
+  workspace: DiagnosisEditorialWorkspace;
+  section: ClinicalSection | undefined;
 }) {
   return (
-    <div className="space-y-2">
-      <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-        Clinical lens
-      </p>
-      {sections.map((section) => (
-        <button
-          key={section.id}
-          type="button"
-          onClick={() => onSelect(section.id)}
-          className={[
-            'w-full rounded-lg border px-3 py-2 text-left transition',
-            activeSectionId === section.id
-              ? 'border-[var(--color-teal)] bg-[var(--color-teal-bg)]'
-              : 'border-[var(--color-navy-border)] bg-white/[0.03] hover:border-slate-500',
-          ].join(' ')}
-        >
-          <span className="block text-sm font-semibold text-slate-100">
-            {section.label}
-          </span>
-          <span className="mt-1 inline-flex">
-            <StatusBadge status={formatLabel(section.tone)} tone={section.tone} />
-          </span>
-        </button>
-      ))}
+    <EditorialEntity
+      eyebrow="Summary / definition"
+      title={workspace.diagnosis.displayLabel}
+      subtitle={
+        workspace.education.id
+          ? section?.summary ?? 'Education content is present, but no compact summary is available.'
+          : 'No education content exists yet.'
+      }
+      tone={workspace.education.blockers.length ? 'danger' : 'info'}
+      state={<StatusBadge status={formatLabel(workspace.education.status)} tone={educationTone(workspace)} />}
+    >
+      <CompactMetricGrid
+        items={[
+          {
+            label: 'Quality',
+            value: formatScore(workspace.education.qualityScore),
+            tone: scoreTone(workspace.education.qualityScore),
+          },
+          { label: 'Version', value: workspace.education.version ?? 'None' },
+          {
+            label: 'Blockers',
+            value: workspace.education.blockers.length,
+            tone: workspace.education.blockers.length ? 'danger' : 'success',
+          },
+          {
+            label: 'Warnings',
+            value: workspace.education.warnings.length,
+            tone: workspace.education.warnings.length ? 'warning' : 'success',
+          },
+        ]}
+      />
+      {workspace.education.updatedAt ? (
+        <p className="mt-3 text-xs text-slate-500">
+          Updated {formatDate(workspace.education.updatedAt)}
+        </p>
+      ) : null}
+    </EditorialEntity>
+  );
+}
+
+function PublicationStateCard({
+  workspace,
+}: {
+  workspace: DiagnosisEditorialWorkspace;
+}) {
+  return (
+    <div id="education-publication-state" className="scroll-mt-24" tabIndex={-1}>
+      <EditorialEntity
+        eyebrow="Publication state"
+        title={formatLabel(workspace.education.status)}
+        subtitle="Current education editorial state and blocking signals from the workspace projection."
+        tone={educationTone(workspace)}
+        state={<StatusBadge status={formatLabel(workspace.lifecycle.education)} tone={lifecycleTone(workspace.lifecycle.education)} />}
+      >
+        {workspace.education.blockers.length || workspace.education.warnings.length ? (
+          <div className="grid gap-2">
+            {[...workspace.education.blockers, ...workspace.education.warnings]
+              .slice(0, 4)
+              .map((message) => (
+                <p
+                  key={message}
+                  className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-2 text-xs leading-5 text-slate-300"
+                >
+                  {message}
+                </p>
+              ))}
+          </div>
+        ) : (
+          <p className="text-sm leading-6 text-slate-400">
+            No education-level blockers or warnings are currently reported.
+          </p>
+        )}
+      </EditorialEntity>
     </div>
   );
 }
 
-function ClinicalSectionDetail({ section }: { section: ClinicalSection }) {
+function ClinicalSignalCard({
+  section,
+  anchorId,
+  eyebrow,
+}: {
+  section: ClinicalSection;
+  anchorId: string;
+  eyebrow: string;
+}) {
   return (
-    <EditorialEntity
-      eyebrow="Clinician view"
-      title={section.label}
-      subtitle={section.summary}
-      tone={section.tone}
-      state={<StatusBadge status={formatLabel(section.tone)} tone={section.tone} />}
-    >
-      <div className="grid gap-3 md:grid-cols-2">
-        <EditorialRow
-          title="Key discriminator"
-          subtitle={section.discriminator}
-          tone={section.discriminator ? 'success' : 'warning'}
-        />
-        <EditorialRow
-          title="Must-not-miss"
-          subtitle={section.warning}
-          tone={section.tone === 'danger' ? 'danger' : 'warning'}
-        />
-      </div>
-      <StreamDisclosure
-        title="Support and context"
-        summary={`${section.context.length} compact signal${section.context.length === 1 ? '' : 's'}`}
+    <div id={anchorId} className="scroll-mt-24" tabIndex={-1}>
+      <EditorialEntity
+        eyebrow={eyebrow}
+        title={section.label}
+        subtitle={section.summary}
+        tone={section.tone}
+        state={<StatusBadge status={formatLabel(section.tone)} tone={section.tone} />}
       >
-        {section.context.length ? (
-          <ReasoningThread items={section.context} />
-        ) : (
-          <EmptyGuidance
-            title="No support context"
-            description="No compact clinical support signal is available for this section yet."
+        <div className="grid gap-3 md:grid-cols-2">
+          <EditorialRow
+            title="Key discriminator"
+            subtitle={section.discriminator}
+            tone={section.discriminator ? 'success' : 'warning'}
           />
-        )}
-      </StreamDisclosure>
-    </EditorialEntity>
+          <EditorialRow
+            title="Must-not-miss"
+            subtitle={section.warning}
+            tone={section.tone === 'danger' ? 'danger' : 'warning'}
+          />
+        </div>
+        <StreamDisclosure
+          title="Support and context"
+          summary={`${section.context.length} compact signal${section.context.length === 1 ? '' : 's'}`}
+        >
+          {section.context.length ? (
+            <ReasoningThread items={section.context} />
+          ) : (
+            <EmptyGuidance
+              title="No support context"
+              description="No compact clinical support signal is available for this section yet."
+            />
+          )}
+        </StreamDisclosure>
+      </EditorialEntity>
+    </div>
+  );
+}
+
+function RepairsPointerCard({
+  workspace,
+}: {
+  workspace: DiagnosisEditorialWorkspace;
+}) {
+  const repairs = workspace.education.acceptedRepairs ?? [];
+
+  if (!repairs.length) {
+    return null;
+  }
+
+  return (
+    <div id="education-repairs" className="scroll-mt-24" tabIndex={-1}>
+      <EditorialEntity
+        eyebrow="Repairs / integrity"
+        title={`${repairs.length} accepted repair${repairs.length === 1 ? '' : 's'}`}
+        subtitle="Accepted claim repairs are tracked in Integrity so education stays evidence-supported."
+        tone="success"
+        state={<StatusBadge status="Evidence-supported" tone="success" />}
+        action={
+          <Link
+            to={`/editorial/diagnoses/${workspace.diagnosis.id}?tab=integrity`}
+            className="editorial-action"
+          >
+            Open Integrity
+          </Link>
+        }
+      >
+        <div className="grid gap-2 md:grid-cols-2">
+          {repairs.slice(0, 4).map((repair) => (
+            <EditorialRow
+              key={`${repair.section}-${repair.sourceAuditId ?? repair.acceptedClaim}`}
+              title={formatLabel(repair.section)}
+              subtitle={repair.acceptedClaim}
+              tone="success"
+            />
+          ))}
+        </div>
+      </EditorialEntity>
+    </div>
   );
 }
 
@@ -296,6 +426,26 @@ function buildClinicalSections(
       })),
     },
   ];
+}
+
+function educationTone(workspace: DiagnosisEditorialWorkspace): StatusBadgeTone {
+  if (workspace.education.blockers.length) return 'danger';
+  if (workspace.education.warnings.length) return 'warning';
+  if (workspace.education.id) return 'success';
+  return 'neutral';
+}
+
+function lifecycleTone(value: string): StatusBadgeTone {
+  if (value === 'complete') return 'success';
+  if (value === 'blocked') return 'danger';
+  return 'warning';
+}
+
+function scoreTone(score: number | null | undefined): StatusBadgeTone {
+  if (typeof score !== 'number') return 'warning';
+  if (score < 0.5) return 'danger';
+  if (score < 0.75) return 'warning';
+  return 'success';
 }
 
 function riskTone(tier: string | null): StatusBadgeTone {

@@ -22,6 +22,7 @@ import {
   type DiagnosisRarityBandValue,
   type DiagnosisUrgencyLevelValue,
 } from './diagnosis-registry-taxonomy';
+import { normalizeSpecialtyDisplayName } from './diagnosis-registry-specialty';
 
 const OPENAI_METADATA_MODEL = 'gpt-4o-mini';
 const OPENAI_METADATA_TIMEOUT_MS = 30_000;
@@ -284,7 +285,15 @@ export class DiagnosisRegistryAiMetadataSuggestionService {
       warnings,
       'urgencyLevel',
     );
-    const specialty = this.metadataString(record.specialty, warnings, 'specialty');
+    const rawSpecialty = this.metadataString(
+      record.specialty,
+      warnings,
+      'specialty',
+    );
+    const specialty = normalizeSpecialtyDisplayName(rawSpecialty);
+    if (rawSpecialty && specialty && rawSpecialty !== specialty) {
+      warnings.push(`metadata_remapped:specialty:${rawSpecialty}->${specialty}`);
+    }
     const subspecialty = this.metadataString(
       record.subspecialty,
       warnings,

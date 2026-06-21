@@ -65,7 +65,9 @@ export const specialtyIconByName: Record<string, SpecialtyIconKey> = {
   cardiology: 'heart',
   neurology: 'brain',
   neurosurgery: 'brain',
+  orthopedic: 'bone',
   orthopedics: 'bone',
+  orthopaedic: 'bone',
   orthopaedics: 'bone',
   pulmonology: 'lungs',
   respiratory: 'lungs',
@@ -113,6 +115,21 @@ export function normalizeSpecialtyName(specialty?: string | null) {
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+export function canonicalizeSpecialtyLabel(specialty?: string | null) {
+  const normalized = normalizeSpecialtyName(specialty);
+  if (
+    normalized === 'orthopedics' ||
+    normalized === 'orthopedic' ||
+    normalized === 'orthopaedics' ||
+    normalized === 'orthopaedic'
+  ) {
+    return 'Orthopaedics';
+  }
+
+  const trimmed = specialty?.replace(/\s+/g, ' ').trim();
+  return trimmed || null;
 }
 
 export function getSpecialtyIconKey(

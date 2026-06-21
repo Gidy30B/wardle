@@ -13,6 +13,7 @@ import RevisionHistoryCard from '../../../cases/education/RevisionHistoryCard';
 import { ClaimRepairPanel } from '../ClaimRepairPanel';
 import {
   ClinicalSignalList,
+  CompactMetricGrid,
   DraftAIActionsPanel,
   EditorialRow,
   EmptyGuidance,
@@ -89,27 +90,39 @@ export function IntegrityTab({
           description="Generate or draft education content before integrity review."
         />
       ) : null}
-      <StreamDisclosure
-        title="Claims & Evidence"
-        summary={`${unsupportedClaims.length} unsupported claim${unsupportedClaims.length === 1 ? '' : 's'}`}
-      >
+      <IntegrityOperatorDashboard
+        workspace={workspace}
+        revisions={revisions}
+        sectionBlockerCount={blockerCount}
+      />
+      <div className="scroll-mt-24">
+        <StreamDisclosure
+          title="Claims & Evidence"
+          summary={`${unsupportedClaims.length} unsupported claim${unsupportedClaims.length === 1 ? '' : 's'}`}
+        >
         <div className="space-y-3">
-          <ClaimRepairPanel
-            claims={unsupportedClaims}
-            repairs={claimRepairs}
-            pendingAction={pendingAction}
-            targetClaimId={targetClaimId}
-            targetSectionId={targetSectionId}
-            onRepairUnsupportedClaim={onRepairUnsupportedClaim}
-            onClaimRepairDecision={onClaimRepairDecision}
-          />
-          <AcceptedRepairsPanel workspace={workspace} />
+          <div id="integrity-unsupported-claims" className="scroll-mt-24" tabIndex={-1}>
+            <ClaimRepairPanel
+              claims={unsupportedClaims}
+              repairs={claimRepairs}
+              pendingAction={pendingAction}
+              targetClaimId={targetClaimId}
+              targetSectionId={targetSectionId}
+              onRepairUnsupportedClaim={onRepairUnsupportedClaim}
+              onClaimRepairDecision={onClaimRepairDecision}
+            />
+          </div>
+          <div id="integrity-accepted-repairs" className="scroll-mt-24" tabIndex={-1}>
+            <AcceptedRepairsPanel workspace={workspace} />
+          </div>
         </div>
-      </StreamDisclosure>
-      <StreamDisclosure
-        title="Section quality"
-        summary={`${blockerCount} blocker${blockerCount === 1 ? '' : 's'}`}
-      >
+        </StreamDisclosure>
+      </div>
+      <div id="integrity-validation-failures" className="scroll-mt-24" tabIndex={-1}>
+        <StreamDisclosure
+          title="Section quality"
+          summary={`${blockerCount} blocker${blockerCount === 1 ? '' : 's'}`}
+        >
         <div className="space-y-3">
           <DraftAIActionsPanel
             actions={regenerableSections.map((section) => ({
@@ -189,23 +202,29 @@ export function IntegrityTab({
             />
           )}
         </div>
-      </StreamDisclosure>
-      <StreamDisclosure
-        title="AI Draft Reviews"
-        summary={`${(workspace.aiDraftAuditTrail ?? []).length + (workspace.discriminatorDraftReviews ?? []).length} draft review${(workspace.aiDraftAuditTrail ?? []).length + (workspace.discriminatorDraftReviews ?? []).length === 1 ? '' : 's'}`}
-      >
-        <AIDraftReviewSummary workspace={workspace} />
-      </StreamDisclosure>
-      <StreamDisclosure
-        title="Case Revision Drafts"
-        summary={`${(workspace.materializedClueRevisionDrafts ?? []).length} clue revision draft${(workspace.materializedClueRevisionDrafts ?? []).length === 1 ? '' : 's'}`}
-      >
-        <CaseRevisionDraftSummary workspace={workspace} />
-      </StreamDisclosure>
-      <StreamDisclosure
-        title="Revision History"
-        summary={`${revisions.length} revision${revisions.length === 1 ? '' : 's'} available`}
-      >
+        </StreamDisclosure>
+      </div>
+      <div id="integrity-audit-trail" className="scroll-mt-24" tabIndex={-1}>
+        <StreamDisclosure
+          title="AI Draft Reviews"
+          summary={`${(workspace.aiDraftAuditTrail ?? []).length + (workspace.discriminatorDraftReviews ?? []).length} draft review${(workspace.aiDraftAuditTrail ?? []).length + (workspace.discriminatorDraftReviews ?? []).length === 1 ? '' : 's'}`}
+        >
+          <AIDraftReviewSummary workspace={workspace} />
+        </StreamDisclosure>
+      </div>
+      <div id="integrity-case-revision-drafts" className="scroll-mt-24" tabIndex={-1}>
+        <StreamDisclosure
+          title="Case Revision Drafts"
+          summary={`${(workspace.materializedClueRevisionDrafts ?? []).length} clue revision draft${(workspace.materializedClueRevisionDrafts ?? []).length === 1 ? '' : 's'}`}
+        >
+          <CaseRevisionDraftSummary workspace={workspace} />
+        </StreamDisclosure>
+      </div>
+      <div id="integrity-revision-history" className="scroll-mt-24" tabIndex={-1}>
+        <StreamDisclosure
+          title="Revision History"
+          summary={`${revisions.length} revision${revisions.length === 1 ? '' : 's'} available`}
+        >
         <div className="space-y-3">
           <RevisionHistoryCard revisions={revisions} loading={false} error={null} />
           <RevisionCompareCard
@@ -219,7 +238,143 @@ export function IntegrityTab({
             onToVersionChange={onToVersionChange}
           />
         </div>
-      </StreamDisclosure>
+        </StreamDisclosure>
+      </div>
+    </div>
+  );
+}
+
+function IntegrityOperatorDashboard({
+  workspace,
+  revisions,
+  sectionBlockerCount,
+}: {
+  workspace: DiagnosisEditorialWorkspace;
+  revisions: DiagnosisEducationRevisionAnalysis[];
+  sectionBlockerCount: number;
+}) {
+  const unsupportedClaims = workspace.unsupportedClaimsBySection ?? [];
+  const acceptedRepairs = workspace.education.acceptedRepairs ?? [];
+  const audits = workspace.aiDraftAuditTrail ?? [];
+  const discriminatorDrafts = workspace.discriminatorDraftReviews ?? [];
+  const clueDrafts = workspace.materializedClueRevisionDrafts ?? [];
+  const pendingAudits = audits.filter((audit) => needsEditorReview(audit.reviewStatus));
+  const pendingDrafts = clueDrafts.filter((draft) => needsEditorReview(draft.status));
+  const sectionWarningCount = workspace.education.sectionHealth.reduce(
+    (count, section) => count + section.warnings.length,
+    0,
+  );
+  const blockingUnsupportedClaims = unsupportedClaims.filter(
+    (claim) => claim.blocksPublication,
+  );
+  const blockerTotal =
+    sectionBlockerCount +
+    blockingUnsupportedClaims.length +
+    pendingAudits.length +
+    pendingDrafts.length;
+  const tone: StatusBadgeTone = blockerTotal
+    ? 'danger'
+    : unsupportedClaims.length || sectionWarningCount
+      ? 'warning'
+      : 'success';
+
+  return (
+    <div id="integrity-blockers" className="scroll-mt-24" tabIndex={-1}>
+      <ReasoningCard
+        eyebrow="Integrity"
+        title="Quality command view"
+        subtitle="Claims, validation, repairs, audit trail, and revisions in one review surface."
+        tone={tone}
+      >
+        <CompactMetricGrid
+          items={[
+            {
+              label: 'Blockers',
+              value: blockerTotal,
+              tone: blockerTotal ? 'danger' : 'success',
+            },
+            {
+              label: 'Unsupported claims',
+              value: unsupportedClaims.length,
+              tone: unsupportedClaims.length ? 'warning' : 'success',
+            },
+            {
+              label: 'Accepted repairs',
+              value: acceptedRepairs.length,
+              tone: acceptedRepairs.length ? 'success' : 'neutral',
+            },
+            {
+              label: 'Revision history',
+              value: revisions.length,
+              tone: revisions.length ? 'success' : 'neutral',
+            },
+          ]}
+        />
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <IntegritySignalCard
+            title="Validation failures"
+            count={sectionBlockerCount}
+            detail={
+              workspace.education.sectionHealth.find(
+                (section) => section.blockers.length,
+              )?.blockers[0] ?? 'No section blockers are currently reported.'
+            }
+            tone={sectionBlockerCount ? 'danger' : 'success'}
+          />
+          <IntegritySignalCard
+            title="Unsupported claim risk"
+            count={unsupportedClaims.length}
+            detail={
+              unsupportedClaims[0]?.claimText ??
+              'All reviewed claims have acceptable evidence support.'
+            }
+            tone={unsupportedClaims.length ? 'warning' : 'success'}
+          />
+          <IntegritySignalCard
+            title="Audit queue"
+            count={pendingAudits.length + discriminatorDrafts.length}
+            detail={
+              pendingAudits[0]?.reviewNote ??
+              discriminatorDrafts[0]?.discriminatorDraftReview.reviewGuidance
+                .primaryQuestion ??
+              'No draft reviews currently need editor attention.'
+            }
+            tone={pendingAudits.length + discriminatorDrafts.length ? 'warning' : 'success'}
+          />
+          <IntegritySignalCard
+            title="Case revision drafts"
+            count={pendingDrafts.length}
+            detail={
+              pendingDrafts[0]?.expectedEffect ??
+              pendingDrafts[0]?.rationale ??
+              'No pending materialized clue revisions.'
+            }
+            tone={pendingDrafts.length ? 'warning' : 'success'}
+          />
+        </div>
+      </ReasoningCard>
+    </div>
+  );
+}
+
+function IntegritySignalCard({
+  title,
+  count,
+  detail,
+  tone,
+}: {
+  title: string;
+  count: number;
+  detail: string;
+  tone: StatusBadgeTone;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm font-semibold text-slate-100">{title}</p>
+        <StatusBadge status={`${count}`} tone={tone} />
+      </div>
+      <p className="mt-2 text-xs leading-5 text-slate-400">{detail}</p>
     </div>
   );
 }
@@ -406,6 +561,15 @@ function reviewTone(status: string): StatusBadgeTone {
     return 'warning';
   }
   return 'neutral';
+}
+
+function needsEditorReview(status: string) {
+  return [
+    'PENDING_REVIEW',
+    'REVIEW_REQUIRED',
+    'NEEDS_CHANGES',
+    'BLOCKED_CASE_NOT_EDITABLE',
+  ].includes(status);
 }
 
 function sectionQualityTone(score: number | null | undefined): StatusBadgeTone {

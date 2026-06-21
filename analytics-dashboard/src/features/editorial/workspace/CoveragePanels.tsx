@@ -16,7 +16,6 @@ import {
   formatLabel,
   severityRank,
 } from './workspaceTransforms';
-import type { WorkspaceTab } from './workspaceTypes';
 
 export function CoverageScoreCard({
   workspace,
@@ -66,10 +65,10 @@ function CoverageCount({ label, value }: { label: string; value: number }) {
 
 export function ReadinessBreakdownCard({
   items,
-  onTabChange,
+  onSectionNavigate,
 }: {
   items: WorkspaceReadinessItem[];
-  onTabChange: (tab: WorkspaceTab) => void;
+  onSectionNavigate: (item: WorkspaceReadinessItem) => void;
 }) {
   const sortedItems = [...items].sort(
     (left, right) => severityRank(left.severity) - severityRank(right.severity),
@@ -83,7 +82,7 @@ export function ReadinessBreakdownCard({
             <button
               key={`${item.actionId}-${index}`}
               type="button"
-              onClick={() => onTabChange(item.targetTab)}
+              onClick={() => onSectionNavigate(item)}
               className={[
                 'w-full rounded-lg border px-3 py-2 text-left text-sm transition hover:bg-white/10',
                 item.severity === 'blocker'

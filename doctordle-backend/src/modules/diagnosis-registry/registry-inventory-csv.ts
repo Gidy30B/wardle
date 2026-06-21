@@ -22,6 +22,7 @@ import {
   normalizeDiagnosisTerm,
 } from './diagnosis-term-normalizer';
 import { assertAliasValidWithClient } from './alias-validation.service';
+import { normalizeSpecialtyDisplayName } from './diagnosis-registry-specialty';
 
 type RegistryInventoryClient =
   | PrismaService
@@ -292,7 +293,7 @@ function parseInventoryRow(
 ): ParsedInventoryRow | RegistryInventoryImportIssue {
   const displayLabel = normalizeOptionalString(row.displayLabel);
   const canonicalName = normalizeOptionalString(row.canonicalName);
-  const specialty = normalizeOptionalString(row.specialty);
+  const specialty = normalizeSpecialtyDisplayName(row.specialty);
   const bodySystem = normalizeOptionalString(row.bodySystem);
 
   if (!displayLabel) {

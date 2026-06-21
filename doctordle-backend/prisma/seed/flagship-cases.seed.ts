@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import {
   PrismaClient,
   CaseEditorialStatus,
@@ -19,15 +20,41 @@ import {
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = resolvePgConnectionString(process.env.DATABASE_URL);
 
 if (!databaseUrl) {
-  throw new Error('DATABASE_URL is required to run Kawasaki disease seed.');
+  throw new Error('DATABASE_URL is required to run Legg-Calvé-Perthes disease seed.');
 }
 
-const pool = new Pool({ connectionString: databaseUrl });
+const pool = new Pool({ connectionString: databaseUrl, max: 1 });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
+
+function resolvePgConnectionString(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+
+  if (!value.startsWith('prisma+postgres://')) {
+    return value;
+  }
+
+  const parsed = new URL(value);
+  const apiKey = parsed.searchParams.get('api_key');
+  if (!apiKey) {
+    throw new Error('DATABASE_URL uses prisma+postgres:// but is missing api_key.');
+  }
+
+  const payload = JSON.parse(
+    Buffer.from(apiKey, 'base64url').toString('utf8'),
+  ) as { databaseUrl?: unknown };
+
+  if (typeof payload.databaseUrl !== 'string' || !payload.databaseUrl) {
+    throw new Error(
+      'DATABASE_URL uses prisma+postgres:// but api_key does not contain a databaseUrl.',
+    );
+  }
+
+  return payload.databaseUrl;
+}
 
 function normalizeClinicalText(value: string): string {
   return value
@@ -79,20 +106,22 @@ async function findAvailableInventoryPlaceholderDate(params: {
 }
 
 const now = new Date();
-const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 17, 12, 0, 0));
-const seedVersion = 'flagship-kawasaki-disease-v1';
+const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 18, 12, 0, 0));
+const seedVersion = 'flagship-legg-calve-perthes-disease-v1';
 
-const canonicalName = 'kawasaki disease';
-const displayLabel = 'Kawasaki Disease';
-const caseTitle = 'Kawasaki Disease with Coronary Artery Dilatation';
+const canonicalName = 'legg-calve-perthes disease';
+const displayLabel = 'Legg-Calvé-Perthes Disease';
+const caseTitle = 'Legg-Calvé-Perthes Disease with Avascular Necrosis of the Femoral Head';
 
 const aliasTerms = [
-  'Kawasaki Disease',
-  'kawasaki disease',
-  'kawasaki syndrome',
-  'mucocutaneous lymph node syndrome',
-  'acute febrile mucocutaneous lymph node syndrome',
-  'incomplete kawasaki disease',
+  'Legg-Calvé-Perthes Disease',
+  'Legg Calve Perthes Disease',
+  'legg-calve-perthes disease',
+  'perthes disease',
+  'legg perthes disease',
+  'coxa plana',
+  'idiopathic avascular necrosis of the femoral head in children',
+  'juvenile osteonecrosis of the femoral head',
 ];
 
 const clues = [
@@ -100,205 +129,207 @@ const clues = [
     order: 0,
     type: 'history',
     value:
-      'A 3-year-old child is brought to the emergency department with persistent high fever for six days despite regular antipyretics.',
+      'A 7-year-old boy is brought with a gradual limp and intermittent left hip pain for two months, with no history of major trauma.',
   },
   {
     order: 1,
     type: 'symptom',
     value:
-      'The parents report marked irritability, poor feeding, and reduced playfulness, with no prominent cough, diarrhea, dysuria, or focal source of infection.',
+      'The pain is worse after running and sometimes radiates to the thigh and knee, but there is no fever, weight loss, or night pain.',
   },
   {
     order: 2,
     type: 'exam',
     value:
-      'Examination reveals bilateral non-purulent conjunctival injection and cracked erythematous lips with a red strawberry tongue.',
+      'He walks with an antalgic gait and has mild wasting of the left thigh compared with the right side.',
   },
   {
     order: 3,
     type: 'exam',
     value:
-      'A diffuse polymorphous rash is present over the trunk, and a tender 2 cm unilateral cervical lymph node is palpable on the left side of the neck.',
+      'Hip examination shows reduced abduction and markedly limited internal rotation of the left hip, while the knee examination is normal.',
   },
   {
     order: 4,
-    type: 'exam',
+    type: 'imaging',
     value:
-      'The hands and feet are swollen with erythema of the palms and soles, and the child remains febrile and unusually irritable during the assessment.',
+      'Anteroposterior pelvis and frog-lateral hip radiographs show sclerosis and flattening of the left femoral head with widening of the joint space.',
   },
   {
     order: 5,
-    type: 'investigation',
+    type: 'imaging',
     value:
-      'Inflammatory markers are markedly elevated with thrombocytosis on repeat blood count, and echocardiography demonstrates mild dilation of the coronary arteries.',
+      'MRI confirms avascular necrosis of the femoral head with early fragmentation, without slipped epiphysis or destructive infection.',
   },
 ] as const;
 
 const differentials = [
-  'Scarlet Fever',
-  'Measles',
-  'Adenovirus Infection',
-  'Toxic Shock Syndrome',
-  'Systemic Juvenile Idiopathic Arthritis',
+  'Slipped Capital Femoral Epiphysis',
+  'Transient Synovitis',
+  'Septic Arthritis of the Hip',
+  'Juvenile Idiopathic Arthritis',
+  'Developmental Dysplasia of the Hip',
 ];
 
 const explanation = {
   diagnosis: displayLabel,
   summary:
-    'Fever for more than five days with bilateral non-purulent conjunctivitis, oral mucosal changes, polymorphous rash, cervical lymphadenopathy, extremity swelling and erythema, raised inflammatory markers, thrombocytosis, and coronary artery dilation supports Kawasaki disease.',
+    'A school-aged boy with gradual limp, activity-related hip pain radiating to the knee, restricted hip abduction and internal rotation, and imaging showing sclerosis, flattening, and avascular necrosis of the femoral head supports Legg-Calvé-Perthes disease.',
   reasoning: [
-    'Persistent fever beyond five days in a young child should raise concern for inflammatory disease when no focal infection is found.',
-    'Marked irritability is common in Kawasaki disease and helps separate it from many simple viral illnesses.',
-    'Bilateral non-purulent conjunctival injection with cracked lips and strawberry tongue provides the mucocutaneous pattern.',
-    'Polymorphous rash plus unilateral cervical lymphadenopathy adds two further classic diagnostic features.',
-    'Swollen erythematous hands and feet complete the extremity-change component of Kawasaki disease.',
-    'Elevated inflammatory markers with thrombocytosis and coronary artery dilation strongly support Kawasaki disease and highlight the major complication.',
+    'A chronic atraumatic limp in a child suggests a hip disorder even when the child reports thigh or knee pain.',
+    'Activity-related hip or referred knee pain without fever or systemic illness points away from acute infection.',
+    'Antalgic gait and thigh wasting suggest a chronic painful hip process.',
+    'Limited abduction and internal rotation are classic high-yield examination findings in Perthes disease.',
+    'Radiographic femoral head sclerosis and flattening support osteonecrosis rather than transient synovitis.',
+    'MRI confirmation of femoral head avascular necrosis with no slipped epiphysis or infection completes the diagnosis.',
   ],
   keyFindings: [
-    'Age 3 years',
-    'Fever for six days',
-    'No clear focal infection',
-    'Marked irritability',
-    'Bilateral non-purulent conjunctival injection',
-    'Cracked erythematous lips',
-    'Strawberry tongue',
-    'Polymorphous truncal rash',
-    'Tender unilateral cervical lymphadenopathy',
-    'Swollen hands and feet',
-    'Palmar and plantar erythema',
-    'Markedly elevated inflammatory markers',
-    'Thrombocytosis on repeat blood count',
-    'Mild coronary artery dilation',
+    'Age 7 years',
+    'Male child',
+    'Gradual limp',
+    'Intermittent hip pain',
+    'Pain radiating to thigh or knee',
+    'Worse after activity',
+    'No major trauma',
+    'No fever or systemic illness',
+    'Antalgic gait',
+    'Thigh wasting',
+    'Reduced hip abduction',
+    'Limited internal rotation',
+    'Normal knee examination',
+    'Femoral head sclerosis',
+    'Femoral head flattening',
+    'Widened hip joint space',
+    'MRI-confirmed avascular necrosis',
+    'Early fragmentation of femoral head',
   ],
   differentials,
   differentialAnalysis: [
     {
-      diagnosis: 'Scarlet Fever',
+      diagnosis: 'Slipped Capital Femoral Epiphysis',
       whyPlausibleEarly:
-        'Fever, rash, strawberry tongue, and cervical lymphadenopathy can suggest scarlet fever from group A streptococcal infection.',
+        'SCFE can cause limp, hip pain, thigh pain, or knee pain in older children and adolescents.',
       ruledOutByClues: [
         {
-          clueOrder: 2,
-          evidence:
-            'bilateral non-purulent conjunctival injection with cracked erythematous lips',
+          clueOrder: 0,
+          evidence: '7-year-old boy',
           reason:
-            'Non-purulent conjunctivitis and broad mucocutaneous involvement are more characteristic of Kawasaki disease than uncomplicated scarlet fever.',
+            'SCFE is more typical in adolescents, especially overweight children, while Perthes commonly affects younger children around 4 to 10 years.',
         },
         {
           clueOrder: 5,
-          evidence: 'coronary artery dilation on echocardiography',
+          evidence: 'MRI confirms avascular necrosis without slipped epiphysis',
           reason:
-            'Coronary artery involvement is a hallmark complication of Kawasaki disease and is not explained by scarlet fever.',
+            'Absence of epiphyseal slip and presence of femoral head osteonecrosis favor Perthes disease.',
         },
       ],
       finalReasonLessLikely:
-        'Scarlet fever does not explain the full CRASH pattern with extremity changes and coronary artery dilation.',
+        'SCFE is less likely because imaging shows avascular necrosis and flattening rather than posterior-inferior displacement of the femoral epiphysis.',
     },
     {
-      diagnosis: 'Measles',
+      diagnosis: 'Transient Synovitis',
       whyPlausibleEarly:
-        'Fever, conjunctivitis, and rash can resemble measles early in the illness.',
+        'Transient synovitis can present with limp and hip pain in a child.',
       ruledOutByClues: [
         {
-          clueOrder: 1,
-          evidence: 'no prominent cough or diarrhea',
+          clueOrder: 0,
+          evidence: 'symptoms for two months',
           reason:
-            'Measles usually has a prominent viral prodrome with cough, coryza, conjunctivitis, and systemic respiratory symptoms.',
+            'Transient synovitis is usually acute and self-limiting rather than a progressive chronic limp.',
         },
         {
           clueOrder: 4,
-          evidence: 'swollen erythematous hands and feet',
+          evidence: 'sclerosis and flattening of the femoral head',
           reason:
-            'Extremity swelling and palm or sole erythema favor Kawasaki disease over measles.',
+            'Structural femoral head changes are not expected in simple transient synovitis.',
         },
       ],
       finalReasonLessLikely:
-        'There are no Koplik spots or classic cephalocaudal measles progression, and coronary involvement points away from measles.',
+        'Transient synovitis does not explain chronic symptoms with femoral head sclerosis, flattening, and MRI-confirmed osteonecrosis.',
     },
     {
-      diagnosis: 'Adenovirus Infection',
+      diagnosis: 'Septic Arthritis of the Hip',
       whyPlausibleEarly:
-        'Adenovirus can cause fever, conjunctivitis, pharyngitis, and a viral-appearing rash in children.',
-      ruledOutByClues: [
-        {
-          clueOrder: 2,
-          evidence: 'non-purulent conjunctivitis with cracked lips and strawberry tongue',
-          reason:
-            'The mucosal pattern is broader than typical adenoviral conjunctivitis or pharyngitis.',
-        },
-        {
-          clueOrder: 5,
-          evidence:
-            'thrombocytosis and mild dilation of the coronary arteries',
-          reason:
-            'Coronary artery changes and subacute thrombocytosis support Kawasaki disease rather than uncomplicated adenovirus.',
-        },
-      ],
-      finalReasonLessLikely:
-        'Adenovirus does not explain the complete mucocutaneous pattern with coronary artery involvement.',
-    },
-    {
-      diagnosis: 'Toxic Shock Syndrome',
-      whyPlausibleEarly:
-        'Fever, rash, mucosal involvement, and systemic illness can suggest toxic shock syndrome.',
+        'Septic arthritis is an important cause of limp and hip pain in children and must be considered early.',
       ruledOutByClues: [
         {
           clueOrder: 1,
-          evidence: 'no diarrhea or focal source of infection',
+          evidence: 'no fever, weight loss, or night pain',
           reason:
-            'Toxic shock often has prominent systemic toxicity, gastrointestinal symptoms, hypotension, or an identifiable staphylococcal or streptococcal source.',
+            'Septic arthritis usually causes acute severe pain with fever, toxicity, and refusal to bear weight.',
         },
         {
           clueOrder: 5,
-          evidence: 'coronary artery dilation on echocardiography',
+          evidence: 'no destructive infection on MRI',
           reason:
-            'Coronary artery inflammation is a Kawasaki disease complication rather than a feature of toxic shock syndrome.',
+            'MRI does not support septic arthritis or adjacent osteomyelitis.',
         },
       ],
       finalReasonLessLikely:
-        'The child has a classic Kawasaki mucocutaneous pattern without shock or multiorgan failure features.',
+        'The chronic course, absence of systemic illness, and imaging pattern favor Perthes disease over septic arthritis.',
     },
     {
-      diagnosis: 'Systemic Juvenile Idiopathic Arthritis',
+      diagnosis: 'Juvenile Idiopathic Arthritis',
       whyPlausibleEarly:
-        'Persistent fever, rash, and high inflammatory markers can suggest systemic juvenile idiopathic arthritis.',
+        'Chronic limp and joint symptoms in a child can suggest juvenile idiopathic arthritis.',
       ruledOutByClues: [
         {
-          clueOrder: 2,
-          evidence: 'cracked lips, strawberry tongue, and non-purulent conjunctivitis',
+          clueOrder: 3,
+          evidence: 'isolated hip restriction with normal knee examination',
           reason:
-            'Prominent mucocutaneous findings are more typical of Kawasaki disease.',
+            'JIA often has inflammatory stiffness, swelling, or multiple joint involvement rather than isolated femoral head collapse.',
         },
         {
-          clueOrder: 5,
-          evidence: 'coronary artery dilation',
+          clueOrder: 4,
+          evidence: 'femoral head sclerosis and flattening',
           reason:
-            'Coronary arteritis or dilation strongly favors Kawasaki disease.',
+            'These are structural osteonecrotic changes typical of Perthes disease.',
         },
       ],
       finalReasonLessLikely:
-        'Systemic JIA usually has quotidian fever, evanescent rash, arthritis, serositis, or hepatosplenomegaly rather than the classic CRASH pattern.',
+        'JIA does not explain the classic radiographic and MRI findings of femoral head avascular necrosis.',
+    },
+    {
+      diagnosis: 'Developmental Dysplasia of the Hip',
+      whyPlausibleEarly:
+        'Hip pathology and limp in a child can raise concern for developmental dysplasia.',
+      ruledOutByClues: [
+        {
+          clueOrder: 0,
+          evidence: 'gradual limp beginning at age 7 years',
+          reason:
+            'Developmental dysplasia usually presents earlier, often in infancy or toddler years.',
+        },
+        {
+          clueOrder: 5,
+          evidence: 'MRI confirms avascular necrosis of the femoral head',
+          reason:
+            'The primary pathology is osteonecrosis rather than acetabular dysplasia or dislocation.',
+        },
+      ],
+      finalReasonLessLikely:
+        'DDH is less likely because imaging localizes the problem to avascular necrosis and flattening of the femoral head.',
     },
   ],
   managementPearl:
-    'Kawasaki disease is a pediatric inflammatory vasculitis with risk of coronary artery aneurysms. Treat promptly with intravenous immunoglobulin and aspirin, obtain echocardiography, and involve pediatric cardiology when coronary changes or high-risk features are present.',
+    'Legg-Calvé-Perthes disease is idiopathic avascular necrosis of the capital femoral epiphysis in children. Management aims to maintain femoral head containment and range of motion, with urgency of orthopedic referral guided by age, severity, femoral head involvement, and loss of containment.',
   generationQuality: {
     contentTier: 'FLAGSHIP',
     seedVersion,
     humanReviewed: true,
     discriminatorStrength: 'HIGH',
     expectedTeachingPoints: [
-      'Kawasaki disease should be considered in fever lasting more than five days with mucocutaneous findings',
-      'The CRASH and burn pattern helps identify the major diagnostic features',
-      'Coronary artery aneurysm or dilation is the feared complication',
-      'Echocardiography is essential at diagnosis and follow-up',
-      'Early intravenous immunoglobulin reduces coronary complications',
+      'Perthes disease commonly presents as chronic atraumatic limp in a boy aged 4 to 10 years',
+      'Hip disease may present as thigh or knee pain',
+      'Reduced abduction and internal rotation are key examination clues',
+      'X-ray may show femoral head sclerosis, fragmentation, flattening, or coxa plana',
+      'Management focuses on containment, range of motion, analgesia, activity modification, and orthopedic follow-up',
     ],
     competencyDomains: [
+      'Orthopaedics',
       'Paediatrics',
-      'Paediatric Cardiology',
-      'Rheumatology',
-      'Emergency Medicine',
+      'Paediatric Orthopaedics',
+      'Musculoskeletal Medicine',
       'Clinical Reasoning',
     ],
   },
@@ -308,356 +339,322 @@ const educationForFrontend = {
   title: displayLabel,
   summary: {
     definition:
-      'Kawasaki disease is an acute self-limited medium-vessel vasculitis of childhood, classically affecting the coronary arteries and presenting with prolonged fever plus mucocutaneous inflammation.',
+      'Legg-Calvé-Perthes disease is idiopathic avascular necrosis of the capital femoral epiphysis in a child, leading to femoral head ischemia, fragmentation, remodeling, and possible deformity.',
     highYieldTakeaway:
-      'Think Kawasaki disease in a young child with fever for at least five days plus non-purulent conjunctivitis, oral changes, rash, cervical lymphadenopathy, extremity changes, and elevated inflammatory markers.',
+      'Think Perthes disease in a 4- to 10-year-old boy with gradual limp, hip or referred knee pain, limited hip abduction and internal rotation, and femoral head sclerosis or flattening on imaging.',
   },
   recognitionPattern: [
     {
-      pattern: 'Prolonged fever with mucocutaneous inflammation',
+      pattern: 'Chronic atraumatic limp in a young boy',
       whyItMatters:
-        'Fever lasting more than five days with multiple mucocutaneous signs should trigger Kawasaki disease assessment because treatment is time-sensitive.',
+        'Perthes disease is often missed because the onset is gradual and the child may complain of knee or thigh pain rather than hip pain.',
       progression:
-        'Systemic vascular inflammation -> persistent fever and irritability -> conjunctival, oral, skin, lymph node, and extremity findings -> coronary arteritis and possible aneurysm formation.',
+        'Temporary loss of femoral head blood supply -> epiphyseal necrosis -> sclerosis -> fragmentation -> flattening or coxa plana -> remodeling.',
       discriminator:
-        'The combination of non-purulent conjunctivitis, oral changes, polymorphous rash, extremity changes, and cervical lymphadenopathy is more specific than fever and rash alone.',
+        'The combination of chronic limp, reduced hip motion, and femoral head changes separates Perthes from transient synovitis.',
       commonTrap:
-        'Do not dismiss persistent fever and rash as a viral illness when the child has red eyes, cracked lips, swollen hands or feet, and marked irritability.',
+        'Do not stop at a normal knee exam when the child reports knee pain; examine and image the hip.',
     },
     {
-      pattern: 'Coronary-risk vasculitis',
+      pattern: 'Painful restricted hip abduction and internal rotation',
       whyItMatters:
-        'Kawasaki disease is important because untreated coronary artery inflammation can lead to aneurysm, thrombosis, myocardial ischemia, or sudden death later.',
+        'Loss of abduction and internal rotation is one of the most useful bedside clues to hip pathology.',
       discriminator:
-        'Coronary artery dilation on echocardiography separates Kawasaki disease from most routine infectious rashes.',
+        'A normal knee with restricted hip movement points the diagnostic search back to the hip.',
       commonTrap:
-        'Do not wait for coronary abnormalities before treating if the clinical syndrome is convincing.',
+        'Do not label the limp as muscular strain when hip range of motion is clearly reduced.',
     },
     {
-      pattern: 'Incomplete Kawasaki disease',
+      pattern: 'Femoral head osteonecrosis on imaging',
       whyItMatters:
-        'Some children do not meet all classic criteria but still have coronary risk, especially infants and young children with persistent unexplained fever and inflammation.',
+        'Imaging confirms the structural disease and helps guide prognosis and orthopedic management.',
       discriminator:
-        'High inflammatory markers, thrombocytosis, sterile pyuria, transaminitis, hypoalbuminaemia, or coronary changes can support the diagnosis when criteria are incomplete.',
+        'Sclerosis, fragmentation, flattening, or coxa plana support Perthes disease over inflammatory or viral causes of limp.',
       commonTrap:
-        'Do not exclude Kawasaki disease solely because all five classic clinical features are not present at the first assessment.',
+        'Early radiographs can be subtle; persistent symptoms may require repeat imaging or MRI.',
     },
   ],
   keySymptoms: [
     {
-      symptom: 'Fever for at least five days',
+      symptom: 'Gradual limp',
       significance:
-        'Persistent fever is the anchor feature and should prompt evaluation for Kawasaki disease when mucocutaneous signs are present.',
+        'A slowly progressive limp is the usual presentation and may occur before severe pain develops.',
     },
     {
-      symptom: 'Marked irritability',
+      symptom: 'Hip, groin, thigh, or knee pain',
       significance:
-        'Children with Kawasaki disease are often strikingly irritable, sometimes more than expected for a simple viral illness.',
+        'Hip pathology can refer pain to the thigh or knee, so knee pain should not exclude hip disease.',
     },
     {
-      symptom: 'Poor feeding or reduced playfulness',
+      symptom: 'Pain worse with activity',
       significance:
-        'Nonspecific systemic symptoms reflect inflammatory illness and help distinguish the child from a well-appearing viral exanthem.',
+        'Mechanical worsening after play or running supports a structural hip disorder.',
     },
   ],
   keySigns: [
     {
-      finding: 'Bilateral non-purulent conjunctival injection',
+      finding: 'Antalgic gait',
       significance:
-        'A major clinical criterion and a key separator from bacterial conjunctivitis.',
+        'Suggests the child is reducing stance time on the painful side.',
+    },
+    {
+      finding: 'Reduced hip abduction',
+      significance:
+        'A classic examination finding that reflects hip irritability and loss of containment mechanics.',
       discriminator:
-        'Non-purulent red eyes with fever and mucosal changes favor Kawasaki disease over isolated conjunctivitis.',
+        'Reduced hip abduction is more useful than isolated tenderness for localizing pathology to the hip.',
     },
     {
-      finding: 'Cracked red lips or strawberry tongue',
+      finding: 'Limited internal rotation',
       significance:
-        'Oral mucosal inflammation is a classic Kawasaki disease feature.',
+        'A high-yield sign of pediatric hip pathology and a major clue in Perthes disease.',
       discriminator:
-        'Oral changes combined with conjunctivitis and extremity swelling are more suggestive than any single finding alone.',
+        'Limited internal rotation helps separate true hip disease from isolated knee pathology.',
     },
     {
-      finding: 'Polymorphous rash',
+      finding: 'Thigh wasting',
       significance:
-        'A variable rash is common and may mimic viral exanthem, scarlet fever, or drug eruption.',
-    },
-    {
-      finding: 'Unilateral cervical lymphadenopathy',
-      significance:
-        'A cervical node at least 1.5 cm is one of the diagnostic clinical features.',
-    },
-    {
-      finding: 'Extremity erythema and swelling',
-      significance:
-        'Swelling or erythema of palms and soles is a strong clue and may later progress to periungual desquamation.',
-      discriminator:
-        'Extremity changes are less typical of measles, adenovirus, or uncomplicated scarlet fever.',
+        'Suggests chronicity and reduced use of the affected limb.',
     },
   ],
   examPearls: [
     {
       type: 'DISCRIMINATOR',
-      title: 'Non-purulent conjunctivitis plus oral changes is a major clue',
+      title: 'Knee pain can be hip disease',
       content:
-        'Bilateral red eyes without discharge, cracked lips, and strawberry tongue in a persistently febrile child should immediately raise Kawasaki disease.',
+        'A child with knee pain and a limp needs hip examination because Perthes disease may refer pain to the thigh or knee.',
       whyItMatters:
-        'These findings shift the diagnosis from nonspecific infection toward systemic vasculitis.',
+        'This prevents missing the diagnosis when the knee exam is normal.',
       discriminator:
-        'Bacterial conjunctivitis is usually purulent; measles usually has cough, coryza, Koplik spots, and a characteristic rash pattern.',
+        'Normal knee findings plus reduced hip abduction or internal rotation localize the problem to the hip.',
       trapAvoided:
-        'Do not treat each mucocutaneous feature as a separate minor infection.',
+        'Do not treat persistent knee pain as a knee problem without checking hip range of motion.',
     },
     {
       type: 'DISCRIMINATOR',
-      title: 'Extremity changes are high-yield',
+      title: 'Chronic course separates Perthes from transient synovitis',
       content:
-        'Swollen erythematous hands and feet during the acute illness strongly support Kawasaki disease and may be followed by peeling around the nails.',
+        'Transient synovitis is usually acute and self-limiting, while Perthes disease causes a persistent or progressive limp.',
       whyItMatters:
-        'Extremity findings are often the clue that separates Kawasaki disease from common viral exanthems.',
+        'Duration of symptoms is a major clue in pediatric limp assessment.',
       discriminator:
-        'Simple viral infections rarely produce the full combination of persistent fever, red eyes, oral changes, rash, lymphadenopathy, and extremity swelling.',
+        'Symptoms lasting weeks to months with radiographic femoral head changes favor Perthes disease.',
       trapAvoided:
-        'Do not wait for desquamation; peeling may occur later after the acute phase.',
+        'Do not repeatedly diagnose transient synovitis when the limp persists.',
     },
     {
       type: 'MNEMONIC',
-      title: 'CRASH and burn',
+      title: 'PERTHES pattern',
       content:
-        'CRASH means Conjunctivitis, Rash, Adenopathy, Strawberry tongue or oral changes, and Hand or foot changes; burn is the persistent fever.',
+        'PERTHES: Painful limp, Epiphyseal avascular necrosis, Reduced abduction/internal rotation, Thigh or knee referred pain, Hip x-ray changes, Early ortho follow-up, School-aged boy.',
       whyItMatters:
-        'The mnemonic organizes the classic diagnostic features around the fever anchor.',
+        'The mnemonic organizes the typical presentation and key discriminators.',
       discriminator:
-        'It helps distinguish Kawasaki disease from isolated fever-rash illnesses by requiring a constellation of mucocutaneous findings.',
+        'It links the clinical presentation to the femoral head imaging abnormality.',
       trapAvoided:
-        'Do not place CRASH under scoringSystems; it is a memory aid, not a formal severity score.',
+        'Do not place this mnemonic under scoringSystems; it is a memory aid, not a formal score.',
     },
   ],
   scoringSystems: [],
   investigations: [
     {
-      test: 'Inflammatory markers',
+      test: 'AP pelvis and frog-lateral hip radiographs',
       interpretation:
-        'Elevated CRP and ESR support systemic inflammation and are useful when Kawasaki disease is suspected.',
+        'May show femoral head sclerosis, fragmentation, flattening, widening of the joint space, or coxa plana.',
       whyItMatters:
-        'High inflammatory markers help distinguish Kawasaki disease from mild viral illness and support incomplete Kawasaki disease evaluation.',
+        'Plain radiographs are the first-line imaging test for suspected Perthes disease.',
     },
     {
-      test: 'Full blood count',
+      test: 'MRI hip',
       interpretation:
-        'Leukocytosis may occur early; thrombocytosis is common after the first week.',
+        'Detects early avascular necrosis and defines the extent of femoral head involvement when x-rays are normal or equivocal.',
       whyItMatters:
-        'Thrombocytosis in the subacute phase supports the diagnosis and reflects ongoing inflammation.',
+        'MRI is useful in early disease and helps separate Perthes disease from infection, tumor, or slipped epiphysis.',
     },
     {
-      test: 'Echocardiography',
+      test: 'Full blood count and inflammatory markers',
       interpretation:
-        'Assesses coronary artery dilation or aneurysm, ventricular function, myocarditis, pericardial effusion, and valvular involvement.',
+        'Usually normal or only mildly abnormal in Perthes disease.',
       whyItMatters:
-        'Coronary assessment is central because prevention of coronary complications is the main reason for urgent treatment.',
+        'Marked fever, leukocytosis, or very high inflammatory markers should raise concern for infection or inflammatory disease.',
     },
     {
-      test: 'Liver function tests and albumin',
+      test: 'Hip ultrasound',
       interpretation:
-        'May show transaminitis or hypoalbuminaemia in more inflammatory disease.',
+        'May detect an effusion but does not define femoral head viability.',
       whyItMatters:
-        'Supportive laboratory abnormalities can strengthen the diagnosis in incomplete presentations.',
-    },
-    {
-      test: 'Urinalysis',
-      interpretation:
-        'Sterile pyuria may be present.',
-      whyItMatters:
-        'Sterile pyuria can support Kawasaki disease and prevents mislabeling the illness as a simple urinary tract infection without culture evidence.',
-    },
-    {
-      test: 'Targeted infectious testing when indicated',
-      interpretation:
-        'Testing for streptococcal infection, measles, adenovirus, or sepsis may be needed depending on exposure and local epidemiology.',
-      whyItMatters:
-        'Kawasaki disease is a clinical diagnosis, but important mimics should be considered and treated appropriately.',
+        'Useful when differentiating painful hip effusion, but x-ray or MRI is needed for Perthes disease assessment.',
     },
   ],
   managementOverview: [
     {
-      step: 'Admit or urgently assess suspected Kawasaki disease',
+      step: 'Refer to orthopedics or pediatric orthopedics',
       rationale:
-        'Children require timely evaluation, inflammatory markers, echocardiography planning, and treatment to reduce coronary risk.',
+        'Management depends on age, stage, femoral head involvement, and containment.',
     },
     {
-      step: 'Give intravenous immunoglobulin',
+      step: 'Provide analgesia and activity modification',
       rationale:
-        'IVIG given early, ideally within the first 10 days of illness, reduces the risk of coronary artery aneurysms.',
+        'Pain control and avoiding high-impact activity reduce symptoms while the femoral head remodels.',
     },
     {
-      step: 'Use aspirin according to local protocol',
+      step: 'Maintain hip range of motion',
       rationale:
-        'Aspirin is used for anti-inflammatory and antiplatelet effects, with dosing adjusted as fever and inflammation resolve.',
+        'Physiotherapy and stretching help preserve abduction and internal rotation.',
     },
     {
-      step: 'Perform echocardiography and arrange follow-up imaging',
+      step: 'Use containment strategies when indicated',
       rationale:
-        'Initial and follow-up echocardiography detect coronary artery dilation, aneurysm, or evolving cardiac involvement.',
+        'Bracing or surgery may be needed to keep the femoral head contained within the acetabulum during healing.',
     },
     {
-      step: 'Consult paediatrics and cardiology when high-risk features exist',
+      step: 'Monitor with serial clinical and radiographic follow-up',
       rationale:
-        'Coronary changes, very young age, shock, IVIG resistance, or severe inflammation require specialist input.',
+        'Disease evolves over years, and prognosis depends on femoral head shape at healing.',
     },
     {
-      step: 'Escalate treatment for IVIG-resistant disease',
+      step: 'Escalate if older age, severe collapse, or loss of containment',
       rationale:
-        'Persistent or recrudescent fever after IVIG may require additional therapy such as repeat IVIG, corticosteroids, or biologic agents depending on protocol.',
-    },
-    {
-      step: 'Give vaccine counselling after IVIG',
-      rationale:
-        'Live vaccines may need to be delayed after IVIG because passive antibodies can reduce vaccine response.',
+        'Children older than 6 to 8 years or those with extensive femoral head involvement have higher risk of poor outcome.',
     },
   ],
   differentialDistinguishers: [
     {
-      diagnosis: 'Scarlet Fever',
+      diagnosis: 'Slipped Capital Femoral Epiphysis',
       whyConfused:
-        'Both can cause fever, rash, strawberry tongue, and cervical lymphadenopathy.',
+        'Both can cause limp with hip, thigh, or knee pain.',
       distinguishingPoint:
-        'Kawasaki disease has non-purulent conjunctivitis, extremity changes, persistent inflammation, and possible coronary involvement.',
+        'SCFE usually affects adolescents and shows epiphyseal slip rather than femoral head necrosis and flattening.',
       keySeparator:
-        'Coronary artery dilation and the full CRASH pattern favor Kawasaki disease.',
+        'Posterior-inferior epiphyseal displacement favors SCFE; avascular necrosis with coxa plana favors Perthes.',
       classicTrap:
-        'Treating as scarlet fever alone and missing echocardiography or IVIG when Kawasaki features are present.',
+        'Assuming every pediatric hip limp is Perthes without checking age, body habitus, and lateral hip imaging.',
     },
     {
-      diagnosis: 'Measles',
+      diagnosis: 'Transient Synovitis',
       whyConfused:
-        'Measles can present with fever, conjunctivitis, and rash.',
+        'Both can present with limp and hip pain in children.',
       distinguishingPoint:
-        'Measles usually has cough, coryza, Koplik spots, and a cephalocaudal rash spread rather than extremity swelling and coronary changes.',
+        'Transient synovitis is acute and self-limited; Perthes is persistent and produces femoral head changes.',
       keySeparator:
-        'Extremity changes and coronary dilation point toward Kawasaki disease.',
+        'Symptoms for weeks to months plus sclerosis or flattening favor Perthes.',
       classicTrap:
-        'Assuming every febrile conjunctivitis-rash illness is measles without checking oral, extremity, and coronary clues.',
+        'Repeating symptomatic treatment without repeat assessment when the limp persists.',
     },
     {
-      diagnosis: 'Adenovirus Infection',
+      diagnosis: 'Septic Arthritis of the Hip',
       whyConfused:
-        'Adenovirus may cause prolonged fever, conjunctivitis, pharyngitis, and rash.',
+        'A painful limp in a child can represent septic arthritis, which is urgent.',
       distinguishingPoint:
-        'Kawasaki disease produces a broader mucocutaneous syndrome with extremity changes and coronary risk.',
+        'Septic arthritis usually has acute severe pain, fever, toxicity, refusal to bear weight, and raised inflammatory markers.',
       keySeparator:
-        'Coronary artery dilation and thrombocytosis after the first week strongly support Kawasaki disease.',
+        'A chronic afebrile limp with femoral head osteonecrosis favors Perthes.',
       classicTrap:
-        'Stopping at a viral diagnosis when persistent fever and extremity findings suggest vasculitis.',
+        'Missing septic arthritis when the child is febrile and unable to bear weight.',
     },
     {
-      diagnosis: 'Toxic Shock Syndrome',
+      diagnosis: 'Juvenile Idiopathic Arthritis',
       whyConfused:
-        'Both can cause fever, rash, mucosal changes, and systemic illness.',
+        'Chronic limp and reduced movement may suggest inflammatory arthritis.',
       distinguishingPoint:
-        'Toxic shock usually has shock, multiorgan involvement, prominent toxicity, and an infectious toxin source.',
+        'JIA often has morning stiffness, swelling, multiple joint involvement, or systemic inflammatory features.',
       keySeparator:
-        'Kawasaki disease is favored by the classic CRASH pattern and coronary artery involvement without shock.',
+        'Femoral head sclerosis, fragmentation, and flattening favor Perthes.',
       classicTrap:
-        'Missing Kawasaki disease because the child appears very irritable and systemically unwell.',
+        'Attributing persistent limp to arthritis without imaging the hip.',
     },
     {
-      diagnosis: 'Systemic Juvenile Idiopathic Arthritis',
+      diagnosis: 'Developmental Dysplasia of the Hip',
       whyConfused:
-        'Both can cause prolonged fever, rash, and raised inflammatory markers.',
+        'Both may cause limp and abnormal hip mechanics.',
       distinguishingPoint:
-        'Systemic JIA more often has quotidian fever, evanescent rash, arthritis, hepatosplenomegaly, or serositis.',
+        'DDH usually presents earlier and involves acetabular dysplasia or dislocation rather than femoral head osteonecrosis.',
       keySeparator:
-        'Non-purulent conjunctivitis, oral changes, extremity swelling, and coronary dilation favor Kawasaki disease.',
+        'Capital femoral epiphysis necrosis favors Perthes.',
       classicTrap:
-        'Labeling persistent fever as rheumatologic without recognizing time-sensitive coronary-risk vasculitis.',
+        'Ignoring age of onset and the specific radiographic abnormality.',
     },
   ],
   complications: [
     {
-      complication: 'Coronary artery aneurysm',
+      complication: 'Femoral head deformity',
       whyItMatters:
-        'The most feared complication and the major reason for urgent IVIG treatment and echocardiographic surveillance.',
+        'Residual flattening can impair hip mechanics and long-term function.',
     },
     {
-      complication: 'Coronary thrombosis or myocardial infarction',
+      complication: 'Coxa plana',
       whyItMatters:
-        'Large aneurysms can thrombose and cause ischemia even in young children.',
+        'Flattening of the femoral head is a classic outcome of severe disease.',
     },
     {
-      complication: 'Myocarditis',
+      complication: 'Leg length discrepancy',
       whyItMatters:
-        'Can contribute to tachycardia, reduced ventricular function, or shock-like presentations.',
+        'Growth disturbance may cause shortening on the affected side.',
     },
     {
-      complication: 'Pericardial effusion',
+      complication: 'Reduced hip range of motion',
       whyItMatters:
-        'Reflects cardiac inflammation and may be detected on echocardiography.',
+        'Persistent stiffness may affect gait and function.',
     },
     {
-      complication: 'Valvular regurgitation',
+      complication: 'Early osteoarthritis',
       whyItMatters:
-        'Inflammation can affect cardiac valves and contribute to follow-up needs.',
-    },
-    {
-      complication: 'Kawasaki disease shock syndrome',
-      whyItMatters:
-        'A severe form with hypotension or poor perfusion requiring urgent escalation.',
+        'Poor femoral head remodeling increases the risk of degenerative hip disease later in life.',
     },
   ],
   pitfalls: [
     {
-      pitfall: 'Calling it a viral exanthem too early',
+      pitfall: 'Investigating only the knee when the child reports knee pain',
       consequence:
-        'Delays IVIG and increases the risk of coronary artery complications.',
+        'Misses referred pain from hip pathology.',
     },
     {
-      pitfall: 'Waiting for all classic criteria to appear',
+      pitfall: 'Calling persistent limp transient synovitis',
       consequence:
-        'Incomplete Kawasaki disease can still cause coronary artery aneurysms.',
+        'Delays diagnosis and orthopedic follow-up.',
     },
     {
-      pitfall: 'Ignoring extremity swelling or erythema',
+      pitfall: 'Missing septic arthritis red flags',
       consequence:
-        'Misses one of the strongest discriminators from routine viral illness.',
+        'A child with fever, toxicity, or refusal to bear weight needs urgent infection workup.',
     },
     {
-      pitfall: 'Forgetting echocardiography',
+      pitfall: 'Relying on one early normal x-ray',
       consequence:
-        'Misses coronary artery dilation, myocarditis, or evolving aneurysm formation.',
+        'Early Perthes disease can be subtle; persistent symptoms may require repeat imaging or MRI.',
     },
     {
-      pitfall: 'Putting CRASH mnemonic under scoringSystems',
+      pitfall: 'Putting the PERTHES mnemonic under scoringSystems',
       consequence:
-        'Pollutes scoringSystems with a mnemonic rather than reserving it for formal validated scores.',
+        'Pollutes scoringSystems with a mnemonic instead of reserving it for formal validated scores.',
     },
   ],
   recallPrompts: [
     {
-      prompt: 'What fever duration should raise concern for Kawasaki disease?',
-      answer:
-        'Fever lasting at least five days, especially with mucocutaneous features.',
+      prompt: 'What age group is classic for Legg-Calvé-Perthes disease?',
+      answer: 'Children around 4 to 10 years, especially boys.',
     },
     {
-      prompt: 'What are the CRASH features of Kawasaki disease?',
-      answer:
-        'Conjunctivitis, Rash, Adenopathy, Strawberry tongue or oral changes, and Hand or foot changes.',
+      prompt: 'What is the underlying pathology in Perthes disease?',
+      answer: 'Idiopathic avascular necrosis of the capital femoral epiphysis.',
     },
     {
-      prompt: 'What is the most feared cardiovascular complication of Kawasaki disease?',
-      answer: 'Coronary artery aneurysm or dilation.',
+      prompt: 'Which hip movements are commonly restricted?',
+      answer: 'Abduction and internal rotation.',
     },
     {
-      prompt: 'What treatment reduces the risk of coronary artery aneurysms?',
-      answer: 'Early intravenous immunoglobulin, usually with aspirin according to local protocol.',
+      prompt: 'Why can Perthes disease present as knee pain?',
+      answer: 'Hip pathology can refer pain to the thigh or knee.',
     },
     {
-      prompt: 'Why is echocardiography performed in suspected Kawasaki disease?',
-      answer:
-        'To assess coronary artery dilation or aneurysm and other cardiac involvement such as myocarditis or effusion.',
+      prompt: 'What x-ray findings support Perthes disease?',
+      answer: 'Femoral head sclerosis, fragmentation, flattening, widened joint space, or coxa plana.',
     },
   ],
   references: [
-    { citation: 'American Heart Association scientific statement on diagnosis, treatment, and long-term management of Kawasaki disease.' },
     { citation: 'Nelson Textbook of Pediatrics.' },
-    { citation: 'RCPCH and paediatric cardiology guidance on Kawasaki disease and paediatric inflammatory vasculitis.' },
+    { citation: 'Rockwood and Wilkins’ Fractures in Children.' },
+    { citation: 'AAOS and pediatric orthopedic guidance on Legg-Calvé-Perthes disease.' },
   ],
 };
 
@@ -693,24 +690,24 @@ async function ensureRegistry() {
           active: true,
           isPlayable: true,
           isGeneratable: true,
-          specialty: 'Paediatrics',
-          subspecialty: 'Paediatric Cardiology',
-          category: 'Vasculitis',
-          bodySystem: 'Multisystem',
-          organSystem: 'Coronary Arteries',
+          specialty: 'Orthopaedics',
+          subspecialty: 'Paediatric Orthopaedics',
+          category: 'Avascular Necrosis',
+          bodySystem: 'Musculoskeletal',
+          organSystem: 'Hip',
           difficultyBand: DiagnosisDifficultyBand.INTERMEDIATE,
           rarityBand: DiagnosisRarityBand.UNCOMMON,
-          clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
+          clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
           ageGroup: DiagnosisAgeGroup.PEDIATRIC,
-          urgencyLevel: DiagnosisUrgencyLevel.URGENT,
+          urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
           preferredClueTypes: [
             'history',
             'symptom',
             'exam',
-            'investigation',
+            'imaging',
           ],
           notes:
-            'Seeded flagship Kawasaki disease case with paediatric vasculitis teaching metadata.',
+            'Seeded flagship Legg-Calvé-Perthes disease case with paediatric hip osteonecrosis teaching metadata.',
         },
         select: {
           id: true,
@@ -726,24 +723,24 @@ async function ensureRegistry() {
           active: true,
           isPlayable: true,
           isGeneratable: true,
-          specialty: 'Paediatrics',
-          subspecialty: 'Paediatric Cardiology',
-          category: 'Vasculitis',
-          bodySystem: 'Multisystem',
-          organSystem: 'Coronary Arteries',
+          specialty: 'Orthopaedics',
+          subspecialty: 'Paediatric Orthopaedics',
+          category: 'Avascular Necrosis',
+          bodySystem: 'Musculoskeletal',
+          organSystem: 'Hip',
           difficultyBand: DiagnosisDifficultyBand.INTERMEDIATE,
           rarityBand: DiagnosisRarityBand.UNCOMMON,
-          clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
+          clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
           ageGroup: DiagnosisAgeGroup.PEDIATRIC,
-          urgencyLevel: DiagnosisUrgencyLevel.URGENT,
+          urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
           preferredClueTypes: [
             'history',
             'symptom',
             'exam',
-            'investigation',
+            'imaging',
           ],
           notes:
-            'Seeded flagship Kawasaki disease case with paediatric vasculitis teaching metadata.',
+            'Seeded flagship Legg-Calvé-Perthes disease case with paediatric hip osteonecrosis teaching metadata.',
         },
         select: {
           id: true,
@@ -894,7 +891,7 @@ async function upsertCase(params: {
   const scheduledCase = existingCases.find((c) => c.dailyCases.length > 0);
 
   if (scheduledCase) {
-    console.log('Skipped existing scheduled Kawasaki disease case:', scheduledCase);
+    console.log('Skipped existing scheduled Legg-Calvé-Perthes disease case:', scheduledCase);
     return;
   }
 
@@ -926,7 +923,7 @@ async function upsertCase(params: {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Seeded complete frontend-aligned flagship Kawasaki disease case with education.',
+      'Seeded complete frontend-aligned flagship Legg-Calvé-Perthes disease case with education.',
   };
 
   const seededCase = reusableCase
@@ -966,7 +963,7 @@ async function upsertCase(params: {
       diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
       diagnosisMappingConfidence: 1,
       diagnosisEditorialNote:
-        'Created complete Kawasaki disease revision with education-aligned explanation.',
+        'Created complete Legg-Calvé-Perthes disease revision with education-aligned explanation.',
     },
     select: { id: true },
   });
@@ -983,20 +980,20 @@ async function upsertCase(params: {
       source: CaseSource.MANUAL,
       publishTrack: PublishTrack.DAILY,
       outcome: ValidationOutcome.PASSED,
-      validatorVersion: 'flagship-human-review:kawasaki-disease-v1',
+      validatorVersion: 'flagship-human-review:legg-calve-perthes-disease-v1',
       summary: {
         contentTier: 'FLAGSHIP',
         seedVersion,
         humanReviewed: true,
         note:
-          'Complete Kawasaki disease flagship seed with playable clue types and full education payload.',
+          'Complete Legg-Calvé-Perthes disease flagship seed with playable clue types and full education payload.',
       },
       findings: [],
       completedAt: now,
     },
   });
 
-  console.log('Seeded Kawasaki Disease:', {
+  console.log('Seeded Legg-Calvé-Perthes Disease:', {
     registryId: params.diagnosisRegistryId,
     caseId: seededCase.id,
     revisionId: revision.id,

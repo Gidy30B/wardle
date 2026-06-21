@@ -17,6 +17,7 @@ import {
 import { PrismaService } from '../../core/db/prisma.service';
 import { CaseEligibilityPolicyService } from '../cases/case-eligibility-policy.service';
 import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service.js';
+import { normalizeSpecialtyDisplayName } from '../diagnosis-registry/diagnosis-registry-specialty.js';
 import {
   AssignmentBlockedReason,
   AssignmentResult,
@@ -636,7 +637,7 @@ export class DailyCasesService {
       legacyName ??
       null;
     const specialty =
-      this.normalizeOptionalText(registry?.specialty) ??
+      normalizeSpecialtyDisplayName(registry?.specialty) ??
       this.normalizeOptionalText(registry?.category) ??
       this.normalizeOptionalText(registry?.bodySystem) ??
       this.normalizeOptionalText(legacy?.system) ??

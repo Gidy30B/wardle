@@ -144,7 +144,13 @@ export function DifferentialMapTab({
           description="Generate or review graph and evidence candidates so discriminators, mimics, and reasoning paths can support this diagnosis."
         />
       ) : null}
-      <div style={{ minHeight: 500 }}>
+      <GraphOperatorDashboard workspace={workspace} mimicGroups={mimicGroups} />
+      <div
+        id="mimic-separation-stream"
+        className="scroll-mt-24"
+        tabIndex={-1}
+        style={{ minHeight: 500 }}
+      >
       <SidebarDetailLayout
         sidebar={
           <MimicSurvivalSelector
@@ -237,10 +243,11 @@ export function DifferentialMapTab({
                 onGenerateClueRevision={onGenerateClueRevision}
               />
             )}
-            <StreamDisclosure
-              title="Map context"
-              summary={`${workspace.graph.reviewableCandidateCount} reviewable graph candidate${workspace.graph.reviewableCandidateCount === 1 ? '' : 's'}`}
-            >
+            <div className="scroll-mt-24">
+              <StreamDisclosure
+                title="Map context"
+                summary={`${workspace.graph.reviewableCandidateCount} reviewable graph candidate${workspace.graph.reviewableCandidateCount === 1 ? '' : 's'}`}
+              >
               <CompactPanel title="Graph readiness">
                 <StatusStrip
                   items={[
@@ -309,11 +316,17 @@ export function DifferentialMapTab({
                 }
                 onGenerateTargetedCase={onGenerateTargetedCase}
               />
-            </StreamDisclosure>
-            <StreamDisclosure
-              title="Teaching relationship details"
-              summary={`${workspace.graph.teachingRelationships?.length ?? 0} relationship${(workspace.graph.teachingRelationships?.length ?? 0) === 1 ? '' : 's'}`}
+              </StreamDisclosure>
+            </div>
+            <div
+              id="teaching-relationship-details"
+              className="scroll-mt-24"
+              tabIndex={-1}
             >
+              <StreamDisclosure
+                title="Teaching relationship details"
+                summary={`${workspace.graph.teachingRelationships?.length ?? 0} relationship${(workspace.graph.teachingRelationships?.length ?? 0) === 1 ? '' : 's'}`}
+              >
               <TeachingRelationshipPanel
                 diagnosisRegistryId={workspace.diagnosis.id}
                 relationships={workspace.graph.teachingRelationships ?? []}
@@ -324,7 +337,8 @@ export function DifferentialMapTab({
                 showPending={showPending}
                 showSuccess={showSuccess}
               />
-            </StreamDisclosure>
+              </StreamDisclosure>
+            </div>
             <StreamDisclosure
               title="Reasoning paths"
               summary={`${workspace.reasoningPaths?.length ?? 0} draft or active path${(workspace.reasoningPaths?.length ?? 0) === 1 ? '' : 's'}`}
@@ -341,10 +355,11 @@ export function DifferentialMapTab({
                 showSuccess={showSuccess}
               />
             </StreamDisclosure>
-            <StreamDisclosure
-              title="Evidence supporting this distinction"
-              summary={`${workspace.evidenceGraph?.relationships?.length ?? 0} evidence relationship${(workspace.evidenceGraph?.relationships?.length ?? 0) === 1 ? '' : 's'}`}
-            >
+            <div id="evidence-graph" className="scroll-mt-24" tabIndex={-1}>
+              <StreamDisclosure
+                title="Evidence supporting this distinction"
+                summary={`${workspace.evidenceGraph?.relationships?.length ?? 0} evidence relationship${(workspace.evidenceGraph?.relationships?.length ?? 0) === 1 ? '' : 's'}`}
+              >
               <EvidenceGraphPanel
                 diagnosisRegistryId={workspace.diagnosis.id}
                 relationships={workspace.evidenceGraph?.relationships ?? []}
@@ -356,13 +371,16 @@ export function DifferentialMapTab({
                 showPending={showPending}
                 showSuccess={showSuccess}
               />
-            </StreamDisclosure>
-            <StreamDisclosure
-              title="Evidence coverage details"
-              summary="Scores, readiness, gaps, and draft trust signals"
-            >
-              <EvidenceCoveragePanel coverage={workspace.evidenceCoverage} />
-            </StreamDisclosure>
+              </StreamDisclosure>
+            </div>
+            <div id="evidence-coverage" className="scroll-mt-24" tabIndex={-1}>
+              <StreamDisclosure
+                title="Evidence coverage details"
+                summary="Scores, readiness, gaps, and draft trust signals"
+              >
+                <EvidenceCoveragePanel coverage={workspace.evidenceCoverage} />
+              </StreamDisclosure>
+            </div>
             <StreamDisclosure
               title="Coverage matrix"
               summary={`${workspace.coverageMatrix.filter((row) => row.graphCoverage !== 'covered').length} uncovered or partial rows`}
@@ -381,18 +399,166 @@ export function DifferentialMapTab({
             >
               <LinkedDifferentialsList links={workspace.linkedDifferentials ?? []} />
             </StreamDisclosure>
-            <StreamDisclosure
-              title="Unreviewed graph candidates"
-              summary={`${workspace.graph.candidates.length} candidate${workspace.graph.candidates.length === 1 ? '' : 's'}`}
-            >
-              <GraphCandidateList candidates={workspace.graph.candidates} />
-            </StreamDisclosure>
+            <div id="graph-candidates" className="scroll-mt-24" tabIndex={-1}>
+              <StreamDisclosure
+                title="Unreviewed graph candidates"
+                summary={`${workspace.graph.candidates.length} candidate${workspace.graph.candidates.length === 1 ? '' : 's'}`}
+              >
+                <GraphCandidateList candidates={workspace.graph.candidates} />
+              </StreamDisclosure>
+            </div>
           </EditorialStream>
         }
       />
       </div>
     </div>
   );
+}
+
+function GraphOperatorDashboard({
+  workspace,
+  mimicGroups,
+}: {
+  workspace: DiagnosisEditorialWorkspace;
+  mimicGroups: MimicReasoningGroup[];
+}) {
+  const mimicItems = mimicGroups.flatMap((group) => group.items);
+  const unresolvedDifferentials = mimicItems.filter((item) => {
+    const survival = item.caseEliminationSupport;
+    return (
+      survival.unresolvedCount > 0 ||
+      survival.persistentConfusionCount > 0 ||
+      item.caseNeeded
+    );
+  });
+  const weakEdges = workspace.graph.teachingRelationships.filter(
+    (relationship) =>
+      relationship.status !== 'ACTIVE' ||
+      (!relationship.supportingGraphFact &&
+        !relationship.supportingTeachingRule &&
+        !relationship.supportingDifferentialLinkId),
+  );
+  const duplicateRisks =
+    workspace.evidenceCoverage?.redundancy.overusedEvidence ?? [];
+  const pendingCandidates = workspace.graph.candidates.filter(
+    (candidate) => candidate.status === 'CANDIDATE',
+  );
+
+  return (
+    <div id="graph-readiness" className="scroll-mt-24" tabIndex={-1}>
+      <EditorialStream
+        eyebrow="Graph"
+        title="Graph command view"
+        subtitle="Readiness, relationship support, weak edges, evidence coverage, and candidate pressure at a glance."
+      >
+        <CompactMetricGrid
+          items={[
+            {
+              label: 'Readiness',
+              value: formatLabel(workspace.graph.readiness),
+              tone:
+                workspace.graph.readiness === 'ready' ||
+                workspace.graph.readiness === 'fact_ready'
+                  ? 'success'
+                  : 'warning',
+            },
+            {
+              label: 'Relationships',
+              value: workspace.graph.teachingRelationships.length,
+              tone: workspace.graph.teachingRelationships.length
+                ? 'success'
+                : 'warning',
+            },
+            {
+              label: 'Evidence active',
+              value: workspace.evidenceGraph.summary.active,
+              tone: workspace.evidenceGraph.summary.active ? 'success' : 'warning',
+            },
+            {
+              label: 'Pending candidates',
+              value: workspace.graph.reviewableCandidateCount,
+              tone: workspace.graph.reviewableCandidateCount
+                ? 'warning'
+                : 'success',
+            },
+          ]}
+        />
+        <div className="grid gap-3 lg:grid-cols-2">
+          <GraphSignalCard
+            title="Weak edges"
+            count={weakEdges.length}
+            detail={
+              weakEdges[0]
+                ? `${weakEdges[0].targetDiagnosisRegistry.displayLabel}: ${relationshipSupportSummary(weakEdges[0])}`
+                : 'Teaching relationships have graph/rule/differential support.'
+            }
+            tone={weakEdges.length ? 'warning' : 'success'}
+          />
+          <GraphSignalCard
+            title="Unresolved differentials"
+            count={unresolvedDifferentials.length}
+            detail={
+              unresolvedDifferentials[0]?.learnerRisk ??
+              unresolvedDifferentials[0]?.label ??
+              'Case-level mimic separation is resolved for mapped differentials.'
+            }
+            tone={unresolvedDifferentials.length ? 'danger' : 'success'}
+          />
+          <GraphSignalCard
+            title="Duplicate concept risk"
+            count={duplicateRisks.length}
+            detail={
+              duplicateRisks[0]
+                ? `${duplicateRisks[0].evidenceKey}: ${duplicateRisks[0].reason}`
+                : 'Evidence redundancy is not currently flagged.'
+            }
+            tone={duplicateRisks.length ? 'warning' : 'success'}
+          />
+          <GraphSignalCard
+            title="Candidate pressure"
+            count={pendingCandidates.length}
+            detail={
+              pendingCandidates[0]?.rawText ??
+              'No unreviewed candidate is currently attached.'
+            }
+            tone={pendingCandidates.length ? 'warning' : 'success'}
+          />
+        </div>
+      </EditorialStream>
+    </div>
+  );
+}
+
+function GraphSignalCard({
+  title,
+  count,
+  detail,
+  tone,
+}: {
+  title: string;
+  count: number;
+  detail: string;
+  tone: StatusBadgeTone;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm font-semibold text-slate-100">{title}</p>
+        <StatusBadge status={`${count}`} tone={tone} />
+      </div>
+      <p className="mt-2 text-xs leading-5 text-slate-400">{detail}</p>
+    </div>
+  );
+}
+
+function relationshipSupportSummary(relationship: DiagnosisTeachingRelationship) {
+  return [
+    relationship.supportingGraphFact ? 'graph fact' : null,
+    relationship.supportingTeachingRule ? 'teaching rule' : null,
+    relationship.supportingDifferentialLinkId ? 'differential link' : null,
+  ]
+    .filter(Boolean)
+    .join(', ') || 'missing explicit support';
 }
 
 function MimicSurvivalSelector({

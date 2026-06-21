@@ -20,6 +20,7 @@ import {
   normalizeDiagnosisTerm,
 } from './diagnosis-term-normalizer.js';
 import { assertAliasValidWithClient } from './alias-validation.service.js';
+import { normalizeSpecialtyDisplayName } from './diagnosis-registry-specialty.js';
 
 type DiagnosisRegistryImportClient =
   | PrismaService
@@ -412,11 +413,7 @@ function buildRegistryMutationInput(
       'category',
       existing?.category ?? null,
     ),
-    specialty: resolveNullableString(
-      record,
-      'specialty',
-      existing?.specialty ?? null,
-    ),
+    specialty: resolveNullableSpecialty(record, existing?.specialty ?? null),
     subspecialty: resolveNullableString(
       record,
       'subspecialty',
@@ -811,6 +808,22 @@ function resolveNullableString<T extends object>(
 
   const normalized = sanitizeTerm(value);
   return normalized.length > 0 ? normalized : null;
+}
+
+function resolveNullableSpecialty(
+  source: ImportedDiagnosisRecord,
+  fallback: string | null,
+): string | null {
+  if (!Object.prototype.hasOwnProperty.call(source, 'specialty')) {
+    return normalizeSpecialtyDisplayName(fallback);
+  }
+
+  const value = source.specialty;
+  if (typeof value !== 'string') {
+    return value == null ? null : normalizeSpecialtyDisplayName(fallback);
+  }
+
+  return normalizeSpecialtyDisplayName(value);
 }
 
 function resolveNullableEnum<T extends object, V extends string>(

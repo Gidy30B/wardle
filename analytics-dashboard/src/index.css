@@ -162,6 +162,12 @@ body {
   animation: editorial-skeleton 1.25s ease-in-out infinite;
 }
 
+[data-workspace-section-focus='true'] {
+  animation: workspace-section-focus 1.45s ease-out;
+  outline: 1px solid color-mix(in srgb, var(--color-teal) 42%, transparent);
+  outline-offset: 4px;
+}
+
 @keyframes editorial-skeleton {
   0% {
     background-position: 100% 0;
@@ -171,12 +177,31 @@ body {
   }
 }
 
+@keyframes workspace-section-focus {
+  0% {
+    outline-color: color-mix(in srgb, var(--color-teal) 54%, transparent);
+    box-shadow: 0 0 0 0 rgba(0, 180, 166, 0);
+  }
+  18% {
+    outline-color: color-mix(in srgb, var(--color-teal) 70%, transparent);
+    box-shadow: 0 0 0 4px rgba(0, 180, 166, 0.08);
+  }
+  100% {
+    outline-color: transparent;
+    box-shadow: 0 0 0 0 rgba(0, 180, 166, 0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .editorial-panel,
   .editorial-action,
   .editorial-skeleton {
     animation: none;
     transition: none;
+  }
+
+  [data-workspace-section-focus='true'] {
+    animation: none;
   }
 }
 

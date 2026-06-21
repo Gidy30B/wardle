@@ -19,6 +19,7 @@ import { CaseEligibilityPolicyService } from '../cases/case-eligibility-policy.s
 import { EditorialReviewInboxService } from './editorial-review-inbox.service';
 import { EvidenceCoverageService } from './evidence-coverage.service';
 import { EditorialTriageProjectionService } from './editorial-triage-projection.service';
+import { normalizeSpecialtyDisplayName } from '../diagnosis-registry/diagnosis-registry-specialty';
 
 export type CoverageWeakness =
   | 'missing_teaching_rules'
@@ -258,7 +259,8 @@ export class EditorialCoverageDashboardService {
     const bySpecialty = new Map<string, typeof diagnoses>();
 
     for (const diagnosis of diagnoses) {
-      const specialty = diagnosis.specialty ?? 'Unassigned';
+      const specialty =
+        normalizeSpecialtyDisplayName(diagnosis.specialty) ?? 'Unassigned';
       bySpecialty.set(specialty, [
         ...(bySpecialty.get(specialty) ?? []),
         diagnosis,
@@ -1379,7 +1381,7 @@ export class EditorialCoverageDashboardService {
 
   private normalizeQuery(query: EditorialCoverageQuery) {
     return {
-      specialty: query.specialty?.trim() || undefined,
+      specialty: normalizeSpecialtyDisplayName(query.specialty) ?? undefined,
       lifecycleState: query.lifecycleState?.trim() || undefined,
       onboardingState: query.onboardingState?.trim() || undefined,
       coverageWeakness: query.coverageWeakness?.trim() || undefined,

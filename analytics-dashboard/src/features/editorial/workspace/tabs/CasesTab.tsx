@@ -157,12 +157,21 @@ export function CasesTab({
         title="Coverage orchestration"
         subtitle="Use each case to cover a learning goal, mimic/discriminator, escalation risk, and learner gap."
       >
-        <CaseInventoryEntity workspace={workspace} />
+        <div id="case-inventory" className="scroll-mt-24" tabIndex={-1}>
+          <CaseInventoryEntity workspace={workspace} />
+        </div>
+        <div id="case-difficulty-spectrum" className="scroll-mt-24" tabIndex={-1}>
+          <CaseDifficultySpectrumCard workspace={workspace} />
+        </div>
+        <div id="case-quality-flags" className="scroll-mt-24" tabIndex={-1}>
+          <CaseQualityFlagsCard workspace={workspace} />
+        </div>
         <CaseContributionCard workspace={workspace} />
-        <StreamDisclosure
-          title="Clue progression and revision workflow"
-          summary="Discriminator annotations, clue repair drafts, and progression details"
-        >
+        <div id="case-validation-state" className="scroll-mt-24" tabIndex={-1}>
+          <StreamDisclosure
+            title="Clue progression and revision workflow"
+            summary="Discriminator annotations, clue repair drafts, and progression details"
+          >
           <ClueProgressionTimelineCard
             workspace={workspace}
             pendingAction={pendingAction}
@@ -181,7 +190,8 @@ export function CasesTab({
             onSupersedeClueRevisionDraft={onSupersedeClueRevisionDraft}
             onApplyClueRevisionDraft={onApplyClueRevisionDraft}
           />
-        </StreamDisclosure>
+          </StreamDisclosure>
+        </div>
         <StreamDisclosure
           title="Coverage editing"
           summary="Learning goal and escalation annotation controls"
@@ -207,14 +217,16 @@ export function CasesTab({
             <CoverageGapsCard gaps={caseGaps} onGapSelect={onGapSelect} />
           </CollapsibleDetail>
         ) : null}
-        <TargetedCaseGenerationCard
-          coverage={coverage}
-          mimicCandidates={mimicCandidates}
-          disabled={pendingAction !== null}
-          pending={pendingAction === 'targeted-case'}
-          generatedCase={generatedTargetedCase}
-          onGenerate={onGenerateTargetedCase}
-        />
+        <div id="case-generation-actions" className="scroll-mt-24" tabIndex={-1}>
+          <TargetedCaseGenerationCard
+            coverage={coverage}
+            mimicCandidates={mimicCandidates}
+            disabled={pendingAction !== null}
+            pending={pendingAction === 'targeted-case'}
+            generatedCase={generatedTargetedCase}
+            onGenerate={onGenerateTargetedCase}
+          />
+        </div>
       </EditorialStream>
     </div>
   );
@@ -274,6 +286,150 @@ function CaseInventoryEntity({
         </p>
       ) : null}
     </EditorialEntity>
+  );
+}
+
+function CaseDifficultySpectrumCard({
+  workspace,
+}: {
+  workspace: DiagnosisEditorialWorkspace;
+}) {
+  const difficultyCounts = workspace.cases.items.reduce<Record<string, number>>(
+    (acc, item) => {
+      const difficulty = formatLabel(item.difficulty || 'unknown');
+      acc[difficulty] = (acc[difficulty] ?? 0) + 1;
+      return acc;
+    },
+    {},
+  );
+  const expectedBands = ['Easy', 'Medium', 'Hard'];
+
+  return (
+    <CompactPanel title="Difficulty spectrum">
+      <div className="grid gap-2 md:grid-cols-3">
+        {expectedBands.map((band) => {
+          const count = difficultyCounts[band] ?? 0;
+          return (
+            <div
+              key={band}
+              className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-3"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-100">{band}</p>
+                <StatusBadge
+                  status={`${count}`}
+                  tone={count ? 'success' : 'warning'}
+                />
+              </div>
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                {count
+                  ? `${count} case${count === 1 ? '' : 's'} represented`
+                  : 'No case currently covers this difficulty band.'}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+      {Object.entries(difficultyCounts).some(
+        ([band]) => !expectedBands.includes(band),
+      ) ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {Object.entries(difficultyCounts)
+            .filter(([band]) => !expectedBands.includes(band))
+            .map(([band, count]) => (
+              <StatusBadge
+                key={band}
+                status={`${band} ${count}`}
+                tone="neutral"
+              />
+            ))}
+        </div>
+      ) : null}
+    </CompactPanel>
+  );
+}
+
+function CaseQualityFlagsCard({
+  workspace,
+}: {
+  workspace: DiagnosisEditorialWorkspace;
+}) {
+  const blockedCases = workspace.cases.items.filter(
+    (item) => item.qualityProjection.blockers.length > 0,
+  );
+  const warningCases = workspace.cases.items.filter(
+    (item) => item.qualityProjection.warnings.length > 0,
+  );
+  const progression = workspace.cases.summary.progressionSignals;
+  const leakRisk =
+    (progression?.prematureLockInCases ?? 0) +
+    (progression?.abruptGiveawayCases ?? 0);
+
+  return (
+    <CompactPanel title="Quality and validation flags">
+      <CompactMetricGrid
+        items={[
+          {
+            label: 'Blocked cases',
+            value: blockedCases.length,
+            tone: blockedCases.length ? 'danger' : 'success',
+          },
+          {
+            label: 'Warning cases',
+            value: warningCases.length,
+            tone: warningCases.length ? 'warning' : 'success',
+          },
+          {
+            label: 'Leak risk',
+            value: leakRisk,
+            tone: leakRisk ? 'danger' : 'success',
+          },
+          {
+            label: 'Validation issues',
+            value:
+              workspace.cases.summary.blockerCount +
+              workspace.cases.summary.warningCount,
+            tone:
+              workspace.cases.summary.blockerCount ||
+              workspace.cases.summary.warningCount
+                ? 'warning'
+                : 'success',
+          },
+        ]}
+      />
+      {blockedCases.length || warningCases.length ? (
+        <div className="mt-3 grid gap-2">
+          {[...blockedCases, ...warningCases].slice(0, 4).map((caseItem) => (
+            <Link
+              key={caseItem.id}
+              to={`/cases/${caseItem.id}`}
+              className="block"
+            >
+              <EditorialRow
+                title={caseItem.title}
+                subtitle={[
+                  caseItem.qualityProjection.blockers[0],
+                  caseItem.qualityProjection.warnings[0],
+                ]
+                  .filter(Boolean)
+                  .join(' ') || 'Quality projection needs review.'}
+                tone={caseTone(caseItem)}
+                meta={
+                  <StatusBadge
+                    status={`${formatLabel(caseItem.difficulty)} case`}
+                    tone={caseTone(caseItem)}
+                  />
+                }
+              />
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm leading-6 text-slate-400">
+          No case quality blockers or warnings are currently reported.
+        </p>
+      )}
+    </CompactPanel>
   );
 }
 

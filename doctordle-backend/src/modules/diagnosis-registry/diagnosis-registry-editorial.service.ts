@@ -31,6 +31,7 @@ import {
   normalizeDiagnosisTerm,
 } from './diagnosis-term-normalizer.js';
 import { assertAliasValidWithClient } from './alias-validation.service.js';
+import { normalizeSpecialtyDisplayName } from './diagnosis-registry-specialty.js';
 
 type DiagnosisRegistryEditorialClient =
   | PrismaService
@@ -965,8 +966,11 @@ export class DiagnosisRegistryEditorialService {
       return;
     }
 
-    record[key] = (this.normalizeOptionalString(value as string | null) ??
-      null) as ImportedDiagnosisRecord[K];
+    const normalized =
+      key === 'specialty'
+        ? normalizeSpecialtyDisplayName(value as string | null)
+        : this.normalizeOptionalString(value as string | null);
+    record[key] = (normalized ?? null) as ImportedDiagnosisRecord[K];
   }
 
   private assignOptionalValue<K extends keyof ImportedDiagnosisRecord>(
@@ -985,7 +989,11 @@ export class DiagnosisRegistryEditorialService {
     value?: string | null,
   ): void {
     if (value !== undefined) {
-      record[key] = (this.normalizeOptionalString(value) ?? null) as never;
+      const normalized =
+        key === 'specialty'
+          ? normalizeSpecialtyDisplayName(value)
+          : this.normalizeOptionalString(value);
+      record[key] = (normalized ?? null) as never;
     }
   }
 
