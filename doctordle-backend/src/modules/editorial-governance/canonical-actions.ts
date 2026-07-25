@@ -1,9 +1,12 @@
 import {
   WEOS_ARTIFACT_TYPES,
+  WEOS_RECORD_KINDS,
   type WeosArtifactType,
+  type WeosRecordKind,
 } from './canonical-artifact-catalogue';
 import {
   WEOS_DECISION_TYPES,
+  WEOS_AUDIT_RECORD_TYPES,
   WEOS_GOVERNANCE_RECORD_TYPES,
   WEOS_IMPLEMENTATION_SUPPORT,
   type WeosDecisionType,
@@ -116,15 +119,11 @@ export const WEOS_EDITORIAL_ACTIONS = {
 export type WeosEditorialAction =
   (typeof WEOS_EDITORIAL_ACTIONS)[keyof typeof WEOS_EDITORIAL_ACTIONS];
 
-export type WeosGovernanceRecordExpectation =
-  | (typeof WEOS_GOVERNANCE_RECORD_TYPES)[keyof typeof WEOS_GOVERNANCE_RECORD_TYPES]
-  | 'REVIEW_EVENT'
-  | 'AUDIT_EVENT'
-  | 'IDENTITY_GOVERNANCE_RECORD'
-  | 'ASSESSMENT_RECORD'
-  | 'VALIDATION_RECORD'
-  | 'REVALIDATION_OBLIGATION'
-  | 'NONE';
+export type WeosGovernanceRecordType =
+  (typeof WEOS_GOVERNANCE_RECORD_TYPES)[keyof typeof WEOS_GOVERNANCE_RECORD_TYPES];
+
+export type WeosAuditRecordType =
+  (typeof WEOS_AUDIT_RECORD_TYPES)[keyof typeof WEOS_AUDIT_RECORD_TYPES];
 
 export type CanonicalActionDefinition = Readonly<{
   key: WeosEditorialAction;
@@ -134,6 +133,10 @@ export type CanonicalActionDefinition = Readonly<{
   category: WeosActionCategory;
   meaning: string;
   applicableArtifactTypes: readonly WeosArtifactType[];
+  subjectArtifactTypes: readonly WeosArtifactType[];
+  targetRevisionTypes: readonly WeosArtifactType[];
+  producesArtifactTypes: readonly WeosArtifactType[];
+  producesRecordKinds: readonly WeosRecordKind[];
   createsContent: boolean;
   changesContent: boolean;
   createsRevision: boolean;
@@ -143,7 +146,8 @@ export type CanonicalActionDefinition = Readonly<{
   requiresDecision: boolean;
   decisionOutcome: WeosDecisionType | null;
   createsGovernanceRecord: boolean;
-  expectedGovernanceRecordType: WeosGovernanceRecordExpectation;
+  governanceRecordType?: WeosGovernanceRecordType;
+  auditRecordType?: WeosAuditRecordType;
   createsOperationalEffect: boolean;
   mayAffectLearnerExposure: boolean;
   mayInvalidatePriorStanding: boolean;
@@ -157,6 +161,8 @@ const C = WEOS_ACTION_CATEGORIES;
 const I = WEOS_IMPLEMENTATION_SUPPORT;
 const D = WEOS_DECISION_TYPES;
 const G = WEOS_GOVERNANCE_RECORD_TYPES;
+const AR = WEOS_AUDIT_RECORD_TYPES;
+const R = WEOS_RECORD_KINDS;
 
 const revisionTargets = [T.CASE_REVISION, T.DIAGNOSIS_EDUCATION_REVISION];
 
@@ -169,10 +175,31 @@ function title(key: string) {
 }
 
 function action(
-  input: Omit<CanonicalActionDefinition, 'label'> & { label?: string },
+  input: Omit<
+    CanonicalActionDefinition,
+    | 'label'
+    | 'subjectArtifactTypes'
+    | 'targetRevisionTypes'
+    | 'producesArtifactTypes'
+    | 'producesRecordKinds'
+  > &
+    Partial<
+      Pick<
+        CanonicalActionDefinition,
+        | 'subjectArtifactTypes'
+        | 'targetRevisionTypes'
+        | 'producesArtifactTypes'
+        | 'producesRecordKinds'
+      >
+    > & { label?: string },
 ): CanonicalActionDefinition {
   return {
     label: title(input.key),
+    subjectArtifactTypes:
+      input.subjectArtifactTypes ?? input.applicableArtifactTypes,
+    targetRevisionTypes: input.targetRevisionTypes ?? [],
+    producesArtifactTypes: input.producesArtifactTypes ?? [],
+    producesRecordKinds: input.producesRecordKinds ?? [],
     ...input,
   };
 }
@@ -189,7 +216,8 @@ const base = {
   requiresDecision: false,
   decisionOutcome: null,
   createsGovernanceRecord: false,
-  expectedGovernanceRecordType: 'NONE',
+  producesArtifactTypes: [],
+  producesRecordKinds: [],
   createsOperationalEffect: false,
   mayAffectLearnerExposure: false,
   mayInvalidatePriorStanding: false,
@@ -198,7 +226,13 @@ const base = {
   notes: [],
 } satisfies Omit<
   CanonicalActionDefinition,
-  'key' | 'label' | 'category' | 'meaning' | 'applicableArtifactTypes'
+  | 'key'
+  | 'label'
+  | 'category'
+  | 'meaning'
+  | 'applicableArtifactTypes'
+  | 'subjectArtifactTypes'
+  | 'targetRevisionTypes'
 >;
 
 export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
@@ -265,9 +299,12 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
     category: C.ASSESSMENT,
     meaning: 'Evaluate whether a change is material; it does not edit content.',
     applicableArtifactTypes: revisionTargets,
+    subjectArtifactTypes: revisionTargets,
+    targetRevisionTypes: revisionTargets,
+    producesArtifactTypes: [T.MATERIAL_CHANGE_DETERMINATION],
     requiresVersionTarget: true,
     createsAssessment: true,
-    expectedGovernanceRecordType: 'ASSESSMENT_RECORD',
+    producesRecordKinds: [R.ASSESSMENT_RECORD],
     currentImplementationSupport: I.PARTIALLY_IMPLEMENTED,
     currentImplementationSymbols: [
       'CaseReviewContextSnapshot.invalidationReason',
@@ -279,9 +316,11 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
     category: C.GOVERNANCE,
     meaning: 'Record material-change determination and affected standing.',
     applicableArtifactTypes: [T.MATERIAL_CHANGE_DETERMINATION],
+    producesArtifactTypes: [T.MATERIAL_CHANGE_DETERMINATION],
     requiresVersionTarget: true,
     createsGovernanceRecord: true,
-    expectedGovernanceRecordType: G.MATERIAL_CHANGE_DETERMINATION,
+    producesRecordKinds: [R.GOVERNANCE_RECORD],
+    governanceRecordType: G.MATERIAL_CHANGE_DETERMINATION,
     mayInvalidatePriorStanding: true,
     currentImplementationSupport: I.PARTIALLY_IMPLEMENTED,
     currentImplementationSymbols: [
@@ -299,7 +338,8 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
     requiresDecision: true,
     decisionOutcome: D.SUPERSEDE_REVISION,
     createsGovernanceRecord: true,
-    expectedGovernanceRecordType: G.SUPERSESSION_RECORD,
+    producesRecordKinds: [R.DECISION_RECORD],
+    governanceRecordType: G.SUPERSESSION_RECORD,
     mayInvalidatePriorStanding: true,
     currentImplementationSupport: I.NOT_IMPLEMENTED,
     notes: ['Creating the replacement revision is CREATE_REVISION.'],
@@ -314,7 +354,8 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
     createsOperationalEffect: true,
     requiresDecision: true,
     createsGovernanceRecord: true,
-    expectedGovernanceRecordType: G.EDITORIAL_DECISION,
+    producesRecordKinds: [R.DECISION_RECORD],
+    governanceRecordType: G.EDITORIAL_DECISION,
     currentImplementationSupport: I.NOT_IMPLEMENTED,
   }),
   action({
@@ -328,7 +369,8 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
     requiresDecision: true,
     decisionOutcome: D.RETIRE_ARTIFACT,
     createsGovernanceRecord: true,
-    expectedGovernanceRecordType: G.EDITORIAL_DECISION,
+    producesRecordKinds: [R.DECISION_RECORD],
+    governanceRecordType: G.EDITORIAL_DECISION,
     mayInvalidatePriorStanding: true,
     currentImplementationSupport: I.NOT_IMPLEMENTED,
     notes: ['Normally requires RETIREMENT_ASSESSMENT before execution.'],
@@ -355,13 +397,13 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
         'RECORD_VALIDATION_RESULT',
         'RERUN_VALIDATION',
       ].includes(key),
-      expectedGovernanceRecordType: [
+      producesRecordKinds: [
         'RUN_VALIDATION',
         'RECORD_VALIDATION_RESULT',
         'RERUN_VALIDATION',
       ].includes(key)
-        ? 'VALIDATION_RECORD'
-        : 'NONE',
+        ? [R.VALIDATION_RECORD]
+        : [],
       mayInvalidatePriorStanding: key === 'MARK_VALIDATION_STALE',
       currentImplementationSupport:
         key === 'MARK_VALIDATION_STALE'
@@ -394,8 +436,8 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
       applicableArtifactTypes: [T.EDITORIAL_REVIEW],
       requiresVersionTarget: true,
       createsGovernanceRecord: false,
-      expectedGovernanceRecordType:
-        key === 'REQUEST_CHANGES' ? 'REVIEW_EVENT' : 'NONE',
+      producesRecordKinds: key === 'REQUEST_CHANGES' ? [R.AUDIT_EVENT] : [],
+      auditRecordType: key === 'REQUEST_CHANGES' ? AR.REVIEW_EVENT : undefined,
       mayInvalidatePriorStanding: key === 'ESCALATE_REVIEW',
       currentImplementationSupport: I.PARTIALLY_IMPLEMENTED,
       currentImplementationSymbols: ['CaseReview'],
@@ -421,7 +463,7 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
       applicableArtifactTypes: [artifactType as WeosArtifactType],
       requiresVersionTarget: true,
       createsAssessment: true,
-      expectedGovernanceRecordType: 'ASSESSMENT_RECORD',
+      producesRecordKinds: [R.ASSESSMENT_RECORD],
       currentImplementationSupport: I.NOT_IMPLEMENTED,
     }),
   ),
@@ -434,7 +476,7 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
     applicableArtifactTypes: [T.PUBLICATION_READINESS_ASSESSMENT],
     requiresVersionTarget: true,
     createsAssessment: false,
-    expectedGovernanceRecordType: 'NONE',
+    producesRecordKinds: [],
     currentImplementationSupport: I.NOT_IMPLEMENTED,
   }),
   ...[
@@ -472,6 +514,24 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
           ? revisionTargets
           : []),
       ],
+      subjectArtifactTypes:
+        key === 'APPROVE_REVISION' ||
+        key === 'REJECT_REVISION' ||
+        key === 'REQUIRE_REVISION'
+          ? revisionTargets
+          : [artifactType as WeosArtifactType],
+      targetRevisionTypes:
+        key === 'APPROVE_REVISION' ||
+        key === 'REJECT_REVISION' ||
+        key === 'REQUIRE_REVISION'
+          ? revisionTargets
+          : [],
+      producesArtifactTypes:
+        key === 'APPROVE_REVISION' ||
+        key === 'REJECT_REVISION' ||
+        key === 'REQUIRE_REVISION'
+          ? [T.EDITORIAL_DECISION]
+          : [artifactType as WeosArtifactType],
       requiresVersionTarget: [
         'APPROVE_REVISION',
         'REJECT_REVISION',
@@ -480,7 +540,8 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
       requiresDecision: true,
       decisionOutcome: outcome as WeosDecisionType,
       createsGovernanceRecord: true,
-      expectedGovernanceRecordType: G.EDITORIAL_DECISION,
+      producesRecordKinds: [R.DECISION_RECORD],
+      governanceRecordType: G.EDITORIAL_DECISION,
       createsOperationalEffect: [
         'ACTIVATE_RELATIONSHIP',
         'DEPRECATE_RELATIONSHIP',
@@ -504,7 +565,8 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
     requiresDecision: true,
     decisionOutcome: D.ACTIVATE_ARTIFACT,
     createsGovernanceRecord: true,
-    expectedGovernanceRecordType: G.EDITORIAL_DECISION,
+    producesRecordKinds: [R.DECISION_RECORD],
+    governanceRecordType: G.EDITORIAL_DECISION,
     createsOperationalEffect: true,
     currentImplementationSupport: I.NOT_IMPLEMENTED,
   }),
@@ -519,7 +581,8 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
     requiresDecision: true,
     decisionOutcome: D.DEPRECATE_ARTIFACT,
     createsGovernanceRecord: true,
-    expectedGovernanceRecordType: G.EDITORIAL_DECISION,
+    producesRecordKinds: [R.DECISION_RECORD],
+    governanceRecordType: G.EDITORIAL_DECISION,
     mayInvalidatePriorStanding: true,
     currentImplementationSupport: I.NOT_IMPLEMENTED,
   }),
@@ -555,6 +618,42 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
         T.CLUE_REVISION_DRAFT,
         T.CONTROLLED_APPLICATION_RECORD,
       ],
+      subjectArtifactTypes:
+        key === 'CREATE_AI_DRAFT'
+          ? revisionTargets
+          : key === 'CREATE_CLUE_REVISION_DRAFT'
+            ? [T.CASE_REVISION]
+            : key.includes('CLUE')
+              ? [T.CLUE_REVISION_DRAFT]
+              : key.includes('AI_DRAFT')
+                ? [T.AI_DRAFT]
+                : [T.CONTROLLED_APPLICATION_RECORD],
+      targetRevisionTypes: [
+        'CREATE_AI_DRAFT',
+        'CREATE_CLUE_REVISION_DRAFT',
+        'APPLY_ACCEPTED_DRAFT',
+        'RECONCILE_STALE_APPLICATION',
+      ].includes(key)
+        ? revisionTargets
+        : [],
+      producesArtifactTypes:
+        key === 'CREATE_AI_DRAFT'
+          ? [T.AI_DRAFT]
+          : key === 'CREATE_CLUE_REVISION_DRAFT'
+            ? [T.CLUE_REVISION_DRAFT]
+            : key === 'VALIDATE_AI_DRAFT'
+              ? [T.VALIDATION_RESULT]
+              : [
+                    'ACCEPT_AI_DRAFT',
+                    'REJECT_AI_DRAFT',
+                    'REQUEST_AI_DRAFT_CHANGES',
+                    'ACCEPT_CLUE_REVISION_DRAFT',
+                    'REJECT_CLUE_REVISION_DRAFT',
+                  ].includes(key)
+                ? [T.EDITORIAL_DECISION]
+                : key === 'APPLY_ACCEPTED_DRAFT'
+                  ? [T.CONTROLLED_APPLICATION_RECORD, T.CASE_REVISION]
+                  : [],
       createsContent: key === 'CREATE_CLUE_REVISION_DRAFT',
       changesContent: key === 'APPLY_ACCEPTED_DRAFT',
       createsRevision: key === 'APPLY_ACCEPTED_DRAFT',
@@ -563,6 +662,20 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
         'RECONCILE_STALE_APPLICATION',
       ].includes(key),
       createsValidationResult: key === 'VALIDATE_AI_DRAFT',
+      producesRecordKinds:
+        key === 'VALIDATE_AI_DRAFT'
+          ? [R.VALIDATION_RECORD]
+          : [
+                'ACCEPT_AI_DRAFT',
+                'REJECT_AI_DRAFT',
+                'REQUEST_AI_DRAFT_CHANGES',
+                'ACCEPT_CLUE_REVISION_DRAFT',
+                'REJECT_CLUE_REVISION_DRAFT',
+              ].includes(key)
+            ? [R.DECISION_RECORD]
+            : key === 'APPLY_ACCEPTED_DRAFT'
+              ? [R.GOVERNANCE_RECORD]
+              : [],
       requiresDecision: [
         'ACCEPT_AI_DRAFT',
         'REJECT_AI_DRAFT',
@@ -590,7 +703,7 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
         'REJECT_CLUE_REVISION_DRAFT',
         'APPLY_ACCEPTED_DRAFT',
       ].includes(key),
-      expectedGovernanceRecordType: [
+      governanceRecordType: [
         'ACCEPT_AI_DRAFT',
         'REJECT_AI_DRAFT',
         'REQUEST_AI_DRAFT_CHANGES',
@@ -600,7 +713,7 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
         ? G.EDITORIAL_DECISION
         : key === 'APPLY_ACCEPTED_DRAFT'
           ? G.CONTROLLED_APPLICATION_RECORD
-          : 'NONE',
+          : undefined,
       createsOperationalEffect: key === 'APPLY_ACCEPTED_DRAFT',
       mayAffectLearnerExposure: key === 'APPLY_ACCEPTED_DRAFT',
       mayInvalidatePriorStanding: [
@@ -636,9 +749,11 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
             ? 'Govern remapping of references between diagnosis identities without changing lifecycle standing by itself.'
             : `${key} changes diagnosis identity standing or projection.`,
       applicableArtifactTypes: [T.DIAGNOSIS_REGISTRY],
+      subjectArtifactTypes: [T.DIAGNOSIS_REGISTRY],
+      producesArtifactTypes: [T.GOVERNANCE_RECORD],
       requiresDecision: true,
       createsGovernanceRecord: true,
-      expectedGovernanceRecordType: 'IDENTITY_GOVERNANCE_RECORD',
+      producesRecordKinds: [R.GOVERNANCE_RECORD],
       createsOperationalEffect: key !== 'REMAP_DIAGNOSIS_REFERENCE',
       mayAffectLearnerExposure: key === 'DEPRECATE_REGISTRY_ENTRY',
       mayInvalidatePriorStanding: [
@@ -671,9 +786,12 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
       category: C.OPERATIONAL_PERMISSION,
       meaning: `${key} changes operational permission and never changes editorial standing.`,
       applicableArtifactTypes: [T.DIAGNOSIS_OPERATIONAL_PERMISSION],
+      subjectArtifactTypes: [T.DIAGNOSIS_OPERATIONAL_PERMISSION],
+      producesArtifactTypes: [T.EDITORIAL_DECISION],
       requiresDecision: true,
       createsGovernanceRecord: true,
-      expectedGovernanceRecordType: G.EDITORIAL_DECISION,
+      producesRecordKinds: [R.DECISION_RECORD],
+      governanceRecordType: G.EDITORIAL_DECISION,
       createsOperationalEffect: true,
       mayAffectLearnerExposure: key.includes('PLAYABILITY'),
       currentImplementationSupport: I.PARTIALLY_IMPLEMENTED,
@@ -690,9 +808,12 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
     meaning:
       'Govern evidence source withdrawal; compatibility projection writes are implementation effects, not peer canonical actions.',
     applicableArtifactTypes: [T.EVIDENCE_SOURCE],
+    subjectArtifactTypes: [T.EVIDENCE_SOURCE],
+    producesArtifactTypes: [T.WITHDRAWAL_RECORD],
     requiresDecision: true,
     createsGovernanceRecord: true,
-    expectedGovernanceRecordType: G.WITHDRAWAL_RECORD,
+    producesRecordKinds: [R.DECISION_RECORD],
+    governanceRecordType: G.WITHDRAWAL_RECORD,
     createsOperationalEffect: true,
     mayInvalidatePriorStanding: true,
     currentImplementationSupport: I.NOT_IMPLEMENTED,
@@ -727,11 +848,20 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
         T.PUBLICATION_DECISION,
         T.PUBLISHED_ARTIFACT_VERSION,
       ],
+      subjectArtifactTypes: [T.PUBLISHED_ARTIFACT_VERSION],
+      targetRevisionTypes: [T.CASE_REVISION, T.DIAGNOSIS_EDUCATION_REVISION],
+      producesArtifactTypes:
+        key === 'WITHDRAW_PUBLICATION'
+          ? [T.WITHDRAWAL_RECORD, T.PUBLICATION_HISTORY]
+          : key === 'SUPERSEDE_PUBLICATION'
+            ? [T.SUPERSESSION_RECORD, T.PUBLICATION_HISTORY]
+            : [T.PUBLICATION_DECISION],
       requiresVersionTarget: true,
       requiresDecision: true,
       decisionOutcome: outcome as WeosDecisionType,
       createsGovernanceRecord: true,
-      expectedGovernanceRecordType:
+      producesRecordKinds: [R.DECISION_RECORD],
+      governanceRecordType:
         key === 'WITHDRAW_PUBLICATION'
           ? G.WITHDRAWAL_RECORD
           : key === 'SUPERSEDE_PUBLICATION'
@@ -789,7 +919,8 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
     requiresVersionTarget: true,
     requiresDecision: true,
     createsGovernanceRecord: true,
-    expectedGovernanceRecordType: G.PUBLICATION_DECISION,
+    producesRecordKinds: [R.DECISION_RECORD],
+    governanceRecordType: G.PUBLICATION_DECISION,
     createsOperationalEffect: true,
     mayAffectLearnerExposure: true,
     mayInvalidatePriorStanding: true,
@@ -821,13 +952,55 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
         T.ADJUDICATION_RECORD,
         T.EMERGENCY_CORRECTION,
       ],
+      subjectArtifactTypes:
+        key === 'CREATE_REVALIDATION_OBLIGATION'
+          ? revisionTargets
+          : key === 'MARK_REVIEW_DUE'
+            ? revisionTargets
+            : key === 'RECORD_CONFLICT_OF_INTEREST'
+              ? [T.EDITORIAL_REVIEW]
+              : key === 'GRANT_GOVERNANCE_EXCEPTION'
+                ? [T.GOVERNANCE_EXCEPTION]
+                : key === 'RECORD_DISAGREEMENT' ||
+                    key === 'ADJUDICATE_DISAGREEMENT'
+                  ? [T.DISAGREEMENT_RECORD]
+                  : [T.EMERGENCY_CORRECTION],
+      producesArtifactTypes:
+        key === 'CREATE_REVALIDATION_OBLIGATION'
+          ? [T.REVALIDATION_OBLIGATION]
+          : key === 'MARK_REVIEW_DUE'
+            ? [T.REVIEW_DUE_DATE]
+            : key === 'RECORD_CONFLICT_OF_INTEREST'
+              ? [T.CONFLICT_OF_INTEREST_DECLARATION]
+              : key === 'GRANT_GOVERNANCE_EXCEPTION'
+                ? [T.GOVERNANCE_EXCEPTION]
+                : key === 'RECORD_DISAGREEMENT'
+                  ? [T.DISAGREEMENT_RECORD]
+                  : key === 'ADJUDICATE_DISAGREEMENT'
+                    ? [T.ADJUDICATION_RECORD]
+                    : [T.EMERGENCY_CORRECTION, T.REVALIDATION_OBLIGATION],
       requiresVersionTarget: true,
       requiresDecision: ![
         'CREATE_REVALIDATION_OBLIGATION',
         'MARK_REVIEW_DUE',
+        'RECORD_DISAGREEMENT',
+        'INITIATE_EMERGENCY_CORRECTION',
       ].includes(key),
-      createsGovernanceRecord: true,
-      expectedGovernanceRecordType:
+      createsGovernanceRecord: [
+        'RECORD_CONFLICT_OF_INTEREST',
+        'GRANT_GOVERNANCE_EXCEPTION',
+        'RECORD_DISAGREEMENT',
+        'ADJUDICATE_DISAGREEMENT',
+      ].includes(key),
+      producesRecordKinds:
+        key === 'CREATE_REVALIDATION_OBLIGATION'
+          ? [R.OBLIGATION]
+          : key === 'MARK_REVIEW_DUE'
+            ? [R.OBLIGATION]
+            : key === 'INITIATE_EMERGENCY_CORRECTION'
+              ? [R.WORKFLOW, R.OBLIGATION]
+              : [R.GOVERNANCE_RECORD],
+      governanceRecordType:
         key === 'GRANT_GOVERNANCE_EXCEPTION'
           ? G.GOVERNANCE_EXCEPTION
           : key === 'RECORD_CONFLICT_OF_INTEREST'
@@ -836,9 +1009,7 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
               ? G.DISAGREEMENT_RECORD
               : key === 'ADJUDICATE_DISAGREEMENT'
                 ? G.ADJUDICATION_RECORD
-                : key === 'CREATE_REVALIDATION_OBLIGATION'
-                  ? 'REVALIDATION_OBLIGATION'
-                  : G.EMERGENCY_CORRECTION_RECORD,
+                : undefined,
       mayAffectLearnerExposure: key === 'INITIATE_EMERGENCY_CORRECTION',
       mayInvalidatePriorStanding: true,
       currentImplementationSupport: I.NOT_IMPLEMENTED,

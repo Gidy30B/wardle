@@ -43,7 +43,7 @@ export type LegacyStatusCanonicalInterpretation = Readonly<{
   lifecycleFamily?: string;
   lifecycleState?: string;
   validationOutcome?: WeosValidationOutcome;
-  validationStanding?: 'CURRENT' | 'STALE' | 'SUPERSEDED' | 'ERROR';
+  validationStanding?: 'CURRENT' | 'STALE' | 'SUPERSEDED';
   meaning: string;
 }>;
 
@@ -197,7 +197,7 @@ const stringEntry = (
 function validation(
   outcome: WeosValidationOutcome,
   meaning: string,
-  standing: 'CURRENT' | 'STALE' | 'SUPERSEDED' | 'ERROR' = 'CURRENT',
+  standing: 'CURRENT' | 'STALE' | 'SUPERSEDED' = 'CURRENT',
 ): LegacyStatusCanonicalInterpretation {
   return projection('VALIDATION_PROJECTION', meaning, T.VALIDATION_RESULT, {
     validationOutcome: outcome,
@@ -754,7 +754,7 @@ const remainingEnums: readonly LegacyStatusCrosswalkEntry[] = [
               ? O.FAILED
               : O.ERROR,
           `${sourceValue} is validation outcome; a newly recorded failed result can still be current.`,
-          sourceValue === ValidationOutcome.ERROR ? 'ERROR' : 'CURRENT',
+          'CURRENT',
         ),
       ],
       ambiguity:

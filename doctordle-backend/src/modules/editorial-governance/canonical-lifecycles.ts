@@ -50,10 +50,7 @@ function state(
     governed: stateClass === K.GOVERNED || stateClass === K.TERMINAL,
     terminal: stateClass === K.TERMINAL,
     candidateKnowledge: stateClass === K.CANDIDATE,
-    permitsContentMutation:
-      stateClass === K.CANDIDATE ||
-      stateClass === K.AUTHORING ||
-      stateClass === K.REVIEW,
+    permitsContentMutation: false,
     mayHaveLearnerExposure: false,
     canonical: true,
     currentlyImplemented: false,
@@ -74,7 +71,10 @@ export const WEOS_CANONICAL_LIFECYCLES: readonly CanonicalLifecycleDefinition[] 
         'Diagnosis registry identity standing, distinct from playability, generatability, onboarding, and readiness.',
       currentImplementationModels: ['DiagnosisRegistry.status'],
       states: [
-        state('DRAFT', K.AUTHORING, { currentlyImplemented: true }),
+        state('DRAFT', K.AUTHORING, {
+          currentlyImplemented: true,
+          permitsContentMutation: true,
+        }),
         state('ACTIVE', K.GOVERNED, { currentlyImplemented: true }),
         state('HIDDEN', K.OPERATIONAL, { currentlyImplemented: true }),
         state('DEPRECATED', K.TERMINAL, { currentlyImplemented: true }),
@@ -120,20 +120,25 @@ export const WEOS_CANONICAL_LIFECYCLES: readonly CanonicalLifecycleDefinition[] 
       ),
     }),
     lifecycle({
-      lifecycleFamily: 'diagnosis-operational-permission',
+      lifecycleFamily: 'diagnosis-playability-permission',
       artifactType: T.DIAGNOSIS_OPERATIONAL_PERMISSION,
       meaning:
-        'Operational participation grants for playability and generation.',
-      currentImplementationModels: [
-        'DiagnosisRegistry.isPlayable',
-        'DiagnosisRegistry.isGeneratable',
-      ],
-      states: [
-        'PLAYABILITY_GRANTED',
-        'PLAYABILITY_REMOVED',
-        'GENERATABILITY_GRANTED',
-        'GENERATABILITY_REMOVED',
-      ].map((key) =>
+        'Independent operational permission dimension controlling learner-answer playability.',
+      currentImplementationModels: ['DiagnosisRegistry.isPlayable'],
+      states: ['GRANTED', 'REMOVED'].map((key) =>
+        state(key, K.OPERATIONAL, {
+          currentlyImplemented: true,
+          governed: false,
+        }),
+      ),
+    }),
+    lifecycle({
+      lifecycleFamily: 'diagnosis-generatability-permission',
+      artifactType: T.DIAGNOSIS_OPERATIONAL_PERMISSION,
+      meaning:
+        'Independent operational permission dimension controlling automated generation participation.',
+      currentImplementationModels: ['DiagnosisRegistry.isGeneratable'],
+      states: ['GRANTED', 'REMOVED'].map((key) =>
         state(key, K.OPERATIONAL, {
           currentlyImplemented: true,
           governed: false,
@@ -148,9 +153,12 @@ export const WEOS_CANONICAL_LIFECYCLES: readonly CanonicalLifecycleDefinition[] 
       currentImplementationModels: ['DiagnosisEditorialBrief.status'],
       states: [
         state('ABSENT', K.AUTHORING),
-        state('DRAFT', K.AUTHORING, { currentlyImplemented: true }),
+        state('DRAFT', K.AUTHORING, {
+          currentlyImplemented: true,
+          permitsContentMutation: true,
+        }),
         state('REVIEW_REQUIRED', K.REVIEW, { currentlyImplemented: true }),
-        state('REVISION_REQUIRED', K.REVIEW),
+        state('REVISION_REQUIRED', K.REVIEW, { permitsContentMutation: true }),
         state('APPROVED', K.GOVERNED, { currentlyImplemented: true }),
         state('REJECTED', K.TERMINAL, { currentlyImplemented: true }),
         state('SUPERSEDED', K.TERMINAL),
@@ -163,7 +171,10 @@ export const WEOS_CANONICAL_LIFECYCLES: readonly CanonicalLifecycleDefinition[] 
         'Learning Goal standing inside a governed Brief version; no independent persistence is claimed.',
       currentImplementationModels: ['DiagnosisEditorialBrief.learningGoals'],
       states: [
-        state('DRAFT', K.AUTHORING, { currentlyImplemented: true }),
+        state('DRAFT', K.AUTHORING, {
+          currentlyImplemented: true,
+          permitsContentMutation: true,
+        }),
         state('ACTIVE_IN_BRIEF', K.GOVERNED, { currentlyImplemented: true }),
         state('REPLACED', K.TERMINAL),
         state('DEPRECATED', K.TERMINAL),
@@ -178,7 +189,7 @@ export const WEOS_CANONICAL_LIFECYCLES: readonly CanonicalLifecycleDefinition[] 
       states: [
         state('CANDIDATE', K.CANDIDATE, { currentlyImplemented: true }),
         state('REVIEW_REQUIRED', K.REVIEW, { currentlyImplemented: true }),
-        state('REVISION_REQUIRED', K.REVIEW),
+        state('REVISION_REQUIRED', K.REVIEW, { permitsContentMutation: true }),
         state('ACTIVE', K.GOVERNED, { currentlyImplemented: true }),
         state('REJECTED', K.TERMINAL, { currentlyImplemented: true }),
         state('DEPRECATED', K.TERMINAL, { currentlyImplemented: true }),
@@ -221,12 +232,18 @@ export const WEOS_CANONICAL_LIFECYCLES: readonly CanonicalLifecycleDefinition[] 
         'Governed Case Revision editorial lifecycle, excluding readiness, publication, scheduling, playability, and learner exposure.',
       currentImplementationModels: ['CaseEditorialStatus', 'CaseRevision'],
       states: [
-        state('DRAFT', K.AUTHORING, { currentlyImplemented: true }),
+        state('DRAFT', K.AUTHORING, {
+          currentlyImplemented: true,
+          permitsContentMutation: true,
+        }),
         state('VALIDATION_PENDING', K.REVIEW, { currentlyImplemented: true }),
         state('VALIDATION_FAILED', K.REVIEW, { currentlyImplemented: true }),
         state('REVIEW_REQUIRED', K.REVIEW, { currentlyImplemented: true }),
         state('UNDER_REVIEW', K.REVIEW, { currentlyImplemented: true }),
-        state('REVISION_REQUIRED', K.REVIEW, { currentlyImplemented: true }),
+        state('REVISION_REQUIRED', K.REVIEW, {
+          currentlyImplemented: true,
+          permitsContentMutation: true,
+        }),
         state('APPROVED', K.GOVERNED, { currentlyImplemented: true }),
         state('REJECTED', K.TERMINAL, { currentlyImplemented: true }),
         state('SUPERSEDED', K.TERMINAL),
@@ -239,7 +256,10 @@ export const WEOS_CANONICAL_LIFECYCLES: readonly CanonicalLifecycleDefinition[] 
         'Case Explanation standing as a component of Case Revision unless independent behavior is proven.',
       currentImplementationModels: ['Case.explanation', 'ExplanationContent'],
       states: [
-        state('DRAFT', K.AUTHORING, { currentlyImplemented: true }),
+        state('DRAFT', K.AUTHORING, {
+          currentlyImplemented: true,
+          permitsContentMutation: true,
+        }),
         state('REVIEW_REQUIRED', K.REVIEW),
         state('APPROVED_WITH_CASE_REVISION', K.GOVERNED),
         state('SUPERSEDED', K.TERMINAL),
@@ -257,7 +277,10 @@ export const WEOS_CANONICAL_LIFECYCLES: readonly CanonicalLifecycleDefinition[] 
         meaning: `${lifecycleFamily} standing within Case Revision unless stable independent identity is required.`,
         currentImplementationModels: ['CaseRevision', 'Case.clues'],
         states: [
-          state('DRAFT', K.AUTHORING, { currentlyImplemented: true }),
+          state('DRAFT', K.AUTHORING, {
+            currentlyImplemented: true,
+            permitsContentMutation: true,
+          }),
           state('ACTIVE_IN_REVISION', K.GOVERNED, {
             currentlyImplemented: true,
           }),
@@ -273,16 +296,13 @@ export const WEOS_CANONICAL_LIFECYCLES: readonly CanonicalLifecycleDefinition[] 
         'Clue Revision Draft standing. Acceptance is not application; application is not approval.',
       currentImplementationModels: ['CaseClueRevisionDraft.status'],
       states: [
-        state('DRAFT', K.AUTHORING),
+        state('DRAFT', K.AUTHORING, { permitsContentMutation: true }),
         state('PENDING_REVIEW', K.REVIEW, { currentlyImplemented: true }),
         state('ACCEPTED', K.GOVERNED, { currentlyImplemented: true }),
         state('CHANGES_REQUESTED', K.REVIEW, { currentlyImplemented: true }),
         state('REJECTED', K.TERMINAL, { currentlyImplemented: true }),
         state('APPLIED', K.OPERATIONAL, { currentlyImplemented: true }),
         state('SUPERSEDED', K.TERMINAL, { currentlyImplemented: true }),
-        state('BLOCKED_CASE_NOT_EDITABLE', K.OPERATIONAL, {
-          currentlyImplemented: true,
-        }),
       ],
     }),
     lifecycle({
@@ -307,13 +327,19 @@ export const WEOS_CANONICAL_LIFECYCLES: readonly CanonicalLifecycleDefinition[] 
         'DiagnosisEducationRevision',
       ],
       states: [
-        state('DRAFT', K.AUTHORING, { currentlyImplemented: true }),
+        state('DRAFT', K.AUTHORING, {
+          currentlyImplemented: true,
+          permitsContentMutation: true,
+        }),
         state('GENERATED_CANDIDATE', K.CANDIDATE, {
           currentlyImplemented: true,
         }),
         state('REVIEW_REQUIRED', K.REVIEW, { currentlyImplemented: true }),
         state('UNDER_REVIEW', K.REVIEW),
-        state('REVISION_REQUIRED', K.REVIEW, { currentlyImplemented: true }),
+        state('REVISION_REQUIRED', K.REVIEW, {
+          currentlyImplemented: true,
+          permitsContentMutation: true,
+        }),
         state('APPROVED', K.GOVERNED, { currentlyImplemented: true }),
         state('REJECTED', K.TERMINAL, { currentlyImplemented: true }),
         state('SUPERSEDED', K.TERMINAL),
@@ -484,19 +510,11 @@ export const WEOS_CANONICAL_LIFECYCLES: readonly CanonicalLifecycleDefinition[] 
       meaning:
         'Validation Result standing; outcome remains separate from lifecycle.',
       currentImplementationModels: ['CaseValidationRun.outcome'],
-      states: ['CURRENT', 'STALE', 'SUPERSEDED', 'ERROR'].map((key) =>
-        state(
-          key,
-          key === 'CURRENT'
-            ? K.GOVERNED
-            : key === 'ERROR'
-              ? K.REVIEW
-              : K.LEGACY,
-          {
-            currentlyImplemented: ['CURRENT', 'ERROR'].includes(key),
-            permitsContentMutation: false,
-          },
-        ),
+      states: ['CURRENT', 'STALE', 'SUPERSEDED'].map((key) =>
+        state(key, key === 'CURRENT' ? K.GOVERNED : K.LEGACY, {
+          currentlyImplemented: key === 'CURRENT',
+          permitsContentMutation: false,
+        }),
       ),
     }),
     ...[
@@ -538,22 +556,16 @@ export const WEOS_CANONICAL_LIFECYCLES: readonly CanonicalLifecycleDefinition[] 
       meaning:
         'Publication Decision lifecycle distinct from assessment and scheduling.',
       currentImplementationModels: ['Case.editorialStatus', 'Case.publishedAt'],
-      states: [
-        'PROPOSED',
-        'AUTHORISED',
-        'DECLINED',
-        'WITHDRAWN',
-        'SUPERSEDED',
-      ].map((key) =>
+      states: ['PROPOSED', 'AUTHORISED', 'DECLINED'].map((key) =>
         state(
           key,
           key === 'AUTHORISED'
             ? K.GOVERNED
-            : ['DECLINED', 'WITHDRAWN', 'SUPERSEDED'].includes(key)
+            : key === 'DECLINED'
               ? K.TERMINAL
               : K.REVIEW,
           {
-            currentlyImplemented: ['AUTHORISED'].includes(key),
+            currentlyImplemented: key === 'AUTHORISED',
           },
         ),
       ),

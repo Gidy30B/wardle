@@ -61,10 +61,7 @@ describe('WEOS canonical artifact catalogue', () => {
         expect(model).not.toContain('.');
         expect(model).not.toContain('/');
       }
-      for (const model of entry.currentRevisionModels) {
-        expect(model).not.toContain('.');
-        expect(model).not.toContain('/');
-      }
+      expect(entry.currentRevisionCarriers.length).toBeGreaterThan(0);
     }
   });
 
@@ -84,6 +81,27 @@ describe('WEOS canonical artifact catalogue', () => {
     expect(WEOS_CANONICAL_ARTIFACT_CATALOGUE.RELEASE_EVENT.recordKind).toBe(
       WEOS_RECORD_KINDS.AUDIT_EVENT,
     );
+    expect(
+      WEOS_CANONICAL_ARTIFACT_CATALOGUE.MATERIAL_CHANGE_DETERMINATION
+        .versioningMode,
+    ).toBe(WEOS_VERSIONING_MODES.VERSION_TARGETED_RECORD);
+  });
+
+  it('does not make validation or assessment records approval or decision records', () => {
+    const validation = WEOS_CANONICAL_ARTIFACT_CATALOGUE.VALIDATION_RESULT;
+    const assessments = WEOS_CANONICAL_ARTIFACT_CATALOGUE_ENTRIES.filter(
+      (entry) => entry.recordKind === WEOS_RECORD_KINDS.ASSESSMENT_RECORD,
+    );
+
+    expect(validation.approvalRequirement).toBe('NOT_REQUIRED');
+    expect(validation.decisionRequirement).toBe('NOT_APPLICABLE');
+    expect(validation.recordKind).toBe(WEOS_RECORD_KINDS.VALIDATION_RECORD);
+
+    for (const assessment of assessments) {
+      expect(assessment.recordKind).not.toBe(WEOS_RECORD_KINDS.DECISION_RECORD);
+      expect(assessment.approvalRequirement).toBe('NOT_REQUIRED');
+      expect(assessment.decisionRequirement).toBe('NOT_APPLICABLE');
+    }
   });
 
   it('classifies candidate knowledge without implying governed approval', () => {

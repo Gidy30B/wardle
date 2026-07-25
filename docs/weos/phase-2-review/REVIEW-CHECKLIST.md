@@ -8,6 +8,7 @@
 - [ ] Technical actor is not authority.
 - [ ] Audit Event is not Governance Record.
 - [ ] Readiness is not lifecycle.
+- [ ] Phase 1 catalogue semantics are preserved unless an approved exception gives rationale.
 
 ## Lifecycle Correctness
 
@@ -15,6 +16,10 @@
 - [ ] Case Revision lifecycle does not include publication or learner exposure.
 - [ ] AI Draft lifecycle does not include Controlled Application.
 - [ ] `BLOCKED_CASE_NOT_EDITABLE` is not forced into canonical lifecycle state.
+- [ ] Playability and generatability are independent permission dimensions.
+- [ ] Publication Decision does not contain `WITHDRAWN` or later supersession standing.
+- [ ] Validation standing excludes `ERROR` while validation outcome includes `ERROR`.
+- [ ] `UNDER_REVIEW` and `APPROVED` do not permit direct content mutation.
 
 ## Transition Correctness
 
@@ -45,6 +50,7 @@
 - [ ] Schedule is not release.
 - [ ] Release is not learner exposure.
 - [ ] Withdrawal creates Withdrawal Record and exposure/schedule effects.
+- [ ] Withdrawal does not weaken the historical Publication Decision.
 
 ## Learner-Exposure Integrity
 
@@ -57,6 +63,7 @@
 - [ ] WEOS-IMP-003 tables are generated from action metadata.
 - [ ] WEOS-IMP-004 tables are generated from crosswalk metadata.
 - [ ] Documentation conformance tests fail if entries are omitted.
+- [ ] Deterministic generation check reports no Markdown drift after build and generator run.
 
 ## Phase 3 Readiness
 
