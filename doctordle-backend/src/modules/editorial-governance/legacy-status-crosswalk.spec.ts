@@ -217,6 +217,7 @@ describe('WEOS legacy status crosswalk', () => {
 
   it('keeps validation outcome distinct from validation standing', () => {
     const failed = conceptsFor('ValidationOutcome', ValidationOutcome.FAILED);
+    const error = conceptsFor('ValidationOutcome', ValidationOutcome.ERROR);
     const reasoningFailed = conceptsFor(
       'ReasoningDraftValidationStatus',
       ReasoningDraftValidationStatus.FAILED,
@@ -238,6 +239,21 @@ describe('WEOS legacy status crosswalk', () => {
         }),
       ]),
     );
+    expect(error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          validationOutcome: WEOS_VALIDATION_OUTCOMES.ERROR,
+          validationStanding: 'CURRENT',
+        }),
+      ]),
+    );
+    expect(
+      WEOS_LEGACY_STATUS_CROSSWALK.flatMap((entry) =>
+        entry.canonicalInterpretations.map(
+          (interpretation) => interpretation.validationStanding,
+        ),
+      ),
+    ).not.toContain('ERROR');
   });
 
   it('protects string-status interpretations reviewed as unsafe', () => {

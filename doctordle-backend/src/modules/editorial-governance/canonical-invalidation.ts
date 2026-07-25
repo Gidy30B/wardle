@@ -466,12 +466,6 @@ export const WEOS_INVALIDATION_RULE_ENTRIES: readonly CanonicalInvalidationRule[
       currentImplementationSupport: 'NOT_IMPLEMENTED',
       impacts: [
         impact(
-          S.PUBLICATION_DECISION,
-          E.FLAG_FOR_REVIEW,
-          'PUBLISHED_VERSION',
-          'Original publication decision remains historical while withdrawal record captures new decision.',
-        ),
-        impact(
           S.PUBLICATION_SCHEDULE,
           E.CANCEL,
           'OPERATIONAL_PROJECTION',

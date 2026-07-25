@@ -49,5 +49,13 @@ describe('WEOS canonical invalidation', () => {
     expect(
       WEOS_INVALIDATION_RULES.PUBLICATION_WITHDRAWAL.causedByActions,
     ).toContain('WITHDRAW_PUBLICATION');
+    expect(WEOS_INVALIDATION_RULES.PUBLICATION_WITHDRAWAL.impacts).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          standing: 'PUBLICATION_DECISION',
+          effect: WEOS_STANDING_EFFECTS.FLAG_FOR_REVIEW,
+        }),
+      ]),
+    );
   });
 });

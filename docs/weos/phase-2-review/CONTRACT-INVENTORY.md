@@ -5,17 +5,18 @@
 - Concept groups: `21`
 - Artifact types: `80`
 - Artifact catalogue entries: `80`
-- Lifecycle families: `45`
-- Lifecycle states: `215`
+- Lifecycle families: `46`
+- Lifecycle states: `211`
 - Actions: `80`
-- Decision actions: `18`
+- Decision-category actions: `18`
+- Decision-required actions: `37`
 - Preconditions: `38`
 - Transitions: `9`
 - Invalidation / standing-impact rules: `15`
 - Crosswalk entries: `95`
 - Semantic-safe mappings: `82`
 - Record-migration-safe mappings: `0`
-- Open decisions: `20`
+- Open decisions: `21`
 
 ## Action Keys
 

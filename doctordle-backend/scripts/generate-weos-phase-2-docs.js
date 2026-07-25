@@ -42,7 +42,10 @@ const actionRows = actions.WEOS_CANONICAL_ACTIONS.map((item) => [
   item.label,
   item.meaning,
   item.category,
-  list(item.applicableArtifactTypes),
+  list(item.subjectArtifactTypes),
+  list(item.targetRevisionTypes),
+  list(item.producesArtifactTypes),
+  list(item.producesRecordKinds),
   item.createsContent,
   item.changesContent,
   item.createsRevision,
@@ -52,7 +55,8 @@ const actionRows = actions.WEOS_CANONICAL_ACTIONS.map((item) => [
   item.requiresDecision,
   item.decisionOutcome,
   item.createsGovernanceRecord,
-  item.expectedGovernanceRecordType,
+  item.governanceRecordType,
+  item.auditRecordType,
   item.createsOperationalEffect,
   item.mayAffectLearnerExposure,
   item.mayInvalidatePriorStanding,
@@ -61,16 +65,26 @@ const actionRows = actions.WEOS_CANONICAL_ACTIONS.map((item) => [
   item.abstract ? 'abstract' : item.composite ? 'composite' : list(item.notes),
 ]);
 
+function decisionClassification(item) {
+  if (item.abstract) return 'abstract decision family';
+  if (item.composite) return 'composite workflow containing decision steps';
+  if (item.decisionOutcome) return 'action produces a decision outcome';
+  return 'action requires a separate prior decision';
+}
+
 const decisionRows = actions.WEOS_CANONICAL_ACTIONS.filter(
-  (item) => item.category === actions.WEOS_ACTION_CATEGORIES.DECISION,
+  (item) => item.requiresDecision,
 ).map((item) => [
   item.key,
-  list(item.applicableArtifactTypes),
+  item.category,
+  decisionClassification(item),
+  list(item.subjectArtifactTypes),
+  list(item.targetRevisionTypes),
   item.requiresVersionTarget,
   item.decisionOutcome,
+  item.governanceRecordType,
   'Phase 2 identifies authority requirement; Phase 5 assigns authority.',
   'Required for governed decisions.',
-  item.expectedGovernanceRecordType,
   item.createsOperationalEffect
     ? 'Operational effect recorded'
     : 'Lifecycle or standing effect',
@@ -101,7 +115,7 @@ const transitionRows = transitions.WEOS_CANONICAL_TRANSITIONS.map((item) => {
     list(item.requiredPreconditions),
     action?.requiresVersionTarget,
     action?.requiresDecision,
-    action?.expectedGovernanceRecordType,
+    action?.governanceRecordType ?? list(action?.producesRecordKinds ?? []),
     action?.createsOperationalEffect,
     action?.mayAffectLearnerExposure,
     item.standingImpacts
@@ -271,13 +285,13 @@ ${table(
 
 Complete table generated from \`WEOS_CANONICAL_ACTIONS\`.
 
-${table(['Action key', 'Label', 'Meaning', 'Category', 'Applicable artifacts', 'Creates content', 'Changes content', 'Creates revision', 'Requires version target', 'Creates Validation Result', 'Creates Assessment', 'Requires Decision', 'Decision outcome', 'Creates Governance Record', 'Expected Governance Record type', 'Creates operational effect', 'May affect learner exposure', 'Standing impacts', 'Implementation support', 'Implementation symbols', 'Notes'], actionRows)}
+${table(['Action key', 'Label', 'Meaning', 'Category', 'Subject artifacts', 'Target revision types', 'Produced artifacts', 'Produced record kinds', 'Creates content', 'Changes content', 'Creates revision', 'Requires version target', 'Creates Validation Result', 'Creates Assessment', 'Requires Decision', 'Decision outcome', 'Creates Governance Record', 'Governance Record type', 'Audit Record type', 'Creates operational effect', 'May affect learner exposure', 'Standing impacts', 'Implementation support', 'Implementation symbols', 'Notes'], actionRows)}
 
 ## 7.4 Complete Decision Catalogue
 
-Every action with category \`DECISION\` appears here. Action key is distinct from decision outcome type.
+Every action with \`requiresDecision: true\` appears here. Action category is distinct from decision requirement, decision outcome, and decision record produced.
 
-${table(['Action key', 'Applicable artifact', 'Version target', 'Outcome type', 'Required authority', 'Required rationale', 'Expected Governance Record', 'Resulting effect'], decisionRows)}
+${table(['Action key', 'Action category', 'Decision classification', 'Subject artifacts', 'Target revision types', 'Version target', 'Decision outcome', 'Decision record produced', 'Required authority', 'Required rationale', 'Resulting effect'], decisionRows)}
 
 ## 7.5 Governance Record Implications
 

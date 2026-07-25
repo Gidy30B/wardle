@@ -91,16 +91,93 @@ describe('WEOS canonical actions', () => {
 
   it('documents every decision action with decision metadata', () => {
     const decisionActions = WEOS_CANONICAL_ACTIONS.filter(
-      (action) => action.category === WEOS_ACTION_CATEGORIES.DECISION,
+      (action) => action.requiresDecision,
     );
 
     expect(decisionActions.length).toBeGreaterThan(0);
     for (const action of decisionActions) {
       expect(action.requiresDecision).toBe(true);
-      expect(action.createsGovernanceRecord).toBe(true);
-      expect(action.expectedGovernanceRecordType).not.toBe('NONE');
-      expect(action.decisionOutcome).not.toBeNull();
+      expect(
+        action.decisionOutcome !== null ||
+          action.abstract ||
+          action.composite ||
+          action.governanceRecordType !== undefined ||
+          action.producesRecordKinds.length > 0,
+      ).toBe(true);
     }
+  });
+
+  it('separates action subjects from produced records and artifacts', () => {
+    const approveRevision = WEOS_CANONICAL_ACTION_BY_KEY.APPROVE_REVISION;
+    const validateAiDraft = WEOS_CANONICAL_ACTION_BY_KEY.VALIDATE_AI_DRAFT;
+    const acceptClueDraft =
+      WEOS_CANONICAL_ACTION_BY_KEY.ACCEPT_CLUE_REVISION_DRAFT;
+
+    expect(approveRevision.subjectArtifactTypes).toContain('CASE_REVISION');
+    expect(approveRevision.subjectArtifactTypes).not.toContain(
+      'EDITORIAL_DECISION',
+    );
+    expect(approveRevision.producesArtifactTypes).toContain(
+      'EDITORIAL_DECISION',
+    );
+    expect(validateAiDraft.producesRecordKinds).toContain('VALIDATION_RECORD');
+    expect(acceptClueDraft.subjectArtifactTypes).toEqual([
+      'CLUE_REVISION_DRAFT',
+    ]);
+  });
+
+  it('does not give every AI and clue action the same subject set', () => {
+    const createAiDraft = WEOS_CANONICAL_ACTION_BY_KEY.CREATE_AI_DRAFT;
+    const createClueDraft =
+      WEOS_CANONICAL_ACTION_BY_KEY.CREATE_CLUE_REVISION_DRAFT;
+    const applyAcceptedDraft =
+      WEOS_CANONICAL_ACTION_BY_KEY.APPLY_ACCEPTED_DRAFT;
+
+    expect(createAiDraft.subjectArtifactTypes).not.toEqual(
+      createClueDraft.subjectArtifactTypes,
+    );
+    expect(applyAcceptedDraft.subjectArtifactTypes).toEqual([
+      'CONTROLLED_APPLICATION_RECORD',
+    ]);
+  });
+
+  it('uses neutral output metadata for validation, assessment, and governance outputs', () => {
+    const validation = WEOS_CANONICAL_ACTION_BY_KEY.RECORD_VALIDATION_RESULT;
+    const assessment = WEOS_CANONICAL_ACTION_BY_KEY.RECORD_CLINICAL_ASSESSMENT;
+    const reviewDue = WEOS_CANONICAL_ACTION_BY_KEY.MARK_REVIEW_DUE;
+    const obligation =
+      WEOS_CANONICAL_ACTION_BY_KEY.CREATE_REVALIDATION_OBLIGATION;
+    const conflict = WEOS_CANONICAL_ACTION_BY_KEY.RECORD_CONFLICT_OF_INTEREST;
+    const exception = WEOS_CANONICAL_ACTION_BY_KEY.GRANT_GOVERNANCE_EXCEPTION;
+    const disagreement = WEOS_CANONICAL_ACTION_BY_KEY.RECORD_DISAGREEMENT;
+    const adjudication = WEOS_CANONICAL_ACTION_BY_KEY.ADJUDICATE_DISAGREEMENT;
+    const emergency =
+      WEOS_CANONICAL_ACTION_BY_KEY.INITIATE_EMERGENCY_CORRECTION;
+
+    expect(validation.producesRecordKinds).toContain('VALIDATION_RECORD');
+    expect(validation.governanceRecordType).toBeUndefined();
+    expect(assessment.producesRecordKinds).toContain('ASSESSMENT_RECORD');
+    expect(assessment.governanceRecordType).toBeUndefined();
+    expect(reviewDue.producesArtifactTypes).toContain('REVIEW_DUE_DATE');
+    expect(reviewDue.producesArtifactTypes).not.toContain(
+      'EMERGENCY_CORRECTION',
+    );
+    expect(obligation.producesArtifactTypes).toContain(
+      'REVALIDATION_OBLIGATION',
+    );
+    expect(conflict.producesArtifactTypes).toContain(
+      'CONFLICT_OF_INTEREST_DECLARATION',
+    );
+    expect(exception.producesArtifactTypes).toContain('GOVERNANCE_EXCEPTION');
+    expect(exception.requiresDecision).toBe(true);
+    expect(disagreement.producesArtifactTypes).toContain('DISAGREEMENT_RECORD');
+    expect(disagreement.requiresDecision).toBe(false);
+    expect(adjudication.producesArtifactTypes).toContain('ADJUDICATION_RECORD');
+    expect(adjudication.requiresDecision).toBe(true);
+    expect(emergency.producesArtifactTypes).toContain('EMERGENCY_CORRECTION');
+    expect(emergency.producesArtifactTypes).toContain(
+      'REVALIDATION_OBLIGATION',
+    );
   });
 
   it('imports implementation support from canonical concepts', () => {
