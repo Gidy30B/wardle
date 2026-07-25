@@ -1,0 +1,66 @@
+# WEOS Phase 2 Review Checklist
+
+## Conceptual Distinctions
+
+- [ ] Validation Result is not Assessment.
+- [ ] Assessment is not Review.
+- [ ] Review is not Decision.
+- [ ] Technical actor is not authority.
+- [ ] Audit Event is not Governance Record.
+- [ ] Readiness is not lifecycle.
+
+## Lifecycle Correctness
+
+- [ ] Lifecycle families are artifact-specific.
+- [ ] Case Revision lifecycle does not include publication or learner exposure.
+- [ ] AI Draft lifecycle does not include Controlled Application.
+- [ ] `BLOCKED_CASE_NOT_EDITABLE` is not forced into canonical lifecycle state.
+
+## Transition Correctness
+
+- [ ] Abstract actions do not appear in executable transitions.
+- [ ] Composite workflows do not appear as atomic transitions.
+- [ ] Withdrawal targets Published Artifact Version, not historical Publication Decision.
+- [ ] Diagnosis remapping is governed identity operation, not lifecycle transition.
+- [ ] `REQUIRE_REVISION` does not carry material content-change impacts.
+
+## Migration Safety
+
+- [ ] Crosswalk separates source artifact from target interpretation.
+- [ ] Semantic mapping safety and record migration safety are separate.
+- [ ] No record migration is marked safe without live evidence.
+- [ ] Legacy `PUBLISHED` does not infer authorised Publication Decision.
+- [ ] Legacy `PUBLISHED` does not infer immutable learner exposure.
+
+## Historical Immutability
+
+- [ ] Historical validation, assessment, review, decision, publication, and exposure records remain preserved.
+- [ ] New revisions do not inherit prior standing without proof.
+- [ ] Publication withdrawal preserves publication history.
+
+## Publication Integrity
+
+- [ ] Approval is not publication.
+- [ ] Publication is not schedule.
+- [ ] Schedule is not release.
+- [ ] Release is not learner exposure.
+- [ ] Withdrawal creates Withdrawal Record and exposure/schedule effects.
+
+## Learner-Exposure Integrity
+
+- [ ] Current learner exposure requires inventory before withdrawal effects.
+- [ ] No legacy status is treated as immutable exposure proof.
+
+## Documentation Synchronization
+
+- [ ] WEOS-IMP-002 tables are generated from lifecycle/transition metadata.
+- [ ] WEOS-IMP-003 tables are generated from action metadata.
+- [ ] WEOS-IMP-004 tables are generated from crosswalk metadata.
+- [ ] Documentation conformance tests fail if entries are omitted.
+
+## Phase 3 Readiness
+
+- [ ] Open decisions remain unresolved where evidence is missing.
+- [ ] Governance Record structure is documented but not implemented.
+- [ ] Required live-data queries are documented but not executed.
+- [ ] Prisma/schema/runtime behavior remains unchanged.
