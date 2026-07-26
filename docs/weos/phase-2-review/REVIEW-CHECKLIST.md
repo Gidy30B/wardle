@@ -46,11 +46,21 @@
 ## Publication Integrity
 
 - [ ] Approval is not publication.
+- [ ] Authorise/decline publication targets exact Case/Diagnosis Education revisions, not already-published versions.
 - [ ] Publication is not schedule.
 - [ ] Schedule is not release.
 - [ ] Release is not learner exposure.
 - [ ] Withdrawal creates Withdrawal Record and exposure/schedule effects.
+- [ ] Withdrawal/supersession change Published Artifact Version standing without producing a replacement Published Artifact Version.
 - [ ] Withdrawal does not weaken the historical Publication Decision.
+
+## Action Contract Integrity
+
+- [ ] `subjectArtifactTypes` identifies the artifact an action operates on.
+- [ ] `targetRevisionTypes` identifies exact revision targets when required.
+- [ ] `producesArtifactTypes` and `producesRecordKinds` contain newly created artifacts/records only.
+- [ ] `changesStandingOfArtifactTypes` contains existing artifacts whose lifecycle, standing, visibility, operational permission, or publication status changes.
+- [ ] `applicableArtifactTypes` is treated only as legacy broad compatibility/discovery metadata.
 
 ## Learner-Exposure Integrity
 
@@ -64,6 +74,7 @@
 - [ ] WEOS-IMP-004 tables are generated from crosswalk metadata.
 - [ ] Documentation conformance tests fail if entries are omitted.
 - [ ] Deterministic generation check reports no Markdown drift after build and generator run.
+- [ ] Local `npm run weos:docs:check` passes; CI enforcement is absent because this repository has no `.github/workflows` directory.
 
 ## Phase 3 Readiness
 
