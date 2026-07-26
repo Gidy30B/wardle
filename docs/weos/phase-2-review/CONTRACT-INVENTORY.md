@@ -10,6 +10,7 @@
 - Actions: `80`
 - Decision-category actions: `18`
 - Decision-required actions: `37`
+- Action contract standing-change field: `changesStandingOfArtifactTypes`
 - Preconditions: `38`
 - Transitions: `9`
 - Invalidation / standing-impact rules: `15`
@@ -31,6 +32,10 @@
 ## Decision Action Keys
 
 `SUPERSEDE_REVISION`, `RETIRE_ARTIFACT`, `APPROVE_REVISION`, `REJECT_REVISION`, `REQUIRE_REVISION`, `APPROVE_CANDIDATE_CREATION`, `MERGE_CANDIDATE`, `APPROVE_GRAPH_PROMOTION`, `REJECT_GRAPH_CANDIDATE`, `ACTIVATE_RELATIONSHIP`, `DEPRECATE_RELATIONSHIP`, `ACTIVATE_ARTIFACT`, `DEPRECATE_ARTIFACT`, `ACCEPT_AI_DRAFT`, `REJECT_AI_DRAFT`, `REQUEST_AI_DRAFT_CHANGES`, `ACCEPT_CLUE_REVISION_DRAFT`, `REJECT_CLUE_REVISION_DRAFT`
+
+## Action Contract Fields
+
+`subjectArtifactTypes` identifies what the action operates on. `targetRevisionTypes` identifies exact revision targets when required. `producesArtifactTypes` and `producesRecordKinds` identify newly created artifacts or records. `changesStandingOfArtifactTypes` identifies existing artifacts whose lifecycle, standing, visibility, operational permission, or publication status changes. `applicableArtifactTypes` remains broad compatibility/discovery metadata and is not authoritative.
 
 ## Transition Keys
 

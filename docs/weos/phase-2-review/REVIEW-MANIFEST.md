@@ -28,6 +28,8 @@
 - `doctordle-backend/src/modules/editorial-governance/phase-1-protected-catalogue.fixture.ts`: static reviewed Phase 1 protected-field fixture.
 - `doctordle-backend/src/modules/editorial-governance/canonical-artifact-catalogue-phase-1-baseline.spec.ts`: regression guard for protected Phase 1 catalogue fields.
 - `doctordle-backend/scripts/generate-weos-phase-2-docs.js`: deterministic development-only documentation generator.
+- `doctordle-backend/scripts/check-weos-phase-2-docs.js`: build/generated-document drift check for WEOS-IMP-002/003/004.
+- `doctordle-backend/package.json`: local WEOS documentation generation and drift-check scripts.
 - `docs/weos/WEOS-IMP-002-lifecycle-transition-specification.md`: regenerated synchronized lifecycle/transition/precondition/standing-impact documentation.
 - `docs/weos/WEOS-IMP-003-editorial-action-decision-catalogue.md`: regenerated complete action and decision catalogue.
 - `docs/weos/WEOS-IMP-004-legacy-status-crosswalk.md`: regenerated complete crosswalk documentation.
@@ -62,6 +64,10 @@
 - Validation standing excludes `ERROR`; validation outcome still includes `ERROR`.
 - Action metadata separates subjects, target revisions, produced artifacts, produced record kinds, governance record subtype, and audit record subtype.
 - Withdrawal standing impacts no longer flag the historical Publication Decision for review.
+- Publication authorisation and decline now operate on exact revision targets, not Published Artifact Version.
+- Action metadata separates newly produced artifacts/records from existing artifacts whose standing changes through `changesStandingOfArtifactTypes`.
+- Withdrawal and supersession produce record/history outputs while changing existing Published Artifact Version standing.
+- Deterministic WEOS documentation drift checking is available locally through `npm run weos:docs:check`; no `.github/workflows` directory exists in this repository, so CI enforcement was not added.
 
 ## Tests Covering the Change
 

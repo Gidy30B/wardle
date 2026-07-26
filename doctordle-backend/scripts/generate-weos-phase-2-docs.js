@@ -46,6 +46,7 @@ const actionRows = actions.WEOS_CANONICAL_ACTIONS.map((item) => [
   list(item.targetRevisionTypes),
   list(item.producesArtifactTypes),
   list(item.producesRecordKinds),
+  list(item.changesStandingOfArtifactTypes),
   item.createsContent,
   item.changesContent,
   item.createsRevision,
@@ -87,7 +88,8 @@ const decisionRows = actions.WEOS_CANONICAL_ACTIONS.filter(
   'Required for governed decisions.',
   item.createsOperationalEffect
     ? 'Operational effect recorded'
-    : 'Lifecycle or standing effect',
+    : list(item.changesStandingOfArtifactTypes) ||
+      'Lifecycle or standing effect',
 ]);
 
 const lifecycleRows = lifecycles.WEOS_CANONICAL_LIFECYCLES.flatMap((family) =>
@@ -285,7 +287,9 @@ ${table(
 
 Complete table generated from \`WEOS_CANONICAL_ACTIONS\`.
 
-${table(['Action key', 'Label', 'Meaning', 'Category', 'Subject artifacts', 'Target revision types', 'Produced artifacts', 'Produced record kinds', 'Creates content', 'Changes content', 'Creates revision', 'Requires version target', 'Creates Validation Result', 'Creates Assessment', 'Requires Decision', 'Decision outcome', 'Creates Governance Record', 'Governance Record type', 'Audit Record type', 'Creates operational effect', 'May affect learner exposure', 'Standing impacts', 'Implementation support', 'Implementation symbols', 'Notes'], actionRows)}
+\`Subject artifacts\` identifies what an action operates on. \`Target revision types\` identifies exact revisions required by the action. \`Produced artifacts\` and \`Produced record kinds\` identify newly created artifacts or records. \`Changes standing of artifact types\` identifies existing artifacts whose lifecycle, standing, visibility, operational permission, or publication status changes. \`applicableArtifactTypes\` remains legacy broad compatibility/discovery metadata and is not the authoritative action contract.
+
+${table(['Action key', 'Label', 'Meaning', 'Category', 'Subject artifacts', 'Target revision types', 'Produced artifacts', 'Produced record kinds', 'Changes standing of artifact types', 'Creates content', 'Changes content', 'Creates revision', 'Requires version target', 'Creates Validation Result', 'Creates Assessment', 'Requires Decision', 'Decision outcome', 'Creates Governance Record', 'Governance Record type', 'Audit Record type', 'Creates operational effect', 'May affect learner exposure', 'Standing impacts', 'Implementation support', 'Implementation symbols', 'Notes'], actionRows)}
 
 ## 7.4 Complete Decision Catalogue
 

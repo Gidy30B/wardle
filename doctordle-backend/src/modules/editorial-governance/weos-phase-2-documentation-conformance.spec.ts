@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
-  WEOS_ACTION_CATEGORIES,
+  WEOS_CANONICAL_ACTION_BY_KEY,
   WEOS_CANONICAL_ACTIONS,
 } from './canonical-actions';
 import { WEOS_CANONICAL_LIFECYCLES } from './canonical-lifecycles';
@@ -32,6 +32,12 @@ const docsRoot = join(process.cwd(), '..', 'docs', 'weos');
 
 function readDoc(file: string) {
   return readFileSync(join(docsRoot, file), 'utf8');
+}
+
+function markdownRow(doc: string, key: string) {
+  const firstCell = new RegExp(`^\\|\\s*${key}\\s*\\|`);
+
+  return doc.split('\n').find((line) => firstCell.test(line));
 }
 
 describe('WEOS Phase 2 documentation conformance', () => {
@@ -103,16 +109,55 @@ describe('WEOS Phase 2 documentation conformance', () => {
       'WEOS-IMP-003-editorial-action-decision-catalogue.md',
     );
     const decisionActions = WEOS_CANONICAL_ACTIONS.filter(
-      (action) => action.category === WEOS_ACTION_CATEGORIES.DECISION,
+      (action) => action.requiresDecision,
     );
 
+    expect(actionDoc).toContain('Changes standing of artifact types');
+    expect(actionDoc).toContain(
+      '`applicableArtifactTypes` remains legacy broad compatibility/discovery metadata',
+    );
     for (const action of WEOS_CANONICAL_ACTIONS) {
       expect(actionDoc).toContain(action.key);
     }
     for (const action of decisionActions) {
       expect(actionDoc).toContain(action.key);
-      expect(actionDoc).toContain(`${action.decisionOutcome}`);
+      if (action.decisionOutcome) {
+        expect(actionDoc).toContain(`${action.decisionOutcome}`);
+      }
     }
+
+    for (const key of [
+      'AUTHORISE_PUBLICATION',
+      'DECLINE_PUBLICATION',
+      'WITHDRAW_PUBLICATION',
+      'SUPERSEDE_PUBLICATION',
+      'GRANT_PLAYABILITY',
+      'REMOVE_PLAYABILITY',
+      'GRANT_GENERATABILITY',
+      'REMOVE_GENERATABILITY',
+      'GRANT_GOVERNANCE_EXCEPTION',
+      'ADJUDICATE_DISAGREEMENT',
+    ] as const) {
+      expect(decisionActions.map((action) => action.key)).toContain(key);
+    }
+
+    const authoriseRow = markdownRow(actionDoc, 'AUTHORISE_PUBLICATION');
+    const withdrawRow = markdownRow(actionDoc, 'WITHDRAW_PUBLICATION');
+    const supersedeRow = markdownRow(actionDoc, 'SUPERSEDE_PUBLICATION');
+
+    expect(authoriseRow).toContain(
+      WEOS_CANONICAL_ACTION_BY_KEY.AUTHORISE_PUBLICATION.subjectArtifactTypes.join(
+        ', ',
+      ),
+    );
+    expect(authoriseRow).not.toContain('| PUBLISHED_ARTIFACT_VERSION |');
+    expect(withdrawRow).toContain(
+      'PUBLISHED_ARTIFACT_VERSION, PUBLICATION_SCHEDULE, LEARNER_EXPOSURE_REFERENCE',
+    );
+    expect(supersedeRow).toContain('SUPERSESSION_RECORD, PUBLICATION_HISTORY');
+    expect(supersedeRow).not.toContain(
+      'SUPERSESSION_RECORD, PUBLICATION_HISTORY, PUBLISHED_ARTIFACT_VERSION',
+    );
   });
 
   it('keeps generated legacy crosswalk documentation synchronized', () => {

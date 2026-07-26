@@ -137,6 +137,7 @@ export type CanonicalActionDefinition = Readonly<{
   targetRevisionTypes: readonly WeosArtifactType[];
   producesArtifactTypes: readonly WeosArtifactType[];
   producesRecordKinds: readonly WeosRecordKind[];
+  changesStandingOfArtifactTypes: readonly WeosArtifactType[];
   createsContent: boolean;
   changesContent: boolean;
   createsRevision: boolean;
@@ -182,6 +183,7 @@ function action(
     | 'targetRevisionTypes'
     | 'producesArtifactTypes'
     | 'producesRecordKinds'
+    | 'changesStandingOfArtifactTypes'
   > &
     Partial<
       Pick<
@@ -190,6 +192,7 @@ function action(
         | 'targetRevisionTypes'
         | 'producesArtifactTypes'
         | 'producesRecordKinds'
+        | 'changesStandingOfArtifactTypes'
       >
     > & { label?: string },
 ): CanonicalActionDefinition {
@@ -200,6 +203,7 @@ function action(
     targetRevisionTypes: input.targetRevisionTypes ?? [],
     producesArtifactTypes: input.producesArtifactTypes ?? [],
     producesRecordKinds: input.producesRecordKinds ?? [],
+    changesStandingOfArtifactTypes: input.changesStandingOfArtifactTypes ?? [],
     ...input,
   };
 }
@@ -218,6 +222,7 @@ const base = {
   createsGovernanceRecord: false,
   producesArtifactTypes: [],
   producesRecordKinds: [],
+  changesStandingOfArtifactTypes: [],
   createsOperationalEffect: false,
   mayAffectLearnerExposure: false,
   mayInvalidatePriorStanding: false,
@@ -531,6 +536,12 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
         key === 'REJECT_REVISION' ||
         key === 'REQUIRE_REVISION'
           ? [T.EDITORIAL_DECISION]
+          : [T.EDITORIAL_DECISION],
+      changesStandingOfArtifactTypes:
+        key === 'APPROVE_REVISION' ||
+        key === 'REJECT_REVISION' ||
+        key === 'REQUIRE_REVISION'
+          ? revisionTargets
           : [artifactType as WeosArtifactType],
       requiresVersionTarget: [
         'APPROVE_REVISION',
@@ -654,6 +665,10 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
                 : key === 'APPLY_ACCEPTED_DRAFT'
                   ? [T.CONTROLLED_APPLICATION_RECORD, T.CASE_REVISION]
                   : [],
+      changesStandingOfArtifactTypes:
+        key === 'APPLY_ACCEPTED_DRAFT'
+          ? [T.AI_DRAFT, T.CLUE_REVISION_DRAFT, T.CONTROLLED_APPLICATION_RECORD]
+          : [],
       createsContent: key === 'CREATE_CLUE_REVISION_DRAFT',
       changesContent: key === 'APPLY_ACCEPTED_DRAFT',
       createsRevision: key === 'APPLY_ACCEPTED_DRAFT',
@@ -727,7 +742,10 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
       ],
       notes:
         key === 'APPLY_ACCEPTED_DRAFT'
-          ? ['Application does not approve the resulting revision.']
+          ? [
+              'Application may produce a target revision and update the Controlled Application Record; it does not approve the resulting revision.',
+              'The accepted source draft may change operational standing to applied.',
+            ]
           : [],
     }),
   ),
@@ -751,6 +769,12 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
       applicableArtifactTypes: [T.DIAGNOSIS_REGISTRY],
       subjectArtifactTypes: [T.DIAGNOSIS_REGISTRY],
       producesArtifactTypes: [T.GOVERNANCE_RECORD],
+      changesStandingOfArtifactTypes:
+        key === 'REMAP_DIAGNOSIS_REFERENCE'
+          ? []
+          : key === 'MERGE_REGISTRY_ENTRY'
+            ? [T.DIAGNOSIS_REGISTRY]
+            : [T.DIAGNOSIS_REGISTRY],
       requiresDecision: true,
       createsGovernanceRecord: true,
       producesRecordKinds: [R.GOVERNANCE_RECORD],
@@ -770,8 +794,13 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
         key === 'REMAP_DIAGNOSIS_REFERENCE'
           ? [
               'Requires source/target identities, affected-reference inventory, authority, rationale, collision checks, dependency-impact assessment, idempotency, transaction, and optimistic concurrency.',
+              'May affect dependent artifacts, but it does not create a new diagnosis identity.',
             ]
-          : [],
+          : key === 'MERGE_REGISTRY_ENTRY'
+            ? [
+                'Subjects are established diagnosis identities; the action does not create a replacement source registry entry.',
+              ]
+            : [],
     }),
   ),
   ...[
@@ -788,6 +817,7 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
       applicableArtifactTypes: [T.DIAGNOSIS_OPERATIONAL_PERMISSION],
       subjectArtifactTypes: [T.DIAGNOSIS_OPERATIONAL_PERMISSION],
       producesArtifactTypes: [T.EDITORIAL_DECISION],
+      changesStandingOfArtifactTypes: [T.DIAGNOSIS_OPERATIONAL_PERMISSION],
       requiresDecision: true,
       createsGovernanceRecord: true,
       producesRecordKinds: [R.DECISION_RECORD],
@@ -816,6 +846,7 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
     governanceRecordType: G.WITHDRAWAL_RECORD,
     createsOperationalEffect: true,
     mayInvalidatePriorStanding: true,
+    changesStandingOfArtifactTypes: [T.EVIDENCE_SOURCE],
     currentImplementationSupport: I.NOT_IMPLEMENTED,
   }),
   ...['TRIGGER_EVIDENCE_REFRESH', 'TRIGGER_GUIDELINE_REVIEW'].map((key) =>
@@ -848,8 +879,16 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
         T.PUBLICATION_DECISION,
         T.PUBLISHED_ARTIFACT_VERSION,
       ],
-      subjectArtifactTypes: [T.PUBLISHED_ARTIFACT_VERSION],
-      targetRevisionTypes: [T.CASE_REVISION, T.DIAGNOSIS_EDUCATION_REVISION],
+      subjectArtifactTypes:
+        key === 'AUTHORISE_PUBLICATION' || key === 'DECLINE_PUBLICATION'
+          ? [T.CASE_REVISION, T.DIAGNOSIS_EDUCATION_REVISION]
+          : [T.PUBLISHED_ARTIFACT_VERSION],
+      targetRevisionTypes:
+        key === 'AUTHORISE_PUBLICATION' || key === 'DECLINE_PUBLICATION'
+          ? [T.CASE_REVISION, T.DIAGNOSIS_EDUCATION_REVISION]
+          : key === 'SUPERSEDE_PUBLICATION'
+            ? [T.CASE_REVISION, T.DIAGNOSIS_EDUCATION_REVISION]
+            : [],
       producesArtifactTypes:
         key === 'WITHDRAW_PUBLICATION'
           ? [T.WITHDRAWAL_RECORD, T.PUBLICATION_HISTORY]
@@ -860,7 +899,10 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
       requiresDecision: true,
       decisionOutcome: outcome as WeosDecisionType,
       createsGovernanceRecord: true,
-      producesRecordKinds: [R.DECISION_RECORD],
+      producesRecordKinds:
+        key === 'WITHDRAW_PUBLICATION' || key === 'SUPERSEDE_PUBLICATION'
+          ? [R.DECISION_RECORD, R.PROJECTION]
+          : [R.DECISION_RECORD],
       governanceRecordType:
         key === 'WITHDRAW_PUBLICATION'
           ? G.WITHDRAWAL_RECORD
@@ -869,12 +911,28 @@ export const WEOS_CANONICAL_ACTIONS: readonly CanonicalActionDefinition[] = [
             : G.PUBLICATION_DECISION,
       createsOperationalEffect:
         key === 'WITHDRAW_PUBLICATION' || key === 'SUPERSEDE_PUBLICATION',
+      changesStandingOfArtifactTypes:
+        key === 'WITHDRAW_PUBLICATION'
+          ? [
+              T.PUBLISHED_ARTIFACT_VERSION,
+              T.PUBLICATION_SCHEDULE,
+              T.LEARNER_EXPOSURE_REFERENCE,
+            ]
+          : key === 'SUPERSEDE_PUBLICATION'
+            ? [T.PUBLISHED_ARTIFACT_VERSION]
+            : [],
       mayAffectLearnerExposure:
         key === 'WITHDRAW_PUBLICATION' || key === 'SUPERSEDE_PUBLICATION',
       mayInvalidatePriorStanding:
         key === 'WITHDRAW_PUBLICATION' || key === 'SUPERSEDE_PUBLICATION',
       currentImplementationSupport: I.NOT_IMPLEMENTED,
       currentImplementationSymbols: ['Case.publishedAt'],
+      notes:
+        key === 'SUPERSEDE_PUBLICATION'
+          ? [
+              'Replacement Published Artifact Version is created through publication/release workflow, not by mutating the superseded version action output.',
+            ]
+          : [],
     }),
   ),
   ...[
