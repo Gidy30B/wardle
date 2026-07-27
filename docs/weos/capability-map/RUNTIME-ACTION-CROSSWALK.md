@@ -147,6 +147,40 @@ Concurrency classifications:
 | `WEOS-ACT-019`  | `RUN_REASONING_DRAFT_VALIDATION`          | `VALIDATE_AI_DRAFT`                       | `REASONING_VALIDATION_RESULT`   | `PARTIAL`       | `PARTIAL`             | Validation is not approval               |
 | `WEOS-ACT-020`  | `GENERATE_UNSUPPORTED_CLAIM_REPAIR_DRAFT` | `CREATE_AI_DRAFT`                         | `AI_DRAFT`                      | `PARTIAL`       | `PARTIAL`             | Creation only; application separate      |
 
+## Permission-ID Index
+
+This index links runtime actions to the permission rows that currently carry the
+`WEOS-PERM-*` identifiers. Detailed action sections still describe runtime
+permission pathways in route terms; this index is interpretation guidance, not
+executable enforcement.
+
+| Runtime action  | Permission row  |
+| --------------- | --------------- |
+| `WEOS-ACT-001`  | `WEOS-PERM-033` |
+| `WEOS-ACT-002`  | `WEOS-PERM-035` |
+| `WEOS-ACT-005`  | `WEOS-PERM-036` |
+| `WEOS-ACT-006`  | `WEOS-PERM-022` |
+| `WEOS-ACT-007`  | `WEOS-PERM-021` |
+| `WEOS-ACT-008`  | `WEOS-PERM-023` |
+| `WEOS-ACT-008A` | `WEOS-PERM-024` |
+| `WEOS-ACT-008B` | `WEOS-PERM-025` |
+| `WEOS-ACT-009A` | `WEOS-PERM-017` |
+| `WEOS-ACT-009B` | `WEOS-PERM-018` |
+| `WEOS-ACT-009C` | `WEOS-PERM-019` |
+| `WEOS-ACT-009D` | `WEOS-PERM-020` |
+| `WEOS-ACT-010`  | `WEOS-PERM-042` |
+| `WEOS-ACT-013`  | `WEOS-PERM-047` |
+| `WEOS-ACT-014`  | `WEOS-PERM-048` |
+| `WEOS-ACT-016A` | `WEOS-PERM-039` |
+| `WEOS-ACT-016D` | `WEOS-PERM-040` |
+| `WEOS-ACT-016E` | `WEOS-PERM-041` |
+| `WEOS-ACT-017A` | `WEOS-PERM-050` |
+| `WEOS-ACT-018A` | `WEOS-PERM-051` |
+| `WEOS-ACT-018B` | `WEOS-PERM-052` |
+| `WEOS-ACT-018C` | `WEOS-PERM-053` |
+| `WEOS-ACT-019`  | `WEOS-PERM-029` |
+| `WEOS-ACT-020`  | `WEOS-PERM-016` |
+
 ## `WEOS-ACT-001` - `START_CASE_REVIEW`
 
 ### Canonical interpretation
@@ -217,7 +251,8 @@ Concurrency classifications:
 - Service logging: `admin.case.review.start_requested`,
   `admin.case.review.started`
 - Evidence: `CaseReviewService.startReview`
-- Missing governance evidence: No `CaseReviewEvent` write proven in this path.
+- Missing governance evidence: `CaseReviewEvent` is `UNAVAILABLE_IN_BRANCH`; no
+  persisted event write is active evidence for this path.
 
 ### Transaction and concurrency
 
@@ -241,8 +276,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin-editorial-permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -265,7 +299,7 @@ Concurrency classifications:
 - Canonical transition: current case revision review decision to approved.
 - Related open decisions: None identified.
 - Open-decision dependency: `NONE_IDENTIFIED`
-- Implementation gap: Should `CaseEditorialDecision` be the mandatory canonical projection for every review decision?
+- Implementation gap: `CaseEditorialDecision` is `UNAVAILABLE_IN_BRANCH`; should a future governance-decision envelope be mandatory for every review decision?
 - Gap tracking: `docs/weos/gaps/IMPLEMENTATION-GAPS.md`
 - Interpretation confidence: Medium.
 
@@ -309,7 +343,7 @@ Concurrency classifications:
 - Exact runtime status literals: `APPROVED`, `REVIEW`
 - Models written: `Case`, `CaseReview`
 - Principal persistence operation: `tx.caseReview.update`; `tx.case.update`
-- Related governance model: `CaseEditorialDecision` - `MODEL_EXISTS_NOT_PROVEN_IN_PATH`
+- Related governance model: `CaseEditorialDecision` - `UNAVAILABLE_IN_BRANCH`
 - Canonical records written: Not proven.
 - Projection fields written: `Case.editorialStatus`, `Case.approvedAt`,
   `Case.approvedByUserId`
@@ -321,10 +355,10 @@ Concurrency classifications:
 ### Governance and audit
 
 - Audit classification: `PERSISTED_REVIEW_RECORD`, `ENTITY_REVIEW_FIELDS`,
-  `MODEL_EXISTS_NOT_PROVEN_IN_PATH`, `SERVICE_LOG_ONLY`
+  `UNAVAILABLE_IN_BRANCH`, `SERVICE_LOG_ONLY`
 - Persisted review record: `CaseReview`
 - Canonical governance decision: Not proven; the
-  `CaseEditorialDecision` path is not proven for every submit call.
+  `CaseEditorialDecision` is `UNAVAILABLE_IN_BRANCH`; no decision-envelope path is proven for every submit call.
 - Persisted event record: Not proven.
 - Entity review fields: `CaseReview.decision`, `CaseReview.decidedAt`
 - Service logging: `admin.case.review.submit_requested`,
@@ -352,11 +386,9 @@ Concurrency classifications:
   exists, but exact action or request-decision coverage was not reverified in
   this documentation pass.
 - Related governance tests:
-  `doctordle-backend/src/modules/admin/case-review-governance.repository.spec.ts`
-  Coverage qualifier: `FILE_EXISTS_ACTION_NOT_PROVEN`; referenced file exists; exact mapped action coverage was not reverified in this correction.
+  `doctordle-backend/src/modules/admin/case-review-governance.repository.spec.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -365,8 +397,7 @@ Concurrency classifications:
 
 ### Open questions
 
-- Should `CaseEditorialDecision` be the mandatory canonical projection for every
-  review decision?
+- `CaseEditorialDecision` is `UNAVAILABLE_IN_BRANCH`; should a future governance-decision envelope be mandatory for every review decision?
 
 ## `WEOS-ACT-003` - `REJECT_CASE_REVISION`
 
@@ -431,7 +462,7 @@ Concurrency classifications:
 ### Governance and audit
 
 - Audit classification: `PERSISTED_REVIEW_RECORD`, `ENTITY_REVIEW_FIELDS`,
-  `MODEL_EXISTS_NOT_PROVEN_IN_PATH`, `SERVICE_LOG_ONLY`
+  `UNAVAILABLE_IN_BRANCH`, `SERVICE_LOG_ONLY`
 - Persisted review record: `CaseReview`
 - Canonical governance decision: Not proven.
 - Persisted event record: Not proven.
@@ -460,11 +491,9 @@ Concurrency classifications:
   exists, but exact action or request-decision coverage was not reverified in
   this documentation pass.
 - Related governance tests:
-  `doctordle-backend/src/modules/admin/case-review-governance.repository.spec.ts`
-  Coverage qualifier: `FILE_EXISTS_ACTION_NOT_PROVEN`; referenced file exists; exact mapped action coverage was not reverified in this correction.
+  `doctordle-backend/src/modules/admin/case-review-governance.repository.spec.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -540,7 +569,7 @@ Concurrency classifications:
 ### Governance and audit
 
 - Audit classification: `PERSISTED_REVIEW_RECORD`, `ENTITY_REVIEW_FIELDS`,
-  `MODEL_EXISTS_NOT_PROVEN_IN_PATH`, `SERVICE_LOG_ONLY`
+  `UNAVAILABLE_IN_BRANCH`, `SERVICE_LOG_ONLY`
 - Persisted review record: `CaseReview`
 - Canonical governance decision: Not proven.
 - Persisted event record: Not proven.
@@ -568,11 +597,9 @@ Concurrency classifications:
   exists, but exact action or request-decision coverage was not reverified in
   this documentation pass.
 - Related governance tests:
-  `doctordle-backend/src/modules/admin/case-review-governance.repository.spec.ts`
-  Coverage qualifier: `FILE_EXISTS_ACTION_NOT_PROVEN`; referenced file exists; exact mapped action coverage was not reverified in this correction.
+  `doctordle-backend/src/modules/admin/case-review-governance.repository.spec.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -596,7 +623,8 @@ Concurrency classifications:
 - Canonical transition: readiness assessment for approved case revision.
 - Related open decisions:
   `docs/weos/WEOS-IMP-005-phase-2-open-decisions.md`
-- Open-decision ID: `NOT_REGISTERED`
+- Open-decision ID: `UNREGISTERED_OPEN_DECISION` - first-class publication
+  authorization route and record after readiness
 - Open-decision document: `docs/weos/WEOS-IMP-005-phase-2-open-decisions.md`
 - Relevant question: What first-class route and record authorise publication after readiness?
 - Gap implication: The unresolved decision should be registered in docs/weos/gaps/IMPLEMENTATION-GAPS.md.
@@ -643,7 +671,7 @@ Concurrency classifications:
 - Exact runtime status literals: `APPROVED`, `READY_TO_PUBLISH`
 - Models written: `Case`
 - Principal persistence operation: `tx.case.update`
-- Related governance model: `CaseEditorialDecision` - `MODEL_EXISTS_NOT_PROVEN_IN_PATH`
+- Related governance model: `CaseEditorialDecision` - `UNAVAILABLE_IN_BRANCH`
 - Canonical records written: Not proven.
 - Projection fields written: `Case.editorialStatus`
 - Revision records written: None identified.
@@ -654,7 +682,7 @@ Concurrency classifications:
 ### Governance and audit
 
 - Audit classification: `ENTITY_STATUS_ONLY`,
-  `MODEL_EXISTS_NOT_PROVEN_IN_PATH`, `SERVICE_LOG_ONLY`
+  `UNAVAILABLE_IN_BRANCH`, `SERVICE_LOG_ONLY`
 - Persisted decision record: Not proven.
 - Persisted event record: Not proven.
 - Entity review fields: None identified.
@@ -686,8 +714,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/editorial/policies/diagnosis-publish-readiness.policy.spec.ts`
   Coverage qualifier: `FILE_EXISTS_ACTION_NOT_PROVEN`; referenced file exists; exact mapped action coverage was not reverified in this correction.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -791,8 +818,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin.controller.spec.ts`
   Coverage qualifier: `CONTROLLER_WIRING_ONLY`; verifies controller wiring for the mapped method.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -889,8 +915,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin.controller.spec.ts`
   Coverage qualifier: `CONTROLLER_WIRING_ONLY`; verifies controller wiring for the mapped method.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -987,8 +1012,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin.controller.spec.ts`
   Coverage qualifier: `CONTROLLER_WIRING_ONLY`; verifies controller wiring for the mapped method.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -1086,8 +1110,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin.controller.spec.ts`
   Coverage qualifier: `CONTROLLER_WIRING_ONLY`; verifies controller wiring for the mapped method.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -1184,8 +1207,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin.controller.spec.ts`
   Coverage qualifier: `CONTROLLER_WIRING_ONLY`; verifies controller wiring for the mapped method.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -1293,8 +1315,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin.controller.spec.ts`
   Coverage qualifier: `CONTROLLER_WIRING_ONLY`; verifies controller wiring for the mapped method.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -1395,8 +1416,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin.controller.spec.ts`
   Coverage qualifier: `CONTROLLER_WIRING_ONLY`; verifies controller wiring for the mapped method.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -1496,8 +1516,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin.controller.spec.ts`
   Coverage qualifier: `CONTROLLER_WIRING_ONLY`; verifies controller wiring for the mapped method.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -1596,8 +1615,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin.controller.spec.ts`
   Coverage qualifier: `CONTROLLER_WIRING_ONLY`; verifies controller wiring for the mapped method.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -1701,8 +1719,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin-editorial-permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -1802,8 +1819,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin-editorial-permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -1897,8 +1913,7 @@ Concurrency classifications:
   this documentation pass.
 - Controller tests: None identified.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -1993,8 +2008,7 @@ Concurrency classifications:
   this documentation pass.
 - Controller tests: None identified.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -2088,8 +2102,7 @@ Concurrency classifications:
   this documentation pass.
 - Controller tests: None identified.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -2183,8 +2196,7 @@ Concurrency classifications:
   this documentation pass.
 - Controller tests: None identified.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -2294,8 +2306,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/diagnosis-graph/admin-diagnosis-graph.permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-command-matrix.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -2394,8 +2405,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/diagnosis-graph/admin-diagnosis-graph.permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-command-matrix.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -2494,8 +2504,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/diagnosis-graph/admin-diagnosis-graph.permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-command-matrix.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -2598,8 +2607,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/education/admin-education.permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -2703,8 +2711,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/education/admin-education.permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -2806,8 +2813,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/education/admin-education.permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -2830,7 +2836,8 @@ Concurrency classifications:
 - Canonical transition: publication decision for education revision.
 - Related open decisions: Publication decision separation remains unresolved for
   runtime.
-- Open-decision ID: `NOT_REGISTERED`
+- Open-decision ID: `UNREGISTERED_OPEN_DECISION` - education review/publication
+  separation and publication authority
 - Open-decision document: `docs/weos/WEOS-IMP-005-phase-2-open-decisions.md`
 - Relevant question: Should education approval and publication be separate runtime decisions?
 - Gap implication: The unresolved decision should be registered in docs/weos/gaps/IMPLEMENTATION-GAPS.md.
@@ -2914,8 +2921,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/education/admin-education.permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -3107,8 +3113,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin-editorial-permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-command-matrix.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -3199,8 +3204,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin-editorial-permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-command-matrix.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -3292,8 +3296,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin-editorial-permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-command-matrix.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -3384,8 +3387,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin-editorial-permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-command-matrix.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -3488,8 +3490,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin-editorial-permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-command-matrix.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -3584,8 +3585,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin-editorial-permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-command-matrix.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -3681,8 +3681,7 @@ Concurrency classifications:
   `doctordle-backend/src/modules/admin/admin-editorial-permissions.spec.ts`
   Coverage qualifier: `PERMISSION_ONLY`; verifies access level for the mapped controller route.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-command-matrix.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -3776,8 +3775,7 @@ Concurrency classifications:
   Coverage qualifier: `TRANSITION_COVERAGE`; covers validation-run behaviour, not canonical approval.
 - Controller tests: None identified.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-command-matrix.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -3877,8 +3875,7 @@ Concurrency classifications:
   this documentation pass.
 - Controller tests: None identified.
 - Dashboard unit tests:
-  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts`
-  Coverage qualifier: `ACTION_REGISTRY_ONLY`; verifies dashboard action registration, not backend enforcement.
+  `analytics-dashboard/src/features/editorial/workspace/actions/workspaceActionRegistry.test.ts` is `FILE_NOT_IN_BRANCH`; not active test evidence for this branch.
 - Browser tests:
   `analytics-dashboard/qa/editorial-workspace-smoke.spec.ts`
   Coverage qualifier: `SMOKE_ONLY`; browser workflow coverage exists, but exact action execution is not proven.
@@ -3900,7 +3897,8 @@ Concurrency classifications:
 - Services inspected: `doctordle-backend/src/modules/diagnosis-registry/diagnosis-registry-lifecycle-policy.service.ts`, `doctordle-backend/src/modules/diagnosis-registry/diagnosis-registry-merge-execution.service.ts`
 - Closest runtime behaviour: Merge execution can write `DiagnosisRegistryStatus.DEPRECATED`; lifecycle route exposes `deactivate` but no `deprecate` action.
 - Why mapping remains unsafe: No first-class deprecate route, request decision, permission pathway or governance record is proven.
-- Related open-decision ID: `NOT_REGISTERED`
+- Related open-decision ID: `UNREGISTERED_OPEN_DECISION` - registry
+  deprecation authority and first-class deprecate route
 - Blocks agent automation: Yes
 - Recommended next investigation: Register a deprecation authority/gap decision and inspect merge execution separately.
 
@@ -3913,7 +3911,8 @@ Concurrency classifications:
 - Services inspected: `doctordle-backend/src/modules/admin/case-review.service.ts`, `doctordle-backend/src/modules/education/diagnosis-education.service.ts`
 - Closest runtime behaviour: Case readiness route; education `status: PUBLISHED`.
 - Why mapping remains unsafe: Case readiness is not publication authorisation; education publication combines review and publication.
-- Related open-decision ID: `NOT_REGISTERED`
+- Related open-decision ID: `UNREGISTERED_OPEN_DECISION` - first-class
+  publication decision route and authority
 - Blocks agent automation: Yes
 - Recommended next investigation: Define first-class publication decision route and authority.
 
@@ -3926,7 +3925,8 @@ Concurrency classifications:
 - Services inspected: `doctordle-backend/src/modules/admin/case-review.service.ts`, `doctordle-backend/src/modules/education/diagnosis-education.service.ts`
 - Closest runtime behaviour: Case revision rejection; education `status: REJECTED`.
 - Why mapping remains unsafe: Rejection of a revision is not first-class decline of publication for an approved publication candidate.
-- Related open-decision ID: `NOT_REGISTERED`
+- Related open-decision ID: `UNREGISTERED_OPEN_DECISION` -
+  publication-decline decision model and route
 - Blocks agent automation: Yes
 - Recommended next investigation: Add publication-decline decision model and route if required.
 
@@ -3939,7 +3939,8 @@ Concurrency classifications:
 - Services inspected: `doctordle-backend/src/modules/admin/case-review.service.ts`, `doctordle-backend/src/modules/education/diagnosis-education.service.ts`
 - Closest runtime behaviour: No first-class runtime behaviour identified.
 - Why mapping remains unsafe: Withdrawal targets published artifact versions and schedule/exposure effects; no equivalent route is proven.
-- Related open-decision ID: `NOT_REGISTERED`
+- Related open-decision ID: `UNREGISTERED_OPEN_DECISION` - publication
+  withdrawal record and exposure effects
 - Blocks agent automation: Yes
 - Recommended next investigation: Define publication history, withdrawal record and exposure/schedule effects.
 
@@ -3952,7 +3953,8 @@ Concurrency classifications:
 - Services inspected: `doctordle-backend/src/modules/admin/case-review.service.ts`, `doctordle-backend/src/modules/education/diagnosis-education.service.ts`
 - Closest runtime behaviour: New revisions and publish-like status changes.
 - Why mapping remains unsafe: Supersession requires publication history and replacement-version semantics; no equivalent route is proven.
-- Related open-decision ID: `NOT_REGISTERED`
+- Related open-decision ID: `UNREGISTERED_OPEN_DECISION` - publication
+  supersession record and replacement-version flow
 - Blocks agent automation: Yes
 - Recommended next investigation: Define supersession record and replacement published artifact version flow.
 
@@ -3965,7 +3967,8 @@ Concurrency classifications:
 - Services inspected: `doctordle-backend/src/modules/diagnosis-registry/diagnosis-registry-merge-execution.service.ts`, `doctordle-backend/src/modules/diagnosis-registry/diagnosis-registry-link.service.ts`
 - Closest runtime behaviour: Registry merge execution can reassign references and create merge logs.
 - Why mapping remains unsafe: Canonical remap requires source/target inventory, authority, rationale, impact assessment and concurrency.
-- Related open-decision ID: `NOT_REGISTERED`
+- Related open-decision ID: `UNREGISTERED_OPEN_DECISION` - diagnosis reference
+  remap authority and concurrency contract
 - Blocks agent automation: Yes
 - Recommended next investigation: Map merge/link routes to WEOS remap requirements with exact expected-version evidence.
 
@@ -3975,9 +3978,10 @@ Concurrency classifications:
 - Canonical action ID: Generic cross-artifact governance-record creation
 - Runtime search performed: Searched case governance repository and entity review fields across case, registry, graph, education, teaching and evidence paths.
 - Routes inspected: Multiple editorial routes; no generic cross-artifact governance route identified.
-- Services inspected: `doctordle-backend/src/modules/admin/case-review-governance.repository.ts` plus mapped service paths above.
-- Closest runtime behaviour: Case governance repository exists; many other paths use entity fields, status fields, logs or audit-specific rows.
+- Services inspected: mapped service paths above; `doctordle-backend/src/modules/admin/case-review-governance.repository.ts` is `FILE_NOT_IN_BRANCH` and not active implementation evidence.
+- Closest runtime behaviour: many paths use entity fields, status fields, logs or audit-specific rows; the case governance repository is `FILE_NOT_IN_BRANCH`.
 - Why mapping remains unsafe: Model existence and service logging do not prove a generic governance record is written for every action.
-- Related open-decision ID: `NOT_REGISTERED`
+- Related open-decision ID: `UNREGISTERED_OPEN_DECISION` - generic
+  governance-record requirements and action-family coverage
 - Blocks agent automation: Yes
 - Recommended next investigation: Register generic governance-record requirements and action-family coverage gaps.
