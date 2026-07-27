@@ -40,6 +40,28 @@ Primary implementation evidence lives in:
 13. `docs/weos/gaps/IMPLEMENTATION-GAPS.md`
 14. `docs/weos/agent-rules/DO-NOT-GUESS.md`
 
+## Phase 2 Interpretation Closure
+
+Phase 2 interpretation work is closed for this reviewed repository state.
+
+- Reviewed branch: `weos/phase-2-review`
+- Reviewed implementation baseline: `bc6621a937bc1182a3a4b8a1a9d959b7b917f26a`
+- Review date: `2026-07-28`
+- Maturity statement:
+
+```text
+DOCUMENTED + PARTIALLY_IMPLEMENTED + AGENT-LEGIBLE +
+NOT YET SAFE FOR FULL GOVERNANCE AUTOMATION
+```
+
+Closure means that the current implementation, permissions, storage,
+verification commands and known governance gaps are documented consistently.
+
+Closure does not resolve open decisions, approve canonical authority, complete
+runtime governance architecture or authorize Phase 3 implementation. Later
+runtime, schema, dashboard, permission or test changes require revalidation of
+this interpretation layer.
+
 ## Authority Cautions
 
 Document existence does not imply formal approval. The baseline package states
@@ -58,6 +80,14 @@ controllers, schemas, and dashboard files show current behavior.
 Open governance questions remain human-controlled in
 `docs/weos/WEOS-IMP-005-phase-2-open-decisions.md`. Agents must not close,
 silently resolve, or override those decisions.
+
+Branch-missing models, repositories, tests, action registries and dashboard files
+must not be treated as implemented. If a file exists only in local worktree state
+or another branch, classify it as unavailable rather than active evidence.
+
+Runtime route access, state gates and canonical authority are separate. Where the
+gap register marks automation unsafe, agents must not perform autonomous
+governed mutation without explicit human authorization.
 
 ## Agent Rule
 
