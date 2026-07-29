@@ -29,6 +29,7 @@
     "generate:cases": "ts-node src/scripts/generate-cases.ts",
     "weos:docs:generate": "npm run build && node scripts/generate-weos-phase-2-docs.js",
     "weos:docs:check": "npm run build && node scripts/check-weos-phase-2-docs.js",
+    "weos:authority:check": "jest src/modules/editorial-governance/document-authority/document-authority.spec.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",

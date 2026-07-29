@@ -32,13 +32,14 @@ Primary implementation evidence lives in:
 5. `docs/weos/WEOS-IMP-003-editorial-action-decision-catalogue.md`
 6. `docs/weos/WEOS-IMP-004-legacy-status-crosswalk.md`
 7. `docs/weos/WEOS-IMP-005-phase-2-open-decisions.md`
-8. `docs/weos/capability-map/WEOS-CAPABILITY-MAP.md`
-9. `docs/weos/capability-map/RUNTIME-ACTION-CROSSWALK.md`
-10. `docs/weos/capability-map/DATABASE-MODEL-MAP.md`
-11. `docs/weos/capability-map/PERMISSION-MAP.md`
-12. `docs/weos/glossary/WEOS-TERMS.md`
-13. `docs/weos/gaps/IMPLEMENTATION-GAPS.md`
-14. `docs/weos/agent-rules/DO-NOT-GUESS.md`
+8. `docs/weos/phase-3-governance-foundations/README.md`
+9. `docs/weos/capability-map/WEOS-CAPABILITY-MAP.md`
+10. `docs/weos/capability-map/RUNTIME-ACTION-CROSSWALK.md`
+11. `docs/weos/capability-map/DATABASE-MODEL-MAP.md`
+12. `docs/weos/capability-map/PERMISSION-MAP.md`
+13. `docs/weos/glossary/WEOS-TERMS.md`
+14. `docs/weos/gaps/IMPLEMENTATION-GAPS.md`
+15. `docs/weos/agent-rules/DO-NOT-GUESS.md`
 
 ## Phase 2 Interpretation Closure
 
@@ -75,11 +76,21 @@ Architecture authority and implementation evidence are different things. The
 canonical documents describe intended WEOS concepts; runtime services,
 controllers, schemas, and dashboard files show current behavior.
 
+## Repository Authority Records
+
+Authority records live under `docs/weos/authority/records/`. Authority schemas live under `docs/weos/authority/schemas/`.
+
+Agents must validate authority records before using them. File existence is not approval. Absent or invalid records mean authority remains unresolved for the affected document, version and scope.
+
+`WEOS-OD-021` is approved with conditions only for Stage 1 repository-native contracts, schemas, pure validation/resolution utilities, conformance tests and documentation integration. Dependent decisions remain open unless they have their own valid approval record.
+
 ## Human-Controlled Decisions
 
 Open governance questions remain human-controlled in
 `docs/weos/WEOS-IMP-005-phase-2-open-decisions.md`. Agents must not close,
 silently resolve, or override those decisions.
+
+The Phase 3 Governance Foundations Decision Pack provides recommended directions for human architecture review. `WEOS-OD-021` is approved with conditions for Stage 1 contracts only. All dependent Phase 3 decisions remain open unless an explicit approval record and implementation authorization exist for that decision.
 
 Branch-missing models, repositories, tests, action registries and dashboard files
 must not be treated as implemented. If a file exists only in local worktree state

@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dxlab.local/weos/protected-field-exception-record.schema.json",
+  "title": "WEOS Protected-Field Exception Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recordId",
+    "recordType",
+    "schemaVersion",
+    "protectedArtifact",
+    "protectedField",
+    "currentValue",
+    "proposedValue",
+    "changeRationale",
+    "impactAssessment",
+    "requester",
+    "reviewer",
+    "approver",
+    "status",
+    "effectiveDate",
+    "requiredRegeneration",
+    "requiredRevalidation",
+    "rollbackConditions",
+    "supportingDecision",
+    "createdAt"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "recordId": { "type": "string", "minLength": 1 },
+    "recordType": { "const": "PROTECTED_FIELD_EXCEPTION" },
+    "schemaVersion": { "type": "string", "minLength": 1 },
+    "protectedArtifact": { "type": "string", "minLength": 1 },
+    "protectedField": { "type": "string", "minLength": 1 },
+    "currentValue": {},
+    "proposedValue": {},
+    "changeRationale": { "type": "string", "minLength": 1 },
+    "impactAssessment": { "type": "string", "minLength": 1 },
+    "requester": { "$ref": "#/$defs/authorityActor" },
+    "reviewer": { "$ref": "#/$defs/authorityActor" },
+    "approver": { "$ref": "#/$defs/authorityActor" },
+    "status": {
+      "enum": [
+        "REQUESTED",
+        "UNDER_REVIEW",
+        "APPROVED",
+        "REJECTED",
+        "WITHDRAWN",
+        "IMPLEMENTED",
+        "ROLLED_BACK"
+      ]
+    },
+    "effectiveDate": { "type": "string", "format": "date" },
+    "requiredRegeneration": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "requiredRevalidation": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "rollbackConditions": { "type": "string", "minLength": 1 },
+    "supportingDecision": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "authorityActor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "role", "authorityBasis"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "authorityBasis": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

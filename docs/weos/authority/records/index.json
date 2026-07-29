@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "1.0.0",
+  "repositoryAuthorityRecordVersion": "2026-07-29-stage-1",
+  "reviewedDate": "2026-07-29",
+  "warning": "Absence of an authority record means authority is unresolved, not denied or approved. File existence is not approval.",
+  "recordFamilies": [
+    {
+      "recordType": "DOCUMENT_APPROVAL",
+      "schemaPath": "docs/weos/authority/schemas/document-approval-record.schema.json",
+      "recordDirectory": "docs/weos/authority/records/document-approvals"
+    },
+    {
+      "recordType": "DOCUMENT_SUPERSESSION",
+      "schemaPath": "docs/weos/authority/schemas/document-supersession-record.schema.json",
+      "recordDirectory": "docs/weos/authority/records/document-supersessions"
+    },
+    {
+      "recordType": "PROTECTED_FIELD_EXCEPTION",
+      "schemaPath": "docs/weos/authority/schemas/protected-field-exception-record.schema.json",
+      "recordDirectory": "docs/weos/authority/records/protected-field-exceptions"
+    }
+  ],
+  "schemaPaths": [
+    "docs/weos/authority/schemas/document-approval-record.schema.json",
+    "docs/weos/authority/schemas/document-supersession-record.schema.json",
+    "docs/weos/authority/schemas/protected-field-exception-record.schema.json"
+  ],
+  "existingRecordPaths": [
+    "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-001.json"
+  ],
+  "activeApprovals": [
+    {
+      "recordId": "WEOS-AUTH-APP-001",
+      "documentId": "WEOS-OD-021",
+      "documentVersion": "0.1",
+      "documentPath": "docs/weos/phase-3-governance-foundations/WEOS-OD-021-document-authority-and-supersession.md",
+      "approvalOutcome": "APPROVED_WITH_CONDITIONS",
+      "implementationAuthorization": "GRANTED_FOR_STAGE_1_CONTRACTS_ONLY"
+    }
+  ],
+  "unresolvedAuthorityConflicts": []
+}

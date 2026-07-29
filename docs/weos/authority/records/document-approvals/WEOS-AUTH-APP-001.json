@@ -1,0 +1,39 @@
+{
+  "$schema": "../../schemas/document-approval-record.schema.json",
+  "recordId": "WEOS-AUTH-APP-001",
+  "recordType": "DOCUMENT_APPROVAL",
+  "schemaVersion": "1.0.0",
+  "documentId": "WEOS-OD-021",
+  "documentVersion": "0.1",
+  "documentPath": "docs/weos/phase-3-governance-foundations/WEOS-OD-021-document-authority-and-supersession.md",
+  "approvalScope": {
+    "scopeType": "DOCUMENT_VERSION",
+    "description": "Approval with conditions for WEOS-OD-021 Stage 1 repository-native document-authority contracts, schemas, approval evidence, validation utilities and conformance tests."
+  },
+  "approvalOutcome": "APPROVED_WITH_CONDITIONS",
+  "approver": {
+    "name": "Gideon Lemasika Saningo",
+    "role": "Founding Architecture Authority",
+    "authorityBasis": "Bootstrap authority explicitly recorded through the WEOS-OD-021 human decision"
+  },
+  "approverAuthority": "Founding Architecture Authority bootstrap authority for initial WEOS governance foundation only",
+  "approvalDate": "2026-07-29",
+  "effectiveDate": "2026-07-29",
+  "rationale": "WEOS requires repository-visible document authority and supersession records before agents can treat architecture decisions as controlling. This record approves WEOS-OD-021 with conditions for Stage 1 repository-native contracts only.",
+  "conditions": [
+    "repository-native records first",
+    "enhanced protected-field review",
+    "generated/runtime evidence cannot independently establish authority",
+    "unresolved conflicts block governance-sensitive implementation",
+    "permanent authority assignment supersedes bootstrap authority",
+    "no Prisma, database, API or runtime enforcement is authorized"
+  ],
+  "supportingDecision": "WEOS-OD-021",
+  "implementationAuthorization": "GRANTED_FOR_STAGE_1_CONTRACTS_ONLY",
+  "bootstrapAuthority": {
+    "isBootstrap": true,
+    "scope": "Initial WEOS governance foundation for repository-native authority records, schemas, TypeScript contracts, pure validation/resolution utilities, conformance tests and documentation integration only. This does not grant editorial, publication, clinical, institutional, operational, Prisma, database, API, runtime enforcement or production rollout authority.",
+    "expiryCondition": "Expires when a permanent authority-assignment process approved under WEOS-OD-022 becomes effective."
+  },
+  "createdAt": "2026-07-29T00:00:00Z"
+}
