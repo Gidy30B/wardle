@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/projection-inventory-entry.schema.json",
+  "title": "WEOS Projection Inventory",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "inventoryId": { "type": "string" },
+    "inventorySchemaVersion": { "type": "string" },
+    "status": { "const": "STAGE_1_CONTRACT_ONLY" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "projectionId",
+          "artifactType",
+          "fieldPath",
+          "knownDirectWriteLocations",
+          "knownReadConsumers",
+          "inventoryCompleteness",
+          "unknownWriterRisk",
+          "inventoryEvidenceReferences"
+        ],
+        "properties": {
+          "projectionId": { "type": "string" },
+          "artifactType": { "type": "string" },
+          "fieldPath": { "type": "string" },
+          "knownDirectWriteLocations": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "knownReadConsumers": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "inventoryCompleteness": {
+            "enum": ["COMPLETE", "PARTIAL", "UNKNOWN"]
+          },
+          "unknownWriterRisk": { "type": "boolean" },
+          "inventoryEvidenceReferences": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "lastInventoriedAt": { "type": "string", "format": "date-time" },
+          "inventoryMethod": { "type": "string" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "recordedAt": { "type": "string", "format": "date-time" }
+  },
+  "required": [
+    "inventoryId",
+    "inventorySchemaVersion",
+    "status",
+    "entries",
+    "createdAt",
+    "recordedAt"
+  ]
+}

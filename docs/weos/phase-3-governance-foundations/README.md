@@ -42,10 +42,10 @@ These downstream decisions are registered in the open-decision register so gap r
 | `WEOS-OD-018` | `APPROVED_WITH_CONDITIONS` | `GRANTED_FOR_STAGE_1_CONTRACTS_ONLY` |
 | `WEOS-OD-022` | `APPROVED_WITH_CONDITIONS` | `GRANTED_FOR_STAGE_1_CONTRACTS_ONLY` |
 | `WEOS-OD-023` | `APPROVED_WITH_CONDITIONS` | `GRANTED_FOR_STAGE_1_CONTRACTS_ONLY` |
-| `WEOS-OD-019` | Open                       | `NOT_GRANTED`                        |
+| `WEOS-OD-019` | `APPROVED_WITH_CONDITIONS` | `GRANTED_FOR_STAGE_1_CONTRACTS_ONLY` |
 | `WEOS-OD-024` | Open                       | `NOT_GRANTED`                        |
 
-Individual approval of `WEOS-OD-021`, `WEOS-OD-018`, `WEOS-OD-022` and `WEOS-OD-023` does not approve the complete pack. Pack-level status remains `REVIEW_REQUIRED`, approval state remains `NOT_APPROVED`, and implementation authority remains `NOT_GRANTED`.
+Individual approval of `WEOS-OD-021`, `WEOS-OD-018`, `WEOS-OD-022`, `WEOS-OD-023` and `WEOS-OD-019` does not approve the complete pack. Pack-level status remains `REVIEW_REQUIRED`, approval state remains `NOT_APPROVED`, and implementation authority remains `NOT_GRANTED`.
 
 ## Dependency Graph
 
@@ -74,7 +74,7 @@ This order is an implementation dependency proposal, not an approval sequence.
 
 ## Implementation Prohibition
 
-No Prisma, service, controller, dashboard, migration, backfill, permission enforcement or production rollout may be derived from this pack. OD-021, OD-018, OD-022 and OD-023 authorize Stage 1 repository-native contracts only; OD-019 and OD-024 remain open.
+No Prisma, service, controller, dashboard, migration, backfill, permission enforcement or production rollout may be derived from this pack. OD-021, OD-018, OD-022, OD-023 and OD-019 authorize Stage 1 repository-native contracts only; OD-024 remains open.
 
 ## Evidence Baseline
 

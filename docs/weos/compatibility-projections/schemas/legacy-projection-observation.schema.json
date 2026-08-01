@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/legacy-projection-observation.schema.json",
+  "title": "WEOS Legacy Projection Observation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "observationId",
+    "projectionId",
+    "sourceArtifactType",
+    "sourceRecordId",
+    "sourceField",
+    "observedValue",
+    "observedAt",
+    "provenanceStatus",
+    "observationEvidenceReferences",
+    "recordedAt"
+  ],
+  "properties": {
+    "observationId": { "type": "string" },
+    "projectionId": { "type": "string" },
+    "sourceArtifactType": { "type": "string" },
+    "sourceRecordId": { "type": "string" },
+    "sourceField": { "type": "string" },
+    "observedValue": true,
+    "observedAt": { "type": "string", "format": "date-time" },
+    "provenanceStatus": {
+      "enum": [
+        "OBSERVED_ONLY",
+        "SOURCE_VERIFIED",
+        "CANONICAL_LINK_UNKNOWN",
+        "CONFLICTING",
+        "UNKNOWN"
+      ]
+    },
+    "observationEvidenceReferences": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "recordedAt": { "type": "string", "format": "date-time" }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/compatibility-projection-registry.schema.json",
+  "title": "WEOS Compatibility Projection Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "registryId",
+    "registrySchemaVersion",
+    "status",
+    "definitions",
+    "createdAt",
+    "recordedAt"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "registryId": { "type": "string", "minLength": 1 },
+    "registrySchemaVersion": { "type": "string", "minLength": 1 },
+    "status": { "const": "STAGE_1_CONTRACT_ONLY" },
+    "definitions": {
+      "type": "array",
+      "items": {
+        "$ref": "./compatibility-projection-definition.schema.json"
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "recordedAt": { "type": "string", "format": "date-time" }
+  }
+}

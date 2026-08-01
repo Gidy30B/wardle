@@ -1,0 +1,9 @@
+{
+  "$schema": "./schemas/compatibility-projection-registry.schema.json",
+  "registryId": "WEOS-COMPATIBILITY-PROJECTION-REGISTRY",
+  "registrySchemaVersion": "1.0.0",
+  "status": "STAGE_1_CONTRACT_ONLY",
+  "definitions": [],
+  "createdAt": "2026-08-02T00:00:00Z",
+  "recordedAt": "2026-08-02T00:00:00Z"
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/projection-drift-result.schema.json",
+  "title": "WEOS Projection Drift Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "driftStatus",
+    "projectionId",
+    "evaluatedAt",
+    "reasons",
+    "repairEvaluated",
+    "repairPerformed"
+  ],
+  "properties": {
+    "driftStatus": {
+      "enum": [
+        "IN_SYNC",
+        "DRIFTED",
+        "OWNER_UNRESOLVED",
+        "CANONICAL_STATE_UNKNOWN",
+        "PROJECTION_STATE_UNKNOWN",
+        "NOT_EVALUABLE",
+        "PROJECTION_MISSING",
+        "CANONICAL_EFFECT_MISSING"
+      ]
+    },
+    "projectionId": { "type": "string" },
+    "canonicalSnapshotReference": { "type": "string" },
+    "projectedSnapshotReference": { "type": "string" },
+    "evaluatedAt": { "type": "string", "format": "date-time" },
+    "safeCanonicalReference": { "type": "string" },
+    "safeProjectedReference": { "type": "string" },
+    "reasons": { "type": "array", "items": { "type": "string" } },
+    "repairEvaluated": { "type": "boolean" },
+    "repairPerformed": { "const": false }
+  }
+}

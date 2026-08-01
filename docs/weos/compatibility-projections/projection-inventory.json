@@ -1,0 +1,9 @@
+{
+  "$schema": "./schemas/projection-inventory-entry.schema.json",
+  "inventoryId": "WEOS-COMPATIBILITY-PROJECTION-INVENTORY",
+  "inventorySchemaVersion": "1.0.0",
+  "status": "STAGE_1_CONTRACT_ONLY",
+  "entries": [],
+  "createdAt": "2026-08-02T00:00:00Z",
+  "recordedAt": "2026-08-02T00:00:00Z"
+}

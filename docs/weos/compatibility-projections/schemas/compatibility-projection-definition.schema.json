@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/compatibility-projection-definition.schema.json",
+  "title": "WEOS Compatibility Projection Definition",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "projectionId",
+    "projectionSchemaVersion",
+    "artifactType",
+    "fieldPath",
+    "projectionMeaning",
+    "projectionSensitivity",
+    "ownershipStatus",
+    "synchronizationStrategy",
+    "writerPolicy",
+    "knownDirectWriteLocations",
+    "knownReadConsumers",
+    "inventoryCompleteness",
+    "unknownWriterRisk",
+    "inventoryEvidenceReferences",
+    "legacyStatePolicy",
+    "disclosurePolicy",
+    "sourceProvenanceRequirements",
+    "rationale",
+    "conditions",
+    "status",
+    "createdAt",
+    "recordedAt"
+  ],
+  "properties": {
+    "projectionId": { "type": "string", "minLength": 1 },
+    "projectionSchemaVersion": { "type": "string", "minLength": 1 },
+    "artifactType": { "type": "string", "minLength": 1 },
+    "fieldPath": { "type": "string", "minLength": 1 },
+    "projectionMeaning": { "type": "string", "minLength": 1 },
+    "projectionSensitivity": {
+      "enum": [
+        "AUTHORITY_SENSITIVE",
+        "LEARNER_EXPOSURE_GATING",
+        "OPERATIONAL_ELIGIBILITY",
+        "NON_AUTHORITY_COMPATIBILITY",
+        "UNKNOWN"
+      ]
+    },
+    "ownershipStatus": {
+      "enum": [
+        "APPROVED_CANONICAL_OWNER",
+        "UNRESOLVED_OWNER",
+        "DEPRECATED_NO_OWNER_REQUIRED"
+      ]
+    },
+    "canonicalOwner": {
+      "type": ["object", "null"],
+      "properties": {
+        "canonicalOwnerType": { "type": "string" },
+        "canonicalOwnerReference": { "type": "string" },
+        "canonicalOwnerDecisionType": { "type": "string" },
+        "canonicalOwnerSchemaVersion": { "type": "string" },
+        "supportingApprovalRecordId": { "type": "string" }
+      }
+    },
+    "synchronizationStrategy": {
+      "enum": [
+        "DERIVED_ON_READ",
+        "ATOMIC_SYNCHRONOUS",
+        "ASYNCHRONOUS_BOUNDED_DRIFT",
+        "LEGACY_OBSERVED_ONLY",
+        "DEPRECATED"
+      ]
+    },
+    "writerPolicy": {
+      "enum": [
+        "GOVERNED_HANDLER_ONLY",
+        "DERIVATION_ONLY",
+        "TEMPORARY_COMPATIBILITY_WRITE",
+        "OBSERVE_ONLY",
+        "NO_WRITES"
+      ]
+    },
+    "knownDirectWriteLocations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "knownReadConsumers": { "type": "array", "items": { "type": "string" } },
+    "inventoryCompleteness": { "enum": ["COMPLETE", "PARTIAL", "UNKNOWN"] },
+    "unknownWriterRisk": { "type": "boolean" },
+    "inventoryEvidenceReferences": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "conditions": { "type": "array", "items": { "type": "string" } },
+    "status": { "enum": ["DRAFT", "APPROVED", "DEPRECATED", "WITHDRAWN"] },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "recordedAt": { "type": "string", "format": "date-time" }
+  }
+}
