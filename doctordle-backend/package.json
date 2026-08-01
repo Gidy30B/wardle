@@ -37,7 +37,8 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "weos:governance-decision:check": "jest src/modules/editorial-governance/governance-decision/governance-decision.spec.ts",
-    "weos:authority-assignment:check": "jest src/modules/editorial-governance/authority-assignment/authority-assignment.spec.ts"
+    "weos:authority-assignment:check": "jest src/modules/editorial-governance/authority-assignment/authority-assignment.spec.ts",
+    "weos:governed-command:check": "jest src/modules/editorial-governance/governed-command/governed-command.spec.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

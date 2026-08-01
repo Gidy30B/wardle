@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/governed-command.schema.json",
+  "title": "WEOS Governed Command",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "commandId",
+    "commandType",
+    "commandContractVersion",
+    "actorContext",
+    "authorityResolutionReference",
+    "primaryTarget",
+    "concurrencyPreconditions",
+    "requestedEffect",
+    "payloadHash",
+    "submittedAt",
+    "correlationId",
+    "causationId"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "commandId": { "type": "string", "minLength": 1 },
+    "commandType": { "type": "string", "minLength": 1 },
+    "commandContractVersion": { "type": "string", "minLength": 1 },
+    "actorContext": { "type": "object" },
+    "authorityResolutionReference": { "type": "object" },
+    "primaryTarget": { "$ref": "#/$defs/GovernedCommandTargetReference" },
+    "concurrencyPreconditions": {
+      "type": "array",
+      "items": { "$ref": "concurrency-precondition.schema.json" },
+      "minItems": 1
+    },
+    "requestedEffect": { "type": "object" },
+    "payloadHash": { "type": "string", "minLength": 1 },
+    "idempotencyKey": { "type": ["string", "null"], "minLength": 1 },
+    "submittedAt": { "type": "string", "format": "date-time" },
+    "correlationId": { "type": "string", "minLength": 1 },
+    "causationId": { "type": "string", "minLength": 1 }
+  },
+  "$defs": {
+    "GovernedCommandTargetReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactType", "artifactId", "targetScope"],
+      "properties": {
+        "artifactType": { "type": "string", "minLength": 1 },
+        "artifactId": { "type": "string", "minLength": 1 },
+        "artifactRevisionId": { "type": "string", "minLength": 1 },
+        "targetScope": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

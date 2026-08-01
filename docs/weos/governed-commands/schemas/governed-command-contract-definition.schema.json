@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/governed-command-contract-definition.schema.json",
+  "title": "WEOS Governed Command Contract Definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "commandType",
+    "commandContractVersion",
+    "status",
+    "targetPolicy",
+    "dependencyPolicy",
+    "idempotencyPolicy",
+    "batchPolicy",
+    "staleResultPolicy"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "commandType": { "type": "string", "minLength": 1 },
+    "commandContractVersion": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["DRAFT", "APPROVED", "DEPRECATED", "WITHDRAWN"] },
+    "targetPolicy": { "type": "object" },
+    "dependencyPolicy": { "type": "object" },
+    "idempotencyPolicy": { "enum": ["REQUIRED", "OPTIONAL", "PROHIBITED"] },
+    "batchPolicy": { "enum": ["ATOMIC", "INDEPENDENT_ITEMS", "PROHIBITED"] },
+    "staleResultPolicy": { "type": "object" }
+  }
+}

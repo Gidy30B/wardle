@@ -79,7 +79,7 @@ decisions.
 
 No other decision inherits approval from `WEOS-AUTH-APP-002`. Governance Decision schemas are contract evidence, not operational authority records. File existence under `docs/weos/governance-decisions/` does not create a Governance Decision.
 
-These records do not approve the rest of the Phase 3 pack, dependent decisions, Prisma, database persistence, runtime enforcement, controllers, API routes, guards, dashboards, migrations, backfills or production rollout.
+`WEOS-AUTH-APP-004` establishes conditional approval of `WEOS-OD-023` version `0.1` only. Its implementation authorization is limited to Stage 1 governed-command contracts, JSON schemas, pure command-contract and token-policy registries, validation, stale-state comparison, idempotency, batch-policy and eligibility resolution, conformance tests and documentation integration. Command schemas are contract evidence, not proof of runtime concurrency enforcement. File existence does not make a command safe. Registry membership alone does not approve a command contract. No existing command inherits compliance. APP-001 through APP-003 retain their prior scopes, and no other decision inherits approval from APP-004.`r`n`r`nThese records do not approve the rest of the Phase 3 pack, dependent decisions, Prisma, database persistence, runtime enforcement, controllers, API routes, guards, dashboards, migrations, backfills or production rollout.
 
 ## Conflict Handling Rule
 

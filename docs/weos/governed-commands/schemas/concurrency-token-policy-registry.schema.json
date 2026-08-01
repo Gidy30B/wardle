@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/concurrency-token-policy-registry.schema.json",
+  "title": "WEOS Concurrency Token Policy Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "registryStatus", "tokenPolicies"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": "1.0.0" },
+    "registryStatus": { "type": "string", "minLength": 1 },
+    "tokenPolicies": {
+      "type": "array",
+      "items": { "$ref": "concurrency-token-policy-definition.schema.json" }
+    }
+  }
+}

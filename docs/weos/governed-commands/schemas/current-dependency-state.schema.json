@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/current-dependency-state.schema.json",
+  "title": "WEOS Current Dependency State",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["target", "dependencyRole", "status"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "target": {
+      "$ref": "governed-command.schema.json#/$defs/GovernedCommandTargetReference"
+    },
+    "dependencyRole": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["KNOWN", "UNKNOWN", "UNAVAILABLE"] },
+    "currentRevisionId": { "type": "string", "minLength": 1 },
+    "currentVersion": { "type": "integer", "minimum": 0 },
+    "currentToken": { "type": "string", "minLength": 1 },
+    "tokenPolicyType": { "type": "string", "minLength": 1 },
+    "tokenPolicyVersion": { "type": "string", "minLength": 1 },
+    "safeCurrentStateReference": { "type": "object" }
+  }
+}
