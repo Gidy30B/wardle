@@ -89,13 +89,15 @@ Only registered approved extensions may validate Governance Decisions. The repos
 
 Runtime enforcement, Prisma persistence, command handlers, projection synchronization and production rollout are not authorized by Stage 1 Governance Decision Envelope contracts.
 
+Authority-assignment Stage 1 contracts live under `docs/weos/authority-assignments/`. Pure TypeScript contracts and conformance tests live under `doctordle-backend/src/modules/editorial-governance/authority-assignment/`. Runtime roles are not authority. Only valid `ACTIVE` assignments under approved authority-type policy may authorize in pure resolution. Production registries are empty, command-context assignment references are claims, no production assignment exists, no runtime enforcement is authorized and bootstrap authority is not converted.
+
 ## Human-Controlled Decisions
 
 Open governance questions remain human-controlled in
 `docs/weos/WEOS-IMP-005-phase-2-open-decisions.md`. Agents must not close,
 silently resolve, or override those decisions.
 
-The Phase 3 Governance Foundations Decision Pack provides recommended directions for human architecture review. `WEOS-OD-021` is approved with conditions for Stage 1 contracts only. All dependent Phase 3 decisions remain open unless an explicit approval record and implementation authorization exist for that decision.
+The Phase 3 Governance Foundations Decision Pack provides recommended directions for human architecture review. `WEOS-OD-021`, `WEOS-OD-018` and `WEOS-OD-022` are approved with conditions for Stage 1 contracts only. Other dependent Phase 3 decisions remain open unless an explicit approval record and implementation authorization exist for that decision.
 
 Branch-missing models, repositories, tests, action registries and dashboard files
 must not be treated as implemented. If a file exists only in local worktree state

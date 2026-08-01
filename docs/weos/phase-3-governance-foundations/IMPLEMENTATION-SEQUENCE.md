@@ -24,7 +24,7 @@ Required approvals:
 - `WEOS-OD-019`
 - `WEOS-OD-024`
 
-No runtime implementation may begin before applicable approvals. Stage 0 remains incomplete because `WEOS-OD-022`, `WEOS-OD-023`, `WEOS-OD-019` and `WEOS-OD-024` remain open, and runtime implementation remains blocked.
+No runtime implementation may begin before applicable approvals. Stage 0 remains incomplete because `WEOS-OD-023`, `WEOS-OD-019` and `WEOS-OD-024` remain open, and runtime implementation remains blocked. `WEOS-OD-021`, `WEOS-OD-018` and `WEOS-OD-022` are approved with conditions for Stage 1 contracts only.
 
 Entry criteria:
 
@@ -40,8 +40,9 @@ Exit criteria:
 
 ## Stage 1 - Canonical TypeScript Contracts
 
-Planned only:
+Implemented for approved Stage 1 contract islands only:
 
+- document-authority contracts;
 - decision-envelope interfaces;
 - authority-assignment contracts;
 - concurrency command contract;
@@ -51,7 +52,7 @@ Planned only:
 
 Entry criteria:
 
-- Stage 0 approvals cover the contracts being drafted.
+- Stage 0 approvals cover the contracts being drafted; concurrency, projection and controlled-application contracts remain blocked until their decisions are approved.
 - Generated-document authority rules are clear.
 
 Exit criteria:

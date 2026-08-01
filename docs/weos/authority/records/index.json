@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
-  "repositoryAuthorityRecordVersion": "2026-07-29-stage-1",
-  "reviewedDate": "2026-07-29",
+  "repositoryAuthorityRecordVersion": "2026-08-01-stage-1",
+  "reviewedDate": "2026-08-01",
   "warning": "Absence of an authority record means authority is unresolved, not denied or approved. File existence is not approval.",
   "recordFamilies": [
     {
@@ -27,7 +27,8 @@
   ],
   "existingRecordPaths": [
     "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-001.json",
-    "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-002.json"
+    "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-002.json",
+    "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-003.json"
   ],
   "activeApprovals": [
     {
@@ -43,6 +44,14 @@
       "documentId": "WEOS-OD-018",
       "documentVersion": "0.1",
       "documentPath": "docs/weos/phase-3-governance-foundations/WEOS-OD-018-governance-decision-envelope.md",
+      "approvalOutcome": "APPROVED_WITH_CONDITIONS",
+      "implementationAuthorization": "GRANTED_FOR_STAGE_1_CONTRACTS_ONLY"
+    },
+    {
+      "recordId": "WEOS-AUTH-APP-003",
+      "documentId": "WEOS-OD-022",
+      "documentVersion": "0.1",
+      "documentPath": "docs/weos/phase-3-governance-foundations/WEOS-OD-022-runtime-role-to-authority-assignment.md",
       "approvalOutcome": "APPROVED_WITH_CONDITIONS",
       "implementationAuthorization": "GRANTED_FOR_STAGE_1_CONTRACTS_ONLY"
     }

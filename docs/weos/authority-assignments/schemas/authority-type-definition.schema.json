@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/authority-type-definition.schema.json",
+  "title": "WEOS Authority Type Definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "authorityType",
+    "authorityTypeSchemaVersion",
+    "status",
+    "allowedDecisionTypes",
+    "requiredScopeDimensions",
+    "permitsGlobalScope",
+    "requiresHumanAuthority",
+    "permittedSubjectTypes",
+    "permitsDelegation",
+    "maximumDelegationDepth",
+    "grantableAuthorityTypes",
+    "requiresEnhancedGrantEvidence",
+    "separationOfDutiesRules"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "authorityType": { "type": "string", "minLength": 1 },
+    "authorityTypeSchemaVersion": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["DRAFT", "APPROVED", "DEPRECATED", "WITHDRAWN"] },
+    "allowedDecisionTypes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "requiredScopeDimensions": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "organizationIds",
+          "specialtyIds",
+          "artifactTypes",
+          "artifactIds",
+          "artifactRevisionIds",
+          "decisionTypes",
+          "environmentScopes"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "permitsGlobalScope": { "type": "boolean" },
+    "requiresHumanAuthority": { "type": "boolean" },
+    "permittedSubjectTypes": {
+      "type": "array",
+      "items": { "enum": ["USER", "SERVICE_ACCOUNT", "AUTOMATION", "SYSTEM"] },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "permitsDelegation": { "type": "boolean" },
+    "maximumDelegationDepth": { "type": "integer", "minimum": 0 },
+    "grantableAuthorityTypes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "maximumGrantValidityDuration": { "type": "string", "minLength": 1 },
+    "requiresEnhancedGrantEvidence": { "type": "boolean" },
+    "separationOfDutiesRules": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "conditionsSchemaReference": { "type": "string", "minLength": 1 }
+  }
+}
