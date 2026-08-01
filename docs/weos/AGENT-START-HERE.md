@@ -82,7 +82,12 @@ Authority records live under `docs/weos/authority/records/`. Authority schemas l
 
 Agents must validate authority records before using them. File existence is not approval. Absent or invalid records mean authority remains unresolved for the affected document, version and scope.
 
-`WEOS-OD-021` is approved with conditions only for Stage 1 repository-native contracts, schemas, pure validation/resolution utilities, conformance tests and documentation integration. Dependent decisions remain open unless they have their own valid approval record.
+`WEOS-OD-021` is approved with conditions only for Stage 1 repository-native contracts, schemas, pure validation/resolution utilities, conformance tests and documentation integration. `WEOS-OD-018` is approved with conditions only for Stage 1 Governance Decision Envelope contracts and validation evidence. Dependent decisions remain open unless they have their own valid approval record.
+Governance Decision Envelope Stage 1 contracts live under `docs/weos/governance-decisions/`. Pure TypeScript contracts and conformance tests live under `doctordle-backend/src/modules/editorial-governance/governance-decision/`.
+
+Only registered approved extensions may validate Governance Decisions. The repository registry initially contains no approved production extension, and unregistered extensions cannot establish a valid decision. `WEOS-OD-021` authority records are not replaced, duplicated or retroactively converted by `WEOS-OD-018`.
+
+Runtime enforcement, Prisma persistence, command handlers, projection synchronization and production rollout are not authorized by Stage 1 Governance Decision Envelope contracts.
 
 ## Human-Controlled Decisions
 

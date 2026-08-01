@@ -73,7 +73,11 @@ decisions.
 
 `WEOS-AUTH-APP-001` establishes approval of `WEOS-OD-021` only within its recorded scope and conditions. It grants implementation authorization only for Stage 1 repository-native contracts, schemas, pure validation/resolution utilities, conformance tests and documentation integration.
 
-It does not approve the rest of the Phase 3 pack, dependent decisions, Prisma, database persistence, runtime enforcement, controllers, API routes, guards, dashboards, migrations, backfills or production rollout.
+`WEOS-AUTH-APP-002` establishes conditional approval of `WEOS-OD-018` version `0.1` only. Its implementation authorization is limited to Stage 1 Governance Decision Envelope TypeScript contracts, JSON schemas, pure in-memory extension registry, pure validation, immutability checks, standing and supersession resolution, conformance tests and documentation integration.
+
+No other decision inherits approval from `WEOS-AUTH-APP-002`. Governance Decision schemas are contract evidence, not operational authority records. File existence under `docs/weos/governance-decisions/` does not create a Governance Decision.
+
+These records do not approve the rest of the Phase 3 pack, dependent decisions, Prisma, database persistence, runtime enforcement, controllers, API routes, guards, dashboards, migrations, backfills or production rollout.
 
 ## Conflict Handling Rule
 

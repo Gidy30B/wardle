@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/governance-decision-extension-registry.schema.json",
+  "title": "WEOS Governance Decision Extension Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "registryStatus", "entries"],
+  "properties": {
+    "schemaVersion": { "type": "string", "minLength": 1 },
+    "registryStatus": { "enum": ["STAGE_1_CONTRACT_EVIDENCE_ONLY"] },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "extensionType",
+          "extensionSchemaVersion",
+          "approvalState",
+          "productionAuthority"
+        ],
+        "properties": {
+          "extensionType": { "type": "string", "minLength": 1 },
+          "extensionSchemaVersion": { "type": "string", "minLength": 1 },
+          "approvalState": {
+            "enum": ["DRAFT", "APPROVED_WITH_CONDITIONS", "APPROVED", "RETIRED"]
+          },
+          "productionAuthority": { "enum": ["NOT_GRANTED", "GRANTED"] },
+          "decisionTypes": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "outcomes": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "effectiveActions": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}

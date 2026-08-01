@@ -24,7 +24,7 @@ Required approvals:
 - `WEOS-OD-019`
 - `WEOS-OD-024`
 
-No runtime implementation may begin before applicable approvals.
+No runtime implementation may begin before applicable approvals. Stage 0 remains incomplete because `WEOS-OD-022`, `WEOS-OD-023`, `WEOS-OD-019` and `WEOS-OD-024` remain open, and runtime implementation remains blocked.
 
 Entry criteria:
 

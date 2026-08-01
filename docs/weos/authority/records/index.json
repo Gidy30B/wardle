@@ -26,7 +26,8 @@
     "docs/weos/authority/schemas/protected-field-exception-record.schema.json"
   ],
   "existingRecordPaths": [
-    "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-001.json"
+    "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-001.json",
+    "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-002.json"
   ],
   "activeApprovals": [
     {
@@ -34,6 +35,14 @@
       "documentId": "WEOS-OD-021",
       "documentVersion": "0.1",
       "documentPath": "docs/weos/phase-3-governance-foundations/WEOS-OD-021-document-authority-and-supersession.md",
+      "approvalOutcome": "APPROVED_WITH_CONDITIONS",
+      "implementationAuthorization": "GRANTED_FOR_STAGE_1_CONTRACTS_ONLY"
+    },
+    {
+      "recordId": "WEOS-AUTH-APP-002",
+      "documentId": "WEOS-OD-018",
+      "documentVersion": "0.1",
+      "documentPath": "docs/weos/phase-3-governance-foundations/WEOS-OD-018-governance-decision-envelope.md",
       "approvalOutcome": "APPROVED_WITH_CONDITIONS",
       "implementationAuthorization": "GRANTED_FOR_STAGE_1_CONTRACTS_ONLY"
     }

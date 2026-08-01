@@ -34,6 +34,19 @@ The pack is local documentation only. It records options, recommendations, conse
 
 These downstream decisions are registered in the open-decision register so gap references no longer depend on unregistered placeholders. They are not fully resolved by this pack.
 
+## Individual Decision Status
+
+| Decision      | Status                     | Implementation authority             |
+| ------------- | -------------------------- | ------------------------------------ |
+| `WEOS-OD-021` | `APPROVED_WITH_CONDITIONS` | `GRANTED_FOR_STAGE_1_CONTRACTS_ONLY` |
+| `WEOS-OD-018` | `APPROVED_WITH_CONDITIONS` | `GRANTED_FOR_STAGE_1_CONTRACTS_ONLY` |
+| `WEOS-OD-022` | Open                       | `NOT_GRANTED`                        |
+| `WEOS-OD-023` | Open                       | `NOT_GRANTED`                        |
+| `WEOS-OD-019` | Open                       | `NOT_GRANTED`                        |
+| `WEOS-OD-024` | Open                       | `NOT_GRANTED`                        |
+
+Individual approval of `WEOS-OD-021` and `WEOS-OD-018` does not approve the complete pack. Pack-level status remains `REVIEW_REQUIRED`, approval state remains `NOT_APPROVED`, and implementation authority remains `NOT_GRANTED`.
+
 ## Dependency Graph
 
 ```text

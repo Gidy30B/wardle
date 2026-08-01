@@ -4,10 +4,10 @@
 
 - Decision ID: `WEOS-OD-018`
 - Version: `0.1`
-- Status: `Draft`
-- Disposition: `REVIEW_REQUIRED`
-- Approval state: `NOT_APPROVED`
-- Implementation authority: `NOT_GRANTED`
+- Status: `Approved with conditions`
+- Disposition: `APPROVED_WITH_CONDITIONS`
+- Approval state: `APPROVED_WITH_CONDITIONS`
+- Implementation authority: `GRANTED_FOR_STAGE_1_CONTRACTS_ONLY`
 - Evidence baseline: `6f41136c21c9e854cbf231752d71939fab82bdac`
 - Review date: `2026-07-29`
 
@@ -94,6 +94,35 @@ Use a common envelope plus typed one-to-one extension records or validated paylo
 Prefer a hybrid envelope with typed extension records or strict validated payload schemas. The common envelope should carry execution actor type, execution actor identity, human authority source where required, scoped authority assignment, target, rationale, findings, outcome, effective action, obligations, supersession and schema version; typed extensions should enforce artifact-specific constraints. Automation may execute an operation, but it must not silently become the authority source.
 
 This recommendation is not an approval, does not resolve the decision, and does not grant implementation authority.
+
+## Selected Decision
+
+WEOS adopts a common immutable Governance Decision Envelope with discriminated, versioned, domain-specific extension contracts.
+
+The common envelope establishes canonical cross-artifact fields for every authority-bearing decision. Domain extensions define additional target, outcome, effect, authority, validation and obligation requirements per registered decision type. The architecture remains independent of database encoding.
+
+Stage 1 defines TypeScript contracts, JSON schemas, extension-registry contracts, pure validation, pure immutability checks, standing and supersession resolution, and conformance tests. Stage 2 may separately decide typed one-to-one records versus strictly validated structured payloads.
+
+Generic unvalidated JSON payloads are prohibited. Independent domain decision records that duplicate the common envelope are prohibited.
+
+WEOS-OD-021 records remain canonical for document authority. WEOS-OD-018 does not replace, duplicate or retroactively convert them. A future adapter may expose WEOS-OD-021 records through a read model that preserves their IDs, scope, conditions and evidence; no adapter is authorized in Stage 1.
+
+This decision does not authorize Prisma models, migrations, persistence, runtime commands, command handlers, services, controllers, guards, projection synchronization, dashboard work, backfill, deployment or production enforcement.
+
+## Approval Conditions
+
+- Envelope records support `primaryTarget` and `targetReferences[]`.
+- Target references distinguish `artifactType`, `artifactId`, `artifactRevisionId` and `targetScope`.
+- Exact revision is required only when the registered extension policy declares content standing, approval, controlled application, publication or revision-sensitive governance; the generic envelope must not invent that requirement.
+- Authority evidence preserves `authorityAssignmentId`, `authorityEvidenceReference`, `authorityScopeSnapshot` and `authorityResolvedAt`; later expiry or revocation must not rewrite decision history.
+- This approval does not finalize the `WEOS-OD-022` authority vocabulary.
+- Finalized decisions are immutable; correction, withdrawal or replacement requires a new decision ID with scoped supersession references.
+- `supersessionReferences[]` include `decisionId` and `supersessionScope`, with optional rationale and evidence; self-supersession is rejected, and field, section or target scope must not be treated as global.
+- Registered extensions control `decisionType`, `outcome`, `effectiveAction`, target and authority requirements, human-authority requirements, obligations, permitted supersession scope and extension-payload validation.
+- Generic `APPROVED` semantics are not shared across artifact families unless the registered extension policy defines them.
+- `envelopeSchemaVersion`, `extensionType` and `extensionSchemaVersion` are independent contract fields.
+- `humanAuthorityActorId` may be absent only when an approved extension policy explicitly permits non-human authority. Automation may execute an authorized decision but must not become the authority source merely because the execution actor is `AUTOMATION`, `SERVICE_ACCOUNT` or `SYSTEM`.
+- Unknown legacy statuses, workflows, assessments, validation runs, audits, revisions and projections must not be converted into Governance Decisions unless target, revision when required, execution actor, authority, rationale, outcome and effective action are proven.
 
 ## Rejected Options and Reasons
 
@@ -212,9 +241,22 @@ This recommendation is not an approval, does not resolve the decision, and does 
 
 ## Approval Record
 
-- Decision status: `OPEN`
-- Approved option: `NOT_SELECTED`
-- Approver: `NOT_RECORDED`
-- Approval date: `NOT_RECORDED`
-- Approval evidence: `NOT_RECORDED`
-- Implementation authorization: `NOT_GRANTED`
+- Decision status: `APPROVED_WITH_CONDITIONS`
+- Approved option: `OPTION_C_HYBRID_ENVELOPE_WITH_TYPED_EXTENSIONS`
+- Approver: `Gideon Lemasika Saningo`
+- Approver role: `Founding Architecture Authority`
+- Approval date: `2026-07-29`
+- Approval evidence: `docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-002.json`
+- Conditions:
+  - exact and multi-target references
+  - extension-controlled exact-revision requirements
+  - authority evidence preserved at decision time
+  - append-only finalized decisions
+  - scoped supersession
+  - extension-controlled outcome and effect semantics
+  - independent envelope and extension versioning
+  - OD-021 records remain canonical for document authority
+  - non-human authority requires explicit approved policy
+  - legacy history is never invented
+  - no Prisma, persistence, API, runtime or enforcement work
+- Implementation authorization: `GRANTED_FOR_STAGE_1_CONTRACTS_ONLY`

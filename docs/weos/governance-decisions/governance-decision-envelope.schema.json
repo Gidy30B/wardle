@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/governance-decision-envelope.schema.json",
+  "title": "WEOS Governance Decision Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "decisionId",
+    "envelopeSchemaVersion",
+    "extensionType",
+    "extensionSchemaVersion",
+    "decisionType",
+    "status",
+    "primaryTarget",
+    "targetReferences",
+    "actor",
+    "authority",
+    "rationale",
+    "findings",
+    "outcome",
+    "effectiveAction",
+    "extensionPayload",
+    "occurredAt",
+    "createdAt"
+  ],
+  "properties": {
+    "decisionId": { "type": "string", "minLength": 1 },
+    "envelopeSchemaVersion": { "type": "string", "minLength": 1 },
+    "extensionType": { "type": "string", "minLength": 1 },
+    "extensionSchemaVersion": { "type": "string", "minLength": 1 },
+    "decisionType": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["DRAFT", "FINALIZED"] },
+    "primaryTarget": { "$ref": "#/$defs/targetReference" },
+    "targetReferences": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/targetReference" }
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actorType", "actorId"],
+      "properties": {
+        "actorType": { "type": "string", "minLength": 1 },
+        "actorId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorityAssignmentId",
+        "authorityEvidenceReference",
+        "authorityScopeSnapshot",
+        "authorityResolvedAt"
+      ],
+      "properties": {
+        "humanAuthorityActorId": { "type": "string", "minLength": 1 },
+        "authorityAssignmentId": { "type": "string", "minLength": 1 },
+        "authorityEvidenceReference": { "type": "string", "minLength": 1 },
+        "authorityScopeSnapshot": { "type": "string", "minLength": 1 },
+        "authorityResolvedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "rationale": { "type": "string", "minLength": 1 },
+    "findings": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "outcome": { "type": "string", "minLength": 1 },
+    "effectiveAction": { "type": "string", "minLength": 1 },
+    "obligations": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "supersessionReferences": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/supersessionReference" }
+    },
+    "extensionPayload": { "type": "object" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "targetReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactType", "artifactId", "targetScope"],
+      "properties": {
+        "artifactType": { "type": "string", "minLength": 1 },
+        "artifactId": { "type": "string", "minLength": 1 },
+        "artifactRevisionId": { "type": "string", "minLength": 1 },
+        "targetScope": { "type": "string", "minLength": 1 }
+      }
+    },
+    "supersessionReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decisionId", "supersessionScope"],
+      "properties": {
+        "decisionId": { "type": "string", "minLength": 1 },
+        "supersessionScope": { "type": "string", "minLength": 1 },
+        "rationale": { "type": "string", "minLength": 1 },
+        "evidenceReference": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
