@@ -13,7 +13,8 @@ This matrix is evidence, not approval.
 | Implementation status | `CLOSED` |
 | Conformance | `CONFORMANT_WITH_NONBLOCKING_FINDINGS` |
 | Closure authority | Final independent APP-006 conformance review |
-| Implementation commit SHA | `PENDING_COMMIT` |
+| Governance baseline commit SHA | `1009a80494b429cfc9eb9f7de50f1c677e1e4c7c` |
+| APP-006 implementation commit SHA | `c428fe1094e7a1a49250fb34bfb2b83d893df112` |
 
 APP-006 remains an approved authorization record whose bounded implementation
 is now conformant and closed. This closure does not approve publication,

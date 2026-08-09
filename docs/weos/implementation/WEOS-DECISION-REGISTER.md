@@ -49,7 +49,8 @@ Authorization status and implementation/conformance status are distinct.
 | Conformance | `CONFORMANT_WITH_NONBLOCKING_FINDINGS` |
 | Closure authority | Final independent APP-006 conformance review |
 | Authorized operation | `APPROVE_CASE_REVISION` |
-| Implementation commit SHA | `PENDING_COMMIT` |
+| Governance baseline commit SHA | `1009a80494b429cfc9eb9f7de50f1c677e1e4c7c` |
+| APP-006 implementation commit SHA | `c428fe1094e7a1a49250fb34bfb2b83d893df112` |
 
 This closure does not create or approve Phase 1C, `WEOS-AUTH-APP-007`,
 publication, learner exposure, controlled AI application, graph promotion,

@@ -16,7 +16,8 @@ under `WEOS-AUTH-APP-006`.
 | Conformance | `CONFORMANT_WITH_NONBLOCKING_FINDINGS` |
 | Closure | `CLOSED` |
 | Reference implementation | YES |
-| Implementation commit SHA | `PENDING_COMMIT` |
+| Governance baseline commit SHA | `1009a80494b429cfc9eb9f7de50f1c677e1e4c7c` |
+| APP-006 implementation commit SHA | `c428fe1094e7a1a49250fb34bfb2b83d893df112` |
 
 APP-006 establishes the current governed-command runtime pattern for subsequent
 bounded slices: exact target selection, explicit expected-state checks,
