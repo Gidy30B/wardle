@@ -1,9 +1,15 @@
 {
   "name": "dxlab",
   "private": true,
+  "packageManager": "npm@10.9.3",
+  "engines": {
+    "node": "22.19.x",
+    "npm": "10.9.x"
+  },
   "scripts": {
     "precompose": "ts-node scripts/check-env.ts",
-    "check:env": "ts-node scripts/check-env.ts"
+    "check:env": "ts-node scripts/check-env.ts",
+    "verify": "node scripts/run-verify.mjs"
   },
   "devDependencies": {
     "ts-node": "^10.9.2",
