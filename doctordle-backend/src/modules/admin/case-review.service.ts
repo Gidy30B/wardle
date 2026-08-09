@@ -3,7 +3,9 @@ import {
   Logger,
   BadRequestException,
   NotFoundException,
+  Inject,
 } from '@nestjs/common';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   CaseEditorialStatus,
   CaseSource,
@@ -45,8 +47,69 @@ import type { SubmitCaseReviewDto } from './dto/submit-case-review.dto.js';
 import type { UpdateCaseDiagnosisDto } from './dto/update-case-diagnosis.dto.js';
 import type { UpdateDiagnosisRegistryMetadataDto } from './dto/update-diagnosis-registry-metadata.dto.js';
 import { CaseQualityProjectionService } from './case-quality-projection.service.js';
+import {
+  resolveGovernedAuthority,
+  type AuthorityTypeRegistry,
+} from '../editorial-governance/authority-assignment/index.js';
+import { stableStringify } from '../editorial-governance/governed-command/index.js';
+import { EditorialAuthorityAssignmentRepository } from './editorial-authority-assignment.repository.js';
+import {
+  APP006_AUTHORITY_TYPE_REGISTRY,
+  createApp006AuthorityTypeRegistry,
+} from './app006-authority-registry.js';
+import {
+  APP006_ACTION,
+  APP006_ENVELOPE_SCHEMA_VERSION,
+  APP006_EXTENSION_SCHEMA_VERSION,
+  APP006_EXTENSION_TYPE,
+  buildApp006GovernanceDecisionEnvelope,
+  validateApp006GovernanceDecisionEnvelope,
+  type App006CompatibilityProjectionEffect,
+} from './app006-case-revision-approval.decision.js';
 
 type ReviewTransactionClient = Prisma.TransactionClient | PrismaClient;
+type App006UniqueConflictTarget =
+  | 'commandIdempotencyKey'
+  | 'reviewId'
+  | 'serializableWriteConflict'
+  | 'unknown';
+
+type App006ApprovalTestHooks = {
+  beforeDecisionCreate?: () => Promise<void> | void;
+  afterRollbackReplayLookup?: (input: {
+    conflictTarget: App006UniqueConflictTarget;
+  }) => Promise<void> | void;
+};
+
+const GOVERNED_CASE_REVISION_APPROVAL_ACTION = APP006_ACTION;
+const GOVERNED_CASE_REVISION_APPROVAL_RECORD_ID = 'WEOS-AUTH-APP-006';
+const GOVERNED_CASE_REVISION_APPROVAL_AUTHORITY_TYPE = 'CASE_REVISION_APPROVAL';
+const GOVERNED_CASE_REVISION_APPROVAL_EXTENSION_TYPE = APP006_EXTENSION_TYPE;
+const GOVERNED_CASE_REVISION_APPROVAL_ENVELOPE_SCHEMA_VERSION =
+  APP006_ENVELOPE_SCHEMA_VERSION;
+const GOVERNED_CASE_REVISION_APPROVAL_EXTENSION_SCHEMA_VERSION =
+  APP006_EXTENSION_SCHEMA_VERSION;
+
+const CASE_REVISION_MATERIAL_SELECT = {
+  id: true,
+  caseId: true,
+  title: true,
+  date: true,
+  difficulty: true,
+  history: true,
+  symptoms: true,
+  labs: true,
+  clues: true,
+  explanation: true,
+  differentials: true,
+  diagnosisId: true,
+  diagnosisRegistryId: true,
+  proposedDiagnosisText: true,
+  diagnosisMappingStatus: true,
+  diagnosisMappingMethod: true,
+  diagnosisMappingConfidence: true,
+  diagnosisEditorialNote: true,
+} satisfies Prisma.CaseRevisionSelect;
 
 const EDITORIAL_CASE_LIST_SELECT: Prisma.CaseSelect = {
   id: true,
@@ -244,6 +307,7 @@ const EDITORIAL_CASE_DETAIL_SELECT: Prisma.CaseSelect = {
 @Injectable()
 export class CaseReviewService {
   private readonly logger = new Logger(CaseReviewService.name);
+  private app006ApprovalTestHooks?: App006ApprovalTestHooks;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -255,7 +319,14 @@ export class CaseReviewService {
     private readonly caseEligibilityPolicy: CaseEligibilityPolicyService,
     private readonly diagnosisGraphExtractionService?: DiagnosisGraphExtractionService,
     private readonly caseQualityProjectionService: CaseQualityProjectionService = new CaseQualityProjectionService(),
+    @Inject(APP006_AUTHORITY_TYPE_REGISTRY)
+    private readonly caseRevisionApprovalAuthorityTypeRegistry: AuthorityTypeRegistry = createApp006AuthorityTypeRegistry(),
+    private readonly editorialAuthorityAssignmentRepository: EditorialAuthorityAssignmentRepository = new EditorialAuthorityAssignmentRepository(),
   ) {}
+
+  setApp006ApprovalTestHooksForTest(hooks?: App006ApprovalTestHooks) {
+    this.app006ApprovalTestHooks = hooks;
+  }
 
   async listEditorialCases(query: ListEditorialCasesDto) {
     const page = query.page ?? 1;
@@ -598,6 +669,12 @@ export class CaseReviewService {
             data: {
               caseId,
               revisionId: caseRecord.currentRevisionId,
+              materialContextHash: this.buildCaseMaterialContextHash(snapshot),
+              reviewContextIdentity: this.buildReviewContextIdentity({
+                revisionId: caseRecord.currentRevisionId,
+                materialContextHash:
+                  this.buildCaseMaterialContextHash(snapshot),
+              }),
               source: CaseSource.ADMIN_EDIT,
               outcome: validationReport.outcome,
               validatorVersion: validationReport.validatorVersion,
@@ -610,6 +687,8 @@ export class CaseReviewService {
             select: {
               id: true,
               revisionId: true,
+              materialContextHash: true,
+              reviewContextIdentity: true,
               outcome: true,
               validatorVersion: true,
               summary: true,
@@ -721,10 +800,18 @@ export class CaseReviewService {
               reviewerUserId: true,
               decision: true,
               notes: true,
+              materialContextHash: true,
+              reviewContextIdentity: true,
               createdAt: true,
               decidedAt: true,
             },
           });
+
+          const materialContext =
+            await this.getCaseRevisionMaterialContextInTransaction(tx, {
+              caseId,
+              revisionId: caseRecord.currentRevisionId,
+            });
 
           const review = existingOpenReview
             ? await tx.caseReview.update({
@@ -733,6 +820,8 @@ export class CaseReviewService {
                 },
                 data: {
                   reviewerUserId,
+                  materialContextHash: materialContext.materialContextHash,
+                  reviewContextIdentity: materialContext.reviewContextIdentity,
                 },
                 select: {
                   id: true,
@@ -740,6 +829,8 @@ export class CaseReviewService {
                   reviewerUserId: true,
                   decision: true,
                   notes: true,
+                  materialContextHash: true,
+                  reviewContextIdentity: true,
                   createdAt: true,
                   decidedAt: true,
                 },
@@ -749,6 +840,8 @@ export class CaseReviewService {
                   caseId,
                   revisionId: caseRecord.currentRevisionId,
                   reviewerUserId,
+                  materialContextHash: materialContext.materialContextHash,
+                  reviewContextIdentity: materialContext.reviewContextIdentity,
                 },
                 select: {
                   id: true,
@@ -756,6 +849,8 @@ export class CaseReviewService {
                   reviewerUserId: true,
                   decision: true,
                   notes: true,
+                  materialContextHash: true,
+                  reviewContextIdentity: true,
                   createdAt: true,
                   decidedAt: true,
                 },
@@ -811,113 +906,223 @@ export class CaseReviewService {
       }),
     );
 
-    const result = await this.withSerializableRetry(() =>
-      this.prisma.$transaction(
-        async (tx) => {
-          const caseRecord = await tx.case.findUnique({
-            where: { id: caseId },
-            select: {
-              id: true,
-              editorialStatus: true,
-              currentRevisionId: true,
+    let result;
+    try {
+      result = await this.withSerializableRetry(
+        () =>
+          this.prisma.$transaction(
+            async (tx) => {
+              const caseRecord = await tx.case.findUnique({
+                where: { id: caseId },
+                select: {
+                  id: true,
+                  editorialStatus: true,
+                  currentRevisionId: true,
+                },
+              });
+
+              if (!caseRecord) {
+                throw new NotFoundException(`Case not found: ${caseId}`);
+              }
+
+              if (caseRecord.editorialStatus !== CaseEditorialStatus.REVIEW) {
+                if (input.decision === ReviewDecision.APPROVED) {
+                  const replay = await this.resolveApprovalIdempotencyReplay(
+                    tx,
+                    {
+                      caseId,
+                      reviewerUserId,
+                      input,
+                    },
+                  );
+                  if (replay) return replay;
+                }
+
+                throw new BadRequestException(
+                  'Case must be in REVIEW before submitting a review',
+                );
+              }
+
+              if (input.decision === ReviewDecision.APPROVED) {
+                if (!this.normalizeOptionalString(input.expectedRevisionId)) {
+                  throw new BadRequestException(
+                    'APPROVE_CASE_REVISION requires explicit expectedRevisionId',
+                  );
+                }
+
+                if (
+                  !this.normalizeOptionalString(input.commandIdempotencyKey)
+                ) {
+                  throw new BadRequestException(
+                    'APPROVE_CASE_REVISION requires commandIdempotencyKey',
+                  );
+                }
+
+                const replay = await this.resolveApprovalIdempotencyReplay(tx, {
+                  caseId,
+                  reviewerUserId,
+                  input,
+                });
+                if (replay) return replay;
+              }
+
+              const openReview = await tx.caseReview.findFirst({
+                where: {
+                  caseId,
+                  revisionId: caseRecord.currentRevisionId,
+                  decision: null,
+                },
+                orderBy: [{ createdAt: 'desc' }],
+                select: {
+                  id: true,
+                  revisionId: true,
+                  reviewerUserId: true,
+                  materialContextHash: true,
+                  reviewContextIdentity: true,
+                  createdAt: true,
+                },
+              });
+
+              if (!openReview) {
+                throw new BadRequestException(
+                  'No active review exists for the current revision',
+                );
+              }
+
+              if (!caseRecord.currentRevisionId) {
+                throw new BadRequestException(
+                  'Cannot approve a case without a current revision',
+                );
+              }
+
+              if (
+                input.expectedRevisionId !== undefined &&
+                input.expectedRevisionId !== caseRecord.currentRevisionId
+              ) {
+                throw new BadRequestException(
+                  'Stale approval command: expected revision does not match current revision',
+                );
+              }
+
+              if (
+                input.expectedReviewId &&
+                input.expectedReviewId !== openReview.id
+              ) {
+                throw new BadRequestException(
+                  'Stale approval command: expected review does not match active review',
+                );
+              }
+
+              if (openReview.revisionId !== caseRecord.currentRevisionId) {
+                throw new BadRequestException(
+                  'Stale review context: active review does not target current revision',
+                );
+              }
+
+              if (
+                openReview.reviewerUserId &&
+                openReview.reviewerUserId !== reviewerUserId
+              ) {
+                throw new BadRequestException(
+                  'Editorial approval authority does not cover this active review',
+                );
+              }
+
+              if (input.decision === ReviewDecision.APPROVED) {
+                return this.approveCaseRevisionThroughGovernedCommand(tx, {
+                  caseId,
+                  reviewerUserId,
+                  input,
+                  reviewId: openReview.id,
+                  reviewCreatedAt: openReview.createdAt,
+                  reviewMaterialContextHash: openReview.materialContextHash,
+                  reviewContextIdentity: openReview.reviewContextIdentity,
+                  targetRevisionId: caseRecord.currentRevisionId,
+                });
+              }
+
+              const review = await tx.caseReview.update({
+                where: { id: openReview.id },
+                data: {
+                  reviewerUserId,
+                  decision: input.decision,
+                  notes: this.normalizeOptionalString(input.notes) ?? null,
+                  decidedAt: new Date(),
+                },
+                select: {
+                  id: true,
+                  revisionId: true,
+                  reviewerUserId: true,
+                  decision: true,
+                  notes: true,
+                  createdAt: true,
+                  decidedAt: true,
+                },
+              });
+
+              const nextEditorialStatus = getEditorialStatusForReviewDecision(
+                input.decision,
+              );
+              const caseUpdate: Prisma.CaseUncheckedUpdateInput = {
+                editorialStatus: nextEditorialStatus,
+              };
+              Object.assign(caseUpdate, getApprovalResetFields());
+
+              const updatedCase = await tx.case.update({
+                where: { id: caseId },
+                data: caseUpdate,
+                select: {
+                  id: true,
+                  editorialStatus: true,
+                  approvedAt: true,
+                  approvedByUserId: true,
+                  currentRevisionId: true,
+                },
+              });
+
+              this.logger.log(
+                JSON.stringify({
+                  event: 'admin.case.review.submitted',
+                  caseId,
+                  reviewId: review.id,
+                  revisionId: updatedCase.currentRevisionId,
+                  reviewerUserId,
+                  decision: review.decision,
+                  editorialStatus: updatedCase.editorialStatus,
+                }),
+              );
+
+              return {
+                case: updatedCase,
+                review,
+              };
             },
-          });
-
-          if (!caseRecord) {
-            throw new NotFoundException(`Case not found: ${caseId}`);
-          }
-
-          if (caseRecord.editorialStatus !== CaseEditorialStatus.REVIEW) {
-            throw new BadRequestException(
-              'Case must be in REVIEW before submitting a review',
-            );
-          }
-
-          const openReview = await tx.caseReview.findFirst({
-            where: {
-              caseId,
-              revisionId: caseRecord.currentRevisionId,
-              decision: null,
+            {
+              isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
             },
-            orderBy: [{ createdAt: 'desc' }],
-            select: {
-              id: true,
-            },
-          });
+          ),
+        input.decision === ReviewDecision.APPROVED ? 1 : undefined,
+      );
+    } catch (error) {
+      const conflictTarget =
+        this.getApp006ReplayEligibleUniqueConflict(error) ??
+        (this.isPrismaSerializableConflict(error)
+          ? 'serializableWriteConflict'
+          : null);
+      if (
+        input.decision !== ReviewDecision.APPROVED ||
+        conflictTarget === null
+      ) {
+        throw error;
+      }
 
-          if (!openReview) {
-            throw new BadRequestException(
-              'No active review exists for the current revision',
-            );
-          }
-
-          const review = await tx.caseReview.update({
-            where: { id: openReview.id },
-            data: {
-              reviewerUserId,
-              decision: input.decision,
-              notes: this.normalizeOptionalString(input.notes) ?? null,
-              decidedAt: new Date(),
-            },
-            select: {
-              id: true,
-              revisionId: true,
-              reviewerUserId: true,
-              decision: true,
-              notes: true,
-              createdAt: true,
-              decidedAt: true,
-            },
-          });
-
-          const nextEditorialStatus = getEditorialStatusForReviewDecision(
-            input.decision,
-          );
-          const caseUpdate: Prisma.CaseUncheckedUpdateInput = {
-            editorialStatus: nextEditorialStatus,
-          };
-
-          if (input.decision === ReviewDecision.APPROVED) {
-            caseUpdate.approvedAt = new Date();
-            caseUpdate.approvedByUserId = reviewerUserId;
-          } else {
-            Object.assign(caseUpdate, getApprovalResetFields());
-          }
-
-          const updatedCase = await tx.case.update({
-            where: { id: caseId },
-            data: caseUpdate,
-            select: {
-              id: true,
-              editorialStatus: true,
-              approvedAt: true,
-              approvedByUserId: true,
-              currentRevisionId: true,
-            },
-          });
-
-          this.logger.log(
-            JSON.stringify({
-              event: 'admin.case.review.submitted',
-              caseId,
-              reviewId: review.id,
-              revisionId: updatedCase.currentRevisionId,
-              reviewerUserId,
-              decision: review.decision,
-              editorialStatus: updatedCase.editorialStatus,
-            }),
-          );
-
-          return {
-            case: updatedCase,
-            review,
-          };
-        },
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        },
-      ),
-    );
+      result = await this.resolveApprovalIdempotencyReplayAfterRollback({
+        caseId,
+        reviewerUserId,
+        input,
+        conflictTarget,
+      });
+    }
 
     this.editorialMetrics.recordReviewOutcome(input.decision);
 
@@ -937,6 +1142,573 @@ export class CaseReviewService {
     }
 
     return result;
+  }
+
+  private buildApproveCaseRevisionCommandFingerprint(input: {
+    caseId: string;
+    reviewerUserId: string;
+    reviewId?: string | null;
+    command: SubmitCaseReviewDto;
+  }): string {
+    return stableStringify({
+      commandAction: GOVERNED_CASE_REVISION_APPROVAL_ACTION,
+      caseId: input.caseId,
+      actorUserId: input.reviewerUserId,
+      expectedRevisionId: input.command.expectedRevisionId,
+      expectedReviewId:
+        input.command.expectedReviewId ?? input.reviewId ?? null,
+      decision: input.command.decision,
+      rationale: this.normalizeOptionalString(input.command.notes) ?? null,
+      authorityAssignmentReferences: [
+        ...(input.command.authorityAssignmentReferences ?? []),
+      ].sort(),
+    });
+  }
+
+  private async resolveApprovalIdempotencyReplay(
+    tx: ReviewTransactionClient,
+    input: {
+      caseId: string;
+      reviewerUserId: string;
+      input: SubmitCaseReviewDto;
+    },
+  ) {
+    const commandIdempotencyKey = this.normalizeOptionalString(
+      input.input.commandIdempotencyKey,
+    );
+    if (!commandIdempotencyKey) return null;
+
+    const prior = await (
+      tx as any
+    ).governedCaseRevisionApprovalDecision.findUnique({
+      where: { commandIdempotencyKey },
+      select: {
+        commandFingerprint: true,
+        caseId: true,
+        reviewId: true,
+        targetRevisionId: true,
+      },
+    });
+    if (!prior) return null;
+
+    const fingerprint = this.buildApproveCaseRevisionCommandFingerprint({
+      caseId: input.caseId,
+      reviewerUserId: input.reviewerUserId,
+      reviewId: prior.reviewId,
+      command: input.input,
+    });
+
+    if (
+      prior.caseId !== input.caseId ||
+      prior.targetRevisionId !== input.input.expectedRevisionId ||
+      prior.commandFingerprint !== fingerprint
+    ) {
+      throw new BadRequestException(
+        'Idempotency conflict for APPROVE_CASE_REVISION',
+      );
+    }
+
+    const [caseRecord, review] = await Promise.all([
+      tx.case.findUnique({
+        where: { id: prior.caseId },
+        select: {
+          id: true,
+          editorialStatus: true,
+          approvedAt: true,
+          approvedByUserId: true,
+          currentRevisionId: true,
+        },
+      }),
+      tx.caseReview.findUnique({
+        where: { id: prior.reviewId },
+        select: {
+          id: true,
+          revisionId: true,
+          reviewerUserId: true,
+          decision: true,
+          notes: true,
+          createdAt: true,
+          decidedAt: true,
+        },
+      }),
+    ]);
+
+    if (!caseRecord || !review) {
+      throw new BadRequestException(
+        'Idempotent approval replay could not reconstruct prior result',
+      );
+    }
+
+    return {
+      case: caseRecord,
+      review,
+    };
+  }
+
+  private async resolveApprovalIdempotencyReplayAfterRollback(input: {
+    caseId: string;
+    reviewerUserId: string;
+    input: SubmitCaseReviewDto;
+    conflictTarget: App006UniqueConflictTarget;
+  }) {
+    await this.app006ApprovalTestHooks?.afterRollbackReplayLookup?.({
+      conflictTarget: input.conflictTarget,
+    });
+
+    const commandIdempotencyKey = this.normalizeOptionalString(
+      input.input.commandIdempotencyKey,
+    );
+    const expectedReviewId = this.normalizeOptionalString(
+      input.input.expectedReviewId,
+    );
+
+    const byIdempotencyKey = commandIdempotencyKey
+      ? await (
+          this.prisma as any
+        ).governedCaseRevisionApprovalDecision.findUnique({
+          where: { commandIdempotencyKey },
+          select: {
+            commandIdempotencyKey: true,
+            commandFingerprint: true,
+            caseId: true,
+            reviewId: true,
+            targetRevisionId: true,
+          },
+        })
+      : null;
+
+    const byReview =
+      byIdempotencyKey || !expectedReviewId
+        ? null
+        : await (
+            this.prisma as any
+          ).governedCaseRevisionApprovalDecision.findUnique({
+            where: { reviewId: expectedReviewId },
+            select: {
+              commandIdempotencyKey: true,
+              commandFingerprint: true,
+              caseId: true,
+              reviewId: true,
+              targetRevisionId: true,
+            },
+          });
+
+    const prior = byIdempotencyKey ?? byReview;
+    if (
+      !prior ||
+      !commandIdempotencyKey ||
+      prior.commandIdempotencyKey !== commandIdempotencyKey
+    ) {
+      throw new BadRequestException(
+        'Idempotency conflict for APPROVE_CASE_REVISION',
+      );
+    }
+
+    const fingerprint = this.buildApproveCaseRevisionCommandFingerprint({
+      caseId: input.caseId,
+      reviewerUserId: input.reviewerUserId,
+      reviewId: prior.reviewId,
+      command: input.input,
+    });
+
+    if (
+      prior.caseId !== input.caseId ||
+      prior.targetRevisionId !== input.input.expectedRevisionId ||
+      prior.commandFingerprint !== fingerprint
+    ) {
+      throw new BadRequestException(
+        'Idempotency conflict for APPROVE_CASE_REVISION',
+      );
+    }
+
+    const [caseRecord, review] = await Promise.all([
+      this.prisma.case.findUnique({
+        where: { id: prior.caseId },
+        select: {
+          id: true,
+          editorialStatus: true,
+          approvedAt: true,
+          approvedByUserId: true,
+          currentRevisionId: true,
+        },
+      }),
+      this.prisma.caseReview.findUnique({
+        where: { id: prior.reviewId },
+        select: {
+          id: true,
+          revisionId: true,
+          reviewerUserId: true,
+          decision: true,
+          notes: true,
+          createdAt: true,
+          decidedAt: true,
+        },
+      }),
+    ]);
+
+    if (!caseRecord || !review) {
+      throw new BadRequestException(
+        'Idempotent approval replay could not reconstruct prior result',
+      );
+    }
+
+    return {
+      case: caseRecord,
+      review,
+    };
+  }
+
+  private async approveCaseRevisionThroughGovernedCommand(
+    tx: ReviewTransactionClient,
+    input: {
+      caseId: string;
+      reviewerUserId: string;
+      targetRevisionId: string;
+      reviewId: string;
+      reviewCreatedAt: Date;
+      reviewMaterialContextHash: string | null;
+      reviewContextIdentity: string | null;
+      input: SubmitCaseReviewDto;
+    },
+  ) {
+    const targetRevision = await tx.caseRevision.findFirst({
+      where: {
+        id: input.targetRevisionId,
+        caseId: input.caseId,
+      },
+      select: {
+        ...CASE_REVISION_MATERIAL_SELECT,
+        createdByUserId: true,
+      },
+    });
+
+    if (!targetRevision) {
+      throw new NotFoundException(
+        `Case revision not found: ${input.targetRevisionId}`,
+      );
+    }
+
+    if (!targetRevision.createdByUserId) {
+      throw new BadRequestException(
+        'Case revision approval requires trusted authorship provenance',
+      );
+    }
+
+    if (targetRevision.createdByUserId === input.reviewerUserId) {
+      throw new BadRequestException(
+        'Case revision approval requires separation of duties',
+      );
+    }
+
+    const materialContextHash =
+      this.buildCaseMaterialContextHash(targetRevision);
+    const reviewContextIdentity = this.buildReviewContextIdentity({
+      revisionId: input.targetRevisionId,
+      materialContextHash,
+    });
+
+    if (
+      !input.reviewMaterialContextHash ||
+      !input.reviewContextIdentity ||
+      input.reviewMaterialContextHash !== materialContextHash ||
+      input.reviewContextIdentity !== reviewContextIdentity
+    ) {
+      throw new BadRequestException(
+        'Stale review context: material review context does not match current revision',
+      );
+    }
+
+    const actor = await tx.user.findUnique({
+      where: { id: input.reviewerUserId },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!actor) {
+      throw new BadRequestException(
+        'Missing approval actor for APPROVE_CASE_REVISION',
+      );
+    }
+
+    const authorityResolvedAt = new Date().toISOString();
+    const persistedAuthorityAssignments =
+      await this.editorialAuthorityAssignmentRepository.loadCandidatesForApproval(
+        tx,
+        {
+          actorUserId: actor.id,
+          authorityType: GOVERNED_CASE_REVISION_APPROVAL_AUTHORITY_TYPE,
+          decisionType: GOVERNED_CASE_REVISION_APPROVAL_ACTION,
+          assignmentReferences: input.input.authorityAssignmentReferences,
+        },
+      );
+    const authorityResolution = resolveGovernedAuthority({
+      actorContext: {
+        actorType: 'USER',
+        actorId: actor.id,
+        runtimeRoles: [],
+        organizationContextIds: [],
+        specialtyContextIds: [],
+        authorityAssignmentReferences:
+          input.input.authorityAssignmentReferences ?? [],
+        correlationId: input.input.commandIdempotencyKey ?? input.reviewId,
+        causationId: input.reviewId,
+        requestedAt: authorityResolvedAt,
+      },
+      assignments: persistedAuthorityAssignments,
+      authorityTypeRegistry: this.caseRevisionApprovalAuthorityTypeRegistry,
+      request: {
+        authorityType: GOVERNED_CASE_REVISION_APPROVAL_AUTHORITY_TYPE,
+        decisionType: GOVERNED_CASE_REVISION_APPROVAL_ACTION,
+        artifactType: 'CASE_REVISION',
+        artifactId: input.caseId,
+        artifactRevisionId: input.targetRevisionId,
+      },
+      evaluatedAt: authorityResolvedAt,
+      hasRequiredTechnicalAccess: true,
+    });
+
+    if (
+      authorityResolution.status !== 'AUTHORIZED' ||
+      !authorityResolution.assignment ||
+      !authorityResolution.od018AuthorityEvidence
+    ) {
+      throw new BadRequestException(
+        'Missing editorial approval authority for APPROVE_CASE_REVISION',
+      );
+    }
+
+    const latestValidationRun = await tx.caseValidationRun.findFirst({
+      where: {
+        caseId: input.caseId,
+        revisionId: input.targetRevisionId,
+      },
+      orderBy: [{ startedAt: 'desc' }],
+      select: {
+        id: true,
+        revisionId: true,
+        outcome: true,
+        completedAt: true,
+        findings: true,
+        materialContextHash: true,
+        reviewContextIdentity: true,
+      },
+    });
+
+    if (!latestValidationRun || !latestValidationRun.completedAt) {
+      throw new BadRequestException(
+        'Stale review context: current revision has no completed validation run',
+      );
+    }
+
+    if (latestValidationRun.outcome !== ValidationOutcome.PASSED) {
+      throw new BadRequestException(
+        'Case revision approval blocked by validation findings',
+      );
+    }
+
+    if (
+      latestValidationRun.revisionId !== input.targetRevisionId ||
+      latestValidationRun.materialContextHash !== materialContextHash ||
+      latestValidationRun.reviewContextIdentity !== reviewContextIdentity
+    ) {
+      throw new BadRequestException(
+        'Stale review context: validation basis does not match reviewed material context',
+      );
+    }
+
+    const decidedAt = new Date();
+    const decidedAtIso = decidedAt.toISOString();
+    const commandIdempotencyKey =
+      this.normalizeOptionalString(input.input.commandIdempotencyKey) ??
+      `${GOVERNED_CASE_REVISION_APPROVAL_ACTION}:${input.caseId}:${input.reviewId}:${input.targetRevisionId}`;
+    const commandFingerprint = this.buildApproveCaseRevisionCommandFingerprint({
+      caseId: input.caseId,
+      reviewerUserId: input.reviewerUserId,
+      reviewId: input.reviewId,
+      command: input.input,
+    });
+    const compatibilityProjectionEffect: App006CompatibilityProjectionEffect = {
+      owner: GOVERNED_CASE_REVISION_APPROVAL_ACTION,
+      caseId: input.caseId,
+      fields: [
+        'Case.editorialStatus',
+        'Case.approvedAt',
+        'Case.approvedByUserId',
+      ],
+      editorialStatus: CaseEditorialStatus.APPROVED,
+      approvedAt: decidedAtIso,
+      approvedByUserId: input.reviewerUserId,
+    };
+    const reviewBasis = {
+      reviewId: input.reviewId,
+      caseRevisionId: input.targetRevisionId,
+      validationRunId: latestValidationRun.id,
+      validationOutcome: latestValidationRun.outcome,
+      validationCompletedAt: latestValidationRun.completedAt.toISOString(),
+      reviewCreatedAt: input.reviewCreatedAt.toISOString(),
+      reviewContextIdentity,
+      materialContextHash,
+      blockingFindingsConsidered: latestValidationRun.findings ?? null,
+    };
+    const canonicalFindings = this.toCanonicalFindings(
+      latestValidationRun.findings,
+    );
+    const rationale =
+      this.normalizeOptionalString(input.input.notes) ??
+      'Case revision approved through governed approval command.';
+    const decisionId = randomUUID();
+    const envelope = buildApp006GovernanceDecisionEnvelope({
+      decisionId,
+      caseId: input.caseId,
+      caseRevisionId: input.targetRevisionId,
+      reviewId: input.reviewId,
+      validationRunId: latestValidationRun.id,
+      reviewContextIdentity,
+      materialContextHash,
+      actorUserId: input.reviewerUserId,
+      authority: authorityResolution.od018AuthorityEvidence,
+      authorityAssignment: authorityResolution.assignment,
+      commandFingerprint,
+      rationale,
+      findings: canonicalFindings,
+      obligations: [],
+      compatibilityProjectionEffect,
+      occurredAt: decidedAtIso,
+      createdAt: decidedAtIso,
+    });
+    const envelopeErrors = validateApp006GovernanceDecisionEnvelope(envelope, {
+      decisionId,
+      caseId: input.caseId,
+      caseRevisionId: input.targetRevisionId,
+      reviewId: input.reviewId,
+      validationRunId: latestValidationRun.id,
+      reviewContextIdentity,
+      materialContextHash,
+      actorUserId: input.reviewerUserId,
+      authority: authorityResolution.od018AuthorityEvidence,
+      authorityAssignment: authorityResolution.assignment,
+      commandFingerprint,
+      rationale,
+      findings: canonicalFindings,
+      obligations: [],
+      compatibilityProjectionEffect,
+      occurredAt: decidedAtIso,
+      createdAt: decidedAtIso,
+    });
+    if (envelopeErrors.length > 0) {
+      throw new BadRequestException(
+        `Invalid APP-006 governance decision envelope: ${envelopeErrors.join('; ')}`,
+      );
+    }
+
+    await this.app006ApprovalTestHooks?.beforeDecisionCreate?.();
+
+    await (tx as any).governedCaseRevisionApprovalDecision.create({
+      data: {
+        id: decisionId,
+        commandAction: GOVERNED_CASE_REVISION_APPROVAL_ACTION,
+        commandIdempotencyKey,
+        commandFingerprint,
+        envelopeSchemaVersion:
+          GOVERNED_CASE_REVISION_APPROVAL_ENVELOPE_SCHEMA_VERSION,
+        extensionType: GOVERNED_CASE_REVISION_APPROVAL_EXTENSION_TYPE,
+        extensionSchemaVersion:
+          GOVERNED_CASE_REVISION_APPROVAL_EXTENSION_SCHEMA_VERSION,
+        status: 'FINALIZED',
+        validatedEnvelope: envelope,
+        extensionPayload: envelope.extensionPayload,
+        primaryTarget: envelope.primaryTarget,
+        targetReferences: [...envelope.targetReferences],
+        actorType: 'USER',
+        approvalRecordId: GOVERNED_CASE_REVISION_APPROVAL_RECORD_ID,
+        authorityAssignmentId:
+          authorityResolution.od018AuthorityEvidence.authorityAssignmentId,
+        authorityEvidenceReference:
+          authorityResolution.od018AuthorityEvidence.authorityEvidenceReference,
+        authorityScopeSnapshot:
+          authorityResolution.od018AuthorityEvidence.authorityScopeSnapshot,
+        authorityResolvedAt,
+        actorUserId: input.reviewerUserId,
+        caseId: input.caseId,
+        targetRevisionId: input.targetRevisionId,
+        expectedRevisionId: input.input.expectedRevisionId,
+        reviewId: input.reviewId,
+        decisionType: GOVERNED_CASE_REVISION_APPROVAL_ACTION,
+        outcome: 'APPROVED',
+        effectiveAction: GOVERNED_CASE_REVISION_APPROVAL_ACTION,
+        rationale,
+        findings: latestValidationRun.findings ?? [],
+        reviewBasis,
+        obligations: [],
+        compatibilityProjection: compatibilityProjectionEffect,
+        occurredAt: decidedAt,
+      },
+    });
+
+    const review = await tx.caseReview.update({
+      where: { id: input.reviewId },
+      data: {
+        reviewerUserId: input.reviewerUserId,
+        decision: ReviewDecision.APPROVED,
+        notes: this.normalizeOptionalString(input.input.notes) ?? null,
+        decidedAt,
+      },
+      select: {
+        id: true,
+        revisionId: true,
+        reviewerUserId: true,
+        decision: true,
+        notes: true,
+        materialContextHash: true,
+        reviewContextIdentity: true,
+        createdAt: true,
+        decidedAt: true,
+      },
+    });
+
+    const updatedCase = await tx.case.update({
+      where: { id: input.caseId },
+      data: {
+        editorialStatus: CaseEditorialStatus.APPROVED,
+        approvedAt: decidedAt,
+        approvedByUserId: input.reviewerUserId,
+      },
+      select: {
+        id: true,
+        editorialStatus: true,
+        approvedAt: true,
+        approvedByUserId: true,
+        currentRevisionId: true,
+      },
+    });
+
+    this.logger.log(
+      JSON.stringify({
+        event: 'admin.case.review.governed_approval_completed',
+        caseId: input.caseId,
+        reviewId: review.id,
+        revisionId: input.targetRevisionId,
+        reviewerUserId: input.reviewerUserId,
+        decision: review.decision,
+        editorialStatus: updatedCase.editorialStatus,
+        approvalRecordId: GOVERNED_CASE_REVISION_APPROVAL_RECORD_ID,
+      }),
+    );
+
+    return {
+      case: updatedCase,
+      review,
+    };
+  }
+
+  async listGovernedCaseRevisionApprovalHistory(caseId: string) {
+    await this.assertCaseExists(caseId);
+
+    return (this.prisma as any).governedCaseRevisionApprovalDecision.findMany({
+      where: { caseId },
+      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+    });
   }
 
   async listRevisions(caseId: string) {
@@ -1547,11 +2319,19 @@ export class CaseReviewService {
 
     const persistencePayload =
       this.caseValidationService.buildPersistencePayload(validationReport);
+    const materialContextHash = this.buildCaseMaterialContextHash(
+      input.snapshot,
+    );
 
     return tx.caseValidationRun.create({
       data: {
         caseId: input.caseId,
         revisionId: input.revisionId,
+        materialContextHash,
+        reviewContextIdentity: this.buildReviewContextIdentity({
+          revisionId: input.revisionId,
+          materialContextHash,
+        }),
         source: input.source,
         outcome: validationReport.outcome,
         validatorVersion: validationReport.validatorVersion,
@@ -1564,6 +2344,8 @@ export class CaseReviewService {
       select: {
         id: true,
         revisionId: true,
+        materialContextHash: true,
+        reviewContextIdentity: true,
         outcome: true,
         validatorVersion: true,
         summary: true,
@@ -1686,6 +2468,133 @@ export class CaseReviewService {
     if (!existing) {
       throw new NotFoundException(`Case not found: ${caseId}`);
     }
+  }
+
+  private async getCaseRevisionMaterialContextInTransaction(
+    tx: ReviewTransactionClient,
+    input: { caseId: string; revisionId: string | null },
+  ) {
+    if (!input.revisionId) {
+      throw new BadRequestException(
+        'Cannot create review context without a current revision',
+      );
+    }
+
+    const revision = await tx.caseRevision.findFirst({
+      where: {
+        id: input.revisionId,
+        caseId: input.caseId,
+      },
+      select: CASE_REVISION_MATERIAL_SELECT,
+    });
+
+    if (!revision) {
+      throw new NotFoundException(
+        `Case revision not found: ${input.revisionId}`,
+      );
+    }
+
+    const materialContextHash = this.buildCaseMaterialContextHash(revision);
+    return {
+      materialContextHash,
+      reviewContextIdentity: this.buildReviewContextIdentity({
+        revisionId: input.revisionId,
+        materialContextHash,
+      }),
+    };
+  }
+
+  private buildReviewContextIdentity(input: {
+    revisionId: string | null;
+    materialContextHash: string;
+  }): string {
+    return `case-review-context:${input.revisionId ?? 'unknown'}:${input.materialContextHash}`;
+  }
+
+  private buildCaseMaterialContextHash(input: Record<string, unknown>): string {
+    const material = {
+      title: input.title,
+      date: input.date,
+      difficulty: input.difficulty,
+      history: input.history,
+      symptoms: input.symptoms,
+      labs: input.labs,
+      clues: input.clues,
+      explanation: input.explanation,
+      differentials: input.differentials,
+      diagnosisId: input.diagnosisId,
+      diagnosisRegistryId: input.diagnosisRegistryId,
+      proposedDiagnosisText: input.proposedDiagnosisText,
+      diagnosisMappingStatus: input.diagnosisMappingStatus,
+      diagnosisMappingMethod: input.diagnosisMappingMethod,
+      diagnosisMappingConfidence: input.diagnosisMappingConfidence,
+      diagnosisEditorialNote: input.diagnosisEditorialNote,
+    };
+    return createHash('sha256')
+      .update(stableStringify(this.normalizeForMaterialHash(material)))
+      .digest('hex');
+  }
+
+  private normalizeForMaterialHash(value: unknown): unknown {
+    if (value instanceof Date) return value.toISOString();
+    if (Array.isArray(value)) {
+      return value.map((entry) => this.normalizeForMaterialHash(entry));
+    }
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+          key,
+          this.normalizeForMaterialHash(entry),
+        ]),
+      );
+    }
+    return value;
+  }
+
+  private toCanonicalFindings(value: unknown): string[] {
+    if (value === null || value === undefined) return [];
+    if (Array.isArray(value)) {
+      return value.map((entry) =>
+        typeof entry === 'string' ? entry : stableStringify(entry),
+      );
+    }
+    return [typeof value === 'string' ? value : stableStringify(value)];
+  }
+
+  private getApp006ReplayEligibleUniqueConflict(
+    error: unknown,
+  ): App006UniqueConflictTarget | null {
+    if (
+      typeof error !== 'object' ||
+      error === null ||
+      !('code' in error) ||
+      (error as { code?: string }).code !== 'P2002'
+    ) {
+      return null;
+    }
+
+    const target = (error as { meta?: { target?: unknown } }).meta?.target;
+    const values = Array.isArray(target)
+      ? target.map(String)
+      : typeof target === 'string'
+        ? [target]
+        : [];
+    if (values.some((value) => value.includes('commandIdempotencyKey'))) {
+      return 'commandIdempotencyKey';
+    }
+    if (values.some((value) => value.includes('reviewId'))) {
+      return 'reviewId';
+    }
+    return null;
+  }
+
+  private isPrismaSerializableConflict(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: string }).code === 'P2034'
+    );
   }
 
   private normalizeOptionalString(value?: string): string | undefined {

@@ -1,0 +1,45 @@
+{
+  "$schema": "../../schemas/document-approval-record.schema.json",
+  "recordId": "WEOS-AUTH-APP-006",
+  "recordType": "DOCUMENT_APPROVAL",
+  "schemaVersion": "1.0.0",
+  "documentId": "WEOS-AUTH-APP-006",
+  "documentVersion": "1.0",
+  "documentPath": "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-006.json",
+  "approvalScope": {
+    "scopeType": "NAMED_STAGE_RUNTIME_AUTHORIZATION",
+    "description": "Approval with conditions for Stage 2 runtime realization of the approved WEOS governance foundation contracts only for governed approval of an exact CaseRevision through canonical action APPROVE_CASE_REVISION."
+  },
+  "approvalOutcome": "APPROVED_WITH_CONDITIONS",
+  "approver": {
+    "name": "Gideon Lemasika Saningo",
+    "role": "Founding Architecture Authority",
+    "authorityBasis": "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-001.json"
+  },
+  "approverAuthority": "Founding Architecture Authority bootstrap authority for the first bounded WEOS runtime governance realization",
+  "approvalDate": "2026-08-08",
+  "effectiveDate": "2026-08-08",
+  "rationale": "WEOS requires the first runtime slice to prove that CaseRevision approval targets an exact revision, rejects stale state and absent authority, records immutable governance history, and updates legacy approval projections transactionally without authorizing broader governance-kernel, publication, learner exposure, AI, graph, education, tenancy, backfill, repair or destructive migration work.",
+  "conditions": [
+    "authorized operation is limited to APPROVE_CASE_REVISION",
+    "approval targets an exact CaseRevision",
+    "stale-state execution fails safely",
+    "explicit editorial approval authority is required",
+    "runtime roles remain distinguishable from canonical editorial authority",
+    "an immutable version-specific governance decision is created for successful approval",
+    "legacy Case approval fields are compatibility projections only",
+    "legacy approval projections are updated only through the governed approval path",
+    "governance history remains reconstructable",
+    "the existing approval route may remain only as a delegate to the governed command",
+    "no historical legacy fields are converted into canonical historical approval decisions",
+    "publication, learner exposure, controlled AI application, graph promotion, education governance, tenancy, broad lifecycle conversion, backfill, repair and destructive migration remain excluded"
+  ],
+  "supportingDecision": "APPROVE_CASE_REVISION_STAGE_2_RUNTIME_AUTHORIZATION",
+  "implementationAuthorization": "GRANTED_FOR_NAMED_STAGE",
+  "bootstrapAuthority": {
+    "isBootstrap": true,
+    "scope": "Stage 2 runtime implementation authorization only for governed CaseRevision approval through APPROVE_CASE_REVISION. Permitted implementation includes additive persistence, additive Prisma schema changes, additive migration, governed approval command handling, authority resolver integration, exact revision and expected-version validation, governance decision persistence, case approval compatibility projection synchronization, governance history query support and automated verification for this operation only.",
+    "expiryCondition": "Expires when permanent runtime governance authority supersedes this pilot authorization, or when implementation extends beyond APPROVE_CASE_REVISION without a separate approved authorization."
+  },
+  "createdAt": "2026-08-08T00:00:00Z"
+}

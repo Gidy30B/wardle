@@ -3360,6 +3360,10 @@ export type StartCaseReviewResult = {
 
 export type SubmitCaseReviewPayload = {
   decision: ReviewDecision;
+  expectedRevisionId?: string;
+  expectedReviewId?: string;
+  commandIdempotencyKey?: string;
+  authorityAssignmentReferences?: string[];
   notes?: string;
 };
 

@@ -13,6 +13,7 @@ import type {
   CurrentDependencyState,
   DisclosureAuthorizationInput,
   GovernedCommand,
+  GovernedCommandConflict,
   GovernedCommandContractRegistry,
   GovernedCommandResolutionResult,
   IdempotencyRecord,
@@ -22,7 +23,7 @@ import { validateGovernedCommand } from './governed-command.validation';
 const rejected = (
   status: GovernedCommandResolutionResult['status'],
   reasons: string[],
-  conflicts = [],
+  conflicts: GovernedCommandConflict[] = [],
 ): GovernedCommandResolutionResult => ({
   status,
   reasons: [...new Set(reasons)],

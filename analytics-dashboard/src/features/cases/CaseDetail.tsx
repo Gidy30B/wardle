@@ -36,6 +36,11 @@ import CaseQualityCard from './CaseQualityCard';
 import CaseHistorySection from './CaseHistorySection';
 import DiagnosisEducationPanel from './DiagnosisEducationPanel';
 import CaseValidationSection from './CaseValidationSection';
+import {
+  buildReviewPayload,
+  createCaseReviewIdempotencyKey,
+  isStaleApprovalConflict,
+} from './caseReviewApprovalPayload';
 import CaseWorkflowSection from './CaseWorkflowSection';
 import {
   getValidationIssueBuckets,
@@ -416,8 +421,13 @@ export default function CaseDetail({
       onRequestRefresh();
       return true;
     } catch (actionError) {
+      if (isStaleApprovalConflict(actionError)) {
+        onRequestRefresh();
+      }
       showError(
-        actionError instanceof Error
+        isStaleApprovalConflict(actionError)
+          ? 'Review context changed. Refresh the case and approve the current revision explicitly.'
+          : actionError instanceof Error
           ? actionError.message
           : 'The action could not be completed.',
       );
@@ -434,6 +444,9 @@ export default function CaseDetail({
 
     const caseId = detail.id;
     const isReject = decision === 'REJECTED';
+    const commandIdempotencyKey = isReject
+      ? undefined
+      : createCaseReviewIdempotencyKey(caseId);
 
     setConfirmAction({
       id: `review-${decision.toLowerCase()}`,
@@ -459,10 +472,16 @@ export default function CaseDetail({
         </div>
       ),
       run: () =>
-        submitCaseReview(client, caseId, {
-          decision,
-          notes: reviewNotes.trim() || undefined,
-        }),
+        submitCaseReview(
+          client,
+          caseId,
+          buildReviewPayload({
+            detail,
+            decision,
+            notes: reviewNotes,
+            commandIdempotencyKey,
+          }),
+        ),
     });
   }
 

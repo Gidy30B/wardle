@@ -880,6 +880,7 @@ model Case {
   explanations               ExplanationContent[]
   validationRuns             CaseValidationRun[]
   reviews                    CaseReview[]
+  governedApprovalDecisions  GovernedCaseRevisionApprovalDecision[]
   revisions                  CaseRevision[]                  @relation("CaseRevisions")
   differentialMappings       CaseDifferentialMapping[]
   differentialLinks          CaseDifferentialLink[]
@@ -1089,6 +1090,7 @@ model CaseRevision {
   currentForCase             Case?                     @relation("CaseCurrentRevision")
   validationRuns             CaseValidationRun[]
   reviews                    CaseReview[]
+  governedApprovalDecisions  GovernedCaseRevisionApprovalDecision[]
   differentialMappings       CaseDifferentialMapping[]
   differentialLinks          CaseDifferentialLink[]
 
@@ -1282,6 +1284,8 @@ model CaseValidationRun {
   id                String             @id @default(uuid())
   caseId            String
   revisionId        String?
+  materialContextHash String?
+  reviewContextIdentity String?
   source            CaseSource?
   publishTrack      PublishTrack?
   outcome           ValidationOutcome?
@@ -1297,6 +1301,7 @@ model CaseValidationRun {
 
   @@index([caseId])
   @@index([revisionId])
+  @@index([materialContextHash])
   @@index([triggeredByUserId])
   @@index([startedAt])
 }
@@ -1305,6 +1310,8 @@ model CaseReview {
   id             String          @id @default(uuid())
   caseId         String
   revisionId     String?
+  materialContextHash String?
+  reviewContextIdentity String?
   reviewerUserId String?
   decision       ReviewDecision?
   notes          String?
@@ -1315,11 +1322,99 @@ model CaseReview {
   case           Case            @relation(fields: [caseId], references: [id], onDelete: Cascade)
   revision       CaseRevision?   @relation(fields: [revisionId], references: [id], onDelete: SetNull)
   reviewer       User?           @relation("CaseReviewReviewerUser", fields: [reviewerUserId], references: [id], onDelete: SetNull)
+  governedApprovalDecision GovernedCaseRevisionApprovalDecision?
 
   @@index([caseId])
   @@index([revisionId])
+  @@index([materialContextHash])
   @@index([reviewerUserId])
   @@index([createdAt])
+}
+
+model GovernedCaseRevisionApprovalDecision {
+  id                         String       @id @default(uuid())
+  commandAction              String
+  commandIdempotencyKey      String       @unique
+  commandFingerprint         String
+  envelopeSchemaVersion      String
+  extensionType              String
+  extensionSchemaVersion     String
+  status                     String
+  validatedEnvelope          Json
+  extensionPayload           Json
+  primaryTarget              Json
+  targetReferences           Json
+  actorType                  String
+  approvalRecordId           String
+  authorityAssignmentId      String
+  authorityEvidenceReference String
+  authorityScopeSnapshot     Json
+  authorityResolvedAt        DateTime
+  actorUserId                String
+  caseId                     String
+  targetRevisionId           String
+  expectedRevisionId         String
+  reviewId                   String       @unique
+  decisionType               String
+  outcome                    String
+  effectiveAction            String
+  rationale                  String
+  findings                   Json
+  reviewBasis                Json
+  obligations                Json
+  compatibilityProjection    Json
+  occurredAt                 DateTime     @default(now())
+  createdAt                  DateTime     @default(now())
+  actor                      User         @relation("GovernedCaseRevisionApprovalActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  case                       Case         @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  targetRevision             CaseRevision @relation(fields: [targetRevisionId], references: [id], onDelete: Restrict)
+  review                     CaseReview   @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+
+  @@index([caseId])
+  @@index([targetRevisionId])
+  @@index([actorUserId])
+  @@index([approvalRecordId])
+  @@index([occurredAt])
+}
+
+model EditorialAuthorityAssignment {
+  id                            String   @id
+  assignmentSchemaVersion       String
+  subjectType                   String
+  subjectId                     String
+  authorityType                 String
+  authorityTypeSchemaVersion    String
+  status                        String
+  scopeMode                     String
+  scope                         Json
+  allowedDecisionTypes          String[]
+  authorityEvidenceReference    String
+  grantingAuthoritySnapshot     Json
+  grantedByActorType            String
+  grantedByActorId              String
+  grantingAuthorityAssignmentId String
+  grantedAt                     DateTime
+  validFrom                     DateTime
+  validUntil                    DateTime?
+  reviewDueAt                   DateTime?
+  rationale                     String
+  delegationAllowed             Boolean  @default(false)
+  maximumDelegationDepth        Int      @default(0)
+  parentAssignmentId            String?
+  humanAuthorityActorId         String?
+  suspendedAt                   DateTime?
+  revokedAt                     DateTime?
+  revokedByActorId              String?
+  supersededByAssignmentId      String?
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  subjectUser                   User?    @relation("EditorialAuthorityAssignmentSubjectUser", fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@index([subjectId])
+  @@index([authorityType])
+  @@index([status])
+  @@index([validFrom])
+  @@index([validUntil])
 }
 
 model HintContent {
@@ -1443,6 +1538,8 @@ model User {
   createdCaseRevisions                   CaseRevision[]                  @relation("CaseRevisionCreatedByUser")
   triggeredCaseValidations               CaseValidationRun[]             @relation("CaseValidationRunTriggeredByUser")
   caseReviews                            CaseReview[]                    @relation("CaseReviewReviewerUser")
+  governedCaseRevisionApprovalDecisions  GovernedCaseRevisionApprovalDecision[] @relation("GovernedCaseRevisionApprovalActor")
+  editorialAuthorityAssignments          EditorialAuthorityAssignment[]   @relation("EditorialAuthorityAssignmentSubjectUser")
   reviewedDiagnosisEducation             DiagnosisEducation[]            @relation("DiagnosisEducationReviewedByUser")
   createdDiagnosisEducationRevisions     DiagnosisEducationRevision[]    @relation("DiagnosisEducationRevisionCreatedByUser")
   reviewedDiagnosisGraphCandidates       DiagnosisGraphCandidate[]       @relation("DiagnosisGraphCandidateReviewedByUser")

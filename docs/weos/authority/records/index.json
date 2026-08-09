@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
-  "repositoryAuthorityRecordVersion": "2026-08-02-stage-1-od019",
-  "reviewedDate": "2026-08-02",
+  "repositoryAuthorityRecordVersion": "2026-08-08-stage-2-case-revision-approval",
+  "reviewedDate": "2026-08-08",
   "warning": "Absence of an authority record means authority is unresolved, not denied or approved. File existence is not approval.",
   "recordFamilies": [
     {
@@ -30,7 +30,8 @@
     "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-002.json",
     "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-003.json",
     "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-004.json",
-    "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-005.json"
+    "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-005.json",
+    "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-006.json"
   ],
   "activeApprovals": [
     {
@@ -72,6 +73,14 @@
       "documentPath": "docs/weos/phase-3-governance-foundations/WEOS-OD-019-compatibility-projection-ownership.md",
       "approvalOutcome": "APPROVED_WITH_CONDITIONS",
       "implementationAuthorization": "GRANTED_FOR_STAGE_1_CONTRACTS_ONLY"
+    },
+    {
+      "recordId": "WEOS-AUTH-APP-006",
+      "documentId": "WEOS-AUTH-APP-006",
+      "documentVersion": "1.0",
+      "documentPath": "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-006.json",
+      "approvalOutcome": "APPROVED_WITH_CONDITIONS",
+      "implementationAuthorization": "GRANTED_FOR_NAMED_STAGE"
     }
   ],
   "unresolvedAuthorityConflicts": []
