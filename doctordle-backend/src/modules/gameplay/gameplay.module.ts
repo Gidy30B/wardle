@@ -22,6 +22,7 @@ import { GameplayEventLogger } from './gameplay-event-logger.service';
 import { GameSessionService } from './game-session.service';
 import { RateLimitGuard } from './guards/rate-limit.guard';
 import { LeaderboardService } from './leaderboard.service';
+import { ParticipationPolicyService } from './participation-policy.service';
 import { RankService } from './rank.service';
 import { RewardOrchestrator } from './reward-orchestrator.service';
 import { SessionCompletedHandler } from './reward-requested.handler';
@@ -59,6 +60,7 @@ import { XpService } from './xp.service';
     GameplayEventLogger,
     StreakService,
     LeaderboardService,
+    ParticipationPolicyService,
     XpService,
     RankService,
     UserProgressService,
@@ -72,6 +74,7 @@ import { XpService } from './xp.service';
     UserProgressService,
     StreakService,
     LeaderboardService,
+    ParticipationPolicyService,
     XpService,
     RankService,
   ],

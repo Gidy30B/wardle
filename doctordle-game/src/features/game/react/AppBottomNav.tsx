@@ -1,6 +1,6 @@
 import { APP_ICONS } from '../../../theme/icons'
 
-export type AppGameTab = 'play' | 'learn' | 'rank' | 'settings'
+export type AppGameTab = 'play' | 'archive' | 'learn' | 'rank' | 'settings'
 
 export type AppNavItem = {
   id: AppGameTab
@@ -16,6 +16,7 @@ type AppBottomNavProps = {
 
 export const appNavItems: AppNavItem[] = [
   { id: 'play', label: 'Play', icon: APP_ICONS.play },
+  { id: 'archive', label: 'Archive', icon: APP_ICONS.archive },
   { id: 'learn', label: 'Learn', icon: APP_ICONS.learn },
   { id: 'rank', label: 'Rank', icon: APP_ICONS.rank },
   { id: 'settings', label: 'Settings', icon: APP_ICONS.settings },

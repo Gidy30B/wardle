@@ -445,6 +445,9 @@ export class LeaderboardService {
           gte: start,
           lt: end,
         },
+        dailyCase: {
+          track: PublishTrack.DAILY,
+        },
       },
       select: {
         userId: true,

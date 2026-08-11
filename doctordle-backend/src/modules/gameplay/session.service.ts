@@ -393,15 +393,16 @@ export class SessionService {
           track: input.track,
           sequenceIndex: input.sequenceIndex,
         })
-      : this.resolveRequestedStartDailyCaseId(todayCases.cases, {
+      : await this.resolveRequestedOrArchiveDailyCaseId(input.userId, todayCases.cases, {
           dailyCaseId: input.dailyCaseId,
           track: input.track,
           sequenceIndex: input.sequenceIndex,
-        }) ??
-        (await this.resolveStartableDailyCaseId(
-          input.userId,
-          todayCases.cases,
-        ));
+        });
+
+    selectedDailyCaseId ??= await this.resolveStartableDailyCaseId(
+      input.userId,
+      todayCases.cases,
+    );
 
     if (!selectedDailyCaseId && !replayMode) {
       selectedDailyCaseId = await this.findMostRecentTodaySessionDailyCaseId(
@@ -1396,6 +1397,45 @@ export class SessionService {
     }
 
     return exactTrackMatch.dailyCaseId;
+  }
+
+  private async resolveRequestedOrArchiveDailyCaseId(
+    userId: string,
+    cases: Array<{
+      dailyCaseId: string;
+      track: PublishTrack;
+      sequenceIndex: number;
+    }>,
+    input: {
+      dailyCaseId?: string;
+      track?: PublishTrack;
+      sequenceIndex?: number;
+    },
+  ): Promise<string | null> {
+    if (!input.dailyCaseId) {
+      return this.resolveRequestedStartDailyCaseId(cases, input);
+    }
+
+    const todayMatch = cases.find(
+      (entry) => entry.dailyCaseId === input.dailyCaseId,
+    );
+
+    if (todayMatch) {
+      return todayMatch.dailyCaseId;
+    }
+
+    if (input.track || input.sequenceIndex) {
+      throw new BadRequestException(
+        'Provide either dailyCaseId or track + sequenceIndex to select a daily case',
+      );
+    }
+
+    await this.dailyCasesService.assertDailyCaseReleasedForUser({
+      userId,
+      dailyCaseId: input.dailyCaseId,
+    });
+
+    return input.dailyCaseId;
   }
 
   private async findMostRecentTodaySessionDailyCaseId(

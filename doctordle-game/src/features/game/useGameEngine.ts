@@ -44,6 +44,7 @@ const FINAL_TRANSITION_DELAY_MS = 250
 
 function invalidateCompletedGameQueries(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ['game', 'learn'] })
+  void queryClient.invalidateQueries({ queryKey: ['game', 'archive'] })
   void queryClient.invalidateQueries({ queryKey: ['user-stats'] })
   void queryClient.invalidateQueries({ queryKey: ['progress'] })
   void queryClient.invalidateQueries({ queryKey: ['leaderboard'] })
@@ -193,7 +194,7 @@ function delay(ms: number): Promise<void> {
   })
 }
 
-export function useGameEngine() {
+export function useGameEngine(input: { dailyCaseId?: string | null } = {}) {
   const { isLoaded, isSignedIn } = useAuth()
   const { request } = useApi()
   const queryClient = useQueryClient()
@@ -207,6 +208,8 @@ export function useGameEngine() {
   const sessionRequestRef = useRef<Promise<void> | null>(null)
   const registryRequestRef = useRef<Promise<DiagnosisDictionaryIndex> | null>(null)
   const submitRequestRef = useRef(false)
+  const targetDailyCaseId = input.dailyCaseId?.trim() || null
+  const targetDailyCaseIdRef = useRef<string | null>(targetDailyCaseId)
 
   const [mode, setMode] = useState<GameEngineMode>({ type: 'LOADING' })
   const [guess, setGuess] = useState('')
@@ -370,7 +373,9 @@ export function useGameEngine() {
       void ensureDiagnosisRegistryLoaded().catch(() => undefined)
 
       try {
-        const session: StartGameResponse = await startGameApi(request)
+        const session: StartGameResponse = await startGameApi(request, {
+          dailyCaseId: targetDailyCaseId ?? undefined,
+        })
 
         if (!isMountedRef.current) {
           return
@@ -475,7 +480,26 @@ export function useGameEngine() {
 
     sessionRequestRef.current = task
     return task
-  }, [clearGameplayState, ensureDiagnosisRegistryLoaded, queryClient, request])
+  }, [
+    clearGameplayState,
+    ensureDiagnosisRegistryLoaded,
+    queryClient,
+    request,
+    targetDailyCaseId,
+  ])
+
+  useEffect(() => {
+    if (targetDailyCaseIdRef.current === targetDailyCaseId) {
+      return
+    }
+
+    targetDailyCaseIdRef.current = targetDailyCaseId
+    didInitRef.current = false
+    sessionRequestRef.current = null
+    clearGameplayState()
+    setError(null)
+    setMode({ type: 'LOADING' })
+  }, [clearGameplayState, targetDailyCaseId])
 
   useEffect(() => {
     isMountedRef.current = true

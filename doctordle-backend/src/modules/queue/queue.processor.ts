@@ -9,6 +9,7 @@ import Redis from 'ioredis';
 import { PrismaService } from '../../core/db/prisma.service';
 import { getEnv } from '../../core/config/env.validation';
 import { LeaderboardService } from '../gameplay/leaderboard.service';
+import { ParticipationPolicyService } from '../gameplay/participation-policy.service';
 import { RewardOrchestrator } from '../gameplay/reward-orchestrator.service';
 import { StreakService } from '../gameplay/streak.service';
 import { XpService } from '../gameplay/xp.service';
@@ -52,6 +53,7 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
     private readonly streakService: StreakService,
     private readonly xpService: XpService,
     private readonly leaderboardService: LeaderboardService,
+    private readonly participationPolicyService: ParticipationPolicyService,
     private readonly rewardOrchestrator: RewardOrchestrator,
     private readonly redisPubSub: RedisPubSubService,
     private readonly notificationProducer: NotificationProducerService,
@@ -289,6 +291,8 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
           dailyCase: {
             select: {
               caseId: true,
+              date: true,
+              track: true,
             },
           },
           startedAt: true,
@@ -354,72 +358,104 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
         );
       }
       const completedCorrectly = latestAttempt.result === 'correct';
+      const participationPolicy =
+        this.participationPolicyService.resolveCompletionPolicy({
+          dailyCase: session.dailyCase,
+        });
+      let streakForReward = 0;
+      let streakAfter: number | undefined;
 
       if (completedCorrectly) {
-        const streak = await this.streakService.updateOnCompletion({
-          userId: payload.userId,
-          completedAt,
-        });
-
-        const awardResult = await this.xpService.awardXpForSession({
-          sessionId: payload.sessionId,
-          userId: payload.userId,
-          streak,
-          attemptsCount: session._count.attempts,
-        });
-
-        if (
-          !awardResult.applied &&
-          awardResult.reason === 'session_not_found'
-        ) {
-          throw new Error(
-            `Unable to award XP for session ${payload.sessionId}`,
-          );
+        if (participationPolicy.streakEligible) {
+          streakAfter = await this.streakService.updateOnCompletion({
+            userId: payload.userId,
+            completedAt,
+          });
+          streakForReward = streakAfter;
         }
 
-        if (awardResult.applied) {
-          this.logger.log({
-            event: 'ws.publish',
-            type: 'game.v1.reward.applied',
-            userId: payload.userId,
-          });
-
-          await this.redisPubSub.publish('ws:events', {
-            type: 'game.v1.reward.applied',
-            userId: payload.userId,
-            payload: {
-              xp: awardResult.xpGained,
-              streak,
-            },
-          });
-
-          await this.notificationProducer.rewardXpAwarded({
-            userId: payload.userId,
+        if (participationPolicy.xpEligible) {
+          const awardResult = await this.xpService.awardXpForSession({
             sessionId: payload.sessionId,
-            xp: awardResult.xpGained,
-            streak,
+            userId: payload.userId,
+            streak: streakForReward,
+            attemptsCount: session._count.attempts,
           });
 
-          if (STREAK_MILESTONES.has(streak)) {
-            await this.notificationProducer.enqueueStreakMilestone({
+          if (
+            !awardResult.applied &&
+            awardResult.reason === 'session_not_found'
+          ) {
+            throw new Error(
+              `Unable to award XP for session ${payload.sessionId}`,
+            );
+          }
+
+          if (awardResult.applied) {
+            const rewardPayload = {
+              xp: awardResult.xpGained,
+              ...(typeof streakAfter === 'number' ? { streak: streakAfter } : {}),
+            };
+
+            this.logger.log({
+              event: 'ws.publish',
+              type: 'game.v1.reward.applied',
+              userId: payload.userId,
+              participationContext: participationPolicy.context,
+            });
+
+            await this.redisPubSub.publish('ws:events', {
+              type: 'game.v1.reward.applied',
+              userId: payload.userId,
+              payload: rewardPayload,
+            });
+
+            await this.notificationProducer.rewardXpAwarded({
               userId: payload.userId,
               sessionId: payload.sessionId,
-              streak,
+              xp: awardResult.xpGained,
+              ...(typeof streakAfter === 'number' ? { streak: streakAfter } : {}),
             });
+
+            if (
+              participationPolicy.streakEligible &&
+              typeof streakAfter === 'number' &&
+              STREAK_MILESTONES.has(streakAfter)
+            ) {
+              await this.notificationProducer.enqueueStreakMilestone({
+                userId: payload.userId,
+                sessionId: payload.sessionId,
+                streak: streakAfter,
+              });
+            }
           }
         }
       }
 
-      await this.leaderboardService.upsertCompletion({
-        sessionId: session.id,
-        userId: payload.userId,
-        caseId: session.caseId,
-        dailyCaseId: session.dailyCaseId,
-        score: latestAttempt.score,
-        attemptsCount: session._count.attempts,
-        completedAt,
-        timeToComplete,
-      });
+      if (participationPolicy.leaderboardEligible) {
+        await this.leaderboardService.upsertCompletion({
+          sessionId: session.id,
+          userId: payload.userId,
+          caseId: session.caseId,
+          dailyCaseId: session.dailyCaseId,
+          score: latestAttempt.score,
+          attemptsCount: session._count.attempts,
+          completedAt,
+          timeToComplete,
+        });
+      } else {
+        this.logger.log(
+          JSON.stringify({
+            event: 'game.completed.noncompetitive_leaderboard_skipped',
+            sessionId: session.id,
+            userId: payload.userId,
+            dailyCaseId: session.dailyCaseId,
+            participationContext: participationPolicy.context,
+            track: session.dailyCase.track,
+            releaseDate: session.dailyCase.date.toISOString(),
+          }),
+        );
+      }
 
       await this.prisma.gameSession.updateMany({
         where: {
@@ -433,7 +469,7 @@ export class QueueProcessor implements OnModuleInit, OnModuleDestroy {
         },
       });
 
-      if (completedCorrectly) {
+      if (completedCorrectly && participationPolicy.xpEligible) {
         await this.rewardOrchestrator.emitRewardApplied({
           sessionId: payload.sessionId,
           userId: payload.userId,
