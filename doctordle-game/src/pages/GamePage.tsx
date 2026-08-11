@@ -140,14 +140,24 @@ export default function GamePage() {
   useEffect(() => {
     const handlePopState = () => {
       const route = getInitialRouteState()
+      const keepArchiveCatchUp =
+        route.activeTab === 'play' &&
+        route.dailyCaseId !== null &&
+        route.dailyCaseId === currentArchiveDailyCaseId
       setActiveTab(route.activeTab)
       setSelectedDailyCaseId(route.dailyCaseId)
       setIsResultModalOpen(false)
+      setArchiveCatchUpActive((current) => current && keepArchiveCatchUp)
+      if (!keepArchiveCatchUp) {
+        setCurrentArchiveDailyCaseId(null)
+        lastArchiveTerminalRef.current = null
+        lastArchiveBlockedRef.current = null
+      }
     }
 
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
-  }, [])
+  }, [currentArchiveDailyCaseId])
 
   const navigateToTab = (tab: AppGameTab) => {
     setActiveTab(tab)
