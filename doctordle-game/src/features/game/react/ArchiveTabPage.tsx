@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
+import BottomSheet from '../../../components/ui/BottomSheet'
 import { DifficultyBadge, TrackBadge } from './learn/archive/shared'
 import {
   buildArchiveCalendarMonth,
@@ -89,14 +90,14 @@ function formatReleaseDate(value: string) {
 
 function getActionLabel(item: DailyCaseArchiveItem) {
   if (item.status === 'completed') {
-    return 'Review'
+    return 'Review case'
   }
 
   if (item.status === 'in_progress') {
-    return 'Resume'
+    return 'Resume case'
   }
 
-  return 'Play'
+  return 'Play case'
 }
 
 function getStatusLabel(item: DailyCaseArchiveItem) {
@@ -108,7 +109,29 @@ function getStatusLabel(item: DailyCaseArchiveItem) {
     return 'In progress'
   }
 
-  return 'Available'
+  return 'Available to play'
+}
+
+function getGroupStatusSummary(group: ArchiveDateGroup) {
+  const statusCounts = group.items.reduce(
+    (counts, item) => ({
+      completed: counts.completed + (item.status === 'completed' ? 1 : 0),
+      inProgress: counts.inProgress + (item.status === 'in_progress' ? 1 : 0),
+      available: counts.available + (item.status === 'unplayed' ? 1 : 0),
+    }),
+    { completed: 0, inProgress: 0, available: 0 },
+  )
+  const parts = [
+    statusCounts.inProgress
+      ? `${statusCounts.inProgress} in progress`
+      : null,
+    statusCounts.available ? `${statusCounts.available} available` : null,
+    statusCounts.completed ? `${statusCounts.completed} completed` : null,
+  ].filter(Boolean)
+
+  return `${group.items.length} ${
+    group.items.length === 1 ? 'assignment' : 'assignments'
+  }: ${parts.join(', ')}`
 }
 
 function getDateTitle(dateKey: string) {
@@ -120,6 +143,7 @@ function getDateTitle(dateKey: string) {
   return new Intl.DateTimeFormat(undefined, {
     day: 'numeric',
     month: 'long',
+    year: 'numeric',
     timeZone: 'UTC',
   })
     .format(date)
@@ -137,13 +161,27 @@ function getCalendarCellLabel(day: ArchiveCalendarDay) {
   const date = new Intl.DateTimeFormat(undefined, {
     day: 'numeric',
     month: 'long',
+    year: 'numeric',
     timeZone: 'UTC',
   }).format(day.date)
-  const firstItem = day.group?.items[0]
+
+  if (!day.inCurrentMonth) {
+    return `${date}, outside displayed month`
+  }
+
+  if (!day.group) {
+    return `${date}, no archive case`
+  }
+
+  const firstItem = day.group.items[0]
+  const caseLabel =
+    day.group.items.length === 1 && firstItem
+      ? firstItem.displayLabel
+      : `${day.group.items.length} archive cases`
   const assignment =
-    day.group && firstItem
-      ? `${firstItem.displayLabel}, ${day.group.status.replace('_', ' ')}`
-      : 'no case'
+    day.group.items.length === 1 && firstItem
+      ? `${caseLabel}, ${getStatusLabel(firstItem)}`
+      : `${caseLabel}, ${getGroupStatusSummary(day.group)}`
 
   return `${date}, ${assignment}`
 }
@@ -166,6 +204,7 @@ export default function ArchiveTabPage({
   const [navigatorOpen, setNavigatorOpen] = useState(false)
   const [navigatorYear, setNavigatorYear] = useState<number | null>(null)
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null)
+  const [dateSheetOpen, setDateSheetOpen] = useState(false)
   const nextArchiveCase = useMemo(() => getNextArchiveCase(items), [items])
   const query = localQuery.trim()
   const searchResults = useMemo(
@@ -212,6 +251,17 @@ export default function ArchiveTabPage({
 
     setCurrentMonthKey(preferredMonth.key)
     setNavigatorYear(year)
+    setDateSheetOpen(false)
+  }
+
+  const selectArchiveDate = (dateKey: string) => {
+    const group = groups.get(dateKey)
+    if (!group) {
+      return
+    }
+
+    setSelectedDateKey(dateKey)
+    setDateSheetOpen(true)
   }
 
   useEffect(() => {
@@ -247,8 +297,24 @@ export default function ArchiveTabPage({
       !selectedDateKey.startsWith(currentMonthDatePrefix)
     ) {
       setSelectedDateKey(null)
+      setDateSheetOpen(false)
     }
   }, [currentMonthDatePrefix, selectedDateKey])
+
+  useEffect(() => {
+    if (!dateSheetOpen) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setDateSheetOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [dateSheetOpen])
 
   const catchUpCount = items.filter((item) => item.status !== 'completed').length
   const completedCount = items.filter((item) => item.status === 'completed').length
@@ -271,10 +337,14 @@ export default function ArchiveTabPage({
           <span className="sr-only">Search archive</span>
           <input
             value={localQuery}
-            onChange={(event) => setLocalQuery(event.target.value)}
+            onChange={(event) => {
+              setLocalQuery(event.target.value)
+              setDateSheetOpen(false)
+            }}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
                 setLocalQuery('')
+                setDateSheetOpen(false)
               }
             }}
             placeholder="Search case number or date"
@@ -283,7 +353,10 @@ export default function ArchiveTabPage({
           {localQuery ? (
             <button
               type="button"
-              onClick={() => setLocalQuery('')}
+              onClick={() => {
+                setLocalQuery('')
+                setDateSheetOpen(false)
+              }}
               aria-label="Clear search"
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] text-white/34 transition hover:bg-white/[0.06] hover:text-white/62 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.24)]"
             >
@@ -338,6 +411,7 @@ export default function ArchiveTabPage({
                           if (olderMonth) {
                             setCurrentMonthKey(olderMonth.key)
                             setNavigatorYear(olderMonth.year)
+                            setDateSheetOpen(false)
                           }
                         }}
                         disabled={!olderMonth}
@@ -355,6 +429,7 @@ export default function ArchiveTabPage({
                           onClick={() => {
                             setNavigatorYear(calendar.year)
                             setNavigatorOpen((open) => !open)
+                            setDateSheetOpen(false)
                           }}
                           aria-expanded={navigatorOpen}
                           className="inline-flex min-w-0 items-center justify-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.025] px-3 py-1 font-brand-mono text-[11px] font-bold text-white/54 transition hover:bg-white/[0.05] hover:text-white/78 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.22)]"
@@ -374,6 +449,7 @@ export default function ArchiveTabPage({
                           if (newerMonth) {
                             setCurrentMonthKey(newerMonth.key)
                             setNavigatorYear(newerMonth.year)
+                            setDateSheetOpen(false)
                           }
                         }}
                         disabled={!newerMonth}
@@ -391,6 +467,7 @@ export default function ArchiveTabPage({
                           setCurrentMonthKey(latestMonth.key)
                           setNavigatorYear(latestMonth.year)
                           setNavigatorOpen(false)
+                          setDateSheetOpen(false)
                         }}
                         className="justify-self-center rounded-full border border-white/[0.07] bg-white/[0.025] px-3 py-1 font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/38 transition hover:bg-white/[0.05] hover:text-white/62"
                       >
@@ -409,10 +486,13 @@ export default function ArchiveTabPage({
                           setCurrentMonthKey(month.key)
                           setNavigatorYear(month.year)
                           setNavigatorOpen(false)
+                          setDateSheetOpen(false)
                         }}
                       />
                     ) : null}
                   </div>
+
+                  <ArchiveCalendarLegend />
 
                   <div className="grid w-full min-w-0 grid-cols-7 gap-1">
                     {WEEKDAY_LABELS.map((label, index) => (
@@ -428,14 +508,7 @@ export default function ArchiveTabPage({
                         key={day.key}
                         day={day}
                         selected={selectedDateKey === day.key}
-                        onSelectDate={(dateKey) => {
-                          const group = groups.get(dateKey)
-                          if (!group) {
-                            return
-                          }
-
-                          setSelectedDateKey(dateKey)
-                        }}
+                        onSelectDate={selectArchiveDate}
                       />
                     ))}
                   </div>
@@ -446,6 +519,15 @@ export default function ArchiveTabPage({
                   visibleItems={selectedGroupItems}
                   onOpenCase={onOpenCase}
                 />
+                <MobileDateDetailSheet
+                  group={selectedGroup}
+                  isOpen={dateSheetOpen}
+                  onClose={() => setDateSheetOpen(false)}
+                  onOpenCase={(dailyCaseId) => {
+                    setDateSheetOpen(false)
+                    onOpenCase(dailyCaseId)
+                  }}
+                />
               </div>
             ) : null}
 
@@ -454,6 +536,40 @@ export default function ArchiveTabPage({
         )}
       </div>
     </section>
+  )
+}
+
+function ArchiveCalendarLegend() {
+  return (
+    <div className="mb-3 grid min-w-0 grid-cols-2 gap-1.5 text-[10px] font-bold text-white/46 sm:flex sm:flex-wrap sm:items-center">
+      <CalendarLegendItem
+        label="Available to play"
+        className="border-white/[0.09] bg-white/[0.04]"
+      />
+      <CalendarLegendItem
+        label="In progress"
+        className="border-[rgba(244,162,97,0.34)] bg-[rgba(244,162,97,0.14)]"
+      />
+      <CalendarLegendItem
+        label="Completed"
+        className="border-[rgba(0,180,166,0.24)] bg-[rgba(0,180,166,0.095)]"
+      />
+    </div>
+  )
+}
+
+function CalendarLegendItem({
+  label,
+  className,
+}: {
+  label: string
+  className: string
+}) {
+  return (
+    <div className="inline-flex min-w-0 items-center gap-1.5">
+      <span className={`h-3 w-3 shrink-0 rounded-[4px] border ${className}`} />
+      <span className="min-w-0 truncate">{label}</span>
+    </div>
   )
 }
 
@@ -614,9 +730,9 @@ function CalendarCell({
   const assignmentCount = day.group?.items.length ?? 0
   const tone =
     status === 'completed'
-      ? 'border-[rgba(0,180,166,0.2)] bg-[rgba(0,180,166,0.075)] text-[var(--wardle-color-teal)]'
+      ? 'border-[rgba(0,180,166,0.24)] bg-[rgba(0,180,166,0.095)] text-[var(--wardle-color-teal)]'
       : status === 'in_progress'
-        ? 'border-[rgba(244,162,97,0.32)] bg-[rgba(244,162,97,0.08)] text-[var(--wardle-color-amber)]'
+        ? 'border-[rgba(244,162,97,0.34)] bg-[rgba(244,162,97,0.14)] text-[var(--wardle-color-amber)]'
         : status === 'available'
           ? 'border-white/[0.09] bg-white/[0.04] text-[var(--wardle-color-mint)]'
           : 'border-transparent bg-transparent text-white/14'
@@ -628,7 +744,7 @@ function CalendarCell({
       onClick={() => onSelectDate(day.key)}
       aria-label={getCalendarCellLabel(day)}
       className={`relative flex aspect-square min-h-8 min-w-0 items-start justify-start rounded-[12px] border p-2 text-left text-sm font-black transition focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.24)] disabled:cursor-default sm:min-h-[40px] ${tone} ${
-        selected ? 'ring-2 ring-white/50 ring-offset-1 ring-offset-transparent' : ''
+        selected ? 'ring-2 ring-white/55 ring-offset-1 ring-offset-transparent' : ''
       } ${day.inCurrentMonth ? '' : 'opacity-25'}`}
     >
       <span>{day.dayNumber}</span>
@@ -668,20 +784,106 @@ function SelectedDateDetail({
   }
 
   return (
-    <section className="min-w-0 max-w-full rounded-[18px] border border-white/[0.06] bg-white/[0.025] px-4 py-4">
+    <section className="hidden min-w-0 max-w-full rounded-[18px] border border-white/[0.06] bg-white/[0.025] px-4 py-4 sm:block">
+      <ArchiveDateAssignments
+        group={group}
+        items={visibleItems}
+        onOpenCase={onOpenCase}
+      />
+    </section>
+  )
+}
+
+function MobileDateDetailSheet({
+  group,
+  isOpen,
+  onClose,
+  onOpenCase,
+}: {
+  group: ArchiveDateGroup | null
+  isOpen: boolean
+  onClose: () => void
+  onOpenCase: (dailyCaseId: string) => void
+}) {
+  if (!group) {
+    return null
+  }
+
+  return (
+    <BottomSheet
+      isOpen={isOpen}
+      onClose={onClose}
+      ariaLabel={`${getDateTitle(group.dateKey)} archive cases`}
+      className="sm:hidden"
+    >
+      <div className="grid min-w-0 gap-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <ArchiveDateAssignmentsHeader group={group} />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close date detail"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] border border-white/[0.08] bg-white/[0.03] text-white/44 transition hover:bg-white/[0.06] hover:text-white/70 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.24)]"
+          >
+            <X className="h-4 w-4" strokeWidth={2} />
+          </button>
+        </div>
+        <ArchiveDateAssignmentsBody
+          items={group.items}
+          onOpenCase={onOpenCase}
+        />
+      </div>
+    </BottomSheet>
+  )
+}
+
+function ArchiveDateAssignments({
+  group,
+  items,
+  onOpenCase,
+}: {
+  group: ArchiveDateGroup
+  items: DailyCaseArchiveItem[]
+  onOpenCase: (dailyCaseId: string) => void
+}) {
+  return (
+    <>
+      <ArchiveDateAssignmentsHeader group={group} />
+      <ArchiveDateAssignmentsBody items={items} onOpenCase={onOpenCase} />
+    </>
+  )
+}
+
+function ArchiveDateAssignmentsHeader({ group }: { group: ArchiveDateGroup }) {
+  return (
+    <div className="min-w-0">
       <h2 className="font-brand-mono text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--wardle-color-mint)]">
         {getDateTitle(group.dateKey)}
       </h2>
-      <div className="mt-3 grid min-w-0 gap-2">
-        {visibleItems.map((item) => (
-          <ArchiveCaseRow
-            key={item.dailyCaseId}
-            item={item}
-            onOpenCase={onOpenCase}
-          />
-        ))}
-      </div>
-    </section>
+      <p className="mt-1 text-xs font-semibold text-white/38">
+        {getGroupStatusSummary(group)}
+      </p>
+    </div>
+  )
+}
+
+function ArchiveDateAssignmentsBody({
+  items,
+  onOpenCase,
+}: {
+  items: DailyCaseArchiveItem[]
+  onOpenCase: (dailyCaseId: string) => void
+}) {
+  return (
+    <div className="mt-3 grid min-w-0 gap-2">
+      {items.map((item) => (
+        <ArchiveCaseRow
+          key={item.dailyCaseId}
+          item={item}
+          onOpenCase={onOpenCase}
+        />
+      ))}
+    </div>
   )
 }
 
