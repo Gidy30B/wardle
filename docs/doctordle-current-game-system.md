@@ -176,3 +176,20 @@
 
 1. Duplicate-guess short-circuit response currently returns result/score/clue metadata but does not include a refreshed case payload.
 2. Daily free-tier limit counts only completed sessions; clue-exhausted losses mark sessions completed, so they consume the daily free attempt.
+# STATUS: SUPERSEDED
+
+This document describes an earlier Wardle gameplay implementation and is
+retained as historical reference only.
+
+For current runtime architecture, see:
+
+- `docs/gameplay/CURRENT-ARCHITECTURE.md`
+
+For the target participation-policy architecture, see:
+
+- `docs/gameplay/PARTICIPATION-POLICY.md`
+
+Do not use the historical claims below as current implementation evidence
+without verifying runtime code.
+
+---

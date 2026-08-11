@@ -10,6 +10,7 @@ import { CasesModule } from '../cases/cases.module';
 import { DailyCasesModule } from '../gameplay/daily-cases.module';
 import { GameplayEventLogger } from '../gameplay/gameplay-event-logger.service';
 import { LeaderboardService } from '../gameplay/leaderboard.service';
+import { ParticipationPolicyService } from '../gameplay/participation-policy.service';
 import { RewardOrchestrator } from '../gameplay/reward-orchestrator.service';
 import { StreakService } from '../gameplay/streak.service';
 import { XpService } from '../gameplay/xp.service';
@@ -35,6 +36,7 @@ import { QueueProcessor } from './queue.processor';
     StreakService,
     XpService,
     LeaderboardService,
+    ParticipationPolicyService,
     PrismaService,
     AppLoggerService,
     MetricsService,

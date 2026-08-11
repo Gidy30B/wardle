@@ -29,6 +29,7 @@ import {
 } from './daily-case-labels.js';
 import { DailyLimitService } from './daily-limit.service';
 import type { GameplayDiagnosisReadModel } from './dto/submit-game-guess.dto';
+import { normalizeWardleDayDate } from './wardle-day';
 
 type SupportedSubscriptionTier = 'free' | 'premium' | 'practice';
 
@@ -53,6 +54,27 @@ type TodayCasePayload = {
     explanation: Prisma.JsonValue | null;
     differentials: Prisma.JsonValue | null;
   };
+};
+
+type ArchiveCaseStatus = 'unplayed' | 'in_progress' | 'completed';
+
+export type DailyCaseArchiveResponse = {
+  generatedAt: string;
+  releaseCutoffDate: string;
+  nextCursor: string | null;
+  items: Array<{
+    dailyCaseId: string;
+    caseId: string;
+    casePublicNumber: number | null;
+    displayLabel: string;
+    trackDisplayLabel: string;
+    releaseDate: string;
+    track: PublishTrack;
+    sequenceIndex: number;
+    difficulty: string;
+    status: ArchiveCaseStatus;
+    completedAt: string | null;
+  }>;
 };
 
 const dailyCaseWithCaseArgs = {
@@ -159,18 +181,11 @@ const TRACK_PRIORITY: Record<PublishTrack, number> = {
 };
 
 export function normalizeDailyDate(value: Date | string = new Date()): Date {
-  const parsed = value instanceof Date ? new Date(value) : new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
+  try {
+    return normalizeWardleDayDate(value);
+  } catch {
     throw new BadRequestException(`Invalid daily case date: ${value}`);
   }
-
-  return new Date(
-    Date.UTC(
-      parsed.getUTCFullYear(),
-      parsed.getUTCMonth(),
-      parsed.getUTCDate(),
-    ),
-  );
 }
 
 export function getTrackPriority(track: PublishTrack): number {
@@ -258,6 +273,179 @@ export class DailyCasesService {
         source,
       }),
     );
+  }
+
+  getCurrentReleaseDate(date: Date | string = new Date()): Date {
+    return normalizeDailyDate(date);
+  }
+
+  async listArchiveForUser(input: {
+    userId: string;
+    limit?: number;
+    cursor?: string;
+    status?: 'all' | ArchiveCaseStatus;
+    date?: Date | string;
+  }): Promise<DailyCaseArchiveResponse> {
+    const limit = Math.max(1, Math.min(100, Math.floor(input.limit ?? 50)));
+    const releaseCutoffDate = this.getCurrentReleaseDate(input.date);
+    const user = await this.prisma.user.upsert({
+      where: { id: input.userId },
+      update: {},
+      create: {
+        id: input.userId,
+      },
+      select: {
+        subscriptionTier: true,
+      },
+    });
+    const allowedTracks = getAllowedTracksForTier(user.subscriptionTier);
+
+    const dailyCases = await this.prisma.dailyCase.findMany({
+      where: {
+        date: {
+          lt: releaseCutoffDate,
+        },
+        track: {
+          in: allowedTracks,
+        },
+        case: {
+          editorialStatus: {
+            in: [
+              CaseEditorialStatus.READY_TO_PUBLISH,
+              CaseEditorialStatus.APPROVED,
+              CaseEditorialStatus.PUBLISHED,
+            ],
+          },
+        },
+      },
+      ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+      orderBy: [
+        { date: 'desc' },
+        { track: 'asc' },
+        { sequenceIndex: 'asc' },
+        { id: 'desc' },
+      ],
+      take: limit + 1,
+      select: {
+        id: true,
+        caseId: true,
+        date: true,
+        track: true,
+        sequenceIndex: true,
+        case: {
+          select: {
+            id: true,
+            publicNumber: true,
+            difficulty: true,
+            editorialStatus: true,
+          },
+        },
+        sessions: {
+          where: {
+            userId: input.userId,
+          },
+          select: {
+            status: true,
+            completedAt: true,
+          },
+          take: 1,
+        },
+      },
+    });
+
+    const page = dailyCases.slice(0, limit);
+    const items = page
+      .map((dailyCase) => {
+        const session = dailyCase.sessions[0] ?? null;
+        const status: ArchiveCaseStatus =
+          session?.status === 'completed' && session.completedAt
+            ? 'completed'
+            : session
+              ? 'in_progress'
+              : 'unplayed';
+
+        return {
+          dailyCaseId: dailyCase.id,
+          caseId: dailyCase.caseId,
+          casePublicNumber: dailyCase.case.publicNumber ?? null,
+          displayLabel: formatDailyCaseDisplayLabel(dailyCase),
+          trackDisplayLabel: formatDailyCaseTrackDisplayLabel(dailyCase),
+          releaseDate: dailyCase.date.toISOString().slice(0, 10),
+          track: dailyCase.track,
+          sequenceIndex: dailyCase.sequenceIndex,
+          difficulty: dailyCase.case.difficulty,
+          status,
+          completedAt: session?.completedAt
+            ? session.completedAt.toISOString()
+            : null,
+        };
+      })
+      .filter((item) =>
+        input.status && input.status !== 'all'
+          ? item.status === input.status
+          : true,
+      );
+
+    return {
+      generatedAt: new Date().toISOString(),
+      releaseCutoffDate: releaseCutoffDate.toISOString().slice(0, 10),
+      nextCursor:
+        dailyCases.length > limit ? dailyCases[limit - 1]?.id ?? null : null,
+      items,
+    };
+  }
+
+  async assertDailyCaseReleasedForUser(input: {
+    userId: string;
+    dailyCaseId: string;
+    date?: Date | string;
+  }): Promise<void> {
+    const releaseCutoffDate = this.getCurrentReleaseDate(input.date);
+    const user = await this.prisma.user.upsert({
+      where: { id: input.userId },
+      update: {},
+      create: {
+        id: input.userId,
+      },
+      select: {
+        subscriptionTier: true,
+      },
+    });
+    const dailyCase = await this.prisma.dailyCase.findUnique({
+      where: {
+        id: input.dailyCaseId,
+      },
+      select: {
+        id: true,
+        date: true,
+        track: true,
+        case: {
+          select: {
+            editorialStatus: true,
+          },
+        },
+      },
+    });
+
+    if (!dailyCase) {
+      throw new NotFoundException(`Daily case not found: ${input.dailyCaseId}`);
+    }
+
+    if (dailyCase.date.getTime() > releaseCutoffDate.getTime()) {
+      throw new NotFoundException(`Daily case not found: ${input.dailyCaseId}`);
+    }
+
+    if (!this.caseEligibilityPolicy.isGameplayEditorialStatus(dailyCase.case.editorialStatus)) {
+      throw new BadRequestException(
+        'Daily case is no longer eligible for gameplay',
+      );
+    }
+
+    if (!hasPremiumTrackAccess(user.subscriptionTier, dailyCase.track)) {
+      throw new ForbiddenException(
+        'Premium access is required to start this daily case',
+      );
+    }
   }
 
   async assignDailyCasesForDate(date: Date | string) {
