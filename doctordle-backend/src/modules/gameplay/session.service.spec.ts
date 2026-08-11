@@ -67,6 +67,7 @@ function createSessionServiceFixture() {
     getTodayCasesForUser: jest.fn(),
     getOrCreateGameSessionForDailyCase: jest.fn(),
     resetUserSessionForDailyCaseReplay: jest.fn().mockResolvedValue(undefined),
+    assertDailyCaseReleasedForUser: jest.fn().mockResolvedValue(undefined),
     publishDailyCasesForDate: jest.fn(),
     ensureScheduleWindow: jest.fn(),
   };
@@ -507,6 +508,71 @@ describe('SessionService gameplay registry correctness', () => {
     expect(
       fixture.dailyCasesService.ensureScheduleWindow,
     ).not.toHaveBeenCalled();
+  });
+
+  it('starts a released historical DailyCase by explicit DailyCase ID', async () => {
+    const fixture = createSessionServiceFixture();
+    fixture.dailyCasesService.getTodayCasesForUser.mockResolvedValue({
+      date: '2026-04-22',
+      cases: [
+        {
+          dailyCaseId: 'today-daily',
+          track: 'DAILY',
+          sequenceIndex: 1,
+        },
+      ],
+    });
+    fixture.dailyCasesService.getOrCreateGameSessionForDailyCase.mockResolvedValue(
+      {
+        user: {
+          id: 'user-1',
+          subscriptionTier: 'free',
+        },
+        session: {
+          id: 'session-archive',
+          caseId: 'case-archive',
+          dailyCaseId: 'archive-daily',
+          status: 'active',
+          startedAt: new Date('2026-04-20T08:00:00.000Z'),
+          completedAt: null,
+          attempts: [],
+        },
+        dailyCase: {
+          id: 'archive-daily',
+          caseId: 'case-archive',
+          date: new Date('2026-04-20T00:00:00.000Z'),
+          track: 'DAILY',
+          sequenceIndex: 1,
+          case: {
+            id: 'case-archive',
+            date: new Date('2026-04-20T00:00:00.000Z'),
+            difficulty: 'medium',
+          },
+        },
+      },
+    );
+
+    const result = await fixture.service.startDailyGame({
+      userId: 'user-1',
+      dailyCaseId: 'archive-daily',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        state: 'ready',
+        sessionId: 'session-archive',
+        dailyCaseId: 'archive-daily',
+      }),
+    );
+    expect(
+      fixture.dailyCasesService.assertDailyCaseReleasedForUser,
+    ).toHaveBeenCalledWith({
+      userId: 'user-1',
+      dailyCaseId: 'archive-daily',
+    });
+    expect(
+      fixture.dailyCasesService.getOrCreateGameSessionForDailyCase,
+    ).toHaveBeenCalledWith('user-1', 'archive-daily');
   });
 
   it('loads normalized legacy investigation clues for gameplay', async () => {

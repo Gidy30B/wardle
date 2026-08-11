@@ -107,6 +107,29 @@ export type StartGameResponse =
       nextCaseAt: string
     }
 
+export type DailyCaseArchiveStatus = 'unplayed' | 'in_progress' | 'completed'
+
+export type DailyCaseArchiveItem = {
+  dailyCaseId: string
+  caseId: string
+  casePublicNumber?: number | null
+  displayLabel: string
+  trackDisplayLabel: string
+  releaseDate: string
+  track: PublishTrack
+  sequenceIndex: number
+  difficulty: string
+  status: DailyCaseArchiveStatus
+  completedAt?: string | null
+}
+
+export type DailyCaseArchiveResponse = {
+  generatedAt: string
+  releaseCutoffDate: string
+  nextCursor?: string | null
+  items: DailyCaseArchiveItem[]
+}
+
 export type GuessApiResponse = {
   result: 'correct' | 'close' | 'wrong'
   score: number

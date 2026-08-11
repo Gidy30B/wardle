@@ -17,6 +17,7 @@ import type {
   GuessApiResponse,
   GuessPayload,
   StartGameResponse,
+  DailyCaseArchiveResponse,
   UserProgress,
 } from "./game.types";
 
@@ -100,7 +101,11 @@ export async function getDiagnosisRegistryVersionApi(
 
 export async function startGameApi(
   request: RequestJson,
+  input: { dailyCaseId?: string } = {},
 ): Promise<StartGameResponse> {
+  const body = input.dailyCaseId
+    ? JSON.stringify({ dailyCaseId: input.dailyCaseId })
+    : undefined
   const response = await request<
     | {
         state: "waiting";
@@ -144,6 +149,7 @@ export async function startGameApi(
       }
   >("/game/start", {
     method: "POST",
+    ...(body ? { body } : {}),
   });
 
   if (response.state === "waiting") {
@@ -214,6 +220,26 @@ export async function getLearnLibraryApi(
   request: RequestJson,
 ): Promise<LearnLibraryResponse> {
   return request<LearnLibraryResponse>("/game/learn");
+}
+
+export async function getDailyCaseArchiveApi(
+  request: RequestJson,
+  input: {
+    status?: "all" | "unplayed" | "in_progress" | "completed"
+    limit?: number
+  } = {},
+): Promise<DailyCaseArchiveResponse> {
+  const params = new URLSearchParams()
+  if (input.status && input.status !== "all") {
+    params.set("status", input.status)
+  }
+  if (input.limit) {
+    params.set("limit", String(input.limit))
+  }
+  const query = params.toString()
+  return request<DailyCaseArchiveResponse>(
+    `/game/archive${query ? `?${query}` : ""}`,
+  )
 }
 
 export async function getDiagnosisEducationApi(

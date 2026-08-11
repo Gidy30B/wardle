@@ -96,6 +96,47 @@ export class GameController {
     }
   }
 
+  @Get('archive')
+  async getArchive(
+    @Req() req: AuthenticatedRequest,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+    @Query('status') status?: string,
+  ) {
+    const parsedLimit = Number(limit ?? 50);
+    const safeLimit = Number.isFinite(parsedLimit)
+      ? Math.max(1, Math.min(100, Math.floor(parsedLimit)))
+      : 50;
+    const normalizedStatus =
+      status === 'unplayed' ||
+      status === 'in_progress' ||
+      status === 'completed'
+        ? status
+        : 'all';
+
+    try {
+      return await this.gameSessionService.getArchiveForUser({
+        userId: req.user.id,
+        limit: safeLimit,
+        cursor,
+        status: normalizedStatus,
+      });
+    } catch (error) {
+      this.logger.error(
+        JSON.stringify({
+          event: 'game.archive.failed',
+          userId: req.user.id,
+          limit: safeLimit,
+          cursor: cursor ?? null,
+          status: normalizedStatus,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
+  }
+
   @Get('learn')
   async getLearningLibrary(
     @Req() req: AuthenticatedRequest,

@@ -1,5 +1,6 @@
 export const APP_ICONS = {
   play: '\u{1FA7A}',
+  archive: '\u{1F5C2}\uFE0F',
   learn: '\u{1F4DA}',
   rank: '\u{1F3C6}',
   streak: '\u{1F525}',

@@ -29,6 +29,15 @@ export class GameSessionService {
     return this.dailyCasesService.getTodayCasesForUser(input.userId, input.date);
   }
 
+  async getArchiveForUser(input: {
+    userId: string;
+    limit?: number;
+    cursor?: string;
+    status?: 'all' | 'unplayed' | 'in_progress' | 'completed';
+  }) {
+    return this.dailyCasesService.listArchiveForUser(input);
+  }
+
   async getCompletedLearningLibrary(input: { userId: string; limit?: number }) {
     return this.sessionService.getCompletedLearningLibrary(input);
   }
