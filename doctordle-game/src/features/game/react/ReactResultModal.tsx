@@ -26,6 +26,13 @@ type ReactResultModalProps = {
   onClose: () => void
   onReviewLearning: () => void
   onContinue: () => void
+  archiveCatchUp?: {
+    nextLabel: string | null
+    caughtUp: boolean
+    onNextArchiveCase: () => void
+    onBackToArchive: () => void
+    onExitArchive: () => void
+  }
 }
 
 export default function ReactResultModal({
@@ -37,6 +44,7 @@ export default function ReactResultModal({
   onClose,
   onReviewLearning,
   onContinue,
+  archiveCatchUp,
 }: ReactResultModalProps) {
   const shareCardRef = useRef<HTMLDivElement | null>(null)
   const [shareState, setShareState] = useState<ShareUiState>('idle')
@@ -88,10 +96,31 @@ export default function ReactResultModal({
           </div>
         )}
 
+        {archiveCatchUp?.caughtUp ? (
+          <div className="mt-4 rounded-[14px] border border-[rgba(0,180,166,0.18)] bg-[rgba(0,180,166,0.07)] px-4 py-3">
+            <p className="text-sm font-black text-[var(--wardle-color-teal)]">
+              You're caught up
+            </p>
+            <p className="mt-1 text-xs leading-5 text-white/42">
+              You've played every available Archive case.
+            </p>
+          </div>
+        ) : null}
+
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <Button type="button" variant="secondary" onClick={onContinue}>
-            {iconSet.play} Continue
-          </Button>
+          {archiveCatchUp?.nextLabel ? (
+            <Button type="button" onClick={archiveCatchUp.onNextArchiveCase}>
+              {iconSet.play} Next archive case
+            </Button>
+          ) : archiveCatchUp?.caughtUp ? (
+            <Button type="button" onClick={archiveCatchUp.onBackToArchive}>
+              Back to Archive
+            </Button>
+          ) : (
+            <Button type="button" variant="secondary" onClick={onContinue}>
+              {iconSet.play} Continue
+            </Button>
+          )}
           <Button type="button" onClick={handleShare} disabled={shareButtonDisabled}>
             {shareState === 'shared'
               ? `${iconSet.rank} Shared`
@@ -118,6 +147,15 @@ export default function ReactResultModal({
             {iconSet.learn} Learning Notes
           </Button>
         </div>
+        {archiveCatchUp?.nextLabel ? (
+          <button
+            type="button"
+            onClick={archiveCatchUp.onExitArchive}
+            className="mt-3 w-full rounded-[13px] border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm font-black text-white/52 transition hover:bg-white/[0.06] hover:text-white/72"
+          >
+            Leave Archive catch-up
+          </button>
+        ) : null}
       </div>
     </div>
   )

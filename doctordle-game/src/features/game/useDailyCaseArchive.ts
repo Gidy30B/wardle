@@ -3,16 +3,13 @@ import { useApi } from '../../lib/api'
 import { getDailyCaseArchiveApi } from './game.api'
 import type {
   DailyCaseArchiveResponse,
-  DailyCaseArchiveStatus,
 } from './game.types'
 
-export type DailyCaseArchiveFilter = 'all' | DailyCaseArchiveStatus
-
-export function useDailyCaseArchive(status: DailyCaseArchiveFilter) {
+export function useDailyCaseArchive() {
   const { request } = useApi()
   const query = useQuery({
-    queryKey: ['game', 'archive', status],
-    queryFn: () => getDailyCaseArchiveApi(request, { status, limit: 100 }),
+    queryKey: ['game', 'archive', 'all'],
+    queryFn: () => getDailyCaseArchiveApi(request, { status: 'all', limit: 100 }),
   })
 
   return {

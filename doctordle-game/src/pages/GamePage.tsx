@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useGameEngine } from '../features/game/useGameEngine'
-import { useDailyCaseArchive, type DailyCaseArchiveFilter } from '../features/game/useDailyCaseArchive'
+import { useDailyCaseArchive } from '../features/game/useDailyCaseArchive'
+import { getNextArchiveCase } from '../features/game/archiveDomain'
 import { useLearnLibrary } from '../features/game/useLearnLibrary'
 import { useLeaderboard } from '../features/leaderboard/leaderboard.hook'
 import type { LeaderboardMode } from '../features/leaderboard/leaderboard.types'
@@ -76,16 +77,18 @@ export default function GamePage() {
   const [selectedDailyCaseId, setSelectedDailyCaseId] = useState<string | null>(
     initialRouteRef.current.dailyCaseId,
   )
-  const [archiveFilter, setArchiveFilter] =
-    useState<DailyCaseArchiveFilter>('all')
   const [leaderboardMode, setLeaderboardMode] = useState<LeaderboardMode>('daily')
   const [isResultModalOpen, setIsResultModalOpen] = useState(false)
   const [learnOpenIntent, setLearnOpenIntent] = useState<LearnOpenIntent | null>(null)
   const [pwaInstallResetKey, setPwaInstallResetKey] = useState(0)
+  const [archiveCatchUpActive, setArchiveCatchUpActive] = useState(false)
+  const [currentArchiveDailyCaseId, setCurrentArchiveDailyCaseId] = useState<string | null>(null)
   const lastResultModalKeyRef = useRef<string | null>(null)
   const learnOpenIntentCounterRef = useRef(0)
+  const lastArchiveTerminalRef = useRef<string | null>(null)
+  const lastArchiveBlockedRef = useRef<string | null>(null)
   const game = useGameEngine({ dailyCaseId: selectedDailyCaseId })
-  const archive = useDailyCaseArchive(archiveFilter)
+  const archive = useDailyCaseArchive()
   const leaderboard = useLeaderboard(leaderboardMode)
   const learnLibrary = useLearnLibrary()
   const organizations = useUserOrganizations()
@@ -155,6 +158,8 @@ export default function GamePage() {
     }
 
     if (tab === 'play') {
+      setArchiveCatchUpActive(false)
+      setCurrentArchiveDailyCaseId(null)
       setSelectedDailyCaseId(null)
       window.history.pushState(null, '', '/')
       return
@@ -164,11 +169,79 @@ export default function GamePage() {
   }
 
   const openArchiveCase = (dailyCaseId: string) => {
+    setArchiveCatchUpActive(true)
+    setCurrentArchiveDailyCaseId(dailyCaseId)
+    lastArchiveTerminalRef.current = null
+    lastArchiveBlockedRef.current = null
     setSelectedDailyCaseId(dailyCaseId)
     setActiveTab('play')
     setIsResultModalOpen(false)
     window.history.pushState(null, '', `/case/${encodeURIComponent(dailyCaseId)}`)
   }
+
+  const openNextArchiveCase = () => {
+    const nextDailyCase = getNextArchiveCase(archive.items, [
+      currentArchiveDailyCaseId,
+    ])
+    if (nextDailyCase) {
+      openArchiveCase(nextDailyCase.dailyCaseId)
+    }
+  }
+
+  const exitArchiveCatchUp = () => {
+    setArchiveCatchUpActive(false)
+    setCurrentArchiveDailyCaseId(null)
+    setIsResultModalOpen(false)
+    setActiveTab('archive')
+    window.history.pushState(null, '', '/archive')
+  }
+
+  useEffect(() => {
+    if (
+      !archiveCatchUpActive ||
+      !currentArchiveDailyCaseId ||
+      !game.isFinalFeedback ||
+      !game.latestResult ||
+      lastArchiveTerminalRef.current === currentArchiveDailyCaseId
+    ) {
+      return
+    }
+
+    lastArchiveTerminalRef.current = currentArchiveDailyCaseId
+    void archive.refetch()
+  }, [
+    archive,
+    archiveCatchUpActive,
+    currentArchiveDailyCaseId,
+    game.isFinalFeedback,
+    game.latestResult,
+  ])
+
+  useEffect(() => {
+    if (
+      !archiveCatchUpActive ||
+      !currentArchiveDailyCaseId ||
+      !game.isBlocked ||
+      lastArchiveBlockedRef.current === currentArchiveDailyCaseId
+    ) {
+      return
+    }
+
+    lastArchiveBlockedRef.current = currentArchiveDailyCaseId
+    void archive.refetch().then((result) => {
+      const nextArchiveCase = getNextArchiveCase(result.data?.items ?? archive.items, [
+        currentArchiveDailyCaseId,
+      ])
+      if (nextArchiveCase) {
+        openArchiveCase(nextArchiveCase.dailyCaseId)
+      }
+    })
+  }, [
+    archive,
+    archiveCatchUpActive,
+    currentArchiveDailyCaseId,
+    game.isBlocked,
+  ])
 
   useEffect(() => {
     if (activeTab !== 'play' && isResultModalOpen) {
@@ -196,6 +269,20 @@ export default function GamePage() {
     () => buildLearnLibraryWithStats(learnLibrary.library, userStats.report),
     [learnLibrary.library, userStats.report],
   )
+  const nextArchiveCase =
+    archiveCatchUpActive && isResultModalOpen
+      ? getNextArchiveCase(archive.items, [currentArchiveDailyCaseId])
+      : null
+  const archiveCatchUpResultActions =
+    archiveCatchUpActive && isResultModalOpen
+      ? {
+          nextLabel: nextArchiveCase?.displayLabel ?? null,
+          caughtUp: !nextArchiveCase,
+          onNextArchiveCase: openNextArchiveCase,
+          onBackToArchive: exitArchiveCatchUp,
+          onExitArchive: exitArchiveCatchUp,
+        }
+      : undefined
 
   return (
     <AppGameShell
@@ -253,6 +340,7 @@ export default function GamePage() {
             setActiveTab('learn')
             void learnLibrary.refetch()
           }}
+          archiveCatchUp={archiveCatchUpResultActions}
         />
       ) : null}
 
@@ -316,12 +404,12 @@ export default function GamePage() {
           items={archive.items}
           loading={archive.loading}
           error={archive.error}
-          filter={archiveFilter}
-          onFilterChange={setArchiveFilter}
           onRetry={() => {
             void archive.refetch()
           }}
           onOpenCase={openArchiveCase}
+          onPlayToday={() => navigateToTab('play')}
+          onContinueArchive={openArchiveCase}
         />
       ) : null}
     </AppGameShell>

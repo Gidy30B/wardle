@@ -22,6 +22,13 @@ type PlayTabPageProps = {
   onReload: () => void
   onCloseResultModal: () => void
   onReviewLearning: () => void
+  archiveCatchUp?: {
+    nextLabel: string | null
+    caughtUp: boolean
+    onNextArchiveCase: () => void
+    onBackToArchive: () => void
+    onExitArchive: () => void
+  }
 }
 
 export default function PlayTabPage({
@@ -43,6 +50,7 @@ export default function PlayTabPage({
   onReload,
   onCloseResultModal,
   onReviewLearning,
+  archiveCatchUp,
 }: PlayTabPageProps) {
   return (
     <>
@@ -75,6 +83,7 @@ export default function PlayTabPage({
         onClose={onCloseResultModal}
         onReviewLearning={onReviewLearning}
         onContinue={onContinue}
+        archiveCatchUp={archiveCatchUp}
       />
     </>
   )
