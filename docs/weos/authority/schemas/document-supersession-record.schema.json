@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dxlab.local/weos/document-supersession-record.schema.json",
+  "title": "WEOS Document Supersession Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recordId",
+    "recordType",
+    "schemaVersion",
+    "supersedingDocument",
+    "supersededDocument",
+    "supersessionScope",
+    "effectiveDate",
+    "rationale",
+    "approver",
+    "approverAuthority",
+    "supportingDecision",
+    "downstreamObligations",
+    "createdAt"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "recordId": { "type": "string", "minLength": 1 },
+    "recordType": { "const": "DOCUMENT_SUPERSESSION" },
+    "schemaVersion": { "type": "string", "minLength": 1 },
+    "supersedingDocument": { "$ref": "#/$defs/documentReference" },
+    "supersededDocument": { "$ref": "#/$defs/documentReference" },
+    "supersessionScope": { "type": "string", "minLength": 1 },
+    "effectiveDate": { "type": "string", "format": "date" },
+    "rationale": { "type": "string", "minLength": 1 },
+    "approver": { "$ref": "#/$defs/authorityActor" },
+    "approverAuthority": { "type": "string", "minLength": 1 },
+    "supportingDecision": { "type": "string", "minLength": 1 },
+    "downstreamObligations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "regenerate",
+        "revalidate",
+        "updateReferences",
+        "reviewDependentDecisions",
+        "notes"
+      ],
+      "properties": {
+        "regenerate": { "type": "boolean" },
+        "revalidate": { "type": "boolean" },
+        "updateReferences": { "type": "boolean" },
+        "reviewDependentDecisions": { "type": "boolean" },
+        "notes": { "type": "string" }
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "documentReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documentId", "documentVersion", "documentPath"],
+      "properties": {
+        "documentId": { "type": "string", "minLength": 1 },
+        "documentVersion": { "type": "string", "minLength": 1 },
+        "documentPath": { "type": "string", "minLength": 1 }
+      }
+    },
+    "authorityActor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "role", "authorityBasis"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "authorityBasis": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

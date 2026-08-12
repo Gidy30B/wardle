@@ -70,7 +70,8 @@ export function createCorsOptions(): CorsOptions {
     'https://admin.wardle.it.com',
     'https://wardle-nu.vercel.app',
     'https://wardle-7xey.vercel.app',
-    'http://localhost:5173',
+    'http://127.0.0.1:8080',
+    'http://127.0.0.1:8081',
     ...parseAllowedOrigins(env.ALLOWED_ORIGINS),
   ];
   const isProduction = env.NODE_ENV.toLowerCase() === 'production';

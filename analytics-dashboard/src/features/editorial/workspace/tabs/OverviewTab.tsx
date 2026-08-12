@@ -22,6 +22,8 @@ import {
   CompactPanel,
   EditorialStream,
   EditorialRow,
+  OperatorDashboard,
+  OperatorMetricGrid,
   IssueSummaryStrip,
   MessageList,
   MetricGrid,
@@ -46,6 +48,10 @@ import {
   getWorkspaceSectionForEducationSection,
   type WorkspaceSectionTarget,
 } from '../workspaceSectionNavigation';
+import {
+  buildEditorialWorkspaceViewModel,
+  type EditorialWorkspaceViewModel,
+} from '../viewModels/editorialWorkspaceViewModel';
 export function OverviewTab({
   workspace,
   onGapSelect,
@@ -69,11 +75,13 @@ export function OverviewTab({
   const warnings = workspace.workspaceSummary.warnings;
   const story = buildOverviewStory(workspace, onSectionNavigate, onGapSelect);
   const primaryAction = story.primaryAction;
+  const viewModel = buildEditorialWorkspaceViewModel(workspace);
 
   return (
     <div className="space-y-4">
       <DiagnosisHealthPanel
         workspace={workspace}
+        viewModel={viewModel}
         onGapSelect={onGapSelect}
         onSectionNavigate={onSectionNavigate}
       />
@@ -93,6 +101,9 @@ export function OverviewTab({
             primaryAction ? (
               <button
                 type="button"
+                data-testid="overview-primary-action"
+                data-target-tab={primaryAction.target.tab}
+                data-target-section={primaryAction.target.sectionId}
                 disabled={!primaryAction.enabled}
                 aria-disabled={!primaryAction.enabled}
                 onClick={() => onSectionNavigate(primaryAction.target)}
@@ -216,6 +227,9 @@ export function OverviewTab({
               {primaryAction ? (
                 <button
                   type="button"
+                  data-testid="overview-primary-action"
+                  data-target-tab={primaryAction.target.tab}
+                  data-target-section={primaryAction.target.sectionId}
                   disabled={!primaryAction.enabled}
                   aria-disabled={!primaryAction.enabled}
                   onClick={() => onSectionNavigate(primaryAction.target)}
@@ -243,6 +257,7 @@ export function OverviewTab({
         <StreamDisclosure
           title="Secondary actions"
           summary={`${workspace.recommendedActions.length} recommended action${workspace.recommendedActions.length === 1 ? '' : 's'}`}
+          testId="overview-secondary-actions"
         >
           <div className="space-y-4">
             <RecommendedActionsCard
@@ -348,109 +363,48 @@ type OverviewStory = {
 
 function DiagnosisHealthPanel({
   workspace,
+  viewModel,
   onGapSelect,
   onSectionNavigate,
 }: {
   workspace: DiagnosisEditorialWorkspace;
+  viewModel: EditorialWorkspaceViewModel;
   onGapSelect: (gap: WorkspaceCoverageGap) => void;
   onSectionNavigate: (target: WorkspaceSectionTarget) => void;
 }) {
-  const sectionBlockers = workspace.education.sectionHealth.filter(
-    (section) => section.blockers.length > 0,
-  ).length;
-  const sectionWarnings = workspace.education.sectionHealth.filter(
-    (section) => section.warnings.length > 0,
-  ).length;
-  const difficultySummary = buildDifficultySummary(workspace);
-  const graphReady =
-    workspace.graph.readiness === 'fact_ready' ||
-    workspace.graph.readiness === 'ready';
   const firstGap = workspace.coverageGaps[0] ?? null;
-  const nextActions = workspace.recommendedActions.slice(0, 3);
+  const nextActions = viewModel.nextBestActions.slice(0, 3);
 
   return (
-    <section
-      id="workspace-diagnosis-health"
-      className="rounded-lg border border-[var(--color-navy-border)] bg-white/[0.03] p-4"
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="editorial-eyebrow">Diagnosis health</p>
-          <h2 className="mt-1 text-base font-semibold text-slate-100">
-            Coverage, risks, and next best actions
-          </h2>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
-            A compact production view over registry metadata, education,
-            playable cases, graph readiness, and open quality gaps.
-          </p>
-        </div>
+    <OperatorDashboard
+      eyebrow="Diagnosis health"
+      title="Coverage, risks, and next best actions"
+      subtitle="A compact production view over registry metadata, education, playable cases, graph readiness, and open quality gaps."
+      status={
         <StatusBadge
           status={formatLabel(workspace.workspaceSummary.status)}
           tone={scoreTone(workspace.workspaceSummary.overallScore)}
         />
-      </div>
+      }
+    >
+    <section
+      id="workspace-diagnosis-health"
+      className="scroll-mt-24"
+      tabIndex={-1}
+    >
+      <OperatorMetricGrid
+        items={viewModel.diagnosisHealth.tiles.map((tile) => ({
+          label: tile.label,
+          value: tile.value,
+          detail: tile.detail,
+          tone: tile.tone,
+        }))}
+      />
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-3">
-        <HealthMetricCard
-          label="Registry"
-          value={formatLabel(workspace.lifecycle.curriculum)}
-          detail={[
-            workspace.diagnosis.specialty
-              ? formatLabel(workspace.diagnosis.specialty)
-              : null,
-            `${workspace.diagnosis.aliases.length} alias${
-              workspace.diagnosis.aliases.length === 1 ? '' : 'es'
-            }`,
-          ]
-            .filter(Boolean)
-            .join(' - ')}
-          tone={
-            workspace.lifecycle.curriculum === 'blocked'
-              ? 'danger'
-              : workspace.lifecycle.curriculum === 'complete'
-                ? 'success'
-                : 'warning'
-          }
-        />
-        <HealthMetricCard
-          label="Education"
-          value={formatLabel(workspace.education.status)}
-          detail={`${sectionBlockers} section blockers - ${sectionWarnings} warnings`}
-          tone={
-            sectionBlockers
-              ? 'danger'
-              : sectionWarnings
-                ? 'warning'
-                : 'success'
-          }
-        />
-        <HealthMetricCard
-          label="Cases"
-          value={`${workspace.cases.summary.usable}/${workspace.cases.summary.total}`}
-          detail={difficultySummary}
-          tone={workspace.cases.summary.usable ? 'success' : 'warning'}
-        />
-        <HealthMetricCard
-          label="Graph"
-          value={formatLabel(workspace.graph.readiness)}
-          detail={`${workspace.graph.factCount} facts - ${workspace.graph.reviewableCandidateCount} candidates`}
-          tone={graphReady ? 'success' : 'warning'}
-        />
-        <HealthMetricCard
-          label="Coverage"
-          value={`${workspace.coverageGaps.length} gap${
-            workspace.coverageGaps.length === 1 ? '' : 's'
-          }`}
-          detail={`${workspace.coverageMatrix.length} mapped teaching units`}
-          tone={workspace.coverageGaps.length ? 'warning' : 'success'}
-        />
-        <HealthMetricCard
-          label="Quality"
-          value={formatScore(workspace.workspaceSummary.overallScore)}
-          detail={`${workspace.workspaceSummary.blockers.length} blockers - ${workspace.workspaceSummary.warnings.length} warnings`}
-          tone={scoreTone(workspace.workspaceSummary.overallScore)}
-        />
-      </div>
+      <CoverageMatrixPreview
+        viewModel={viewModel}
+        onSectionNavigate={onSectionNavigate}
+      />
 
       <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.55fr)]">
         <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
@@ -471,33 +425,21 @@ function DiagnosisHealthPanel({
                   type="button"
                   disabled={!action.enabled}
                   aria-disabled={!action.enabled}
-                  onClick={() =>
-                    onSectionNavigate(
-                      getDefaultWorkspaceSectionForTab(action.targetTab),
-                    )
-                  }
+                  onClick={() => onSectionNavigate(action.target)}
                   className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-2 text-left transition hover:border-[var(--color-teal)]/40 hover:bg-[var(--color-teal)]/10 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-sm font-semibold leading-5 text-slate-100">
-                      {action.label}
+                      {action.title}
                     </p>
                     <StatusBadge
-                      status={formatLabel(action.severity ?? 'info')}
-                      tone={
-                        action.severity === 'blocker'
-                          ? 'danger'
-                          : action.severity === 'warning'
-                            ? 'warning'
-                            : 'info'
-                      }
+                      status={formatLabel(action.severity)}
+                      tone={action.tone}
                     />
                   </div>
-                  {action.disabledReason ? (
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
-                      {action.disabledReason}
-                    </p>
-                  ) : null}
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    {action.disabledReason ?? action.reason}
+                  </p>
                 </button>
               ))}
             </div>
@@ -546,52 +488,84 @@ function DiagnosisHealthPanel({
         </div>
       </div>
     </section>
+    </OperatorDashboard>
   );
 }
 
-function HealthMetricCard({
-  label,
-  value,
-  detail,
-  tone,
+function CoverageMatrixPreview({
+  viewModel,
+  onSectionNavigate,
 }: {
-  label: string;
-  value: string | number;
-  detail: string;
-  tone: StatusBadgeTone;
+  viewModel: EditorialWorkspaceViewModel;
+  onSectionNavigate: (target: WorkspaceSectionTarget) => void;
 }) {
+  const rows = viewModel.coverageMatrix.rows.slice(0, 5);
+
   return (
-    <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 px-3 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-          {label}
-        </p>
-        <StatusBadge status={String(value)} tone={tone} />
+    <div className="mt-4 rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="editorial-eyebrow">Coverage matrix</p>
+          <h3 className="mt-1 text-sm font-semibold text-slate-100">
+            Education, cases, and graph support by teaching unit
+          </h3>
+        </div>
+        <button
+          type="button"
+          onClick={() =>
+            onSectionNavigate({
+              tab: 'teaching-rules',
+              sectionId: 'teaching-coverage-matrix',
+            })
+          }
+          className="editorial-action px-2.5 py-1.5 text-xs"
+        >
+          Open matrix
+        </button>
       </div>
-      <p className="mt-2 text-xs leading-5 text-slate-400">{detail}</p>
+      {rows.length ? (
+        <div className="grid gap-2">
+          {rows.map((row) => {
+            return (
+              <EditorialRow
+                key={row.id}
+                title={row.title}
+                subtitle={row.recommendedAction || 'No recommended action.'}
+                tone={row.tone}
+                meta={<StatusBadge status={formatLabel(row.status)} tone={row.tone} />}
+              >
+                <div className="flex flex-wrap gap-1.5">
+                  <StatusBadge
+                    status={`Education ${formatLabel(row.educationCoverage)}`}
+                    tone={coverageTone(row.educationCoverage)}
+                  />
+                  <StatusBadge
+                    status={`Cases ${formatLabel(row.caseCoverage)}`}
+                    tone={coverageTone(row.caseCoverage)}
+                  />
+                  <StatusBadge
+                    status={`Graph ${formatLabel(row.graphCoverage)}`}
+                    tone={coverageTone(row.graphCoverage)}
+                  />
+                </div>
+              </EditorialRow>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-sm leading-6 text-slate-400">
+          No coverage matrix rows are available for this diagnosis yet.
+        </p>
+      )}
     </div>
   );
 }
 
-function buildDifficultySummary(workspace: DiagnosisEditorialWorkspace) {
-  const byDifficulty = workspace.cases.items.reduce<Record<string, number>>(
-    (acc, item) => {
-      const difficulty = formatLabel(item.difficulty || 'unknown');
-      acc[difficulty] = (acc[difficulty] ?? 0) + 1;
-      return acc;
-    },
-    {},
-  );
-  const entries = Object.entries(byDifficulty);
-
-  if (!entries.length) {
-    return 'No cases mapped yet';
-  }
-
-  return entries
-    .slice(0, 3)
-    .map(([difficulty, count]) => `${difficulty} ${count}`)
-    .join(' - ');
+function coverageTone(status: string): StatusBadgeTone {
+  if (status === 'covered') return 'success';
+  if (status === 'missing') return 'danger';
+  if (status === 'partial') return 'warning';
+  return 'neutral';
 }
 
 function StoryMarker({ children }: { children: string }) {
@@ -1463,6 +1437,9 @@ function RecommendedActionsCard({
               action={
                 <button
                   type="button"
+                  data-testid={`overview-recommended-action-${action.id}`}
+                  data-target-tab={getDefaultWorkspaceSectionForTab(action.targetTab).tab}
+                  data-target-section={getDefaultWorkspaceSectionForTab(action.targetTab).sectionId}
                   disabled={!action.enabled}
                   aria-disabled={!action.enabled}
                   onClick={() =>

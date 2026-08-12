@@ -13,7 +13,7 @@ const config: CapacitorConfig = {
   // ── Server ──────────────────────────────────────────────────────
   // Remove `url` for production builds. Uncomment only for live-reload dev.
   // server: {
-  //   url: "http://YOUR_LOCAL_IP:5173",
+  //   url: "http://YOUR_LOCAL_IP:8081",
   //   cleartext: true,
   // },
 

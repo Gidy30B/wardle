@@ -6,10 +6,13 @@ import StatusBadge from '../../../../components/ui/StatusBadge';
 import type { StatusBadgeTone } from '../../../../components/ui/statusBadgeMeta';
 import {
   CompactMetricGrid,
+  EditorialChipRow,
   EditorialEntity,
   EditorialRow,
   EditorialStream,
   EmptyGuidance,
+  OperatorDashboard,
+  OperatorMetricGrid,
   ReasoningThread,
   StreamDisclosure,
   TabNextStepCard,
@@ -23,6 +26,10 @@ import {
 } from '../clinicalRecognition';
 import { mimicSurvivalStateMeta } from '../mimicSurvival';
 import { formatDate, formatLabel, formatScore } from '../workspaceTransforms';
+import {
+  buildEditorialWorkspaceViewModel,
+  type EducationBoardViewModel,
+} from '../viewModels/editorialWorkspaceViewModel';
 
 type ClinicalSectionId =
   | 'presentation'
@@ -50,6 +57,10 @@ export function ClinicalPictureTab({
   const investigationSection = sections.find((section) => section.id === 'investigation');
   const pitfallSection = sections.find((section) => section.id === 'pearls');
   const managementSection = sections.find((section) => section.id === 'management');
+  const viewModel = buildEditorialWorkspaceViewModel(workspace);
+  const weakSections = viewModel.educationBoard.sections.filter(
+    (section) => section.blockers.length || section.warnings.length,
+  );
 
   return (
     <div className="space-y-4">
@@ -61,6 +72,48 @@ export function ClinicalPictureTab({
       ) : null}
 
       <div id="education-summary" className="scroll-mt-24" tabIndex={-1}>
+        <OperatorDashboard
+          eyebrow="Education"
+          title="Section quality cockpit"
+          subtitle="Definition, clinical pattern, investigations, management, pitfalls, and publication state arranged as compact editorial cards."
+          status={
+            <StatusBadge
+              status={formatLabel(workspace.education.status)}
+              tone={educationTone(workspace)}
+            />
+          }
+        >
+          <OperatorMetricGrid
+            items={[
+              {
+                label: 'Quality',
+                value: formatScore(viewModel.educationBoard.qualityScore),
+                tone: scoreTone(viewModel.educationBoard.qualityScore),
+                detail: 'Education quality score',
+              },
+              {
+                label: 'Weak sections',
+                value: weakSections.length,
+                tone: weakSections.length ? 'warning' : 'success',
+                detail: 'Sections with blockers or warnings',
+              },
+              {
+                label: 'Repairs',
+                value: workspace.education.acceptedRepairs?.length ?? 0,
+                tone: workspace.education.acceptedRepairs?.length
+                  ? 'success'
+                  : 'neutral',
+                detail: 'Accepted claim repairs applied',
+              },
+              {
+                label: 'Lifecycle',
+                value: viewModel.educationBoard.status,
+                tone: educationTone(workspace),
+                detail: 'Publication readiness state',
+              },
+            ]}
+          />
+        </OperatorDashboard>
         <EditorialStream
           eyebrow="Clinical picture"
           title="Education cockpit"
@@ -70,6 +123,8 @@ export function ClinicalPictureTab({
             <EducationSummaryCard workspace={workspace} section={summarySection} />
             <PublicationStateCard workspace={workspace} />
           </div>
+
+          <EducationSectionStatusGrid board={viewModel.educationBoard} />
 
           <div className="grid gap-3 xl:grid-cols-2">
             {summarySection ? (
@@ -148,12 +203,79 @@ function EducationSummaryCard({
           },
         ]}
       />
+      <div className="mt-3">
+        <EditorialChipRow
+          items={[
+            {
+              label: workspace.education.updatedAt
+                ? `Updated ${formatDate(workspace.education.updatedAt)}`
+                : 'No update timestamp',
+              tone: workspace.education.updatedAt ? 'info' : 'neutral',
+            },
+            {
+              label: `${workspace.education.blockers.length} blockers`,
+              tone: workspace.education.blockers.length ? 'danger' : 'success',
+            },
+            {
+              label: `${workspace.education.warnings.length} warnings`,
+              tone: workspace.education.warnings.length ? 'warning' : 'success',
+            },
+          ]}
+        />
+      </div>
       {workspace.education.updatedAt ? (
         <p className="mt-3 text-xs text-slate-500">
           Updated {formatDate(workspace.education.updatedAt)}
         </p>
       ) : null}
     </EditorialEntity>
+  );
+}
+
+function EducationSectionStatusGrid({
+  board,
+}: {
+  board: EducationBoardViewModel;
+}) {
+  if (!board.sections.length) {
+    return (
+      <EmptyGuidance
+        title="No education section health yet"
+        description="Section quality, blockers, warnings, and publication status will appear after education analysis runs."
+      />
+    );
+  }
+
+  return (
+    <div className="grid gap-2 xl:grid-cols-2">
+      {board.sections.slice(0, 6).map((section) => (
+        <EditorialRow
+          key={section.id}
+          title={section.name}
+          subtitle={
+            section.blockers[0] ??
+            section.warnings[0] ??
+            `Publication state: ${section.publishedState}`
+          }
+          tone={section.tone}
+          meta={<StatusBadge status={section.quality} tone={section.tone} />}
+        >
+          <EditorialChipRow
+            items={[
+              { label: section.status, tone: section.tone },
+              {
+                label: `${section.blockers.length} blockers`,
+                tone: section.blockers.length ? 'danger' : 'success',
+              },
+              {
+                label: `${section.warnings.length} warnings`,
+                tone: section.warnings.length ? 'warning' : 'success',
+              },
+            ]}
+          />
+        </EditorialRow>
+      ))}
+    </div>
   );
 }
 

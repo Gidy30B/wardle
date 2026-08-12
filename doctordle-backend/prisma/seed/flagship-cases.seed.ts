@@ -15,32 +15,55 @@ import {
   DiagnosisRegistryStatus,
   DiagnosisUrgencyLevel,
   PublishTrack,
-  ValidationOutcome,
 } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import { CaseEligibilityPolicyService } from '../../src/modules/cases/case-eligibility-policy.service';
+import { CaseValidationService } from '../../src/modules/case-validation/case-validation.service';
 
 const databaseUrl = resolvePgConnectionString(process.env.DATABASE_URL);
 
 if (!databaseUrl) {
-  throw new Error('DATABASE_URL is required to run Legg-Calvé-Perthes disease seed.');
+  throw new Error(
+    'DATABASE_URL is required to run the Boerhaave syndrome seed.',
+  );
 }
 
-const pool = new Pool({ connectionString: databaseUrl, max: 1 });
+const pool = new Pool({
+  connectionString: databaseUrl,
+  max: 1,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 20_000,
+  allowExitOnIdle: true,
+  ssl:
+    databaseUrl.includes('railway') ||
+    databaseUrl.includes('proxy.rlwy.net') ||
+    databaseUrl.includes('postgres.railway.internal')
+      ? { rejectUnauthorized: false }
+      : undefined,
+});
+
+pool.on('error', (error) => {
+  console.error('[pg-pool] idle client error:', error);
+});
+
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
+const caseEligibilityPolicy = new CaseEligibilityPolicyService();
+const caseValidationService = new CaseValidationService();
 
-function resolvePgConnectionString(value: string | undefined): string | undefined {
+function resolvePgConnectionString(
+  value: string | undefined,
+): string | undefined {
   if (!value) return undefined;
-
-  if (!value.startsWith('prisma+postgres://')) {
-    return value;
-  }
+  if (!value.startsWith('prisma+postgres://')) return value;
 
   const parsed = new URL(value);
   const apiKey = parsed.searchParams.get('api_key');
   if (!apiKey) {
-    throw new Error('DATABASE_URL uses prisma+postgres:// but is missing api_key.');
+    throw new Error(
+      'DATABASE_URL uses prisma+postgres:// but is missing api_key.',
+    );
   }
 
   const payload = JSON.parse(
@@ -102,26 +125,34 @@ async function findAvailableInventoryPlaceholderDate(params: {
     }
   }
 
-  throw new Error(`No free inventory placeholder date for ${params.displayLabel}.`);
+  throw new Error(
+    `No free inventory placeholder date for ${params.displayLabel}.`,
+  );
 }
 
 const now = new Date();
-const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 18, 12, 0, 0));
-const seedVersion = 'flagship-legg-calve-perthes-disease-v1';
+const inventoryPlaceholderDate = new Date(Date.UTC(2099, 0, 19, 12, 0, 0));
+const seedVersion = 'flagship-boerhaave-syndrome-v1';
 
-const canonicalName = 'legg-calve-perthes disease';
-const displayLabel = 'Legg-Calvé-Perthes Disease';
-const caseTitle = 'Legg-Calvé-Perthes Disease with Avascular Necrosis of the Femoral Head';
+const canonicalName = 'boerhaave syndrome';
+const displayLabel = 'Boerhaave Syndrome';
+const caseTitle =
+  'Spontaneous Esophageal Perforation Following Forceful Vomiting';
 
 const aliasTerms = [
-  'Legg-Calvé-Perthes Disease',
-  'Legg Calve Perthes Disease',
-  'legg-calve-perthes disease',
-  'perthes disease',
-  'legg perthes disease',
-  'coxa plana',
-  'idiopathic avascular necrosis of the femoral head in children',
-  'juvenile osteonecrosis of the femoral head',
+  'Boerhaave Syndrome',
+  "Boerhaave's Syndrome",
+  'boerhaave syndrome',
+  'spontaneous esophageal perforation',
+  'spontaneous oesophageal perforation',
+  'spontaneous esophageal rupture',
+  'spontaneous oesophageal rupture',
+  'esophageal perforation',
+  'oesophageal perforation',
+  'esophageal rupture',
+  'oesophageal rupture',
+  'effort rupture of the esophagus',
+  'effort rupture of the oesophagus',
 ];
 
 const clues = [
@@ -129,207 +160,244 @@ const clues = [
     order: 0,
     type: 'history',
     value:
-      'A 7-year-old boy is brought with a gradual limp and intermittent left hip pain for two months, with no history of major trauma.',
+      'A 49-year-old man develops sudden severe lower retrosternal and epigastric pain immediately after repeated forceful vomiting following a large meal.',
   },
   {
     order: 1,
     type: 'symptom',
     value:
-      'The pain is worse after running and sometimes radiates to the thigh and knee, but there is no fever, weight loss, or night pain.',
+      'The pain radiates to the back and left shoulder and is accompanied by dyspnea and painful swallowing. He has no hematemesis.',
   },
   {
     order: 2,
-    type: 'exam',
+    type: 'vital',
     value:
-      'He walks with an antalgic gait and has mild wasting of the left thigh compared with the right side.',
+      'Temperature is 38.3 C, heart rate 128/min, blood pressure 88/54 mmHg, respiratory rate 30/min, and oxygen saturation 90% on room air.',
   },
   {
     order: 3,
     type: 'exam',
     value:
-      'Hip examination shows reduced abduction and markedly limited internal rotation of the left hip, while the knee examination is normal.',
+      'He appears acutely ill and diaphoretic. Breath sounds are reduced at the left base, and palpable crepitus extends across the lower neck and upper chest.',
   },
   {
     order: 4,
     type: 'imaging',
     value:
-      'Anteroposterior pelvis and frog-lateral hip radiographs show sclerosis and flattening of the left femoral head with widening of the joint space.',
+      'Chest radiography shows a left hydropneumothorax, left pleural effusion, and streaks of mediastinal air.',
   },
   {
     order: 5,
     type: 'imaging',
     value:
-      'MRI confirms avascular necrosis of the femoral head with early fragmentation, without slipped epiphysis or destructive infection.',
+      'Contrast-enhanced CT of the chest with water-soluble oral contrast demonstrates a distal thoracic esophageal wall defect, extraluminal contrast, pneumomediastinum, mediastinal fluid, and contamination of the left pleural cavity.',
   },
 ] as const;
 
 const differentials = [
-  'Slipped Capital Femoral Epiphysis',
-  'Transient Synovitis',
-  'Septic Arthritis of the Hip',
-  'Juvenile Idiopathic Arthritis',
-  'Developmental Dysplasia of the Hip',
+  'Acute Coronary Syndrome',
+  'Acute Aortic Syndrome',
+  'Perforated Peptic Ulcer',
+  'Spontaneous Pneumothorax',
+  'Mallory-Weiss Tear',
 ];
 
 const explanation = {
   diagnosis: displayLabel,
   summary:
-    'A school-aged boy with gradual limp, activity-related hip pain radiating to the knee, restricted hip abduction and internal rotation, and imaging showing sclerosis, flattening, and avascular necrosis of the femoral head supports Legg-Calvé-Perthes disease.',
+    'Forceful vomiting followed immediately by severe chest and epigastric pain, rapid septic deterioration, subcutaneous emphysema, a left hydropneumothorax, pneumomediastinum, and direct CT evidence of contrast extravasation from the distal esophagus establishes spontaneous full-thickness esophageal perforation.',
   reasoning: [
-    'A chronic atraumatic limp in a child suggests a hip disorder even when the child reports thigh or knee pain.',
-    'Activity-related hip or referred knee pain without fever or systemic illness points away from acute infection.',
-    'Antalgic gait and thigh wasting suggest a chronic painful hip process.',
-    'Limited abduction and internal rotation are classic high-yield examination findings in Perthes disease.',
-    'Radiographic femoral head sclerosis and flattening support osteonecrosis rather than transient synovitis.',
-    'MRI confirmation of femoral head avascular necrosis with no slipped epiphysis or infection completes the diagnosis.',
+    'The abrupt onset of severe chest and upper abdominal pain immediately after repeated forceful vomiting is the defining historical pattern of effort-related esophageal rupture.',
+    'Pain radiating to the back with dyspnea and odynophagia localizes the process to the thoracic esophagus and mediastinum rather than an isolated mucosal tear.',
+    'Fever, tachycardia, hypotension, tachypnea, and hypoxemia indicate evolving mediastinal and pleural contamination with sepsis.',
+    'Subcutaneous crepitus demonstrates air tracking from the mediastinum into the cervical and chest-wall soft tissues.',
+    'A left hydropneumothorax with pneumomediastinum is a high-risk radiographic pattern for distal thoracic esophageal perforation.',
+    'Extraluminal oral contrast through a visible distal esophageal defect directly confirms the diagnosis and defines an uncontained thoracic leak requiring urgent source control.',
   ],
   keyFindings: [
-    'Age 7 years',
-    'Male child',
-    'Gradual limp',
-    'Intermittent hip pain',
-    'Pain radiating to thigh or knee',
-    'Worse after activity',
-    'No major trauma',
-    'No fever or systemic illness',
-    'Antalgic gait',
-    'Thigh wasting',
-    'Reduced hip abduction',
-    'Limited internal rotation',
-    'Normal knee examination',
-    'Femoral head sclerosis',
-    'Femoral head flattening',
-    'Widened hip joint space',
-    'MRI-confirmed avascular necrosis',
-    'Early fragmentation of femoral head',
+    'Repeated forceful vomiting',
+    'Sudden severe retrosternal and epigastric pain',
+    'Pain radiating to the back and left shoulder',
+    'Dyspnea',
+    'Odynophagia',
+    'No hematemesis',
+    'Fever',
+    'Tachycardia',
+    'Hypotension',
+    'Tachypnea',
+    'Hypoxemia',
+    'Subcutaneous emphysema',
+    'Reduced left basal breath sounds',
+    'Left hydropneumothorax',
+    'Pneumomediastinum',
+    'Mediastinal fluid',
+    'Extraluminal oral contrast',
+    'Distal thoracic esophageal wall defect',
+    'Left pleural contamination',
   ],
   differentials,
   differentialAnalysis: [
     {
-      diagnosis: 'Slipped Capital Femoral Epiphysis',
+      diagnosis: 'Acute Coronary Syndrome',
       whyPlausibleEarly:
-        'SCFE can cause limp, hip pain, thigh pain, or knee pain in older children and adolescents.',
+        'Acute coronary syndrome can cause severe retrosternal pain, diaphoresis, dyspnea, and hypotension.',
       ruledOutByClues: [
         {
           clueOrder: 0,
-          evidence: '7-year-old boy',
+          evidence: 'pain began immediately after repeated forceful vomiting',
           reason:
-            'SCFE is more typical in adolescents, especially overweight children, while Perthes commonly affects younger children around 4 to 10 years.',
-        },
-        {
-          clueOrder: 5,
-          evidence: 'MRI confirms avascular necrosis without slipped epiphysis',
-          reason:
-            'Absence of epiphyseal slip and presence of femoral head osteonecrosis favor Perthes disease.',
-        },
-      ],
-      finalReasonLessLikely:
-        'SCFE is less likely because imaging shows avascular necrosis and flattening rather than posterior-inferior displacement of the femoral epiphysis.',
-    },
-    {
-      diagnosis: 'Transient Synovitis',
-      whyPlausibleEarly:
-        'Transient synovitis can present with limp and hip pain in a child.',
-      ruledOutByClues: [
-        {
-          clueOrder: 0,
-          evidence: 'symptoms for two months',
-          reason:
-            'Transient synovitis is usually acute and self-limiting rather than a progressive chronic limp.',
+            'The direct temporal relationship to forceful vomiting strongly suggests pressure-related esophageal injury rather than myocardial ischemia.',
         },
         {
           clueOrder: 4,
-          evidence: 'sclerosis and flattening of the femoral head',
+          evidence: 'left hydropneumothorax with mediastinal air',
           reason:
-            'Structural femoral head changes are not expected in simple transient synovitis.',
+            'Pleural air-fluid contamination and pneumomediastinum are not explained by acute coronary syndrome.',
+        },
+        {
+          clueOrder: 5,
+          evidence:
+            'contrast extravasates through a distal esophageal wall defect',
+          reason:
+            'Direct visualization of an esophageal leak establishes a non-cardiac structural cause.',
         },
       ],
       finalReasonLessLikely:
-        'Transient synovitis does not explain chronic symptoms with femoral head sclerosis, flattening, and MRI-confirmed osteonecrosis.',
+        'Acute coronary syndrome does not explain subcutaneous emphysema, pneumomediastinum, hydropneumothorax, or direct esophageal contrast leakage.',
     },
     {
-      diagnosis: 'Septic Arthritis of the Hip',
+      diagnosis: 'Acute Aortic Syndrome',
       whyPlausibleEarly:
-        'Septic arthritis is an important cause of limp and hip pain in children and must be considered early.',
+        'Aortic dissection or rupture can produce sudden severe chest pain radiating to the back with shock.',
+      ruledOutByClues: [
+        {
+          clueOrder: 0,
+          evidence: 'onset immediately after repeated forceful vomiting',
+          reason:
+            'The precipitating event is characteristic of effort rupture of the esophagus.',
+        },
+        {
+          clueOrder: 3,
+          evidence: 'palpable cervical and upper-chest crepitus',
+          reason:
+            'Subcutaneous emphysema points toward an aerodigestive tract leak rather than primary aortic disease.',
+        },
+        {
+          clueOrder: 5,
+          evidence:
+            'distal esophageal wall defect with extraluminal oral contrast',
+          reason: 'The CT directly identifies the source as the esophagus.',
+        },
+      ],
+      finalReasonLessLikely:
+        'Acute aortic syndrome remains an early life-threatening mimic, but CT demonstrates an esophageal perforation rather than aortic pathology.',
+    },
+    {
+      diagnosis: 'Perforated Peptic Ulcer',
+      whyPlausibleEarly:
+        'Perforated peptic ulcer can cause sudden epigastric pain, shock, and sepsis.',
       ruledOutByClues: [
         {
           clueOrder: 1,
-          evidence: 'no fever, weight loss, or night pain',
+          evidence: 'retrosternal pain, dyspnea, and painful swallowing',
           reason:
-            'Septic arthritis usually causes acute severe pain with fever, toxicity, and refusal to bear weight.',
+            'Thoracic and swallowing symptoms are more consistent with esophageal and mediastinal injury.',
+        },
+        {
+          clueOrder: 3,
+          evidence: 'subcutaneous emphysema over the neck and upper chest',
+          reason:
+            'Cervical subcutaneous air is not a typical feature of isolated gastroduodenal perforation.',
         },
         {
           clueOrder: 5,
-          evidence: 'no destructive infection on MRI',
+          evidence: 'oral contrast leaks from the distal thoracic esophagus',
           reason:
-            'MRI does not support septic arthritis or adjacent osteomyelitis.',
+            'The site of perforation is directly demonstrated above the gastroesophageal junction.',
         },
       ],
       finalReasonLessLikely:
-        'The chronic course, absence of systemic illness, and imaging pattern favor Perthes disease over septic arthritis.',
+        'Perforated peptic ulcer would more typically produce pneumoperitoneum and generalized peritonism rather than an esophageal wall defect with mediastinal and left pleural contamination.',
     },
     {
-      diagnosis: 'Juvenile Idiopathic Arthritis',
+      diagnosis: 'Spontaneous Pneumothorax',
       whyPlausibleEarly:
-        'Chronic limp and joint symptoms in a child can suggest juvenile idiopathic arthritis.',
-      ruledOutByClues: [
-        {
-          clueOrder: 3,
-          evidence: 'isolated hip restriction with normal knee examination',
-          reason:
-            'JIA often has inflammatory stiffness, swelling, or multiple joint involvement rather than isolated femoral head collapse.',
-        },
-        {
-          clueOrder: 4,
-          evidence: 'femoral head sclerosis and flattening',
-          reason:
-            'These are structural osteonecrotic changes typical of Perthes disease.',
-        },
-      ],
-      finalReasonLessLikely:
-        'JIA does not explain the classic radiographic and MRI findings of femoral head avascular necrosis.',
-    },
-    {
-      diagnosis: 'Developmental Dysplasia of the Hip',
-      whyPlausibleEarly:
-        'Hip pathology and limp in a child can raise concern for developmental dysplasia.',
+        'Pneumothorax can cause abrupt chest pain, dyspnea, hypoxemia, and reduced unilateral breath sounds.',
       ruledOutByClues: [
         {
           clueOrder: 0,
-          evidence: 'gradual limp beginning at age 7 years',
+          evidence: 'severe pain began after repeated forceful vomiting',
           reason:
-            'Developmental dysplasia usually presents earlier, often in infancy or toddler years.',
+            'The vomiting trigger suggests an esophageal pressure injury rather than primary pleural rupture.',
+        },
+        {
+          clueOrder: 4,
+          evidence:
+            'hydropneumothorax, pleural effusion, and pneumomediastinum',
+          reason:
+            'The combined air-fluid and mediastinal pattern suggests contamination from a hollow viscus.',
         },
         {
           clueOrder: 5,
-          evidence: 'MRI confirms avascular necrosis of the femoral head',
+          evidence:
+            'extraluminal contrast and mediastinal fluid around an esophageal defect',
           reason:
-            'The primary pathology is osteonecrosis rather than acetabular dysplasia or dislocation.',
+            'These findings cannot be explained by an isolated spontaneous pneumothorax.',
         },
       ],
       finalReasonLessLikely:
-        'DDH is less likely because imaging localizes the problem to avascular necrosis and flattening of the femoral head.',
+        'The pleural air is secondary to esophageal rupture rather than a primary spontaneous pneumothorax.',
+    },
+    {
+      diagnosis: 'Mallory-Weiss Tear',
+      whyPlausibleEarly:
+        'Mallory-Weiss tear also follows repeated retching or vomiting.',
+      ruledOutByClues: [
+        {
+          clueOrder: 1,
+          evidence: 'severe chest pain and odynophagia without hematemesis',
+          reason:
+            'Mallory-Weiss tear is a mucosal laceration that usually presents with upper gastrointestinal bleeding rather than severe thoracic sepsis.',
+        },
+        {
+          clueOrder: 3,
+          evidence: 'subcutaneous emphysema',
+          reason:
+            'Air escape into the mediastinum requires a transmural perforation, not a superficial mucosal tear.',
+        },
+        {
+          clueOrder: 5,
+          evidence:
+            'full-thickness distal esophageal defect with contrast extravasation',
+          reason:
+            'This directly distinguishes Boerhaave syndrome from a mucosal Mallory-Weiss lesion.',
+        },
+      ],
+      finalReasonLessLikely:
+        'Mallory-Weiss tear does not cause full-thickness leakage, pneumomediastinum, pleural contamination, or septic shock.',
     },
   ],
   managementPearl:
-    'Legg-Calvé-Perthes disease is idiopathic avascular necrosis of the capital femoral epiphysis in children. Management aims to maintain femoral head containment and range of motion, with urgency of orthopedic referral guided by age, severity, femoral head involvement, and loss of containment.',
+    'Treat suspected spontaneous esophageal perforation as a time-critical surgical emergency: keep the patient nil by mouth, resuscitate, start broad-spectrum intravenous antimicrobial therapy, obtain urgent upper gastrointestinal or thoracic surgical input, and achieve prompt pleural and mediastinal source control. This unstable patient has an uncontained thoracic leak and is not a candidate for observation alone.',
   generationQuality: {
     contentTier: 'FLAGSHIP',
     seedVersion,
     humanReviewed: true,
     discriminatorStrength: 'HIGH',
     expectedTeachingPoints: [
-      'Perthes disease commonly presents as chronic atraumatic limp in a boy aged 4 to 10 years',
-      'Hip disease may present as thigh or knee pain',
-      'Reduced abduction and internal rotation are key examination clues',
-      'X-ray may show femoral head sclerosis, fragmentation, flattening, or coxa plana',
-      'Management focuses on containment, range of motion, analgesia, activity modification, and orthopedic follow-up',
+      'Forceful vomiting followed by sudden severe chest pain is the central recognition pattern for Boerhaave syndrome',
+      'Mackler triad is classic but absence of one component does not exclude perforation',
+      'Subcutaneous emphysema and pneumomediastinum indicate extraluminal air',
+      'A left hydropneumothorax is an important clue to distal thoracic esophageal rupture',
+      'CT with intravenous and water-soluble oral contrast defines the leak and contamination',
+      'Uncontained thoracic perforation with shock requires urgent multidisciplinary source control',
     ],
     competencyDomains: [
-      'Orthopaedics',
-      'Paediatrics',
-      'Paediatric Orthopaedics',
-      'Musculoskeletal Medicine',
+      'General Surgery',
+      'Upper Gastrointestinal Surgery',
+      'Thoracic Surgery',
+      'Emergency Medicine',
+      'Critical Care',
       'Clinical Reasoning',
     ],
   },
@@ -339,322 +407,389 @@ const educationForFrontend = {
   title: displayLabel,
   summary: {
     definition:
-      'Legg-Calvé-Perthes disease is idiopathic avascular necrosis of the capital femoral epiphysis in a child, leading to femoral head ischemia, fragmentation, remodeling, and possible deformity.',
+      'Boerhaave syndrome is a spontaneous full-thickness esophageal rupture caused by a sudden rise in intraesophageal pressure, most often during forceful vomiting or retching.',
     highYieldTakeaway:
-      'Think Perthes disease in a 4- to 10-year-old boy with gradual limp, hip or referred knee pain, limited hip abduction and internal rotation, and femoral head sclerosis or flattening on imaging.',
+      'Suspect Boerhaave syndrome when forceful vomiting is followed by abrupt severe chest or epigastric pain, especially when the patient develops dyspnea, subcutaneous emphysema, pneumomediastinum, a left pleural air-fluid collection, or sepsis.',
   },
   recognitionPattern: [
     {
-      pattern: 'Chronic atraumatic limp in a young boy',
+      pattern:
+        'Forceful vomiting followed immediately by severe chest or epigastric pain',
       whyItMatters:
-        'Perthes disease is often missed because the onset is gradual and the child may complain of knee or thigh pain rather than hip pain.',
+        'The close temporal sequence is the most important early diagnostic clue.',
       progression:
-        'Temporary loss of femoral head blood supply -> epiphyseal necrosis -> sclerosis -> fragmentation -> flattening or coxa plana -> remodeling.',
+        'Sudden rise in intraesophageal pressure -> full-thickness distal esophageal tear -> mediastinal contamination -> pleural contamination -> sepsis and shock.',
       discriminator:
-        'The combination of chronic limp, reduced hip motion, and femoral head changes separates Perthes from transient synovitis.',
+        'Boerhaave syndrome produces severe pain and systemic deterioration, unlike an uncomplicated mucosal Mallory-Weiss tear.',
       commonTrap:
-        'Do not stop at a normal knee exam when the child reports knee pain; examine and image the hip.',
+        'Do not dismiss the pain as muscular strain, reflux, gastritis, or pancreatitis after vomiting.',
     },
     {
-      pattern: 'Painful restricted hip abduction and internal rotation',
+      pattern:
+        'Pneumomediastinum with subcutaneous emphysema or a left hydropneumothorax',
       whyItMatters:
-        'Loss of abduction and internal rotation is one of the most useful bedside clues to hip pathology.',
+        'Air and fluid escaping from the esophagus can spread through the mediastinum, pleural cavity, neck, and chest wall.',
       discriminator:
-        'A normal knee with restricted hip movement points the diagnostic search back to the hip.',
+        'The combination of mediastinal air and pleural fluid after vomiting is more concerning for esophageal rupture than isolated pneumothorax.',
       commonTrap:
-        'Do not label the limp as muscular strain when hip range of motion is clearly reduced.',
+        'Do not assume that a pleural effusion after vomiting is aspiration pneumonia without considering esophageal perforation.',
     },
     {
-      pattern: 'Femoral head osteonecrosis on imaging',
+      pattern: 'Rapid progression to fever, respiratory distress, and shock',
       whyItMatters:
-        'Imaging confirms the structural disease and helps guide prognosis and orthopedic management.',
+        'Mediastinal and pleural contamination can cause fulminant sepsis within hours.',
       discriminator:
-        'Sclerosis, fragmentation, flattening, or coxa plana support Perthes disease over inflammatory or viral causes of limp.',
+        'Rapid systemic toxicity separates perforation from most benign post-vomiting chest pain syndromes.',
       commonTrap:
-        'Early radiographs can be subtle; persistent symptoms may require repeat imaging or MRI.',
+        'Do not wait for the full classic triad before obtaining definitive imaging and surgical review.',
+    },
+    {
+      pattern:
+        'CT demonstration of esophageal wall defect and extraluminal contrast',
+      whyItMatters:
+        'CT identifies the site of rupture, degree of contamination, pleural involvement, and complications.',
+      discriminator:
+        'Direct contrast extravasation confirms a transmural leak rather than a superficial tear.',
+      commonTrap:
+        'A normal or nonspecific early chest radiograph does not safely exclude perforation when clinical suspicion remains high.',
     },
   ],
   keySymptoms: [
     {
-      symptom: 'Gradual limp',
+      symptom: 'Sudden severe retrosternal or epigastric pain',
       significance:
-        'A slowly progressive limp is the usual presentation and may occur before severe pain develops.',
+        'Pain typically begins immediately after forceful vomiting and may radiate to the back or shoulder.',
     },
     {
-      symptom: 'Hip, groin, thigh, or knee pain',
+      symptom: 'Dyspnea',
       significance:
-        'Hip pathology can refer pain to the thigh or knee, so knee pain should not exclude hip disease.',
+        'May result from pleural contamination, pneumothorax, effusion, pain, or evolving sepsis.',
     },
     {
-      symptom: 'Pain worse with activity',
+      symptom: 'Odynophagia or dysphagia',
       significance:
-        'Mechanical worsening after play or running supports a structural hip disorder.',
+        'Painful or difficult swallowing supports esophageal and mediastinal injury.',
+    },
+    {
+      symptom: 'Repeated vomiting or retching',
+      significance:
+        'A sudden increase in intraesophageal pressure is the usual precipitating mechanism in spontaneous rupture.',
     },
   ],
   keySigns: [
     {
-      finding: 'Antalgic gait',
+      finding: 'Subcutaneous emphysema',
       significance:
-        'Suggests the child is reducing stance time on the painful side.',
-    },
-    {
-      finding: 'Reduced hip abduction',
-      significance:
-        'A classic examination finding that reflects hip irritability and loss of containment mechanics.',
+        'Air may track from the mediastinum into the neck and chest wall.',
       discriminator:
-        'Reduced hip abduction is more useful than isolated tenderness for localizing pathology to the hip.',
+        'This finding strongly supports an aerodigestive tract leak but may be absent early.',
     },
     {
-      finding: 'Limited internal rotation',
+      finding: 'Fever and tachycardia',
       significance:
-        'A high-yield sign of pediatric hip pathology and a major clue in Perthes disease.',
+        'Suggest early mediastinal inflammation, contamination, and sepsis.',
+    },
+    {
+      finding: 'Hypotension',
+      significance:
+        'Indicates shock and substantially increases the urgency of source control.',
       discriminator:
-        'Limited internal rotation helps separate true hip disease from isolated knee pathology.',
+        'An unstable patient with an uncontained thoracic leak is not suitable for conservative observation.',
     },
     {
-      finding: 'Thigh wasting',
+      finding: 'Reduced unilateral breath sounds',
       significance:
-        'Suggests chronicity and reduced use of the affected limb.',
+        'May reflect pleural effusion, hydropneumothorax, or empyema, often on the left.',
     },
   ],
   examPearls: [
     {
       type: 'DISCRIMINATOR',
-      title: 'Knee pain can be hip disease',
+      title: 'Vomiting before pain changes the differential',
       content:
-        'A child with knee pain and a limp needs hip examination because Perthes disease may refer pain to the thigh or knee.',
+        'The sequence of forceful vomiting followed by sudden severe chest pain should immediately raise concern for spontaneous esophageal rupture.',
       whyItMatters:
-        'This prevents missing the diagnosis when the knee exam is normal.',
+        'The chronology may be more discriminating than any single physical sign.',
       discriminator:
-        'Normal knee findings plus reduced hip abduction or internal rotation localize the problem to the hip.',
+        'A direct vomiting-to-pain sequence favors Boerhaave syndrome over primary acute coronary or aortic disease.',
       trapAvoided:
-        'Do not treat persistent knee pain as a knee problem without checking hip range of motion.',
+        'Do not record vomiting and chest pain as unrelated symptoms.',
     },
     {
       type: 'DISCRIMINATOR',
-      title: 'Chronic course separates Perthes from transient synovitis',
+      title: 'Left pleural air and fluid is a major clue',
       content:
-        'Transient synovitis is usually acute and self-limiting, while Perthes disease causes a persistent or progressive limp.',
+        'Distal thoracic perforations commonly contaminate the left pleural cavity and may produce a left hydropneumothorax.',
       whyItMatters:
-        'Duration of symptoms is a major clue in pediatric limp assessment.',
+        'This finding may be the first objective sign that chest pain after vomiting is caused by esophageal rupture.',
       discriminator:
-        'Symptoms lasting weeks to months with radiographic femoral head changes favor Perthes disease.',
+        'Pleural fluid plus pneumomediastinum is more concerning than an isolated pneumothorax.',
       trapAvoided:
-        'Do not repeatedly diagnose transient synovitis when the limp persists.',
+        'Do not insert a chest drain and stop the diagnostic workup without considering the source of pleural contamination.',
     },
     {
       type: 'MNEMONIC',
-      title: 'PERTHES pattern',
+      title: 'Mackler triad',
       content:
-        'PERTHES: Painful limp, Epiphyseal avascular necrosis, Reduced abduction/internal rotation, Thigh or knee referred pain, Hip x-ray changes, Early ortho follow-up, School-aged boy.',
-      whyItMatters:
-        'The mnemonic organizes the typical presentation and key discriminators.',
+        'Mackler triad: vomiting, severe chest pain, and subcutaneous emphysema.',
+      whyItMatters: 'The triad summarizes the classic clinical pattern.',
       discriminator:
-        'It links the clinical presentation to the femoral head imaging abnormality.',
+        'Its presence is highly suggestive, but many patients do not present with all three findings.',
       trapAvoided:
-        'Do not place this mnemonic under scoringSystems; it is a memory aid, not a formal score.',
+        'Do not use absence of the complete triad to exclude esophageal perforation.',
     },
   ],
   scoringSystems: [],
   investigations: [
     {
-      test: 'AP pelvis and frog-lateral hip radiographs',
+      test: 'Chest radiograph',
       interpretation:
-        'May show femoral head sclerosis, fragmentation, flattening, widening of the joint space, or coxa plana.',
+        'May show pleural effusion, hydropneumothorax, pneumomediastinum, widened mediastinum, or subcutaneous emphysema.',
       whyItMatters:
-        'Plain radiographs are the first-line imaging test for suspected Perthes disease.',
+        'It is rapidly available but cannot reliably exclude an early or contained perforation.',
     },
     {
-      test: 'MRI hip',
+      test: 'Contrast-enhanced CT chest and upper abdomen with water-soluble oral contrast',
       interpretation:
-        'Detects early avascular necrosis and defines the extent of femoral head involvement when x-rays are normal or equivocal.',
+        'May demonstrate esophageal wall discontinuity, extraluminal air or contrast, mediastinal fluid, pleural collections, and the extent of contamination.',
       whyItMatters:
-        'MRI is useful in early disease and helps separate Perthes disease from infection, tumor, or slipped epiphysis.',
+        'CT is the key investigation for confirming the diagnosis and planning source control.',
     },
     {
-      test: 'Full blood count and inflammatory markers',
+      test: 'Water-soluble contrast esophagram',
       interpretation:
-        'Usually normal or only mildly abnormal in Perthes disease.',
+        'Can localize active extravasation; a negative study does not completely exclude a small leak when suspicion remains high.',
       whyItMatters:
-        'Marked fever, leukocytosis, or very high inflammatory markers should raise concern for infection or inflammatory disease.',
+        'It may complement CT in stable patients when the site or containment of the leak remains uncertain.',
     },
     {
-      test: 'Hip ultrasound',
+      test: 'Full blood count, renal and liver profile, coagulation studies, arterial or venous blood gas, and lactate',
       interpretation:
-        'May detect an effusion but does not define femoral head viability.',
+        'Leukocytosis, acidosis, organ dysfunction, and elevated lactate indicate systemic contamination and shock.',
       whyItMatters:
-        'Useful when differentiating painful hip effusion, but x-ray or MRI is needed for Perthes disease assessment.',
+        'Laboratory tests assess severity and guide resuscitation but do not exclude perforation when initially normal.',
+    },
+    {
+      test: 'ECG and cardiac biomarkers',
+      interpretation:
+        'Used to assess an important competing diagnosis when the patient presents with acute chest pain.',
+      whyItMatters:
+        'Cardiac evaluation should occur in parallel without delaying definitive imaging for suspected perforation.',
     },
   ],
   managementOverview: [
     {
-      step: 'Refer to orthopedics or pediatric orthopedics',
+      step: 'Keep the patient nil by mouth and begin immediate resuscitation',
       rationale:
-        'Management depends on age, stage, femoral head involvement, and containment.',
+        'Prevent further contamination while correcting hypoxemia, shock, and electrolyte abnormalities.',
     },
     {
-      step: 'Provide analgesia and activity modification',
+      step: 'Start broad-spectrum intravenous antimicrobial therapy and acid suppression',
       rationale:
-        'Pain control and avoiding high-impact activity reduce symptoms while the femoral head remodels.',
+        'Early treatment must cover oral and upper gastrointestinal aerobic and anaerobic organisms while reducing ongoing chemical injury.',
     },
     {
-      step: 'Maintain hip range of motion',
+      step: 'Obtain urgent upper gastrointestinal and thoracic surgical review',
       rationale:
-        'Physiotherapy and stretching help preserve abduction and internal rotation.',
+        'Management depends on site, timing, containment, tissue viability, physiological stability, and available expertise.',
     },
     {
-      step: 'Use containment strategies when indicated',
+      step: 'Drain contaminated pleural and mediastinal collections',
       rationale:
-        'Bracing or surgery may be needed to keep the femoral head contained within the acetabulum during healing.',
+        'Adequate source control is essential to treat sepsis and prevent empyema or persistent mediastinitis.',
     },
     {
-      step: 'Monitor with serial clinical and radiographic follow-up',
+      step: 'Repair, exclude, or internally control the leak using the appropriate operative or endoscopic strategy',
       rationale:
-        'Disease evolves over years, and prognosis depends on femoral head shape at healing.',
+        'An unstable patient with an uncontained thoracic perforation generally requires urgent definitive source control; selected defects may be treated with stenting, clipping, endoscopic vacuum therapy, or surgery according to local expertise.',
     },
     {
-      step: 'Escalate if older age, severe collapse, or loss of containment',
+      step: 'Provide enteral or parenteral nutritional support',
       rationale:
-        'Children older than 6 to 8 years or those with extensive femoral head involvement have higher risk of poor outcome.',
+        'Oral intake is withheld while the perforation heals, and early nutrition supports recovery.',
+    },
+    {
+      step: 'Reserve non-operative management for carefully selected stable patients',
+      rationale:
+        'Observation is appropriate only when the leak is contained, contamination is limited, there is no uncontrolled sepsis, and close specialist monitoring and drainage are available.',
     },
   ],
   differentialDistinguishers: [
     {
-      diagnosis: 'Slipped Capital Femoral Epiphysis',
+      diagnosis: 'Acute Coronary Syndrome',
       whyConfused:
-        'Both can cause limp with hip, thigh, or knee pain.',
+        'Both can cause acute retrosternal pain, diaphoresis, dyspnea, and shock.',
       distinguishingPoint:
-        'SCFE usually affects adolescents and shows epiphyseal slip rather than femoral head necrosis and flattening.',
+        'Boerhaave syndrome is linked to forceful vomiting and produces extraluminal air, pleural contamination, or esophageal contrast leakage.',
       keySeparator:
-        'Posterior-inferior epiphyseal displacement favors SCFE; avascular necrosis with coxa plana favors Perthes.',
+        'Pneumomediastinum or an esophageal wall defect is not explained by myocardial ischemia.',
       classicTrap:
-        'Assuming every pediatric hip limp is Perthes without checking age, body habitus, and lateral hip imaging.',
+        'Completing only a cardiac workup despite a high-risk post-vomiting history.',
     },
     {
-      diagnosis: 'Transient Synovitis',
+      diagnosis: 'Acute Aortic Syndrome',
       whyConfused:
-        'Both can present with limp and hip pain in children.',
+        'Both may produce sudden pain radiating to the back with hemodynamic instability.',
       distinguishingPoint:
-        'Transient synovitis is acute and self-limited; Perthes is persistent and produces femoral head changes.',
+        'CT demonstrates aortic pathology in acute aortic syndrome and an esophageal leak in Boerhaave syndrome.',
       keySeparator:
-        'Symptoms for weeks to months plus sclerosis or flattening favor Perthes.',
+        'Extraluminal oral contrast from the esophagus confirms the perforation.',
       classicTrap:
-        'Repeating symptomatic treatment without repeat assessment when the limp persists.',
+        'Anchoring on the character of pain without integrating the vomiting trigger and mediastinal air.',
     },
     {
-      diagnosis: 'Septic Arthritis of the Hip',
-      whyConfused:
-        'A painful limp in a child can represent septic arthritis, which is urgent.',
+      diagnosis: 'Perforated Peptic Ulcer',
+      whyConfused: 'Both can cause sudden epigastric pain, sepsis, and shock.',
       distinguishingPoint:
-        'Septic arthritis usually has acute severe pain, fever, toxicity, refusal to bear weight, and raised inflammatory markers.',
+        'Peptic ulcer perforation usually produces pneumoperitoneum and peritonism, while Boerhaave syndrome causes thoracic mediastinal and pleural contamination.',
       keySeparator:
-        'A chronic afebrile limp with femoral head osteonecrosis favors Perthes.',
+        'The demonstrated site of contrast leakage identifies the perforated organ.',
       classicTrap:
-        'Missing septic arthritis when the child is febrile and unable to bear weight.',
+        'Assuming every post-vomiting epigastric emergency is gastroduodenal.',
     },
     {
-      diagnosis: 'Juvenile Idiopathic Arthritis',
+      diagnosis: 'Spontaneous Pneumothorax',
       whyConfused:
-        'Chronic limp and reduced movement may suggest inflammatory arthritis.',
+        'Both can cause acute chest pain, dyspnea, hypoxemia, and reduced unilateral breath sounds.',
       distinguishingPoint:
-        'JIA often has morning stiffness, swelling, multiple joint involvement, or systemic inflammatory features.',
+        'Boerhaave syndrome often has pleural fluid, pneumomediastinum, fever, and a vomiting trigger in addition to pleural air.',
       keySeparator:
-        'Femoral head sclerosis, fragmentation, and flattening favor Perthes.',
+        'A hydropneumothorax with esophageal contrast extravasation is secondary to perforation.',
       classicTrap:
-        'Attributing persistent limp to arthritis without imaging the hip.',
+        'Treating the pneumothorax without identifying the underlying esophageal leak.',
     },
     {
-      diagnosis: 'Developmental Dysplasia of the Hip',
-      whyConfused:
-        'Both may cause limp and abnormal hip mechanics.',
+      diagnosis: 'Mallory-Weiss Tear',
+      whyConfused: 'Both follow vomiting or retching.',
       distinguishingPoint:
-        'DDH usually presents earlier and involves acetabular dysplasia or dislocation rather than femoral head osteonecrosis.',
+        'Mallory-Weiss is a mucosal tear that usually causes hematemesis; Boerhaave syndrome is a full-thickness rupture causing severe pain, air leakage, and sepsis.',
       keySeparator:
-        'Capital femoral epiphysis necrosis favors Perthes.',
+        'Mediastinal or pleural contrast leakage confirms transmural perforation.',
       classicTrap:
-        'Ignoring age of onset and the specific radiographic abnormality.',
+        'Calling all post-vomiting esophageal injuries Mallory-Weiss syndrome.',
     },
   ],
   complications: [
     {
-      complication: 'Femoral head deformity',
+      complication: 'Acute mediastinitis',
       whyItMatters:
-        'Residual flattening can impair hip mechanics and long-term function.',
+        'Contamination of mediastinal tissues can progress rapidly and requires urgent source control.',
     },
     {
-      complication: 'Coxa plana',
+      complication: 'Pleural empyema or persistent hydropneumothorax',
       whyItMatters:
-        'Flattening of the femoral head is a classic outcome of severe disease.',
+        'Pleural contamination commonly accompanies distal thoracic rupture and may require drainage or surgery.',
     },
     {
-      complication: 'Leg length discrepancy',
+      complication: 'Septic shock and multiorgan dysfunction',
       whyItMatters:
-        'Growth disturbance may cause shortening on the affected side.',
+        'Delayed recognition or inadequate source control can lead to rapid physiological collapse.',
     },
     {
-      complication: 'Reduced hip range of motion',
+      complication: 'Acute respiratory distress syndrome',
       whyItMatters:
-        'Persistent stiffness may affect gait and function.',
+        'Severe sepsis and pleural contamination can produce respiratory failure requiring critical care.',
     },
     {
-      complication: 'Early osteoarthritis',
+      complication: 'Persistent esophageal leak or fistula',
       whyItMatters:
-        'Poor femoral head remodeling increases the risk of degenerative hip disease later in life.',
+        'Failure of closure may require repeat drainage, endoscopic therapy, or further surgery.',
+    },
+    {
+      complication: 'Esophageal stricture',
+      whyItMatters:
+        'Healing and subsequent fibrosis may cause later dysphagia.',
     },
   ],
   pitfalls: [
     {
-      pitfall: 'Investigating only the knee when the child reports knee pain',
+      pitfall:
+        'Waiting for vomiting, chest pain, and subcutaneous emphysema to all be present',
       consequence:
-        'Misses referred pain from hip pathology.',
+        'The complete classic triad is not required, and waiting delays definitive imaging and source control.',
     },
     {
-      pitfall: 'Calling persistent limp transient synovitis',
-      consequence:
-        'Delays diagnosis and orthopedic follow-up.',
+      pitfall:
+        'Attributing chest pain after vomiting to reflux, muscle strain, pancreatitis, or acute coronary syndrome alone',
+      consequence: 'Misses a rapidly lethal structural emergency.',
     },
     {
-      pitfall: 'Missing septic arthritis red flags',
+      pitfall: 'Using a normal early chest radiograph to exclude perforation',
       consequence:
-        'A child with fever, toxicity, or refusal to bear weight needs urgent infection workup.',
+        'Small or early leaks may not produce obvious initial radiographic abnormalities.',
     },
     {
-      pitfall: 'Relying on one early normal x-ray',
+      pitfall: 'Treating a hydropneumothorax without investigating its source',
       consequence:
-        'Early Perthes disease can be subtle; persistent symptoms may require repeat imaging or MRI.',
+        'Pleural drainage alone does not control an ongoing esophageal leak.',
     },
     {
-      pitfall: 'Putting the PERTHES mnemonic under scoringSystems',
+      pitfall:
+        'Performing routine diagnostic endoscopy before defining the perforation on imaging',
       consequence:
-        'Pollutes scoringSystems with a mnemonic instead of reserving it for formal validated scores.',
+        'Insufflation and instrumentation may worsen an existing defect; endoscopy should be reserved for selected cases under specialist direction.',
+    },
+    {
+      pitfall:
+        'Choosing conservative management for an unstable patient with an uncontained thoracic leak',
+      consequence:
+        'Uncontrolled contamination progresses to mediastinitis, empyema, shock, and multiorgan failure.',
+    },
+    {
+      pitfall: 'Treating Mackler triad as a severity score',
+      consequence:
+        'The triad is a recognition mnemonic, not a validated severity score.',
     },
   ],
   recallPrompts: [
     {
-      prompt: 'What age group is classic for Legg-Calvé-Perthes disease?',
-      answer: 'Children around 4 to 10 years, especially boys.',
+      prompt:
+        'What historical sequence should immediately suggest Boerhaave syndrome?',
+      answer:
+        'Forceful vomiting or retching followed immediately by sudden severe chest or epigastric pain.',
     },
     {
-      prompt: 'What is the underlying pathology in Perthes disease?',
-      answer: 'Idiopathic avascular necrosis of the capital femoral epiphysis.',
+      prompt: 'What is the pathological lesion in Boerhaave syndrome?',
+      answer: 'A spontaneous full-thickness esophageal rupture.',
     },
     {
-      prompt: 'Which hip movements are commonly restricted?',
-      answer: 'Abduction and internal rotation.',
+      prompt: 'What three findings make up Mackler triad?',
+      answer: 'Vomiting, severe chest pain, and subcutaneous emphysema.',
     },
     {
-      prompt: 'Why can Perthes disease present as knee pain?',
-      answer: 'Hip pathology can refer pain to the thigh or knee.',
+      prompt:
+        'Which pleural imaging pattern is classically associated with distal thoracic esophageal rupture?',
+      answer:
+        'A left pleural effusion or left hydropneumothorax with pneumomediastinum.',
     },
     {
-      prompt: 'What x-ray findings support Perthes disease?',
-      answer: 'Femoral head sclerosis, fragmentation, flattening, widened joint space, or coxa plana.',
+      prompt: 'What CT finding directly confirms an active esophageal leak?',
+      answer:
+        'Extraluminal water-soluble oral contrast through an esophageal wall defect.',
+    },
+    {
+      prompt: 'Which patient may be considered for non-operative management?',
+      answer:
+        'A carefully selected stable patient with a contained leak, limited contamination, no uncontrolled sepsis, and access to close specialist monitoring and drainage.',
     },
   ],
   references: [
-    { citation: 'Nelson Textbook of Pediatrics.' },
-    { citation: 'Rockwood and Wilkins’ Fractures in Children.' },
-    { citation: 'AAOS and pediatric orthopedic guidance on Legg-Calvé-Perthes disease.' },
+    {
+      citation:
+        'Chirica M, Kelly MD, Siboni S, et al. Esophageal emergencies: WSES guidelines. World Journal of Emergency Surgery. 2019.',
+    },
+    {
+      citation:
+        'American Association for Thoracic Surgery. TSRA Primer: Esophageal Perforation.',
+    },
+    {
+      citation:
+        'Sabiston Textbook of Surgery. Esophageal perforation and mediastinal contamination.',
+    },
+    {
+      citation:
+        "Bailey & Love's Short Practice of Surgery. Esophageal perforation.",
+    },
   ],
 };
 
@@ -690,29 +825,27 @@ async function ensureRegistry() {
           active: true,
           isPlayable: true,
           isGeneratable: true,
-          specialty: 'Orthopaedics',
-          subspecialty: 'Paediatric Orthopaedics',
-          category: 'Avascular Necrosis',
-          bodySystem: 'Musculoskeletal',
-          organSystem: 'Hip',
-          difficultyBand: DiagnosisDifficultyBand.INTERMEDIATE,
+          specialty: 'General Surgery',
+          subspecialty: 'Upper Gastrointestinal Surgery',
+          category: 'Esophageal Emergency',
+          bodySystem: 'Gastrointestinal',
+          organSystem: 'Esophagus',
+          difficultyBand: DiagnosisDifficultyBand.ADVANCED,
           rarityBand: DiagnosisRarityBand.UNCOMMON,
-          clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
-          ageGroup: DiagnosisAgeGroup.PEDIATRIC,
-          urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
+          clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
+          ageGroup: DiagnosisAgeGroup.ADULT,
+          urgencyLevel: DiagnosisUrgencyLevel.EMERGENT,
           preferredClueTypes: [
             'history',
             'symptom',
+            'vital',
             'exam',
             'imaging',
           ],
           notes:
-            'Seeded flagship Legg-Calvé-Perthes disease case with paediatric hip osteonecrosis teaching metadata.',
+            'Seeded flagship Boerhaave syndrome case with uncontained distal thoracic esophageal perforation, pleural contamination, and shock.',
         },
-        select: {
-          id: true,
-          displayLabel: true,
-        },
+        select: { id: true, displayLabel: true },
       })
     : await prisma.diagnosisRegistry.create({
         data: {
@@ -723,29 +856,27 @@ async function ensureRegistry() {
           active: true,
           isPlayable: true,
           isGeneratable: true,
-          specialty: 'Orthopaedics',
-          subspecialty: 'Paediatric Orthopaedics',
-          category: 'Avascular Necrosis',
-          bodySystem: 'Musculoskeletal',
-          organSystem: 'Hip',
-          difficultyBand: DiagnosisDifficultyBand.INTERMEDIATE,
+          specialty: 'General Surgery',
+          subspecialty: 'Upper Gastrointestinal Surgery',
+          category: 'Esophageal Emergency',
+          bodySystem: 'Gastrointestinal',
+          organSystem: 'Esophagus',
+          difficultyBand: DiagnosisDifficultyBand.ADVANCED,
           rarityBand: DiagnosisRarityBand.UNCOMMON,
-          clinicalSetting: DiagnosisClinicalSetting.OUTPATIENT,
-          ageGroup: DiagnosisAgeGroup.PEDIATRIC,
-          urgencyLevel: DiagnosisUrgencyLevel.ROUTINE,
+          clinicalSetting: DiagnosisClinicalSetting.EMERGENCY,
+          ageGroup: DiagnosisAgeGroup.ADULT,
+          urgencyLevel: DiagnosisUrgencyLevel.EMERGENT,
           preferredClueTypes: [
             'history',
             'symptom',
+            'vital',
             'exam',
             'imaging',
           ],
           notes:
-            'Seeded flagship Legg-Calvé-Perthes disease case with paediatric hip osteonecrosis teaching metadata.',
+            'Seeded flagship Boerhaave syndrome case with uncontained distal thoracic esophageal perforation, pleural contamination, and shock.',
         },
-        select: {
-          id: true,
-          displayLabel: true,
-        },
+        select: { id: true, displayLabel: true },
       });
 
   for (const [rank, term] of aliasTerms.entries()) {
@@ -871,6 +1002,43 @@ async function upsertCase(params: {
   const history = clues[0].value;
   const symptoms = [clues[1].value];
 
+  const clueValidation = caseEligibilityPolicy.validatePlayableClues(clues, {
+    minimumPlayableClues: 6,
+  });
+
+  if (!clueValidation.valid) {
+    throw new Error(
+      `${displayLabel} clues are not playable: ${clueValidation.reasons.join(', ') || 'unknown reason'}.`,
+    );
+  }
+
+  const preflightValidation = caseValidationService.validateSnapshot({
+    caseId: 'seed-preflight',
+    title: caseTitle,
+    date: inventoryPlaceholderDate,
+    difficulty: 'hard',
+    history,
+    symptoms,
+    labs: null,
+    clues: clues as unknown as object[],
+    explanation: explanation as unknown as object,
+    differentials,
+    diagnosisId: null,
+    diagnosisRegistryId: params.diagnosisRegistryId,
+    proposedDiagnosisText: displayLabel,
+    diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
+    diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
+    diagnosisMappingConfidence: 1,
+    diagnosisEditorialNote:
+      'Preflight validation for flagship Boerhaave syndrome seed.',
+  });
+
+  if (preflightValidation.outcome !== 'PASSED') {
+    throw new Error(
+      `${displayLabel} case failed Wardle validation: ${preflightValidation.issues.map((issue) => `${issue.code}: ${issue.message}`).join('; ')}`,
+    );
+  }
+
   const existingCases = await prisma.case.findMany({
     where: {
       diagnosisRegistryId: params.diagnosisRegistryId,
@@ -887,28 +1055,37 @@ async function upsertCase(params: {
     },
   });
 
-  const reusableCase = existingCases.find((c) => c.dailyCases.length === 0);
-  const scheduledCase = existingCases.find((c) => c.dailyCases.length > 0);
+  const reusableCase = existingCases.find(
+    (candidate) => candidate.dailyCases.length === 0,
+  );
+  const scheduledCase = existingCases.find(
+    (candidate) => candidate.dailyCases.length > 0,
+  );
+  const targetCase = scheduledCase ?? reusableCase;
 
   if (scheduledCase) {
-    console.log('Skipped existing scheduled Legg-Calvé-Perthes disease case:', scheduledCase);
-    return;
+    console.log(
+      `One-off production update enabled for scheduled ${displayLabel} case:`,
+      scheduledCase,
+    );
   }
 
-  const assignedDate = await findAvailableInventoryPlaceholderDate({
-    preferredDate: inventoryPlaceholderDate,
-    reusableCaseId: reusableCase?.id,
-    displayLabel: caseTitle,
-  });
+  const assignedDate =
+    targetCase?.date ??
+    (await findAvailableInventoryPlaceholderDate({
+      preferredDate: inventoryPlaceholderDate,
+      reusableCaseId: reusableCase?.id,
+      displayLabel: caseTitle,
+    }));
 
   const publicNumber =
-    reusableCase?.publicNumber ?? (await getNextCasePublicNumber());
+    targetCase?.publicNumber ?? (await getNextCasePublicNumber());
 
   const caseData = {
     title: caseTitle,
     publicNumber,
     date: assignedDate,
-    difficulty: 'intermediate',
+    difficulty: 'hard',
     history,
     symptoms,
     clues: clues as unknown as object,
@@ -923,12 +1100,12 @@ async function upsertCase(params: {
     diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
     diagnosisMappingConfidence: 1,
     diagnosisEditorialNote:
-      'Seeded complete frontend-aligned flagship Legg-Calvé-Perthes disease case with education.',
+      'Seeded complete frontend-aligned flagship Boerhaave syndrome case with education.',
   };
 
-  const seededCase = reusableCase
+  const seededCase = targetCase
     ? await prisma.case.update({
-        where: { id: reusableCase.id },
+        where: { id: targetCase.id },
         data: caseData,
         select: { id: true },
       })
@@ -951,7 +1128,7 @@ async function upsertCase(params: {
       publishTrack: PublishTrack.DAILY,
       title: caseTitle,
       date: assignedDate,
-      difficulty: 'intermediate',
+      difficulty: 'hard',
       history,
       symptoms,
       clues: clues as unknown as object,
@@ -963,7 +1140,7 @@ async function upsertCase(params: {
       diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
       diagnosisMappingConfidence: 1,
       diagnosisEditorialNote:
-        'Created complete Legg-Calvé-Perthes disease revision with education-aligned explanation.',
+        'Created complete Boerhaave syndrome revision with education-aligned clue progression and differential analysis.',
     },
     select: { id: true },
   });
@@ -973,33 +1150,109 @@ async function upsertCase(params: {
     data: { currentRevisionId: revision.id },
   });
 
+  const validationReport = caseValidationService.validateSnapshot({
+    caseId: seededCase.id,
+    title: caseTitle,
+    date: assignedDate,
+    difficulty: 'hard',
+    history,
+    symptoms,
+    labs: null,
+    clues: clues as unknown as object[],
+    explanation: explanation as unknown as object,
+    differentials,
+    diagnosisId: null,
+    diagnosisRegistryId: params.diagnosisRegistryId,
+    proposedDiagnosisText: displayLabel,
+    diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
+    diagnosisMappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
+    diagnosisMappingConfidence: 1,
+    diagnosisEditorialNote:
+      'Stored validation for flagship Boerhaave syndrome seed.',
+  });
+  const validationPayload =
+    caseValidationService.buildPersistencePayload(validationReport);
+  const validationSummary =
+    validationPayload.summary &&
+    typeof validationPayload.summary === 'object' &&
+    !Array.isArray(validationPayload.summary)
+      ? validationPayload.summary
+      : {};
+
   await prisma.caseValidationRun.create({
     data: {
       caseId: seededCase.id,
       revisionId: revision.id,
       source: CaseSource.MANUAL,
       publishTrack: PublishTrack.DAILY,
-      outcome: ValidationOutcome.PASSED,
-      validatorVersion: 'flagship-human-review:legg-calve-perthes-disease-v1',
+      outcome: validationReport.outcome,
+      validatorVersion: validationReport.validatorVersion,
       summary: {
+        ...validationSummary,
         contentTier: 'FLAGSHIP',
         seedVersion,
         humanReviewed: true,
-        note:
-          'Complete Legg-Calvé-Perthes disease flagship seed with playable clue types and full education payload.',
+        wardleClueValidation: {
+          playableClueCount: clueValidation.playableClueCount,
+          clueTypes: clueValidation.clues.map((clue) => clue.type),
+          clueOrders: clueValidation.clues.map((clue) => clue.order),
+        },
       },
-      findings: [],
+      findings: validationPayload.findings,
       completedAt: now,
     },
   });
 
-  console.log('Seeded Legg-Calvé-Perthes Disease:', {
+  const persisted = await prisma.case.findUniqueOrThrow({
+    where: { id: seededCase.id },
+    select: {
+      id: true,
+      clues: true,
+      currentRevisionId: true,
+      currentRevision: {
+        select: {
+          id: true,
+          clues: true,
+        },
+      },
+    },
+  });
+
+  const persistedCaseClues = caseEligibilityPolicy.validatePlayableClues(
+    persisted.clues,
+    { caseId: persisted.id, minimumPlayableClues: 6 },
+  );
+  const persistedRevisionClues = caseEligibilityPolicy.validatePlayableClues(
+    persisted.currentRevision?.clues,
+    { caseId: persisted.id, minimumPlayableClues: 6 },
+  );
+
+  if (!persistedCaseClues.valid || !persistedRevisionClues.valid) {
+    throw new Error(
+      `Persisted ${displayLabel} clues are not playable. Case reasons: ${persistedCaseClues.reasons.join(', ') || 'none'}; revision reasons: ${persistedRevisionClues.reasons.join(', ') || 'none'}.`,
+    );
+  }
+
+  if (
+    persisted.currentRevisionId !== revision.id ||
+    persisted.currentRevision?.id !== revision.id
+  ) {
+    throw new Error(
+      `Case ${seededCase.id} currentRevisionId does not point to revision ${revision.id}.`,
+    );
+  }
+
+  console.log('Seeded Boerhaave Syndrome:', {
     registryId: params.diagnosisRegistryId,
+    registryDisplayLabel: params.registryDisplayLabel,
     caseId: seededCase.id,
     revisionId: revision.id,
     publicNumber,
     educationId: params.educationId,
-    clueTypes: clues.map((c) => c.type),
+    validationOutcome: validationReport.outcome,
+    validatorVersion: validationReport.validatorVersion,
+    clueTypes: persistedCaseClues.clues.map((clue) => clue.type),
+    clueOrders: persistedCaseClues.clues.map((clue) => clue.order),
   });
 }
 

@@ -1,0 +1,46 @@
+{
+  "$schema": "../../schemas/document-approval-record.schema.json",
+  "recordId": "WEOS-AUTH-APP-005",
+  "recordType": "DOCUMENT_APPROVAL",
+  "schemaVersion": "1.0.0",
+  "documentId": "WEOS-OD-019",
+  "documentVersion": "0.1",
+  "documentPath": "docs/weos/phase-3-governance-foundations/WEOS-OD-019-compatibility-projection-ownership.md",
+  "approvalScope": {
+    "scopeType": "DOCUMENT_VERSION",
+    "description": "Approval with conditions for WEOS-OD-019 Stage 1 repository-native compatibility-projection ownership contracts, schemas, pure registry, ownership validation, writer-policy validation, inventory validation, drift evaluation, repair eligibility, deprecation checks and compatibility tests. Dependency evidence: WEOS-AUTH-APP-004. Supporting foundations: WEOS-AUTH-APP-002 and WEOS-AUTH-APP-003."
+  },
+  "approvalOutcome": "APPROVED_WITH_CONDITIONS",
+  "approver": {
+    "name": "Gideon Lemasika Saningo",
+    "role": "Founding Architecture Authority",
+    "authorityBasis": "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-001.json"
+  },
+  "approverAuthority": "Founding Architecture Authority bootstrap authority for initial WEOS governance foundation only",
+  "approvalDate": "2026-08-02",
+  "effectiveDate": "2026-08-02",
+  "rationale": "WEOS requires compatibility projections to preserve existing reads without letting runtime fields independently establish canonical authority, approval, publication, lifecycle standing, playability, generatability, learner exposure or institutional authority. This approval records WEOS-OD-019 Option D with WEOS-AUTH-APP-004 as dependency evidence and WEOS-AUTH-APP-002 and WEOS-AUTH-APP-003 as supporting foundations.",
+  "conditions": [
+    "projections never independently establish canonical authority",
+    "every operational projection requires exactly one approved owner",
+    "unresolved ownership remains explicitly unresolved",
+    "synchronization and writer policies are declared per projection",
+    "authority-sensitive projections default to derived or atomic treatment",
+    "direct writes become prohibited once governed ownership exists",
+    "stale or unauthorized commands permit no projection update",
+    "asynchronous synchronization requires explicit bounded-drift policy",
+    "drift detection does not authorize repair",
+    "repair cannot invent governance history",
+    "legacy projection values remain observed state where provenance is absent",
+    "production owners are not invented",
+    "no persistence, backfill, synchronization, repair execution or runtime enforcement is authorized"
+  ],
+  "supportingDecision": "WEOS-OD-019",
+  "implementationAuthorization": "GRANTED_FOR_STAGE_1_CONTRACTS_ONLY",
+  "bootstrapAuthority": {
+    "isBootstrap": true,
+    "scope": "Initial WEOS compatibility-projection foundation for repository-native documentation, APP-005 approval evidence, JSON schemas, serializable TypeScript contracts, pure in-memory projection-definition registry, pure ownership validation, pure synchronization-strategy validation, pure writer-policy validation, pure inventory validation, pure projection-drift evaluation, pure future synchronization eligibility, pure repair-eligibility evaluation, pure deprecation validation, deterministic conformance tests and documentation integration only. This does not grant Prisma, migrations, persistence, projection synchronization, backfill, repair execution, direct-write enforcement, service changes, command handlers, DTOs, controllers, guards, dashboard changes, consumer migration, field removal, production owner declarations or deployment.",
+    "expiryCondition": "Expires when permanent compatibility-projection runtime ownership, synchronization, repair or enforcement authority is approved under WEOS-OD-019, WEOS-OD-024 or an approved successor."
+  },
+  "createdAt": "2026-08-02T00:00:00Z"
+}

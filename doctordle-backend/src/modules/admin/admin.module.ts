@@ -14,6 +14,8 @@ import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-re
 import { EditorialObservabilityModule } from '../editorial/editorial-observability.module.js';
 import { DiagnosisGraphModule } from '../diagnosis-graph/diagnosis-graph.module.js';
 import { CaseReviewService } from './case-review.service';
+import { CaseReviewContextService } from './case-review-context.service';
+import { CaseReviewGovernanceRepository } from './case-review-governance.repository';
 import { CaseInventoryHealthService } from './case-inventory-health.service';
 import { CaseQualityProjectionService } from './case-quality-projection.service';
 import { ClueProgressionAnalysisService } from './clue-progression-analysis.service';
@@ -66,6 +68,8 @@ import { DiagnosisRegistryMergeExecutionService } from '../diagnosis-registry/di
     EditorialGuard,
     SeniorEditorialGuard,
     CaseReviewService,
+    CaseReviewContextService,
+    CaseReviewGovernanceRepository,
     CaseInventoryHealthService,
     CaseQualityProjectionService,
     ClueProgressionAnalysisService,

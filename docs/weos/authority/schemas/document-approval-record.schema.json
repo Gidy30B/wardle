@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dxlab.local/weos/document-approval-record.schema.json",
+  "title": "WEOS Document Approval Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recordId",
+    "recordType",
+    "schemaVersion",
+    "documentId",
+    "documentVersion",
+    "documentPath",
+    "approvalScope",
+    "approvalOutcome",
+    "approver",
+    "approverAuthority",
+    "approvalDate",
+    "effectiveDate",
+    "rationale",
+    "conditions",
+    "supportingDecision",
+    "implementationAuthorization",
+    "bootstrapAuthority",
+    "createdAt"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "recordId": { "type": "string", "minLength": 1 },
+    "recordType": { "const": "DOCUMENT_APPROVAL" },
+    "schemaVersion": { "type": "string", "minLength": 1 },
+    "documentId": { "type": "string", "minLength": 1 },
+    "documentVersion": { "type": "string", "minLength": 1 },
+    "documentPath": { "type": "string", "minLength": 1 },
+    "approvalScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scopeType", "description"],
+      "properties": {
+        "scopeType": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 }
+      }
+    },
+    "approvalOutcome": {
+      "enum": ["APPROVED", "APPROVED_WITH_CONDITIONS", "REJECTED", "WITHDRAWN"]
+    },
+    "approver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "role", "authorityBasis"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "authorityBasis": { "type": "string", "minLength": 1 }
+      }
+    },
+    "approverAuthority": { "type": "string", "minLength": 1 },
+    "approvalDate": { "type": "string", "format": "date" },
+    "effectiveDate": { "type": "string", "format": "date" },
+    "rationale": { "type": "string", "minLength": 1 },
+    "conditions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "supportingDecision": { "type": "string", "minLength": 1 },
+    "implementationAuthorization": {
+      "enum": [
+        "NOT_GRANTED",
+        "GRANTED_FOR_STAGE_1_CONTRACTS_ONLY",
+        "GRANTED_FOR_NAMED_STAGE",
+        "GRANTED"
+      ]
+    },
+    "bootstrapAuthority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["isBootstrap", "scope", "expiryCondition"],
+      "properties": {
+        "isBootstrap": { "type": "boolean" },
+        "scope": { "type": "string", "minLength": 1 },
+        "expiryCondition": { "type": "string", "minLength": 1 }
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "approvalOutcome": { "const": "APPROVED_WITH_CONDITIONS" }
+        }
+      },
+      "then": { "properties": { "conditions": { "minItems": 1 } } }
+    }
+  ]
+}

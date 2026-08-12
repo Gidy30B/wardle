@@ -74,6 +74,7 @@ import {
   WorkspaceLoadingSkeleton,
 } from './workspace/EditorialPrimitives';
 import { EditorialRightRail } from './workspace/EditorialRightRail';
+import { WorkspacePageShell } from './workspace/WorkspacePageShell';
 import { TabBar, WorkspaceHeader } from './workspace/WorkspaceHeader';
 import { CasesTab } from './workspace/tabs/CasesTab';
 import { ClinicalPictureTab } from './workspace/tabs/ClinicalPictureTab';
@@ -109,6 +110,21 @@ import {
   WORKSPACE_SECTION_IDS_BY_TAB,
   type WorkspaceSectionTarget,
 } from './workspace/workspaceSectionNavigation';
+import {
+  buildWorkflowNavigationViewModel,
+  buildWorkflowSearchParams,
+} from './workspace/viewModels/workflowNavigationViewModel';
+import {
+  getWorkspaceActionPendingKey,
+  runWorkspaceAction as runCentralizedWorkspaceAction,
+  type WorkspaceActionId,
+  type WorkspaceActionPayload,
+  type WorkspaceActionRequestHandler,
+} from './workspace/actions/index.ts';
+import type {
+  WorkspaceBoardId,
+  WorkspaceWorkflowId,
+} from './workspace/viewModels/workflowNavigationViewModel';
 
 export default function EditorialDiagnosisWorkspacePage() {
   const { diagnosisRegistryId } = useParams<{ diagnosisRegistryId: string }>();
@@ -119,6 +135,16 @@ export default function EditorialDiagnosisWorkspacePage() {
   const claimTarget = useMemo(() => getClaimTarget(searchParams), [searchParams]);
   const hasExplicitClaimTarget = hasClaimTarget(claimTarget);
   const activeTab: WorkspaceTab = normalizeWorkspaceTab(searchParams.get('tab'));
+  const useWorkflowShell = searchParams.get('workspaceShell') !== 'legacy';
+  const workflowNavigation = useMemo(
+    () =>
+      buildWorkflowNavigationViewModel({
+        workflowParam: searchParams.get('workflow'),
+        boardParam: searchParams.get('board'),
+        legacyTabParam: searchParams.get('tab'),
+      }),
+    [searchParams],
+  );
   const setActiveTab = useCallback((tab: WorkspaceTab) => {
     const next = new URLSearchParams(searchParams);
     if (tab === 'overview') {
@@ -128,6 +154,25 @@ export default function EditorialDiagnosisWorkspacePage() {
     }
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
+  const setActiveWorkflow = useCallback(
+    (
+      workflowId: WorkspaceWorkflowId,
+      boardId?: WorkspaceBoardId | null,
+    ) => {
+      const next = buildWorkflowSearchParams(searchParams, {
+        workflowId,
+        boardId,
+      });
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+  const setActiveWorkflowTarget = useCallback(
+    (target: { workflowId: WorkspaceWorkflowId; boardId?: WorkspaceBoardId | null }) => {
+      setActiveWorkflow(target.workflowId, target.boardId);
+    },
+    [setActiveWorkflow],
+  );
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [pendingSectionTarget, setPendingSectionTarget] =
     useState<WorkspaceSectionTarget | null>(null);
@@ -245,8 +290,10 @@ export default function EditorialDiagnosisWorkspacePage() {
   const navigateToWorkspaceSection = useCallback(
     (target: WorkspaceSectionTarget) => {
       setPendingSectionTarget(target);
+      replaceWorkspaceHash(target.sectionId);
       if (target.tab !== activeTab) {
         setActiveTab(target.tab);
+        window.setTimeout(() => replaceWorkspaceHash(target.sectionId), 0);
       }
     },
     [activeTab, setActiveTab],
@@ -357,9 +404,20 @@ export default function EditorialDiagnosisWorkspacePage() {
       );
 
       if (didScroll) {
-        replaceWorkspaceHash(pendingSectionTarget.sectionId);
-        markWorkspaceSectionReached(pendingSectionTarget.sectionId);
-        setActiveSectionId(pendingSectionTarget.sectionId);
+        const sectionId = pendingSectionTarget.sectionId;
+        const ensureHash = () => {
+          if (window.location.hash !== `#${sectionId}`) {
+            replaceWorkspaceHash(sectionId);
+          }
+        };
+
+        replaceWorkspaceHash(sectionId);
+        window.requestAnimationFrame(() => {
+          ensureHash();
+          window.setTimeout(ensureHash, 180);
+        });
+        markWorkspaceSectionReached(sectionId);
+        setActiveSectionId(sectionId);
         setPendingSectionTarget(null);
         return;
       }
@@ -555,6 +613,51 @@ export default function EditorialDiagnosisWorkspacePage() {
       setPendingAction(null);
     }
   }
+
+  const handleWorkflowAction: WorkspaceActionRequestHandler = useCallback(
+    async (
+      actionId: WorkspaceActionId,
+      payload: WorkspaceActionPayload,
+      subjectId: string,
+    ) => {
+      if (!diagnosisRegistryId) {
+        return {
+          ok: false,
+          actionId,
+          message: 'Unable to run workspace action.',
+          error: 'Missing diagnosis registry ID.',
+        };
+      }
+
+      setPendingAction(getWorkspaceActionPendingKey(actionId, subjectId));
+      try {
+        return await runCentralizedWorkspaceAction(actionId, payload, {
+          client,
+          diagnosisRegistryId,
+          access: {
+            canAccessEditorial: access.canAccessEditorial,
+            canPublishEditorial: access.canPublishEditorial,
+          },
+          refreshWorkspace,
+          showPending,
+          showSuccess,
+          showError,
+        });
+      } finally {
+        setPendingAction(null);
+      }
+    },
+    [
+      access.canAccessEditorial,
+      access.canPublishEditorial,
+      client,
+      diagnosisRegistryId,
+      refreshWorkspace,
+      showError,
+      showPending,
+      showSuccess,
+    ],
+  );
 
   function handleGenerateTeachingRuleCandidates() {
     if (!diagnosisRegistryId) {
@@ -1106,6 +1209,25 @@ export default function EditorialDiagnosisWorkspacePage() {
       <ErrorState
         title="Workspace unavailable"
         message="The diagnosis workspace did not return any data."
+      />
+    );
+  }
+
+  if (useWorkflowShell) {
+    return (
+      <WorkspacePageShell
+        workspace={workspace}
+        navigation={workflowNavigation}
+        actionAccess={{
+          canAccessEditorial: access.canAccessEditorial,
+          canPublishEditorial: access.canPublishEditorial,
+        }}
+        actionFeedback={feedback}
+        pendingAction={pendingAction}
+        onDismissActionFeedback={clear}
+        onRunAction={handleWorkflowAction}
+        onWorkflowChange={setActiveWorkflow}
+        onWorkflowTargetChange={setActiveWorkflowTarget}
       />
     );
   }

@@ -32,6 +32,7 @@ import {
   CollapsibleDetail,
   CompactMetricGrid,
   CompactPanel,
+  EditorialChipRow,
   DraftAIActionsPanel,
   EditorialEntity,
   EditorialRow,
@@ -39,6 +40,8 @@ import {
   EmptyGuidance,
   ExplainabilityMetric,
   InlineReviewBar,
+  OperatorDashboard,
+  OperatorMetricGrid,
   SecondaryActionDisclosure,
   StreamDisclosure,
   TabNextStepCard,
@@ -56,10 +59,15 @@ import { mimicStateTone } from '../../../../components/ui/statusBadgeMeta';
 import {
   aggregateCaseDimensions,
   caseTone,
+  formatDate,
   formatLabel,
   groupCaseLearningGoalCoverage,
   scoreTone,
 } from '../workspaceTransforms';
+import {
+  buildEditorialWorkspaceViewModel,
+  type CaseInventoryBoardViewModel,
+} from '../viewModels/editorialWorkspaceViewModel';
 export function CasesTab({
   workspace,
   coverage,
@@ -143,6 +151,7 @@ export function CasesTab({
   ) => void;
 }) {
   const caseGaps = workspace.coverageGaps.filter((gap) => gap.missingCases);
+  const viewModel = buildEditorialWorkspaceViewModel(workspace);
 
   return (
     <div className="space-y-4">
@@ -158,13 +167,61 @@ export function CasesTab({
         subtitle="Use each case to cover a learning goal, mimic/discriminator, escalation risk, and learner gap."
       >
         <div id="case-inventory" className="scroll-mt-24" tabIndex={-1}>
+          <OperatorDashboard
+            eyebrow="Case inventory"
+            title="Playable coverage board"
+            subtitle="Difficulty spread, quality flags, validation state, and case cards in one dense editorial view."
+            status={
+              <StatusBadge
+                status={`${workspace.cases.summary.usable}/${workspace.cases.summary.total} usable`}
+                tone={workspace.cases.summary.usable ? 'success' : 'warning'}
+              />
+            }
+          >
+            <OperatorMetricGrid
+              items={[
+                {
+                  label: 'Total cases',
+                  value: viewModel.caseInventoryBoard.summary.total,
+                  tone: viewModel.caseInventoryBoard.summary.total ? 'success' : 'warning',
+                  detail: 'Attached to this diagnosis',
+                },
+                {
+                  label: 'Quality warnings',
+                  value: viewModel.caseInventoryBoard.summary.warnings,
+                  tone: viewModel.caseInventoryBoard.summary.warnings
+                    ? 'warning'
+                    : 'success',
+                  detail: 'Cases with projected warning state',
+                },
+                {
+                  label: 'Blockers',
+                  value: viewModel.caseInventoryBoard.summary.blockers,
+                  tone: viewModel.caseInventoryBoard.summary.blockers
+                    ? 'danger'
+                    : 'success',
+                  detail: 'Cases with blocking quality issues',
+                },
+                {
+                  label: 'Missing bands',
+                  value: viewModel.caseInventoryBoard.missingDifficultyBands.length,
+                  tone: viewModel.caseInventoryBoard.missingDifficultyBands.length ? 'warning' : 'success',
+                  detail: viewModel.caseInventoryBoard.missingDifficultyBands.length
+                    ? viewModel.caseInventoryBoard.missingDifficultyBands.join(', ')
+                    : 'Easy, medium, and hard represented',
+                },
+              ]}
+            />
+          </OperatorDashboard>
           <CaseInventoryEntity workspace={workspace} />
+          <CaseCardDeck board={viewModel.caseInventoryBoard} />
         </div>
         <div id="case-difficulty-spectrum" className="scroll-mt-24" tabIndex={-1}>
-          <CaseDifficultySpectrumCard workspace={workspace} />
+          <CaseDifficultySpectrumCard board={viewModel.caseInventoryBoard} />
         </div>
         <div id="case-quality-flags" className="scroll-mt-24" tabIndex={-1}>
-          <CaseQualityFlagsCard workspace={workspace} />
+          <CaseQualityFlagsCard board={viewModel.caseInventoryBoard} />
+          <CaseValidationQueue board={viewModel.caseInventoryBoard} />
         </div>
         <CaseContributionCard workspace={workspace} />
         <div id="case-validation-state" className="scroll-mt-24" tabIndex={-1}>
@@ -172,60 +229,72 @@ export function CasesTab({
             title="Clue progression and revision workflow"
             summary="Discriminator annotations, clue repair drafts, and progression details"
           >
-          <ClueProgressionTimelineCard
-            workspace={workspace}
-            pendingAction={pendingAction}
-            onCreateDiscriminatorAnnotation={onCreateDiscriminatorAnnotation}
-            onUpdateDiscriminatorAnnotation={onUpdateDiscriminatorAnnotation}
-            onDeleteDiscriminatorAnnotation={onDeleteDiscriminatorAnnotation}
-            onGenerateDiscriminatorCase={onGenerateDiscriminatorCase}
-            onGenerateClueRevision={onGenerateClueRevision}
-            onAiDraftDecision={onAiDraftDecision}
-            onUpdateClueRevisionDraft={onUpdateClueRevisionDraft}
-            onApproveClueRevisionDraft={onApproveClueRevisionDraft}
-            onRejectClueRevisionDraft={onRejectClueRevisionDraft}
-            onRequestChangesForClueRevisionDraft={
-              onRequestChangesForClueRevisionDraft
-            }
-            onSupersedeClueRevisionDraft={onSupersedeClueRevisionDraft}
-            onApplyClueRevisionDraft={onApplyClueRevisionDraft}
-          />
+            <ClueProgressionTimelineCard
+              workspace={workspace}
+              pendingAction={pendingAction}
+              onCreateDiscriminatorAnnotation={onCreateDiscriminatorAnnotation}
+              onUpdateDiscriminatorAnnotation={onUpdateDiscriminatorAnnotation}
+              onDeleteDiscriminatorAnnotation={onDeleteDiscriminatorAnnotation}
+              onGenerateDiscriminatorCase={onGenerateDiscriminatorCase}
+              onGenerateClueRevision={onGenerateClueRevision}
+              onAiDraftDecision={onAiDraftDecision}
+              onUpdateClueRevisionDraft={onUpdateClueRevisionDraft}
+              onApproveClueRevisionDraft={onApproveClueRevisionDraft}
+              onRejectClueRevisionDraft={onRejectClueRevisionDraft}
+              onRequestChangesForClueRevisionDraft={
+                onRequestChangesForClueRevisionDraft
+              }
+              onSupersedeClueRevisionDraft={onSupersedeClueRevisionDraft}
+              onApplyClueRevisionDraft={onApplyClueRevisionDraft}
+            />
           </StreamDisclosure>
         </div>
         <StreamDisclosure
           title="Coverage editing"
           summary="Learning goal and escalation annotation controls"
+          testId="case-coverage-annotation-controls"
         >
-          <CaseCoverageExplainabilityCard
-            workspace={workspace}
-            caseGaps={caseGaps}
-            pendingAction={pendingAction}
-            onGenerateTargetedCase={onGenerateTargetedCase}
-            onCreateLearningGoalCoverage={onCreateLearningGoalCoverage}
-            onCreateEscalationAnnotation={onCreateEscalationAnnotation}
-            onUpdateLearningGoalCoverage={onUpdateLearningGoalCoverage}
-            onDeleteLearningGoalCoverage={onDeleteLearningGoalCoverage}
-            onUpdateEscalationAnnotation={onUpdateEscalationAnnotation}
-            onDeleteEscalationAnnotation={onDeleteEscalationAnnotation}
-          />
+            <CaseCoverageExplainabilityCard
+              workspace={workspace}
+              caseGaps={caseGaps}
+              pendingAction={pendingAction}
+              onGenerateTargetedCase={onGenerateTargetedCase}
+              onCreateLearningGoalCoverage={onCreateLearningGoalCoverage}
+              onCreateEscalationAnnotation={onCreateEscalationAnnotation}
+              onUpdateLearningGoalCoverage={onUpdateLearningGoalCoverage}
+              onDeleteLearningGoalCoverage={onDeleteLearningGoalCoverage}
+              onUpdateEscalationAnnotation={onUpdateEscalationAnnotation}
+              onDeleteEscalationAnnotation={onDeleteEscalationAnnotation}
+            />
         </StreamDisclosure>
         {caseGaps.length ? (
           <CollapsibleDetail
             title="Case coverage gaps"
             summary={`${caseGaps.length} gap${caseGaps.length === 1 ? '' : 's'} available for targeted generation`}
           >
-            <CoverageGapsCard gaps={caseGaps} onGapSelect={onGapSelect} />
+              <CoverageGapsCard gaps={caseGaps} onGapSelect={onGapSelect} />
           </CollapsibleDetail>
         ) : null}
         <div id="case-generation-actions" className="scroll-mt-24" tabIndex={-1}>
-          <TargetedCaseGenerationCard
-            coverage={coverage}
-            mimicCandidates={mimicCandidates}
-            disabled={pendingAction !== null}
-            pending={pendingAction === 'targeted-case'}
-            generatedCase={generatedTargetedCase}
-            onGenerate={onGenerateTargetedCase}
-          />
+          <CompactPanel
+            title="Targeted case generation"
+            subtitle="Draft generation stays constrained to selected coverage and mimic targets."
+            action={
+              <StatusBadge
+                status={pendingAction === 'targeted-case' ? 'Generating' : 'Ready'}
+                tone={pendingAction === 'targeted-case' ? 'warning' : 'info'}
+              />
+            }
+          >
+            <TargetedCaseGenerationCard
+              coverage={coverage}
+              mimicCandidates={mimicCandidates}
+              disabled={pendingAction !== null}
+              pending={pendingAction === 'targeted-case'}
+              generatedCase={generatedTargetedCase}
+              onGenerate={onGenerateTargetedCase}
+            />
+          </CompactPanel>
         </div>
       </EditorialStream>
     </div>
@@ -289,82 +358,101 @@ function CaseInventoryEntity({
   );
 }
 
-function CaseDifficultySpectrumCard({
-  workspace,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-}) {
-  const difficultyCounts = workspace.cases.items.reduce<Record<string, number>>(
-    (acc, item) => {
-      const difficulty = formatLabel(item.difficulty || 'unknown');
-      acc[difficulty] = (acc[difficulty] ?? 0) + 1;
-      return acc;
-    },
-    {},
-  );
-  const expectedBands = ['Easy', 'Medium', 'Hard'];
+function CaseCardDeck({ board }: { board: CaseInventoryBoardViewModel }) {
+  if (!board.caseCards.length) {
+    return (
+      <EmptyGuidance
+        title="No case cards yet"
+        description="Generated or reviewed cases will appear here as compact inventory cards."
+      />
+    );
+  }
 
+  return (
+    <div className="grid gap-2 lg:grid-cols-2">
+      {board.caseCards.slice(0, 8).map((item) => {
+        return (
+          <EditorialRow
+            key={item.id}
+            title={item.title}
+            subtitle={`Updated ${item.updatedAt ? formatDate(item.updatedAt) : 'unknown'}`}
+            tone={item.tone}
+            meta={
+              <StatusBadge
+                status={item.editorialStatus}
+                tone={item.tone}
+              />
+            }
+            action={
+              <Link to={`/cases/${item.id}`} className="editorial-action px-2 py-1 text-xs">
+                Open
+              </Link>
+            }
+          >
+            <EditorialChipRow
+              items={[
+                {
+                  label: item.difficulty,
+                  tone: item.difficulty ? 'info' : 'neutral',
+                },
+                {
+                  label: `${item.blockers.length} blockers`,
+                  tone: item.blockers.length ? 'danger' : 'success',
+                },
+                {
+                  label: `${item.warnings.length} warnings`,
+                  tone: item.warnings.length ? 'warning' : 'success',
+                },
+                {
+                  label: item.clueProgression ? 'Progression mapped' : 'No progression map',
+                  tone: item.clueProgression ? 'success' : 'neutral',
+                },
+              ]}
+            />
+          </EditorialRow>
+        );
+      })}
+    </div>
+  );
+}
+
+function CaseDifficultySpectrumCard({
+  board,
+}: {
+  board: CaseInventoryBoardViewModel;
+}) {
   return (
     <CompactPanel title="Difficulty spectrum">
       <div className="grid gap-2 md:grid-cols-3">
-        {expectedBands.map((band) => {
-          const count = difficultyCounts[band] ?? 0;
+        {board.difficultyChips.map((chip) => {
           return (
             <div
-              key={band}
+              key={chip.label}
               className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 px-3 py-3"
             >
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-slate-100">{band}</p>
+                <p className="text-sm font-semibold text-slate-100">{chip.label}</p>
                 <StatusBadge
-                  status={`${count}`}
-                  tone={count ? 'success' : 'warning'}
+                  status={`${chip.count}`}
+                  tone={chip.tone}
                 />
               </div>
               <p className="mt-2 text-xs leading-5 text-slate-500">
-                {count
-                  ? `${count} case${count === 1 ? '' : 's'} represented`
+                {chip.count
+                  ? `${chip.count} case${chip.count === 1 ? '' : 's'} represented`
                   : 'No case currently covers this difficulty band.'}
               </p>
             </div>
           );
         })}
       </div>
-      {Object.entries(difficultyCounts).some(
-        ([band]) => !expectedBands.includes(band),
-      ) ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {Object.entries(difficultyCounts)
-            .filter(([band]) => !expectedBands.includes(band))
-            .map(([band, count]) => (
-              <StatusBadge
-                key={band}
-                status={`${band} ${count}`}
-                tone="neutral"
-              />
-            ))}
-        </div>
-      ) : null}
     </CompactPanel>
   );
 }
 
-function CaseQualityFlagsCard({
-  workspace,
-}: {
-  workspace: DiagnosisEditorialWorkspace;
-}) {
-  const blockedCases = workspace.cases.items.filter(
-    (item) => item.qualityProjection.blockers.length > 0,
-  );
-  const warningCases = workspace.cases.items.filter(
-    (item) => item.qualityProjection.warnings.length > 0,
-  );
-  const progression = workspace.cases.summary.progressionSignals;
-  const leakRisk =
-    (progression?.prematureLockInCases ?? 0) +
-    (progression?.abruptGiveawayCases ?? 0);
-
+function CaseQualityFlagsCard({ board }: { board: CaseInventoryBoardViewModel }) {
+  const blockedCases = board.caseCards.filter((item) => item.blockers.length > 0);
+  const warningCases = board.caseCards.filter((item) => item.warnings.length > 0);
   return (
     <CompactPanel title="Quality and validation flags">
       <CompactMetricGrid
@@ -381,19 +469,13 @@ function CaseQualityFlagsCard({
           },
           {
             label: 'Leak risk',
-            value: leakRisk,
-            tone: leakRisk ? 'danger' : 'success',
+            value: board.summary.leakRisk,
+            tone: board.summary.leakRisk ? 'danger' : 'success',
           },
           {
             label: 'Validation issues',
-            value:
-              workspace.cases.summary.blockerCount +
-              workspace.cases.summary.warningCount,
-            tone:
-              workspace.cases.summary.blockerCount ||
-              workspace.cases.summary.warningCount
-                ? 'warning'
-                : 'success',
+            value: board.summary.blockers + board.summary.warnings,
+            tone: board.summary.blockers || board.summary.warnings ? 'warning' : 'success',
           },
         ]}
       />
@@ -408,16 +490,16 @@ function CaseQualityFlagsCard({
               <EditorialRow
                 title={caseItem.title}
                 subtitle={[
-                  caseItem.qualityProjection.blockers[0],
-                  caseItem.qualityProjection.warnings[0],
+                  caseItem.blockers[0],
+                  caseItem.warnings[0],
                 ]
                   .filter(Boolean)
                   .join(' ') || 'Quality projection needs review.'}
-                tone={caseTone(caseItem)}
+                tone={caseItem.tone}
                 meta={
                   <StatusBadge
-                    status={`${formatLabel(caseItem.difficulty)} case`}
-                    tone={caseTone(caseItem)}
+                    status={`${caseItem.difficulty} case`}
+                    tone={caseItem.tone}
                   />
                 }
               />
@@ -430,6 +512,85 @@ function CaseQualityFlagsCard({
         </p>
       )}
     </CompactPanel>
+  );
+}
+
+function CaseValidationQueue({ board }: { board: CaseInventoryBoardViewModel }) {
+  const queuedCases = board.qualityQueue.slice(0, 5);
+
+  if (!queuedCases.length) {
+    return (
+      <div className="mt-3 rounded-lg border border-[var(--color-green)]/25 bg-[var(--color-green)]/10 px-3 py-2">
+        <p className="text-sm font-semibold text-[var(--color-green)]">
+          No case validation queue items.
+        </p>
+        <p className="mt-1 text-xs leading-5 text-slate-400">
+          Current case inventory has no blockers, warnings, or missing clue
+          progression maps.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="editorial-eyebrow">Validation queue</p>
+          <h3 className="mt-1 text-sm font-semibold text-slate-100">
+            Case cards needing editorial attention
+          </h3>
+        </div>
+        <StatusBadge status={`${queuedCases.length} shown`} tone="warning" />
+      </div>
+      <div className="grid gap-2">
+        {queuedCases.map((caseItem) => (
+            <EditorialRow
+              key={caseItem.id}
+              title={caseItem.title}
+              subtitle={
+                caseItem.blockers[0] ??
+                caseItem.warnings[0] ??
+                'Clue progression has not been mapped for this case.'
+              }
+              tone={caseItem.tone}
+              meta={
+                <StatusBadge
+                  status={caseItem.difficulty}
+                  tone={caseItem.tone}
+                />
+              }
+              action={
+                <Link
+                  to={`/cases/${caseItem.id}`}
+                  className="editorial-action px-2 py-1 text-xs"
+                >
+                  Open
+                </Link>
+              }
+            >
+              <EditorialChipRow
+                items={[
+                  {
+                    label: `${caseItem.blockers.length} blockers`,
+                    tone: caseItem.blockers.length ? 'danger' : 'success',
+                  },
+                  {
+                    label: `${caseItem.warnings.length} warnings`,
+                    tone: caseItem.warnings.length ? 'warning' : 'success',
+                  },
+                  {
+                    label: caseItem.clueProgression
+                      ? 'Progression mapped'
+                      : 'Progression missing',
+                    tone: caseItem.clueProgression ? 'success' : 'warning',
+                  },
+                ]}
+              />
+            </EditorialRow>
+        ))}
+      </div>
+    </div>
   );
 }
 

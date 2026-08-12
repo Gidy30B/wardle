@@ -1,0 +1,48 @@
+{
+  "$schema": "../../schemas/document-approval-record.schema.json",
+  "recordId": "WEOS-AUTH-APP-003",
+  "recordType": "DOCUMENT_APPROVAL",
+  "schemaVersion": "1.0.0",
+  "documentId": "WEOS-OD-022",
+  "documentVersion": "0.1",
+  "documentPath": "docs/weos/phase-3-governance-foundations/WEOS-OD-022-runtime-role-to-authority-assignment.md",
+  "approvalScope": {
+    "scopeType": "DOCUMENT_VERSION",
+    "description": "Approval with conditions for WEOS-OD-022 Stage 1 repository-native Runtime Role to Authority Assignment contracts, schemas, pure in-memory authority-type registry, validation, scope evaluation, delegation, grant non-escalation, separation-of-duties, authority resolution, conformance tests and documentation integration."
+  },
+  "approvalOutcome": "APPROVED_WITH_CONDITIONS",
+  "approver": {
+    "name": "Gideon Lemasika Saningo",
+    "role": "Founding Architecture Authority",
+    "authorityBasis": "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-001.json"
+  },
+  "approverAuthority": "Founding Architecture Authority bootstrap authority for initial WEOS governance foundation only",
+  "approvalDate": "2026-08-01",
+  "effectiveDate": "2026-08-01",
+  "rationale": "WEOS requires a strict separation between technical runtime access and scoped canonical authority before governed runtime command enforcement can be designed safely. This record approves WEOS-OD-022 with conditions for Stage 1 repository-native contracts only, using WEOS-AUTH-APP-002 as dependency evidence for compatibility with the Governance Decision Envelope.",
+  "conditions": [
+    "runtime roles, execution identity and canonical authority must remain separate; runtime roles are technical-access evidence only",
+    "authority-bearing governed actions require independently validated, scoped AuthorityAssignments",
+    "authority types are governed powers independent of runtime role labels such as USER, EDITOR, SENIOR_EDITOR and ADMIN",
+    "validation and resolution must fail closed when authority is absent, unknown, expired, revoked, suspended, superseded, invalid, unregistered or out of scope",
+    "global authority requires explicit GLOBAL scope mode, approved authority-type policy permission, rationale, enhanced evidence, authorized grantor, expiry or review and explicit marking; empty scope is never global",
+    "authority evidence, granting snapshot, grantor identity, validity windows and review metadata must be preserved at grant time and compatible with WEOS-OD-018 decision evidence fields",
+    "grant authority is distinct from action authority and requires AUTHORITY_ASSIGNMENT_GRANT",
+    "grant and delegation validation must prevent escalation of authority type, scope, duration, delegation rights or depth",
+    "delegation is denied by default and must reject missing permission, circular delegation, self-parenting, self-originating grants and escalation",
+    "separation-of-duties checks must be policy-driven rather than hardcoded as a single domain rule",
+    "non-human execution by SERVICE_ACCOUNT, AUTOMATION or SYSTEM is not human or institutional authority by itself",
+    "ordinary assignments do not establish emergency or break-glass authority",
+    "role, profile, frontend visibility, dashboard access, repository ownership, employment title, previous action or mutable status backfill is prohibited",
+    "bootstrap authority is not converted into production AuthorityAssignments",
+    "no production assignments, persistence, Prisma, migrations, runtime enforcement, guards, controllers, command handlers, dashboards or deployment are authorized"
+  ],
+  "supportingDecision": "WEOS-OD-022",
+  "implementationAuthorization": "GRANTED_FOR_STAGE_1_CONTRACTS_ONLY",
+  "bootstrapAuthority": {
+    "isBootstrap": true,
+    "scope": "Initial WEOS governance foundation for repository-native authority-assignment contracts, JSON schemas, TypeScript serializable contracts, pure in-memory authority-type registry, validation, actor-command-context validation, authority resolution, scope evaluation, grant non-escalation, delegation, separation-of-duties, deterministic conformance tests and documentation integration only. This does not grant real assignments, institutional authority, Prisma, persistence, API, runtime service, guard, controller, command-handler, dashboard, break-glass, backfill, deployment or production enforcement authority.",
+    "expiryCondition": "Expires when a permanent authority-assignment process approved under WEOS-OD-022 or an approved successor becomes effective."
+  },
+  "createdAt": "2026-08-01T00:00:00Z"
+}
