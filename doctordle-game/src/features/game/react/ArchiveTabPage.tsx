@@ -316,12 +316,40 @@ export default function ArchiveTabPage({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [dateSheetOpen])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const desktopQuery = window.matchMedia('(min-width: 640px)')
+    const clearMobileSearch = () => {
+      if (!desktopQuery.matches) {
+        setLocalQuery('')
+      }
+    }
+
+    clearMobileSearch()
+    if (typeof desktopQuery.addEventListener === 'function') {
+      desktopQuery.addEventListener('change', clearMobileSearch)
+      return () => desktopQuery.removeEventListener('change', clearMobileSearch)
+    }
+
+    const legacyDesktopQuery = desktopQuery as MediaQueryList & {
+      addListener: (listener: () => void) => void
+      removeListener: (listener: () => void) => void
+    }
+    legacyDesktopQuery.addListener(clearMobileSearch)
+    return () => legacyDesktopQuery.removeListener(clearMobileSearch)
+  }, [])
+
   const catchUpCount = items.filter((item) => item.status !== 'completed').length
   const completedCount = items.filter((item) => item.status === 'completed').length
 
   return (
     <section className="flex min-h-0 w-full flex-col overflow-hidden">
-      <header className="shrink-0 border-b border-white/[0.07] px-4 pb-3 pt-2 sm:px-5">
+      <MobileArchiveHeader />
+
+      <header className="hidden shrink-0 border-b border-white/[0.07] px-4 pb-3 pt-2 sm:block sm:px-5">
         <p className="font-brand-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--wardle-color-teal)]/70">
           Archive
         </p>
@@ -394,11 +422,13 @@ export default function ArchiveTabPage({
           />
         ) : (
           <div className="grid min-w-0 gap-4 pb-6">
-            <ArchiveCatchUpHero
-              item={nextArchiveCase}
-              onContinueArchive={onContinueArchive}
-              onPlayToday={onPlayToday}
-            />
+            <div className="hidden sm:block">
+              <ArchiveCatchUpHero
+                item={nextArchiveCase}
+                onContinueArchive={onContinueArchive}
+                onPlayToday={onPlayToday}
+              />
+            </div>
 
             {calendar ? (
               <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
@@ -492,7 +522,9 @@ export default function ArchiveTabPage({
                     ) : null}
                   </div>
 
-                  <ArchiveCalendarLegend />
+                  <div className="hidden sm:block">
+                    <ArchiveCalendarLegend />
+                  </div>
 
                   <div className="grid w-full min-w-0 grid-cols-7 gap-1">
                     {WEEKDAY_LABELS.map((label, index) => (
@@ -531,11 +563,24 @@ export default function ArchiveTabPage({
               </div>
             ) : null}
 
-            <ArchiveRewardNote />
+            <div className="hidden sm:block">
+              <ArchiveRewardNote />
+            </div>
           </div>
         )}
       </div>
     </section>
+  )
+}
+
+function MobileArchiveHeader() {
+  return (
+    <header className="flex min-h-[58px] shrink-0 items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-3 sm:hidden">
+      <h1 className="min-w-0 truncate text-2xl font-black leading-tight text-[var(--wardle-color-mint)]">
+        Archive
+      </h1>
+      <div className="h-10 w-10 shrink-0" aria-hidden="true" />
+    </header>
   )
 }
 
