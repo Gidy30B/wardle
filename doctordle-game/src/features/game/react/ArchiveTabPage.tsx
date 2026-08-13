@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
+import {
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Search,
+  Sparkles,
+  Stethoscope,
+  X,
+} from 'lucide-react'
 import BottomSheet from '../../../components/ui/BottomSheet'
 import { DifficultyBadge, TrackBadge } from './learn/archive/shared'
 import {
@@ -134,6 +144,63 @@ function getGroupStatusSummary(group: ArchiveDateGroup) {
   }: ${parts.join(', ')}`
 }
 
+function formatMobileSheetDate(dateKey: string) {
+  const date = parseArchiveDate(dateKey)
+  if (!date) {
+    return dateKey.toUpperCase()
+  }
+
+  const weekday = new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    timeZone: 'UTC',
+  }).format(date)
+  const day = new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(date)
+  const month = new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    timeZone: 'UTC',
+  }).format(date)
+
+  return `${weekday} · ${day} ${month}`.toUpperCase()
+}
+
+function formatArchiveMetadataValue(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/_/g, ' ')
+    .replace(/(^|\s)\S/g, (character) => character.toUpperCase())
+}
+
+function getMobileArchiveMetadata(item: DailyCaseArchiveItem) {
+  const parts = [formatArchiveMetadataValue(item.difficulty)]
+
+  if (item.track !== 'DAILY') {
+    parts.unshift(formatArchiveMetadataValue(item.track))
+  }
+
+  if (item.status === 'in_progress') {
+    parts.push('In progress')
+  } else if (item.status === 'completed') {
+    parts.push('Completed')
+  }
+
+  return parts.join(' · ')
+}
+
+function getMobileArchiveAction(item: DailyCaseArchiveItem) {
+  if (item.status === 'completed') {
+    return 'Review'
+  }
+
+  if (item.status === 'in_progress') {
+    return 'Resume'
+  }
+
+  return 'Play'
+}
+
 function getDateTitle(dateKey: string) {
   const date = parseArchiveDate(dateKey)
   if (!date) {
@@ -196,6 +263,7 @@ export default function ArchiveTabPage({
   onContinueArchive,
 }: ArchiveTabPageProps) {
   const [localQuery, setLocalQuery] = useState('')
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const months = useMemo(() => getArchiveMonths(items), [items])
   const years = useMemo(() => getArchiveYears(items), [items])
   const groups = useMemo(() => groupArchiveByDate(items), [items])
@@ -264,6 +332,17 @@ export default function ArchiveTabPage({
     setDateSheetOpen(true)
   }
 
+  const openMobileSearch = () => {
+    setMobileSearchOpen(true)
+    setDateSheetOpen(false)
+    setNavigatorOpen(false)
+  }
+
+  const closeMobileSearch = () => {
+    setMobileSearchOpen(false)
+    setLocalQuery('')
+  }
+
   useEffect(() => {
     if (!latestMonth) {
       setCurrentMonthKey(null)
@@ -317,29 +396,47 @@ export default function ArchiveTabPage({
   }, [dateSheetOpen])
 
   useEffect(() => {
+    if (!mobileSearchOpen) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMobileSearchOpen(false)
+        setLocalQuery('')
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [mobileSearchOpen])
+
+  useEffect(() => {
     if (typeof window === 'undefined') {
       return
     }
 
     const desktopQuery = window.matchMedia('(min-width: 640px)')
-    const clearMobileSearch = () => {
+    const syncResponsiveSearchState = () => {
+      setMobileSearchOpen(false)
       if (!desktopQuery.matches) {
         setLocalQuery('')
       }
     }
 
-    clearMobileSearch()
+    syncResponsiveSearchState()
     if (typeof desktopQuery.addEventListener === 'function') {
-      desktopQuery.addEventListener('change', clearMobileSearch)
-      return () => desktopQuery.removeEventListener('change', clearMobileSearch)
+      desktopQuery.addEventListener('change', syncResponsiveSearchState)
+      return () =>
+        desktopQuery.removeEventListener('change', syncResponsiveSearchState)
     }
 
     const legacyDesktopQuery = desktopQuery as MediaQueryList & {
       addListener: (listener: () => void) => void
       removeListener: (listener: () => void) => void
     }
-    legacyDesktopQuery.addListener(clearMobileSearch)
-    return () => legacyDesktopQuery.removeListener(clearMobileSearch)
+    legacyDesktopQuery.addListener(syncResponsiveSearchState)
+    return () => legacyDesktopQuery.removeListener(syncResponsiveSearchState)
   }, [])
 
   const catchUpCount = items.filter((item) => item.status !== 'completed').length
@@ -347,7 +444,14 @@ export default function ArchiveTabPage({
 
   return (
     <section className="flex min-h-0 w-full flex-col overflow-hidden">
-      <MobileArchiveHeader />
+      <MobileArchiveHeader
+        searchOpen={mobileSearchOpen}
+        query={localQuery}
+        onOpenSearch={openMobileSearch}
+        onQueryChange={setLocalQuery}
+        onClearSearch={() => setLocalQuery('')}
+        onCloseSearch={closeMobileSearch}
+      />
 
       <header className="hidden shrink-0 border-b border-white/[0.07] px-4 pb-3 pt-2 sm:block sm:px-5">
         <p className="font-brand-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--wardle-color-teal)]/70">
@@ -414,6 +518,8 @@ export default function ArchiveTabPage({
             actionLabel={error ? 'Retry' : "Play today's case"}
             onAction={error ? onRetry : onPlayToday}
           />
+        ) : mobileSearchOpen && !query ? (
+          <MobileArchiveSearchPrompt />
         ) : query ? (
           <SearchResults
             items={searchResults}
@@ -432,7 +538,55 @@ export default function ArchiveTabPage({
 
             {calendar ? (
               <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-                <section className="min-w-0 max-w-full rounded-[18px] border border-white/[0.06] bg-white/[0.025] p-3 sm:p-4">
+                <MobileArchiveCalendar
+                  calendar={calendar}
+                  years={years}
+                  olderMonth={olderMonth}
+                  newerMonth={newerMonth}
+                  latestMonth={latestMonth}
+                  navigatorOpen={navigatorOpen}
+                  navigatorYearValue={navigatorYearValue}
+                  navigatorYearMonths={navigatorYearMonths}
+                  currentMonthIsLatest={currentMonthIsLatest}
+                  selectedDateKey={selectedDateKey}
+                  onSelectOlderMonth={() => {
+                    if (olderMonth) {
+                      setCurrentMonthKey(olderMonth.key)
+                      setNavigatorYear(olderMonth.year)
+                      setDateSheetOpen(false)
+                    }
+                  }}
+                  onSelectNewerMonth={() => {
+                    if (newerMonth) {
+                      setCurrentMonthKey(newerMonth.key)
+                      setNavigatorYear(newerMonth.year)
+                      setDateSheetOpen(false)
+                    }
+                  }}
+                  onToggleNavigator={() => {
+                    setNavigatorYear(calendar.year)
+                    setNavigatorOpen((open) => !open)
+                    setDateSheetOpen(false)
+                  }}
+                  onSelectLatestMonth={() => {
+                    if (latestMonth) {
+                      setCurrentMonthKey(latestMonth.key)
+                      setNavigatorYear(latestMonth.year)
+                      setNavigatorOpen(false)
+                      setDateSheetOpen(false)
+                    }
+                  }}
+                  onSelectYear={changeArchiveYear}
+                  onSelectMonth={(month) => {
+                    setCurrentMonthKey(month.key)
+                    setNavigatorYear(month.year)
+                    setNavigatorOpen(false)
+                    setDateSheetOpen(false)
+                  }}
+                  onSelectDate={selectArchiveDate}
+                />
+
+                <section className="hidden min-w-0 max-w-full rounded-[18px] border border-white/[0.06] bg-white/[0.025] p-3 sm:block sm:p-4">
                   <div className="mb-3 grid min-w-0 gap-2">
                     <div className="flex min-w-0 items-center justify-between gap-2">
                       <button
@@ -522,9 +676,7 @@ export default function ArchiveTabPage({
                     ) : null}
                   </div>
 
-                  <div className="hidden sm:block">
-                    <ArchiveCalendarLegend />
-                  </div>
+                  <ArchiveCalendarLegend />
 
                   <div className="grid w-full min-w-0 grid-cols-7 gap-1">
                     {WEEKDAY_LABELS.map((label, index) => (
@@ -573,14 +725,400 @@ export default function ArchiveTabPage({
   )
 }
 
-function MobileArchiveHeader() {
+function MobileArchiveHeader({
+  searchOpen,
+  query,
+  onOpenSearch,
+  onQueryChange,
+  onClearSearch,
+  onCloseSearch,
+}: {
+  searchOpen: boolean
+  query: string
+  onOpenSearch: () => void
+  onQueryChange: (value: string) => void
+  onClearSearch: () => void
+  onCloseSearch: () => void
+}) {
+  if (searchOpen) {
+    return (
+      <header className="flex min-h-[58px] shrink-0 items-center gap-2 border-b border-white/[0.07] px-4 py-3 sm:hidden">
+        <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/[0.09] bg-white/[0.035] px-3 transition focus-within:border-[var(--wardle-color-teal)]/40 focus-within:ring-2 focus-within:ring-[rgba(0,180,166,0.18)]">
+          <Search className="h-4 w-4 shrink-0 text-white/32" strokeWidth={2} />
+          <input
+            autoFocus
+            aria-label="Search archive"
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.stopPropagation()
+                onCloseSearch()
+              }
+            }}
+            placeholder="Search case number or date"
+            className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-white/78 outline-none placeholder:text-white/28"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={onClearSearch}
+              aria-label="Clear archive search"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white/34 transition hover:bg-white/[0.06] hover:text-white/68 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.24)]"
+            >
+              <X className="h-4 w-4" strokeWidth={2} />
+            </button>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={onCloseSearch}
+          aria-label="Close archive search"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white/48 transition hover:bg-white/[0.05] hover:text-white/76 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.24)]"
+        >
+          <X className="h-5 w-5" strokeWidth={2} />
+        </button>
+      </header>
+    )
+  }
+
   return (
     <header className="flex min-h-[58px] shrink-0 items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-3 sm:hidden">
       <h1 className="min-w-0 truncate text-2xl font-black leading-tight text-[var(--wardle-color-mint)]">
         Archive
       </h1>
-      <div className="h-10 w-10 shrink-0" aria-hidden="true" />
+      <button
+        type="button"
+        onClick={onOpenSearch}
+        aria-label="Search archive"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/[0.075] bg-white/[0.025] text-white/46 transition hover:bg-white/[0.055] hover:text-white/76 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.24)]"
+      >
+        <Search className="h-4 w-4" strokeWidth={2} />
+      </button>
     </header>
+  )
+}
+
+function MobileArchiveSearchPrompt() {
+  return (
+    <div className="flex min-h-[220px] flex-col items-center justify-center px-6 text-center sm:hidden">
+      <Search className="h-5 w-5 text-white/24" strokeWidth={1.8} aria-hidden="true" />
+      <p className="mt-3 text-sm font-semibold text-white/42">
+        Search by case number or date.
+      </p>
+    </div>
+  )
+}
+
+function MobileArchiveCalendar({
+  calendar,
+  years,
+  olderMonth,
+  newerMonth,
+  latestMonth,
+  navigatorOpen,
+  navigatorYearValue,
+  navigatorYearMonths,
+  currentMonthIsLatest,
+  selectedDateKey,
+  onSelectOlderMonth,
+  onSelectNewerMonth,
+  onToggleNavigator,
+  onSelectLatestMonth,
+  onSelectYear,
+  onSelectMonth,
+  onSelectDate,
+}: {
+  calendar: ArchiveMonth & { weeks: ArchiveCalendarDay[][] }
+  years: number[]
+  olderMonth: ArchiveMonth | null
+  newerMonth: ArchiveMonth | null
+  latestMonth: ArchiveMonth | null
+  navigatorOpen: boolean
+  navigatorYearValue: number | null
+  navigatorYearMonths: ArchiveMonth[]
+  currentMonthIsLatest: boolean
+  selectedDateKey: string | null
+  onSelectOlderMonth: () => void
+  onSelectNewerMonth: () => void
+  onToggleNavigator: () => void
+  onSelectLatestMonth: () => void
+  onSelectYear: (year: number) => void
+  onSelectMonth: (month: ArchiveMonth) => void
+  onSelectDate: (dateKey: string) => void
+}) {
+  return (
+    <section className="min-w-0 max-w-full sm:hidden">
+      <MobileArchiveMonthHeader
+        calendar={calendar}
+        olderMonth={olderMonth}
+        newerMonth={newerMonth}
+        latestMonth={latestMonth}
+        navigatorOpen={navigatorOpen}
+        navigatorYearValue={navigatorYearValue}
+        currentMonthIsLatest={currentMonthIsLatest}
+        onSelectOlderMonth={onSelectOlderMonth}
+        onSelectNewerMonth={onSelectNewerMonth}
+        onToggleNavigator={onToggleNavigator}
+        onSelectLatestMonth={onSelectLatestMonth}
+      />
+
+      {navigatorOpen && navigatorYearValue ? (
+        <div className="mb-4">
+          <ArchiveMonthNavigator
+            years={years}
+            selectedYear={navigatorYearValue}
+            selectedMonthKey={calendar.key}
+            activeMonths={navigatorYearMonths}
+            onSelectYear={onSelectYear}
+            onSelectMonth={onSelectMonth}
+          />
+        </div>
+      ) : null}
+
+      <MobileArchiveTileLegend />
+
+      <div className="grid w-full min-w-0 grid-cols-7 gap-1.5">
+        {WEEKDAY_LABELS.map((label, index) => (
+          <div
+            key={`${label}-${index}`}
+            className="pb-2 pt-1 text-center font-brand-mono text-[10px] font-bold text-white/32"
+          >
+            {label}
+          </div>
+        ))}
+        {calendar.weeks.flat().map((day) => (
+          <MobileCalendarCell
+            key={day.key}
+            day={day}
+            selected={selectedDateKey === day.key}
+            onSelectDate={onSelectDate}
+          />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function MobileArchiveMonthHeader({
+  calendar,
+  olderMonth,
+  newerMonth,
+  latestMonth,
+  navigatorOpen,
+  navigatorYearValue,
+  currentMonthIsLatest,
+  onSelectOlderMonth,
+  onSelectNewerMonth,
+  onToggleNavigator,
+  onSelectLatestMonth,
+}: {
+  calendar: ArchiveMonth
+  olderMonth: ArchiveMonth | null
+  newerMonth: ArchiveMonth | null
+  latestMonth: ArchiveMonth | null
+  navigatorOpen: boolean
+  navigatorYearValue: number | null
+  currentMonthIsLatest: boolean
+  onSelectOlderMonth: () => void
+  onSelectNewerMonth: () => void
+  onToggleNavigator: () => void
+  onSelectLatestMonth: () => void
+}) {
+  return (
+    <div className="mb-4 grid min-w-0 justify-items-center gap-1">
+      <button
+        type="button"
+        onClick={onToggleNavigator}
+        aria-expanded={navigatorOpen}
+        className="inline-flex max-w-full min-w-0 items-center justify-center gap-1.5 rounded-full px-3 py-1 text-lg font-black leading-tight text-[var(--wardle-color-mint)] transition hover:text-white focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.24)]"
+      >
+        <span className="min-w-0 truncate">
+          {getMonthName(calendar.year, calendar.month)} {calendar.year}
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-white/34 transition ${
+            navigatorOpen ? 'rotate-180' : ''
+          }`}
+          strokeWidth={2}
+        />
+      </button>
+
+      <div className="grid w-full grid-cols-[44px_minmax(0,1fr)_44px] items-center">
+        <button
+          type="button"
+          onClick={onSelectOlderMonth}
+          disabled={!olderMonth}
+          aria-label="Previous archive month"
+          className="flex h-11 w-11 items-center justify-center rounded-full text-white/52 transition hover:bg-white/[0.04] hover:text-white/78 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.22)] disabled:cursor-default disabled:text-white/16 disabled:hover:bg-transparent"
+        >
+          <ChevronLeft className="h-5 w-5" strokeWidth={2} />
+        </button>
+
+        {!currentMonthIsLatest && latestMonth ? (
+          <button
+            type="button"
+            onClick={onSelectLatestMonth}
+            className="justify-self-center rounded-full px-3 py-1 font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/36 transition hover:bg-white/[0.04] hover:text-white/62 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.2)]"
+          >
+            Latest
+          </button>
+        ) : (
+          <span
+            className="justify-self-center font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/18"
+            aria-hidden="true"
+          >
+            {navigatorYearValue}
+          </span>
+        )}
+
+        <button
+          type="button"
+          onClick={onSelectNewerMonth}
+          disabled={!newerMonth}
+          aria-label="Next archive month"
+          className="flex h-11 w-11 items-center justify-center rounded-full text-white/52 transition hover:bg-white/[0.04] hover:text-white/78 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.22)] disabled:cursor-default disabled:text-white/16 disabled:hover:bg-transparent"
+        >
+          <ChevronRight className="h-5 w-5" strokeWidth={2} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function getArchiveCalendarTileState(day: ArchiveCalendarDay) {
+  if (!day.inCurrentMonth || !day.group) {
+    return 'empty' as const
+  }
+
+  if (day.group.items.some((item) => item.status === 'in_progress')) {
+    return 'in_progress' as const
+  }
+
+  if (day.group.items.every((item) => item.status === 'completed')) {
+    return 'completed' as const
+  }
+
+  return 'available' as const
+}
+
+function getArchiveCalendarTileStyle(
+  state: ReturnType<typeof getArchiveCalendarTileState>,
+  selected: boolean,
+  inCurrentMonth: boolean,
+) {
+  const base = {
+    borderRadius: '4px',
+    outline: selected ? '2px solid var(--wardle-color-mint)' : undefined,
+    outlineOffset: selected ? '2px' : undefined,
+  }
+
+  if (state === 'completed') {
+    return {
+      ...base,
+      backgroundColor: 'var(--wardle-color-teal)',
+      borderColor: 'var(--wardle-color-teal)',
+      color: '#052322',
+      boxShadow: '0 5px 16px rgba(0, 180, 166, 0.13)',
+    }
+  }
+
+  if (state === 'in_progress') {
+    return {
+      ...base,
+      backgroundColor: 'var(--wardle-color-amber)',
+      borderColor: 'var(--wardle-color-amber)',
+      color: '#3f2305',
+      boxShadow: '0 5px 16px rgba(244, 162, 97, 0.12)',
+    }
+  }
+
+  if (state === 'available') {
+    return {
+      ...base,
+      backgroundColor: '#ffffff',
+      borderColor: '#ffffff',
+      color: '#071313',
+      boxShadow: '0 5px 18px rgba(255, 255, 255, 0.10)',
+    }
+  }
+
+  return {
+    ...base,
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    color: inCurrentMonth ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.10)',
+    boxShadow: 'none',
+  }
+}
+
+function MobileCalendarCell({
+  day,
+  selected,
+  onSelectDate,
+}: {
+  day: ArchiveCalendarDay
+  selected: boolean
+  onSelectDate: (dateKey: string) => void
+}) {
+  const tileState = getArchiveCalendarTileState(day)
+  const interactive = tileState !== 'empty'
+  const assignmentCount = day.group?.items.length ?? 0
+  const tileStyle = getArchiveCalendarTileStyle(tileState, selected, day.inCurrentMonth)
+
+  return (
+    <button
+      type="button"
+      disabled={!interactive}
+      onClick={() => onSelectDate(day.key)}
+      aria-label={getCalendarCellLabel(day)}
+      data-archive-tile-state={tileState}
+      style={tileStyle}
+      className={`group relative flex aspect-square min-h-[42px] min-w-0 items-center justify-center border text-center text-[15px] font-black leading-none transition-[transform,box-shadow,filter] duration-150 focus:outline-none disabled:cursor-default ${
+        interactive
+          ? 'hover:-translate-y-0.5 hover:brightness-[1.03] active:translate-y-0 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[var(--wardle-color-mint)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#071313]'
+          : ''
+      }`}
+    >
+      <span>{day.dayNumber}</span>
+
+      {assignmentCount > 1 ? (
+        <span
+          style={{ borderRadius: '3px' }}
+          className="absolute right-1 top-1 flex min-h-4 min-w-4 items-center justify-center bg-black/[0.14] px-1 font-brand-mono text-[8px] font-black leading-none text-current"
+        >
+          {assignmentCount}
+        </span>
+      ) : null}
+    </button>
+  )
+}
+
+function MobileArchiveTileLegend() {
+  return (
+    <div className="mb-3 flex items-center justify-center gap-4 font-brand-mono text-[9px] font-bold uppercase tracking-[0.08em] text-white/42 sm:hidden">
+      <span className="inline-flex items-center gap-1.5">
+        <span
+          className="h-2.5 w-2.5 rounded-[3px] border border-white bg-white"
+          aria-hidden="true"
+        />
+        Play
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span
+          className="h-2.5 w-2.5 rounded-[3px] border border-[var(--wardle-color-amber)] bg-[var(--wardle-color-amber)]"
+          aria-hidden="true"
+        />
+        Resume
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span
+          className="h-2.5 w-2.5 rounded-[3px] border border-[var(--wardle-color-teal)] bg-[var(--wardle-color-teal)]"
+          aria-hidden="true"
+        />
+        Done
+      </span>
+    </div>
   )
 }
 
@@ -588,16 +1126,16 @@ function ArchiveCalendarLegend() {
   return (
     <div className="mb-3 grid min-w-0 grid-cols-2 gap-1.5 text-[10px] font-bold text-white/46 sm:flex sm:flex-wrap sm:items-center">
       <CalendarLegendItem
-        label="Available to play"
-        className="border-white/[0.09] bg-white/[0.04]"
+        label="Ready to play"
+        className="border-white bg-white"
       />
       <CalendarLegendItem
         label="In progress"
-        className="border-[rgba(244,162,97,0.34)] bg-[rgba(244,162,97,0.14)]"
+        className="border-[var(--wardle-color-amber)] bg-[var(--wardle-color-amber)]"
       />
       <CalendarLegendItem
         label="Completed"
-        className="border-[rgba(0,180,166,0.24)] bg-[rgba(0,180,166,0.095)]"
+        className="border-[var(--wardle-color-teal)] bg-[var(--wardle-color-teal)]"
       />
     </div>
   )
@@ -770,17 +1308,10 @@ function CalendarCell({
   selected: boolean
   onSelectDate: (dateKey: string) => void
 }) {
-  const status = day.group?.status ?? 'empty'
-  const interactive = day.inCurrentMonth && Boolean(day.group)
+  const tileState = getArchiveCalendarTileState(day)
+  const interactive = tileState !== 'empty'
   const assignmentCount = day.group?.items.length ?? 0
-  const tone =
-    status === 'completed'
-      ? 'border-[rgba(0,180,166,0.24)] bg-[rgba(0,180,166,0.095)] text-[var(--wardle-color-teal)]'
-      : status === 'in_progress'
-        ? 'border-[rgba(244,162,97,0.34)] bg-[rgba(244,162,97,0.14)] text-[var(--wardle-color-amber)]'
-        : status === 'available'
-          ? 'border-white/[0.09] bg-white/[0.04] text-[var(--wardle-color-mint)]'
-          : 'border-transparent bg-transparent text-white/14'
+  const tileStyle = getArchiveCalendarTileStyle(tileState, selected, day.inCurrentMonth)
 
   return (
     <button
@@ -788,27 +1319,21 @@ function CalendarCell({
       disabled={!interactive}
       onClick={() => onSelectDate(day.key)}
       aria-label={getCalendarCellLabel(day)}
-      className={`relative flex aspect-square min-h-8 min-w-0 items-start justify-start rounded-[12px] border p-2 text-left text-sm font-black transition focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.24)] disabled:cursor-default sm:min-h-[40px] ${tone} ${
-        selected ? 'ring-2 ring-white/55 ring-offset-1 ring-offset-transparent' : ''
-      } ${day.inCurrentMonth ? '' : 'opacity-25'}`}
+      data-archive-tile-state={tileState}
+      style={tileStyle}
+      className={`relative flex aspect-square min-h-8 min-w-0 items-center justify-center border text-center text-sm font-black transition-[transform,box-shadow,filter] duration-150 focus:outline-none disabled:cursor-default sm:min-h-[40px] ${
+        interactive
+          ? 'hover:-translate-y-0.5 hover:brightness-[1.03] active:translate-y-0 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-[var(--wardle-color-mint)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#071313]'
+          : ''
+      }`}
     >
       <span>{day.dayNumber}</span>
       {assignmentCount > 1 ? (
-        <span className="absolute right-1.5 top-1.5 rounded-full bg-white/[0.08] px-1.5 font-brand-mono text-[9px] font-bold leading-4 text-white/54">
+        <span
+          style={{ borderRadius: '3px' }}
+          className="absolute right-1.5 top-1.5 flex min-h-4 min-w-4 items-center justify-center bg-black/[0.14] px-1 font-brand-mono text-[8px] font-black leading-none text-current"
+        >
           {assignmentCount}
-        </span>
-      ) : null}
-      {status !== 'empty' ? (
-        <span className="absolute bottom-1.5 left-1/2 flex -translate-x-1/2 items-center gap-1">
-          {status === 'completed' ? (
-            <span className="font-brand-mono text-[10px]" aria-hidden="true">
-              ok
-            </span>
-          ) : status === 'in_progress' ? (
-            <span className="h-1.5 w-4 rounded-full bg-[var(--wardle-color-amber)]" />
-          ) : (
-            <span className="h-1.5 w-1.5 rounded-full bg-[var(--wardle-color-teal)]" />
-          )}
         </span>
       ) : null}
     </button>
@@ -861,24 +1386,145 @@ function MobileDateDetailSheet({
       ariaLabel={`${getDateTitle(group.dateKey)} archive cases`}
       className="sm:hidden"
     >
-      <div className="grid min-w-0 gap-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-        <div className="flex min-w-0 items-start justify-between gap-3">
-          <ArchiveDateAssignmentsHeader group={group} />
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close date detail"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] border border-white/[0.08] bg-white/[0.03] text-white/44 transition hover:bg-white/[0.06] hover:text-white/70 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.24)]"
-          >
-            <X className="h-4 w-4" strokeWidth={2} />
-          </button>
-        </div>
-        <ArchiveDateAssignmentsBody
+      <div className="min-w-0 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+        <MobileArchiveSheetHeader group={group} onClose={onClose} />
+        <MobileArchiveAssignmentList
           items={group.items}
           onOpenCase={onOpenCase}
         />
       </div>
     </BottomSheet>
+  )
+}
+
+function MobileArchiveSheetHeader({
+  group,
+  onClose,
+}: {
+  group: ArchiveDateGroup
+  onClose: () => void
+}) {
+  return (
+    <div className="flex min-w-0 items-start justify-between gap-4 pb-3 pt-1">
+      <div className="min-w-0 pt-1">
+        <h2 className="font-brand-mono text-[11px] font-bold uppercase tracking-[0.17em] text-[var(--wardle-color-mint)]">
+          {formatMobileSheetDate(group.dateKey)}
+        </h2>
+        {group.items.length > 1 ? (
+          <p className="mt-1.5 text-sm font-semibold text-white/38">
+            {group.items.length} cases
+          </p>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close date detail"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/[0.075] bg-white/[0.025] text-white/44 transition hover:bg-white/[0.055] hover:text-white/72 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.24)]"
+      >
+        <X className="h-4 w-4" strokeWidth={2} />
+      </button>
+    </div>
+  )
+}
+
+function MobileArchiveAssignmentList({
+  items,
+  onOpenCase,
+}: {
+  items: DailyCaseArchiveItem[]
+  onOpenCase: (dailyCaseId: string) => void
+}) {
+  return (
+    <div className="min-w-0 divide-y divide-white/[0.065]">
+      {items.map((item) => (
+        <MobileArchiveAssignmentRow
+          key={item.dailyCaseId}
+          item={item}
+          onOpenCase={onOpenCase}
+        />
+      ))}
+    </div>
+  )
+}
+
+function MobileArchiveAssignmentRow({
+  item,
+  onOpenCase,
+}: {
+  item: DailyCaseArchiveItem
+  onOpenCase: (dailyCaseId: string) => void
+}) {
+  const completed = item.status === 'completed'
+  const inProgress = item.status === 'in_progress'
+  const metadata = getMobileArchiveMetadata(item)
+  const action = getMobileArchiveAction(item)
+  const LeadingIcon = completed
+    ? Check
+    : inProgress || item.track === 'PRACTICE'
+      ? Clock3
+      : item.track === 'PREMIUM'
+        ? Sparkles
+        : Stethoscope
+  const iconTone = completed
+    ? 'border-white/[0.07] bg-white/[0.025] text-white/34'
+    : inProgress
+      ? 'border-[rgba(244,162,97,0.25)] bg-[rgba(244,162,97,0.08)] text-[var(--wardle-color-amber)]'
+      : 'border-[rgba(0,180,166,0.22)] bg-[rgba(0,180,166,0.07)] text-[var(--wardle-color-teal)]'
+  const actionTone = completed
+    ? 'text-white/42'
+    : inProgress
+      ? 'text-[var(--wardle-color-amber)]'
+      : 'text-[var(--wardle-color-teal)]'
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenCase(item.dailyCaseId)}
+      aria-label={`${item.displayLabel}, ${metadata}, ${action} case`}
+      className={`group flex min-h-[76px] w-full min-w-0 items-center gap-3 py-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgba(0,180,166,0.32)] ${
+        completed ? 'opacity-70' : ''
+      }`}
+    >
+      <span
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border ${iconTone}`}
+        aria-hidden="true"
+      >
+        <LeadingIcon className="h-5 w-5" strokeWidth={1.9} />
+      </span>
+
+      <span className="min-w-0 flex-1">
+        <span
+          className={`block min-w-0 truncate text-[16px] font-black leading-5 ${
+            completed ? 'text-white/52' : 'text-[var(--wardle-color-mint)]'
+          }`}
+        >
+          {item.displayLabel}
+        </span>
+        <span
+          className={`mt-1 block min-w-0 truncate text-[12px] font-semibold ${
+            inProgress
+              ? 'text-[var(--wardle-color-amber)]/72'
+              : completed
+                ? 'text-white/28'
+                : 'text-white/38'
+          }`}
+        >
+          {metadata}
+        </span>
+      </span>
+
+      <span
+        className={`flex shrink-0 items-center gap-1 text-sm font-black ${actionTone}`}
+        aria-hidden="true"
+      >
+        {action}
+        <ChevronRight
+          className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+          strokeWidth={2}
+        />
+      </span>
+    </button>
   )
 }
 
