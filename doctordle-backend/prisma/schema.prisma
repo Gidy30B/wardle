@@ -1106,6 +1106,7 @@ model CaseRevision {
   reviews                    CaseReview[]
   governedApprovalDecisions  GovernedCaseRevisionApprovalDecision[]
   publicationDecisions       CaseRevisionPublicationDecision[]
+  dailyCases                 DailyCase[]
   differentialMappings       CaseDifferentialMapping[]
   differentialLinks          CaseDifferentialLink[]
 
@@ -1457,6 +1458,7 @@ model CaseRevisionPublicationDecision {
   actor                       User                            @relation("CaseRevisionPublicationActor", fields: [actorUserId], references: [id], onDelete: Restrict)
   supersedesPublication       CaseRevisionPublicationDecision? @relation("CaseRevisionPublicationSupersession", fields: [supersedesPublicationId], references: [id], onDelete: SetNull)
   supersededByPublications    CaseRevisionPublicationDecision[] @relation("CaseRevisionPublicationSupersession")
+  dailyCases                  DailyCase[]
 
   @@index([caseId])
   @@index([caseRevisionId])
@@ -1800,16 +1802,22 @@ model UserStats {
 model DailyCase {
   id                 String             @id @default(uuid())
   caseId             String
+  caseRevisionId     String?
+  publicationDecisionId String?
   date               DateTime           @db.Date
   track              PublishTrack
   sequenceIndex      Int
   createdAt          DateTime           @default(now())
   case               Case               @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseRevision       CaseRevision?      @relation(fields: [caseRevisionId], references: [id], onDelete: Restrict)
+  publicationDecision CaseRevisionPublicationDecision? @relation(fields: [publicationDecisionId], references: [id], onDelete: Restrict)
   sessions           GameSession[]
   leaderboardEntries LeaderboardEntry[]
 
   @@unique([date, track, sequenceIndex])
   @@index([caseId])
+  @@index([caseRevisionId])
+  @@index([publicationDecisionId])
   @@index([date, track])
 }
 

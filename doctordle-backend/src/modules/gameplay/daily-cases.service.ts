@@ -16,6 +16,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { CaseEligibilityPolicyService } from '../cases/case-eligibility-policy.service';
+import { CasePublicationGovernanceService } from '../admin/case-publication-governance.service.js';
 import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service.js';
 import { normalizeSpecialtyDisplayName } from '../diagnosis-registry/diagnosis-registry-specialty.js';
 import {
@@ -132,6 +133,8 @@ type DailyCaseScheduleWindowSlot = {
   date: string;
   dailyCaseId: string;
   caseId: string;
+  caseRevisionId: string | null;
+  publicationDecisionId: string | null;
   track: PublishTrack;
   sequenceIndex: number;
 };
@@ -242,6 +245,8 @@ export class DailyCasesService {
     private readonly caseEligibilityPolicy: CaseEligibilityPolicyService,
     @Optional()
     private caseAssignmentService?: CaseAssignmentService,
+    @Optional()
+    private readonly publicationGovernance?: CasePublicationGovernanceService,
     @Optional()
     private readonly lifecyclePolicy?: DiagnosisRegistryLifecyclePolicyService,
   ) {}
@@ -687,6 +692,7 @@ export class DailyCasesService {
       this.prisma,
       this.caseEligibilityPolicy,
       this.lifecyclePolicy,
+      this.publicationGovernance,
     );
     return this.caseAssignmentService;
   }
@@ -781,6 +787,8 @@ export class DailyCasesService {
       date: this.toDateKey(dailyCase.date),
       dailyCaseId: dailyCase.id,
       caseId: dailyCase.caseId,
+      caseRevisionId: dailyCase.caseRevisionId ?? null,
+      publicationDecisionId: dailyCase.publicationDecisionId ?? null,
       track: dailyCase.track,
       sequenceIndex: dailyCase.sequenceIndex,
     };

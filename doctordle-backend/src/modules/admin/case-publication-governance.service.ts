@@ -11,6 +11,7 @@ import {
   CaseRevisionPublicationStanding,
   DiagnosisMappingStatus,
   Prisma,
+  PublishTrack,
   ValidationOutcome,
   type PrismaClient,
 } from '@prisma/client';
@@ -70,6 +71,27 @@ export type PublicationReadiness = {
   contentBoundaryClassification: {
     clinicallyMaterialExposureStable: string[];
     presentationalOrOrganizationalLiveOk: string[];
+  };
+};
+
+export type SchedulerPublicationCandidate = {
+  publicationDecisionId: string;
+  caseId: string;
+  caseRevisionId: string;
+  occurredAt: Date;
+  case: {
+    id: string;
+    title: string;
+    editorialStatus: CaseEditorialStatus | null;
+    approvedAt: Date | null;
+    publishedAt: Date | null;
+    currentRevisionId: string | null;
+  };
+  revision: {
+    id: string;
+    caseId: string;
+    date: Date;
+    publishTrack: PublishTrack | null;
   };
 };
 
@@ -152,6 +174,73 @@ export class CasePublicationGovernanceService {
       where: { caseId },
       orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
     });
+  }
+
+  async listSchedulerEligiblePublications(
+    client: PublicationTransactionClient = this.prisma,
+    input: {
+      normalizedStart?: Date;
+      windowEndExclusive?: Date;
+    } = {},
+  ): Promise<SchedulerPublicationCandidate[]> {
+    const revisionDate =
+      input.normalizedStart && input.windowEndExclusive
+        ? {
+            gte: input.normalizedStart,
+            lt: input.windowEndExclusive,
+          }
+        : undefined;
+
+    const decisions = await (
+      client as any
+    ).caseRevisionPublicationDecision.findMany({
+      where: {
+        standing: CaseRevisionPublicationStanding.AUTHORIZED,
+        ...(revisionDate
+          ? {
+              caseRevision: {
+                is: {
+                  date: revisionDate,
+                },
+              },
+            }
+          : {}),
+      },
+      orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        caseId: true,
+        caseRevisionId: true,
+        occurredAt: true,
+        case: {
+          select: {
+            id: true,
+            title: true,
+            editorialStatus: true,
+            approvedAt: true,
+            publishedAt: true,
+            currentRevisionId: true,
+          },
+        },
+        caseRevision: {
+          select: {
+            id: true,
+            caseId: true,
+            date: true,
+            publishTrack: true,
+          },
+        },
+      },
+    });
+
+    return decisions.map((decision: any) => ({
+      publicationDecisionId: decision.id,
+      caseId: decision.caseId,
+      caseRevisionId: decision.caseRevisionId,
+      occurredAt: decision.occurredAt,
+      case: decision.case,
+      revision: decision.caseRevision,
+    }));
   }
 
   async authorizeRevisionPublication(

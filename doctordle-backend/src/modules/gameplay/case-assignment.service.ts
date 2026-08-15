@@ -8,7 +8,9 @@ import {
 import { PrismaService } from '../../core/db/prisma.service';
 import { CaseEligibilityPolicyService } from '../cases/case-eligibility-policy.service';
 import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
-import { ASSIGNABLE_EDITORIAL_STATUSES } from '../editorial/policies/publish-policy.js';
+import {
+  CasePublicationGovernanceService,
+} from '../admin/case-publication-governance.service.js';
 
 const TRACK_PRIORITY: Record<PublishTrack, number> = {
   [PublishTrack.DAILY]: 1,
@@ -62,9 +64,9 @@ type AssignmentDailyCase = Prisma.DailyCaseGetPayload<
 type AssignmentCandidate = {
   id: string;
   title: string;
-  diagnosisId: string | null;
-  diagnosisRegistryId: string | null;
-  diagnosisMappingStatus: string;
+  caseRevisionId: string;
+  publicationDecisionId: string;
+  occurredAt: Date;
   diagnosisRegistry: {
     id: string;
     displayLabel: string | null;
@@ -80,6 +82,7 @@ type AssignmentCandidate = {
   currentRevisionId: string | null;
   currentRevision: {
     id: string;
+    caseId: string;
     date: Date;
     publishTrack: PublishTrack | null;
   } | null;
@@ -95,7 +98,8 @@ export type AssignmentBlockedReason =
   | 'diagnosis_not_matched'
   | 'registry_not_playable'
   | 'missing_explanation'
-  | 'track_mismatch';
+  | 'track_mismatch'
+  | 'publication_identity_mismatch';
 
 export type AssignmentSkippedSlotReason =
   | 'slot_already_exists'
@@ -106,6 +110,8 @@ export type AssignedSlot = {
   date: string;
   dailyCaseId: string;
   caseId: string;
+  caseRevisionId: string | null;
+  publicationDecisionId: string | null;
   track: PublishTrack;
   sequenceIndex: number;
 };
@@ -149,6 +155,8 @@ export class CaseAssignmentService {
     private readonly caseEligibilityPolicy: CaseEligibilityPolicyService,
     @Optional()
     private readonly lifecyclePolicy?: DiagnosisRegistryLifecyclePolicyService,
+    @Optional()
+    private readonly publicationGovernance?: CasePublicationGovernanceService,
   ) {}
 
   async ensureWindow(input: {
@@ -205,41 +213,11 @@ export class CaseAssignmentService {
     }
 
     if (
-      !this.caseEligibilityPolicy.isAssignableEditorialStatus(
-        caseRecord.editorialStatus,
-      )
+      !caseRecord.caseRevisionId ||
+      !caseRecord.publicationDecisionId ||
+      caseRecord.currentRevision?.caseId !== caseRecord.id
     ) {
-      return 'invalid_status';
-    }
-
-    const clueReason = this.caseEligibilityPolicy.getSchedulerClueExclusionReason(
-      caseRecord.clues,
-    );
-    if (clueReason) {
-      return clueReason;
-    }
-
-    if (!caseRecord.diagnosisRegistryId?.trim()) {
-      return 'missing_diagnosis';
-    }
-
-    if (caseRecord.diagnosisMappingStatus !== 'MATCHED') {
-      return 'diagnosis_not_matched';
-    }
-
-    if (
-      !this.caseEligibilityPolicy.isRegistryPlayable(
-        caseRecord.diagnosisRegistry,
-      )
-    ) {
-      return 'registry_not_playable';
-    }
-
-    if (
-      caseRecord.explanation === null ||
-      caseRecord.explanation === undefined
-    ) {
-      return 'missing_explanation';
+      return 'publication_identity_mismatch';
     }
 
     if (mode === 'editorial_date') {
@@ -469,56 +447,36 @@ export class CaseAssignmentService {
       mode: AssignmentMode;
     },
   ): Promise<AssignmentCandidate[]> {
-    const where =
-      input.mode === 'editorial_date'
-        ? {
-            editorialStatus: {
-              in: [...ASSIGNABLE_EDITORIAL_STATUSES],
-            },
-            currentRevision: {
-              is: {
-                date: {
-                  gte: input.normalizedStart,
-                  lt: input.windowEndExclusive,
-                },
-              },
-            },
-          }
-        : {};
+    const publications =
+      await this.getPublicationGovernance().listSchedulerEligiblePublications(
+        tx,
+        input.mode === 'editorial_date'
+          ? {
+              normalizedStart: input.normalizedStart,
+              windowEndExclusive: input.windowEndExclusive,
+            }
+          : {},
+      );
 
-    return tx.case.findMany({
-      where,
-      orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
-      select: {
-        id: true,
-        title: true,
-        diagnosisId: true,
-        diagnosisRegistryId: true,
-        diagnosisMappingStatus: true,
-        diagnosisRegistry: {
-          select: {
-            id: true,
-            displayLabel: true,
-            canonicalName: true,
-            status: true,
-            active: true,
-            isPlayable: true,
-          },
-        },
-        clues: true,
-        explanation: true,
-        editorialStatus: true,
-        approvedAt: true,
-        currentRevisionId: true,
-        currentRevision: {
-          select: {
-            id: true,
-            date: true,
-            publishTrack: true,
-          },
-        },
+    return publications.map((publication) => ({
+      id: publication.caseId,
+      title: publication.case.title,
+      caseRevisionId: publication.caseRevisionId,
+      publicationDecisionId: publication.publicationDecisionId,
+      occurredAt: publication.occurredAt,
+      diagnosisRegistry: null,
+      clues: null,
+      explanation: null,
+      editorialStatus: publication.case.editorialStatus,
+      approvedAt: publication.case.approvedAt,
+      currentRevisionId: publication.case.currentRevisionId,
+      currentRevision: {
+        id: publication.revision.id,
+        caseId: publication.revision.caseId,
+        date: publication.revision.date,
+        publishTrack: publication.revision.publishTrack,
       },
-    });
+    }));
   }
 
   private planCreateRows(input: {
@@ -534,6 +492,8 @@ export class CaseAssignmentService {
     rows: Array<{
       date: Date;
       caseId: string;
+      caseRevisionId: string;
+      publicationDecisionId: string;
       track: PublishTrack;
       sequenceIndex: number;
     }>;
@@ -548,6 +508,8 @@ export class CaseAssignmentService {
     const rows: Array<{
       date: Date;
       caseId: string;
+      caseRevisionId: string;
+      publicationDecisionId: string;
       track: PublishTrack;
       sequenceIndex: number;
     }> = [];
@@ -594,7 +556,14 @@ export class CaseAssignmentService {
           continue;
         }
 
-        rows.push({ date, caseId: caseRecord.id, track, sequenceIndex });
+        rows.push({
+          date,
+          caseId: caseRecord.id,
+          caseRevisionId: caseRecord.caseRevisionId,
+          publicationDecisionId: caseRecord.publicationDecisionId,
+          track,
+          sequenceIndex,
+        });
         usedCaseIds.add(caseRecord.id);
         continue;
       }
@@ -654,6 +623,8 @@ export class CaseAssignmentService {
           rows.push({
             date,
             caseId: caseRecord.id,
+            caseRevisionId: caseRecord.caseRevisionId,
+            publicationDecisionId: caseRecord.publicationDecisionId,
             track,
             sequenceIndex,
           });
@@ -669,6 +640,8 @@ export class CaseAssignmentService {
     createRows: Array<{
       date: Date;
       caseId: string;
+      caseRevisionId: string;
+      publicationDecisionId: string;
       track: PublishTrack;
       sequenceIndex: number;
     }>,
@@ -726,6 +699,7 @@ export class CaseAssignmentService {
       diagnosis:
         caseRecord.diagnosisRegistry?.displayLabel ??
         caseRecord.diagnosisRegistry?.canonicalName ??
+        caseRecord.title ??
         null,
       editorialStatus: caseRecord.editorialStatus ?? null,
       reason,
@@ -737,9 +711,21 @@ export class CaseAssignmentService {
       date: this.toDateKey(dailyCase.date),
       dailyCaseId: dailyCase.id,
       caseId: dailyCase.caseId,
+      caseRevisionId: dailyCase.caseRevisionId ?? null,
+      publicationDecisionId: dailyCase.publicationDecisionId ?? null,
       track: dailyCase.track,
       sequenceIndex: dailyCase.sequenceIndex,
     };
+  }
+
+  private getPublicationGovernance(): CasePublicationGovernanceService {
+    return (
+      this.publicationGovernance ??
+      new CasePublicationGovernanceService(
+        this.prisma,
+        this.caseEligibilityPolicy,
+      )
+    );
   }
 
   private getSlotKey(

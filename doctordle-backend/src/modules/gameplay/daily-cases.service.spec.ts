@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import {
   CaseEditorialStatus,
+  CaseRevisionPublicationStanding,
   DiagnosisRegistryStatus,
   PublishTrack,
 } from '@prisma/client';
@@ -47,10 +48,20 @@ type StoreCase = {
 type StoreDailyCase = {
   id: string;
   caseId: string;
+  caseRevisionId?: string | null;
+  publicationDecisionId?: string | null;
   date: Date;
   track: PublishTrack;
   sequenceIndex: number;
   createdAt: Date;
+};
+
+type StorePublicationDecision = {
+  id: string;
+  caseId: string;
+  caseRevisionId: string;
+  standing: CaseRevisionPublicationStanding;
+  occurredAt: Date;
 };
 
 type StoreUser = {
@@ -85,6 +96,7 @@ function createDailyCasesFixture(options?: { forceCreateRace?: boolean }) {
     users: [] as StoreUser[],
     cases: [] as StoreCase[],
     dailyCases: [] as StoreDailyCase[],
+    publicationDecisions: [] as StorePublicationDecision[],
     sessions: [] as StoreSession[],
     leaderboardEntries: [] as StoreLeaderboardEntry[],
   };
@@ -344,6 +356,8 @@ function createDailyCasesFixture(options?: { forceCreateRace?: boolean }) {
           store.dailyCases.push({
             id: `dc-${dailyCaseCounter++}`,
             caseId: row.caseId,
+            caseRevisionId: row.caseRevisionId ?? null,
+            publicationDecisionId: row.publicationDecisionId ?? null,
             date: row.date,
             track: row.track,
             sequenceIndex: row.sequenceIndex,
@@ -353,6 +367,59 @@ function createDailyCasesFixture(options?: { forceCreateRace?: boolean }) {
         }
 
         return { count: createdCount };
+      }),
+    },
+    caseRevisionPublicationDecision: {
+      findMany: jest.fn(async (args: any) => {
+        const revisionDate = args.where?.caseRevision?.is?.date;
+        return store.publicationDecisions
+          .filter(
+            (decision) =>
+              decision.standing === args.where.standing &&
+              (!revisionDate ||
+                (store.cases
+                  .find((item) => item.id === decision.caseId)
+                  ?.currentRevision?.date.getTime() ?? Number.NaN) >=
+                  revisionDate.gte.getTime()) &&
+              (!revisionDate ||
+                (store.cases
+                  .find((item) => item.id === decision.caseId)
+                  ?.currentRevision?.date.getTime() ?? Number.NaN) <
+                  revisionDate.lt.getTime()),
+          )
+          .sort((left, right) => {
+            const occurredDelta =
+              left.occurredAt.getTime() - right.occurredAt.getTime();
+            return occurredDelta !== 0
+              ? occurredDelta
+              : left.id.localeCompare(right.id);
+          })
+          .map((decision) => {
+            const caseRecord = store.cases.find(
+              (item) => item.id === decision.caseId,
+            )!;
+            const revision = caseRecord.currentRevision!;
+            return {
+              id: decision.id,
+              caseId: decision.caseId,
+              caseRevisionId: decision.caseRevisionId,
+              occurredAt: decision.occurredAt,
+              case: {
+                id: caseRecord.id,
+                title: caseRecord.title,
+                editorialStatus: caseRecord.editorialStatus,
+                approvedAt: caseRecord.approvedAt,
+                publishedAt: caseRecord.publishedAt ?? null,
+                currentRevisionId: revision.id ?? `rev-${caseRecord.id}`,
+              },
+              caseRevision: {
+                id: decision.caseRevisionId,
+                caseId: decision.caseId,
+                date: revision.date,
+                publishTrack: revision.publishTrack,
+              },
+            };
+          });
       }),
     },
     gameSession: {
@@ -483,7 +550,10 @@ function createDailyCasesFixture(options?: { forceCreateRace?: boolean }) {
 
 function addScheduleCase(
   store: ReturnType<typeof createDailyCasesFixture>['store'],
-  overrides: Partial<StoreCase> & { id: string },
+  overrides: Partial<StoreCase> & {
+    id: string;
+    authorizePublication?: boolean;
+  },
 ) {
   const targetDate = normalizeDailyDate('2099-01-01');
   const hasOverride = (key: keyof StoreCase) =>
@@ -524,10 +594,40 @@ function addScheduleCase(
     currentRevision:
       overrides.currentRevision === undefined
         ? {
+            id: `rev-${overrides.id}`,
             publishTrack: PublishTrack.PREMIUM,
             date: targetDate,
           }
         : overrides.currentRevision,
+  });
+
+  if (overrides.authorizePublication !== false) {
+    addPublicationDecisionForCase(store, overrides.id);
+  }
+}
+
+function addPublicationDecisionForCase(
+  store: ReturnType<typeof createDailyCasesFixture>['store'],
+  caseId: string,
+  overrides: Partial<StorePublicationDecision> = {},
+) {
+  const caseRecord = store.cases.find((item) => item.id === caseId);
+  if (!caseRecord?.currentRevision) {
+    throw new Error(`Cannot authorize publication without revision: ${caseId}`);
+  }
+  const caseRevisionId =
+    caseRecord.currentRevision.id ?? overrides.caseRevisionId ?? `rev-${caseId}`;
+  if (!caseRecord.currentRevision.id) {
+    caseRecord.currentRevision.id = caseRevisionId;
+  }
+  store.publicationDecisions.push({
+    id: overrides.id ?? `pub-${caseId}`,
+    caseId,
+    caseRevisionId,
+    standing:
+      overrides.standing ?? CaseRevisionPublicationStanding.AUTHORIZED,
+    occurredAt:
+      overrides.occurredAt ?? new Date('2026-01-01T00:00:00.000Z'),
   });
 }
 
@@ -569,23 +669,24 @@ describe('DailyCasesService', () => {
     ).toBeInstanceOf(Date);
   });
 
-  it('schedules APPROVED inventory as assignable', async () => {
+  it('does not schedule APPROVED inventory without APP-008A publication authority', async () => {
     const { service, store } = createDailyCasesFixture();
     const scheduleDate = normalizeDailyDate('2099-02-02');
     addScheduleCase(store, {
       id: 'case-approved',
       editorialStatus: CaseEditorialStatus.APPROVED,
+      authorizePublication: false,
     });
 
     const result = await service.ensureScheduleWindow(scheduleDate, 1);
 
-    expect(result.createdSlots).toMatchObject([
-      {
-        caseId: 'case-approved',
-        track: PublishTrack.DAILY,
-        sequenceIndex: 1,
-      },
-    ]);
+    expect(result.createdSlots).toEqual([]);
+    expect(result.skippedSlots).toContainEqual({
+      date: '2099-02-02',
+      track: PublishTrack.DAILY,
+      sequenceIndex: 1,
+      reason: 'no_eligible_case',
+    });
     expect(store.cases.find((item) => item.id === 'case-approved')).toMatchObject(
       {
         editorialStatus: CaseEditorialStatus.APPROVED,
@@ -594,7 +695,7 @@ describe('DailyCasesService', () => {
     );
   });
 
-  it('does not reuse PUBLISHED inventory', async () => {
+  it('schedules active APP-008A publication even when Case is PUBLISHED projection', async () => {
     const { service, store } = createDailyCasesFixture();
     const scheduleDate = normalizeDailyDate('2099-02-02');
     addScheduleCase(store, {
@@ -605,20 +706,26 @@ describe('DailyCasesService', () => {
 
     const result = await service.ensureScheduleWindow(scheduleDate, 1);
 
-    expect(result.createdSlots).toEqual([]);
-    expect(result.blockedCases).toContainEqual({
-      caseId: 'case-published',
-      diagnosis: 'case-published',
-      editorialStatus: CaseEditorialStatus.PUBLISHED,
-      reason: 'invalid_status',
-    });
+    expect(result.createdSlots).toMatchObject([
+      {
+        caseId: 'case-published',
+        caseRevisionId: 'rev-case-published',
+        publicationDecisionId: 'pub-case-published',
+        track: PublishTrack.DAILY,
+        sequenceIndex: 1,
+      },
+    ]);
   });
 
-  it('excludes invalid inventory with scheduling diagnostics', async () => {
+  it('ignores unpublication-authorized inventory with scheduling diagnostics', async () => {
     const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation();
     const { service, store } = createDailyCasesFixture();
     const scheduleDate = normalizeDailyDate('2099-02-03');
     addScheduleCase(store, { id: 'case-valid' });
+    addScheduleCase(store, {
+      id: 'case-no-publication',
+      authorizePublication: false,
+    });
     addScheduleCase(store, { id: 'case-invalid-clues', clues: [] });
     addScheduleCase(store, {
       id: 'case-missing-diagnosis',
@@ -637,18 +744,12 @@ describe('DailyCasesService', () => {
     const result = await service.ensureScheduleWindow(scheduleDate, 1);
 
     expect(result.createdCount).toBe(1);
-    expect(result.excludedCases).toEqual(
-      expect.arrayContaining([
-        { caseId: 'case-invalid-clues', reason: 'no_playable_clues' },
-        { caseId: 'case-missing-diagnosis', reason: 'missing_diagnosis' },
-        { caseId: 'case-missing-explanation', reason: 'missing_explanation' },
-        { caseId: 'case-draft', reason: 'invalid_status' },
-      ]),
-    );
-    expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('daily_case.schedule.case.excluded'),
+    expect(result.excludedCases).toEqual([]);
+    expect(logSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('case-no-publication'),
     );
     for (const caseId of [
+      'case-no-publication',
       'case-invalid-clues',
       'case-missing-diagnosis',
       'case-missing-explanation',
@@ -661,13 +762,22 @@ describe('DailyCasesService', () => {
     logSpy.mockRestore();
   });
 
-  it('does not assign PUBLISHED cases again', async () => {
+  it('does not assign already scheduled authorized publications again', async () => {
     const { service, store } = createDailyCasesFixture();
     const scheduleDate = normalizeDailyDate('2099-02-05');
+    const previousDate = normalizeDailyDate('2099-01-15');
     addScheduleCase(store, {
       id: 'case-published',
       editorialStatus: CaseEditorialStatus.PUBLISHED,
       publishedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    store.dailyCases.push({
+      id: 'dc-existing-elsewhere',
+      caseId: 'case-published',
+      date: previousDate,
+      track: PublishTrack.DAILY,
+      sequenceIndex: 1,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
     });
 
     const result = await service.ensureScheduleWindow(scheduleDate, 1);
@@ -677,9 +787,9 @@ describe('DailyCasesService', () => {
       caseId: 'case-published',
       diagnosis: 'case-published',
       editorialStatus: CaseEditorialStatus.PUBLISHED,
-      reason: 'invalid_status',
+      reason: 'already_scheduled',
     });
-    expect(store.dailyCases).toEqual([]);
+    expect(store.dailyCases).toHaveLength(1);
     expect(store.cases.find((item) => item.id === 'case-published')).toMatchObject(
       {
         editorialStatus: CaseEditorialStatus.PUBLISHED,
@@ -796,6 +906,8 @@ describe('DailyCasesService', () => {
         date: '2099-05-02',
         dailyCaseId: 'dc-preserved',
         caseId: 'case-preserved',
+        caseRevisionId: null,
+        publicationDecisionId: null,
         track: PublishTrack.DAILY,
         sequenceIndex: 1,
       },
@@ -1042,6 +1154,9 @@ describe('DailyCasesService', () => {
         currentRevision: { publishTrack: PublishTrack.PREMIUM, date },
       },
     );
+    addPublicationDecisionForCase(store, 'case-daily');
+    addPublicationDecisionForCase(store, 'case-premium-2');
+    addPublicationDecisionForCase(store, 'case-premium-1');
 
     await service.publishDailyCasesForDate(date);
     const result = await service.getTodayCasesForUser('premium-user', date);
@@ -1322,6 +1437,15 @@ describe('DailyCasesService', () => {
         currentRevision: { publishTrack: PublishTrack.PREMIUM, date },
       },
     );
+    addPublicationDecisionForCase(store, 'case-daily', {
+      occurredAt: new Date('2026-04-17T00:00:00.000Z'),
+    });
+    addPublicationDecisionForCase(store, 'case-premium-a', {
+      occurredAt: new Date('2026-04-17T00:00:02.000Z'),
+    });
+    addPublicationDecisionForCase(store, 'case-premium-b', {
+      occurredAt: new Date('2026-04-17T00:00:03.000Z'),
+    });
 
     const first = await service.publishDailyCasesForDate(date);
     const second = await service.publishDailyCasesForDate(date);
@@ -1393,6 +1517,12 @@ describe('DailyCasesService', () => {
         currentRevision: { publishTrack: PublishTrack.PREMIUM, date },
       },
     );
+    addPublicationDecisionForCase(store, 'case-premium-a', {
+      occurredAt: new Date('2026-04-17T00:00:02.000Z'),
+    });
+    addPublicationDecisionForCase(store, 'case-premium-b', {
+      occurredAt: new Date('2026-04-17T00:00:03.000Z'),
+    });
 
     const result = await service.publishDailyCasesForDate(date);
 
@@ -1401,12 +1531,16 @@ describe('DailyCasesService', () => {
         {
           date,
           caseId: 'case-premium-a',
+          caseRevisionId: 'rev-case-premium-a',
+          publicationDecisionId: 'pub-case-premium-a',
           track: PublishTrack.PREMIUM,
           sequenceIndex: 1,
         },
         {
           date,
           caseId: 'case-premium-b',
+          caseRevisionId: 'rev-case-premium-b',
+          publicationDecisionId: 'pub-case-premium-b',
           track: PublishTrack.PREMIUM,
           sequenceIndex: 2,
         },
@@ -1461,6 +1595,9 @@ describe('DailyCasesService', () => {
         currentRevision: { publishTrack: PublishTrack.PREMIUM, date },
       },
     );
+    addPublicationDecisionForCase(store, 'case-premium-b', {
+      occurredAt: new Date('2026-04-17T00:00:03.000Z'),
+    });
 
     await service.publishDailyCasesForDate(date);
 
@@ -1515,6 +1652,12 @@ describe('DailyCasesService', () => {
         currentRevision: { publishTrack: PublishTrack.PREMIUM, date },
       },
     );
+    addPublicationDecisionForCase(store, 'case-premium-a', {
+      occurredAt: new Date('2026-04-17T00:00:02.000Z'),
+    });
+    addPublicationDecisionForCase(store, 'case-premium-b', {
+      occurredAt: new Date('2026-04-17T00:00:03.000Z'),
+    });
 
     await service.publishDailyCasesForDate(date);
 
@@ -1553,6 +1696,9 @@ describe('DailyCasesService', () => {
       editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
       approvedAt: new Date('2026-04-17T00:00:02.000Z'),
       currentRevision: { publishTrack: PublishTrack.PREMIUM, date },
+    });
+    addPublicationDecisionForCase(store, 'case-premium-a', {
+      occurredAt: new Date('2026-04-17T00:00:02.000Z'),
     });
 
     const result = await service.assignDailyCasesForDate(date);
