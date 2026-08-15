@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  BarChart3,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock3,
   Search,
   Sparkles,
-  Stethoscope,
   X,
 } from 'lucide-react'
+import WardleLogo from '../../../components/brand/WardleLogo'
 import BottomSheet from '../../../components/ui/BottomSheet'
 import { DifficultyBadge, TrackBadge } from './learn/archive/shared'
 import {
@@ -18,7 +18,6 @@ import {
   getAdjacentArchiveMonth,
   getArchiveDateKey,
   getArchiveMonths,
-  getArchiveMonthsForYear,
   getArchiveYears,
   getLatestArchiveMonth,
   getNextArchiveCase,
@@ -43,20 +42,6 @@ type ArchiveTabPageProps = {
 }
 
 const WEEKDAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
-const MONTH_SHORT_LABELS = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-]
 
 function formatAbsoluteDate(date: Date, includeYear: boolean) {
   return new Intl.DateTimeFormat(undefined, {
@@ -224,6 +209,20 @@ function getMonthName(year: number, month: number) {
   }).format(new Date(Date.UTC(year, month, 1)))
 }
 
+function getAdjacentArchiveYears(years: number[], currentYear: number) {
+  const availableYears = [...years].sort((a, b) => a - b)
+  const currentYearIndex = availableYears.indexOf(currentYear)
+
+  return {
+    olderYear:
+      currentYearIndex > 0 ? availableYears[currentYearIndex - 1] : null,
+    newerYear:
+      currentYearIndex >= 0 && currentYearIndex < availableYears.length - 1
+        ? availableYears[currentYearIndex + 1]
+        : null,
+  }
+}
+
 function getCalendarCellLabel(day: ArchiveCalendarDay) {
   const date = new Intl.DateTimeFormat(undefined, {
     day: 'numeric',
@@ -263,14 +262,11 @@ export default function ArchiveTabPage({
   onContinueArchive,
 }: ArchiveTabPageProps) {
   const [localQuery, setLocalQuery] = useState('')
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const months = useMemo(() => getArchiveMonths(items), [items])
   const years = useMemo(() => getArchiveYears(items), [items])
   const groups = useMemo(() => groupArchiveByDate(items), [items])
   const latestMonth = useMemo(() => getLatestArchiveMonth(items), [items])
   const [currentMonthKey, setCurrentMonthKey] = useState<string | null>(null)
-  const [navigatorOpen, setNavigatorOpen] = useState(false)
-  const [navigatorYear, setNavigatorYear] = useState<number | null>(null)
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null)
   const [dateSheetOpen, setDateSheetOpen] = useState(false)
   const nextArchiveCase = useMemo(() => getNextArchiveCase(items), [items])
@@ -297,10 +293,9 @@ export default function ArchiveTabPage({
   const newerMonth = currentMonth
     ? getAdjacentArchiveMonth(months, currentMonth.key, 'newer')
     : null
-  const navigatorYearValue = navigatorYear ?? currentMonth?.year ?? years[0] ?? null
-  const navigatorYearMonths = navigatorYearValue
-    ? getArchiveMonthsForYear(items, navigatorYearValue)
-    : []
+  const { olderYear, newerYear } = currentMonth
+    ? getAdjacentArchiveYears(years, currentMonth.year)
+    : { olderYear: null, newerYear: null }
   const currentMonthDatePrefix = currentMonth ? `${currentMonth.key}-` : null
 
   const changeArchiveYear = (year: number) => {
@@ -318,7 +313,6 @@ export default function ArchiveTabPage({
     }
 
     setCurrentMonthKey(preferredMonth.key)
-    setNavigatorYear(year)
     setDateSheetOpen(false)
   }
 
@@ -332,17 +326,6 @@ export default function ArchiveTabPage({
     setDateSheetOpen(true)
   }
 
-  const openMobileSearch = () => {
-    setMobileSearchOpen(true)
-    setDateSheetOpen(false)
-    setNavigatorOpen(false)
-  }
-
-  const closeMobileSearch = () => {
-    setMobileSearchOpen(false)
-    setLocalQuery('')
-  }
-
   useEffect(() => {
     if (!latestMonth) {
       setCurrentMonthKey(null)
@@ -353,12 +336,6 @@ export default function ArchiveTabPage({
       setCurrentMonthKey(latestMonth.key)
     }
   }, [currentMonthKey, latestMonth, months])
-
-  useEffect(() => {
-    if (currentMonth && !navigatorYear) {
-      setNavigatorYear(currentMonth.year)
-    }
-  }, [currentMonth, navigatorYear])
 
   useEffect(() => {
     if (!selectedDateKey && nextArchiveCase) {
@@ -396,29 +373,12 @@ export default function ArchiveTabPage({
   }, [dateSheetOpen])
 
   useEffect(() => {
-    if (!mobileSearchOpen) {
-      return
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setMobileSearchOpen(false)
-        setLocalQuery('')
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [mobileSearchOpen])
-
-  useEffect(() => {
     if (typeof window === 'undefined') {
       return
     }
 
     const desktopQuery = window.matchMedia('(min-width: 640px)')
     const syncResponsiveSearchState = () => {
-      setMobileSearchOpen(false)
       if (!desktopQuery.matches) {
         setLocalQuery('')
       }
@@ -444,14 +404,7 @@ export default function ArchiveTabPage({
 
   return (
     <section className="flex min-h-0 w-full flex-col overflow-hidden">
-      <MobileArchiveHeader
-        searchOpen={mobileSearchOpen}
-        query={localQuery}
-        onOpenSearch={openMobileSearch}
-        onQueryChange={setLocalQuery}
-        onClearSearch={() => setLocalQuery('')}
-        onCloseSearch={closeMobileSearch}
-      />
+      <MobileArchiveHeader />
 
       <header className="hidden shrink-0 border-b border-white/[0.07] px-4 pb-3 pt-2 sm:block sm:px-5">
         <p className="font-brand-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--wardle-color-teal)]/70">
@@ -518,8 +471,6 @@ export default function ArchiveTabPage({
             actionLabel={error ? 'Retry' : "Play today's case"}
             onAction={error ? onRetry : onPlayToday}
           />
-        ) : mobileSearchOpen && !query ? (
-          <MobileArchiveSearchPrompt />
         ) : query ? (
           <SearchResults
             items={searchResults}
@@ -540,141 +491,66 @@ export default function ArchiveTabPage({
               <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
                 <MobileArchiveCalendar
                   calendar={calendar}
-                  years={years}
                   olderMonth={olderMonth}
                   newerMonth={newerMonth}
                   latestMonth={latestMonth}
-                  navigatorOpen={navigatorOpen}
-                  navigatorYearValue={navigatorYearValue}
-                  navigatorYearMonths={navigatorYearMonths}
+                  olderYear={olderYear}
+                  newerYear={newerYear}
                   currentMonthIsLatest={currentMonthIsLatest}
                   selectedDateKey={selectedDateKey}
                   onSelectOlderMonth={() => {
                     if (olderMonth) {
                       setCurrentMonthKey(olderMonth.key)
-                      setNavigatorYear(olderMonth.year)
                       setDateSheetOpen(false)
                     }
                   }}
                   onSelectNewerMonth={() => {
                     if (newerMonth) {
                       setCurrentMonthKey(newerMonth.key)
-                      setNavigatorYear(newerMonth.year)
                       setDateSheetOpen(false)
                     }
-                  }}
-                  onToggleNavigator={() => {
-                    setNavigatorYear(calendar.year)
-                    setNavigatorOpen((open) => !open)
-                    setDateSheetOpen(false)
                   }}
                   onSelectLatestMonth={() => {
                     if (latestMonth) {
                       setCurrentMonthKey(latestMonth.key)
-                      setNavigatorYear(latestMonth.year)
-                      setNavigatorOpen(false)
                       setDateSheetOpen(false)
                     }
                   }}
                   onSelectYear={changeArchiveYear}
-                  onSelectMonth={(month) => {
-                    setCurrentMonthKey(month.key)
-                    setNavigatorYear(month.year)
-                    setNavigatorOpen(false)
-                    setDateSheetOpen(false)
-                  }}
                   onSelectDate={selectArchiveDate}
                 />
 
                 <section className="hidden min-w-0 max-w-full rounded-[18px] border border-white/[0.06] bg-white/[0.025] p-3 sm:block sm:p-4">
-                  <div className="mb-3 grid min-w-0 gap-2">
-                    <div className="flex min-w-0 items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (olderMonth) {
-                            setCurrentMonthKey(olderMonth.key)
-                            setNavigatorYear(olderMonth.year)
-                            setDateSheetOpen(false)
-                          }
-                        }}
-                        disabled={!olderMonth}
-                        aria-label="Previous archive month"
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] border border-white/[0.08] bg-white/[0.03] text-white/48 transition hover:text-white/72 disabled:opacity-30"
-                      >
-                        <ChevronLeft className="h-4 w-4" strokeWidth={2} />
-                      </button>
-                      <div className="grid min-w-0 flex-1 justify-items-center gap-0.5">
-                        <span className="min-w-0 truncate text-base font-black text-[var(--wardle-color-mint)]">
-                          {getMonthName(calendar.year, calendar.month)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setNavigatorYear(calendar.year)
-                            setNavigatorOpen((open) => !open)
-                            setDateSheetOpen(false)
-                          }}
-                          aria-expanded={navigatorOpen}
-                          className="inline-flex min-w-0 items-center justify-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.025] px-3 py-1 font-brand-mono text-[11px] font-bold text-white/54 transition hover:bg-white/[0.05] hover:text-white/78 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.22)]"
-                        >
-                          {calendar.year}
-                          <ChevronDown
-                            className={`h-3.5 w-3.5 shrink-0 text-white/32 transition ${
-                              navigatorOpen ? 'rotate-180' : ''
-                            }`}
-                            strokeWidth={2}
-                          />
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (newerMonth) {
-                            setCurrentMonthKey(newerMonth.key)
-                            setNavigatorYear(newerMonth.year)
-                            setDateSheetOpen(false)
-                          }
-                        }}
-                        disabled={!newerMonth}
-                        aria-label="Next archive month"
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] border border-white/[0.08] bg-white/[0.03] text-white/48 transition hover:text-white/72 disabled:opacity-30"
-                      >
-                        <ChevronRight className="h-4 w-4" strokeWidth={2} />
-                      </button>
-                    </div>
-
-                    {!currentMonthIsLatest && latestMonth ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCurrentMonthKey(latestMonth.key)
-                          setNavigatorYear(latestMonth.year)
-                          setNavigatorOpen(false)
-                          setDateSheetOpen(false)
-                        }}
-                        className="justify-self-center rounded-full border border-white/[0.07] bg-white/[0.025] px-3 py-1 font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/38 transition hover:bg-white/[0.05] hover:text-white/62"
-                      >
-                        Latest
-                      </button>
-                    ) : null}
-
-                    {navigatorOpen && navigatorYearValue ? (
-                      <ArchiveMonthNavigator
-                        years={years}
-                        selectedYear={navigatorYearValue}
-                        selectedMonthKey={calendar.key}
-                        activeMonths={navigatorYearMonths}
-                        onSelectYear={changeArchiveYear}
-                        onSelectMonth={(month) => {
-                          setCurrentMonthKey(month.key)
-                          setNavigatorYear(month.year)
-                          setNavigatorOpen(false)
-                          setDateSheetOpen(false)
-                        }}
-                      />
-                    ) : null}
-                  </div>
+                  <ArchiveCalendarStepperNav
+                    monthName={getMonthName(calendar.year, calendar.month)}
+                    year={calendar.year}
+                    canGoOlderMonth={Boolean(olderMonth)}
+                    canGoNewerMonth={Boolean(newerMonth)}
+                    olderYear={olderYear}
+                    newerYear={newerYear}
+                    showLatest={!currentMonthIsLatest && Boolean(latestMonth)}
+                    className="mb-3 mx-auto max-w-[440px]"
+                    onOlderMonth={() => {
+                      if (olderMonth) {
+                        setCurrentMonthKey(olderMonth.key)
+                        setDateSheetOpen(false)
+                      }
+                    }}
+                    onNewerMonth={() => {
+                      if (newerMonth) {
+                        setCurrentMonthKey(newerMonth.key)
+                        setDateSheetOpen(false)
+                      }
+                    }}
+                    onOlderYear={changeArchiveYear}
+                    onNewerYear={changeArchiveYear}
+                    onLatest={() => {
+                      if (latestMonth) {
+                        setCurrentMonthKey(latestMonth.key)
+                        setDateSheetOpen(false)
+                      }
+                    }}
+                  />
 
                   <ArchiveCalendarLegend />
 
@@ -725,156 +601,62 @@ export default function ArchiveTabPage({
   )
 }
 
-function MobileArchiveHeader({
-  searchOpen,
-  query,
-  onOpenSearch,
-  onQueryChange,
-  onClearSearch,
-  onCloseSearch,
-}: {
-  searchOpen: boolean
-  query: string
-  onOpenSearch: () => void
-  onQueryChange: (value: string) => void
-  onClearSearch: () => void
-  onCloseSearch: () => void
-}) {
-  if (searchOpen) {
-    return (
-      <header className="flex min-h-[58px] shrink-0 items-center gap-2 border-b border-white/[0.07] px-4 py-3 sm:hidden">
-        <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/[0.09] bg-white/[0.035] px-3 transition focus-within:border-[var(--wardle-color-teal)]/40 focus-within:ring-2 focus-within:ring-[rgba(0,180,166,0.18)]">
-          <Search className="h-4 w-4 shrink-0 text-white/32" strokeWidth={2} />
-          <input
-            autoFocus
-            aria-label="Search archive"
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                event.stopPropagation()
-                onCloseSearch()
-              }
-            }}
-            placeholder="Search case number or date"
-            className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-white/78 outline-none placeholder:text-white/28"
-          />
-          {query ? (
-            <button
-              type="button"
-              onClick={onClearSearch}
-              aria-label="Clear archive search"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white/34 transition hover:bg-white/[0.06] hover:text-white/68 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.24)]"
-            >
-              <X className="h-4 w-4" strokeWidth={2} />
-            </button>
-          ) : null}
-        </div>
-        <button
-          type="button"
-          onClick={onCloseSearch}
-          aria-label="Close archive search"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white/48 transition hover:bg-white/[0.05] hover:text-white/76 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.24)]"
-        >
-          <X className="h-5 w-5" strokeWidth={2} />
-        </button>
-      </header>
-    )
-  }
-
+function MobileArchiveHeader() {
   return (
-    <header className="flex min-h-[58px] shrink-0 items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-3 sm:hidden">
-      <h1 className="min-w-0 truncate text-2xl font-black leading-tight text-[var(--wardle-color-mint)]">
+    <header className="sticky top-0 z-20 flex min-w-0 items-center justify-between border-b border-white/[0.05] bg-[var(--wardle-color-charcoal)]/96 px-5 py-3 backdrop-blur sm:hidden">
+      <WardleLogo size="sm" />
+      <span className="font-brand-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--wardle-color-teal)]/50">
         Archive
-      </h1>
-      <button
-        type="button"
-        onClick={onOpenSearch}
-        aria-label="Search archive"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/[0.075] bg-white/[0.025] text-white/46 transition hover:bg-white/[0.055] hover:text-white/76 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.24)]"
-      >
-        <Search className="h-4 w-4" strokeWidth={2} />
-      </button>
+      </span>
     </header>
-  )
-}
-
-function MobileArchiveSearchPrompt() {
-  return (
-    <div className="flex min-h-[220px] flex-col items-center justify-center px-6 text-center sm:hidden">
-      <Search className="h-5 w-5 text-white/24" strokeWidth={1.8} aria-hidden="true" />
-      <p className="mt-3 text-sm font-semibold text-white/42">
-        Search by case number or date.
-      </p>
-    </div>
   )
 }
 
 function MobileArchiveCalendar({
   calendar,
-  years,
   olderMonth,
   newerMonth,
   latestMonth,
-  navigatorOpen,
-  navigatorYearValue,
-  navigatorYearMonths,
+  olderYear,
+  newerYear,
   currentMonthIsLatest,
   selectedDateKey,
   onSelectOlderMonth,
   onSelectNewerMonth,
-  onToggleNavigator,
   onSelectLatestMonth,
   onSelectYear,
-  onSelectMonth,
   onSelectDate,
 }: {
   calendar: ArchiveMonth & { weeks: ArchiveCalendarDay[][] }
-  years: number[]
   olderMonth: ArchiveMonth | null
   newerMonth: ArchiveMonth | null
   latestMonth: ArchiveMonth | null
-  navigatorOpen: boolean
-  navigatorYearValue: number | null
-  navigatorYearMonths: ArchiveMonth[]
+  olderYear: number | null
+  newerYear: number | null
   currentMonthIsLatest: boolean
   selectedDateKey: string | null
   onSelectOlderMonth: () => void
   onSelectNewerMonth: () => void
-  onToggleNavigator: () => void
   onSelectLatestMonth: () => void
   onSelectYear: (year: number) => void
-  onSelectMonth: (month: ArchiveMonth) => void
   onSelectDate: (dateKey: string) => void
 }) {
   return (
     <section className="min-w-0 max-w-full sm:hidden">
-      <MobileArchiveMonthHeader
-        calendar={calendar}
-        olderMonth={olderMonth}
-        newerMonth={newerMonth}
-        latestMonth={latestMonth}
-        navigatorOpen={navigatorOpen}
-        navigatorYearValue={navigatorYearValue}
-        currentMonthIsLatest={currentMonthIsLatest}
-        onSelectOlderMonth={onSelectOlderMonth}
-        onSelectNewerMonth={onSelectNewerMonth}
-        onToggleNavigator={onToggleNavigator}
-        onSelectLatestMonth={onSelectLatestMonth}
+      <ArchiveCalendarStepperNav
+        monthName={getMonthName(calendar.year, calendar.month)}
+        year={calendar.year}
+        canGoOlderMonth={Boolean(olderMonth)}
+        canGoNewerMonth={Boolean(newerMonth)}
+        olderYear={olderYear}
+        newerYear={newerYear}
+        showLatest={!currentMonthIsLatest && Boolean(latestMonth)}
+        onOlderMonth={onSelectOlderMonth}
+        onNewerMonth={onSelectNewerMonth}
+        onOlderYear={onSelectYear}
+        onNewerYear={onSelectYear}
+        onLatest={onSelectLatestMonth}
       />
-
-      {navigatorOpen && navigatorYearValue ? (
-        <div className="mb-4">
-          <ArchiveMonthNavigator
-            years={years}
-            selectedYear={navigatorYearValue}
-            selectedMonthKey={calendar.key}
-            activeMonths={navigatorYearMonths}
-            onSelectYear={onSelectYear}
-            onSelectMonth={onSelectMonth}
-          />
-        </div>
-      ) : null}
 
       <MobileArchiveTileLegend />
 
@@ -900,88 +682,104 @@ function MobileArchiveCalendar({
   )
 }
 
-function MobileArchiveMonthHeader({
-  calendar,
-  olderMonth,
-  newerMonth,
-  latestMonth,
-  navigatorOpen,
-  navigatorYearValue,
-  currentMonthIsLatest,
-  onSelectOlderMonth,
-  onSelectNewerMonth,
-  onToggleNavigator,
-  onSelectLatestMonth,
+function ArchiveCalendarStepperNav({
+  monthName,
+  year,
+  canGoOlderMonth,
+  canGoNewerMonth,
+  olderYear,
+  newerYear,
+  showLatest,
+  className = '',
+  onOlderMonth,
+  onNewerMonth,
+  onOlderYear,
+  onNewerYear,
+  onLatest,
 }: {
-  calendar: ArchiveMonth
-  olderMonth: ArchiveMonth | null
-  newerMonth: ArchiveMonth | null
-  latestMonth: ArchiveMonth | null
-  navigatorOpen: boolean
-  navigatorYearValue: number | null
-  currentMonthIsLatest: boolean
-  onSelectOlderMonth: () => void
-  onSelectNewerMonth: () => void
-  onToggleNavigator: () => void
-  onSelectLatestMonth: () => void
+  monthName: string
+  year: number
+  canGoOlderMonth: boolean
+  canGoNewerMonth: boolean
+  olderYear: number | null
+  newerYear: number | null
+  showLatest: boolean
+  className?: string
+  onOlderMonth: () => void
+  onNewerMonth: () => void
+  onOlderYear: (year: number) => void
+  onNewerYear: (year: number) => void
+  onLatest: () => void
 }) {
   return (
-    <div className="mb-4 grid min-w-0 justify-items-center gap-1">
-      <button
-        type="button"
-        onClick={onToggleNavigator}
-        aria-expanded={navigatorOpen}
-        className="inline-flex max-w-full min-w-0 items-center justify-center gap-1.5 rounded-full px-3 py-1 text-lg font-black leading-tight text-[var(--wardle-color-mint)] transition hover:text-white focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.24)]"
-      >
-        <span className="min-w-0 truncate">
-          {getMonthName(calendar.year, calendar.month)} {calendar.year}
-        </span>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-white/34 transition ${
-            navigatorOpen ? 'rotate-180' : ''
-          }`}
-          strokeWidth={2}
-        />
-      </button>
-
-      <div className="grid w-full grid-cols-[44px_minmax(0,1fr)_44px] items-center">
-        <button
-          type="button"
-          onClick={onSelectOlderMonth}
-          disabled={!olderMonth}
-          aria-label="Previous archive month"
-          className="flex h-11 w-11 items-center justify-center rounded-full text-white/52 transition hover:bg-white/[0.04] hover:text-white/78 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.22)] disabled:cursor-default disabled:text-white/16 disabled:hover:bg-transparent"
-        >
-          <ChevronLeft className="h-5 w-5" strokeWidth={2} />
-        </button>
-
-        {!currentMonthIsLatest && latestMonth ? (
+    <div className={`mb-4 grid min-w-0 gap-2 ${className}`}>
+      <div className="grid w-full min-w-0 grid-cols-[minmax(0,1.35fr)_minmax(0,0.85fr)] items-center gap-4">
+        <div className="grid min-w-0 grid-cols-[38px_minmax(0,1fr)_38px] items-center">
           <button
             type="button"
-            onClick={onSelectLatestMonth}
-            className="justify-self-center rounded-full px-3 py-1 font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/36 transition hover:bg-white/[0.04] hover:text-white/62 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.2)]"
+            onClick={onOlderMonth}
+            disabled={!canGoOlderMonth}
+            aria-label="Previous archive month"
+            className="flex h-10 w-10 items-center justify-center justify-self-start rounded-full text-[var(--wardle-color-teal)] transition hover:bg-white/[0.04] hover:text-[var(--wardle-color-mint)] focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.22)] disabled:cursor-default disabled:text-white/16 disabled:hover:bg-transparent"
           >
-            Latest
+            <ChevronLeft className="h-4 w-4" strokeWidth={2} />
           </button>
-        ) : (
-          <span
-            className="justify-self-center font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/18"
-            aria-hidden="true"
-          >
-            {navigatorYearValue}
+          <span className="min-w-0 truncate text-center font-brand-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--wardle-color-mint)]">
+            {monthName}
           </span>
-        )}
+          <button
+            type="button"
+            onClick={onNewerMonth}
+            disabled={!canGoNewerMonth}
+            aria-label="Next archive month"
+            className="flex h-10 w-10 items-center justify-center justify-self-end rounded-full text-[var(--wardle-color-teal)] transition hover:bg-white/[0.04] hover:text-[var(--wardle-color-mint)] focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.22)] disabled:cursor-default disabled:text-white/16 disabled:hover:bg-transparent"
+          >
+            <ChevronRight className="h-4 w-4" strokeWidth={2} />
+          </button>
+        </div>
 
+        <div className="grid min-w-0 grid-cols-[34px_minmax(0,1fr)_34px] items-center">
+          <button
+            type="button"
+            onClick={() => {
+              if (olderYear) {
+                onOlderYear(olderYear)
+              }
+            }}
+            disabled={!olderYear}
+            aria-label="Previous archive year"
+            className="flex h-10 w-9 items-center justify-center justify-self-start rounded-full text-[var(--wardle-color-teal)] transition hover:bg-white/[0.04] hover:text-[var(--wardle-color-mint)] focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.22)] disabled:cursor-default disabled:text-white/16 disabled:hover:bg-transparent"
+          >
+            <ChevronLeft className="h-4 w-4" strokeWidth={2} />
+          </button>
+          <span className="min-w-0 truncate text-center font-brand-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white/56">
+            {year}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              if (newerYear) {
+                onNewerYear(newerYear)
+              }
+            }}
+            disabled={!newerYear}
+            aria-label="Next archive year"
+            className="flex h-10 w-9 items-center justify-center justify-self-end rounded-full text-[var(--wardle-color-teal)] transition hover:bg-white/[0.04] hover:text-[var(--wardle-color-mint)] focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.22)] disabled:cursor-default disabled:text-white/16 disabled:hover:bg-transparent"
+          >
+            <ChevronRight className="h-4 w-4" strokeWidth={2} />
+          </button>
+        </div>
+      </div>
+
+      {showLatest ? (
         <button
           type="button"
-          onClick={onSelectNewerMonth}
-          disabled={!newerMonth}
-          aria-label="Next archive month"
-          className="flex h-11 w-11 items-center justify-center rounded-full text-white/52 transition hover:bg-white/[0.04] hover:text-white/78 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.22)] disabled:cursor-default disabled:text-white/16 disabled:hover:bg-transparent"
+          onClick={onLatest}
+          className="justify-self-center rounded-full px-3 py-1 font-brand-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/36 transition hover:bg-white/[0.04] hover:text-white/62 focus:outline-none focus:ring-2 focus:ring-[rgba(0,180,166,0.2)]"
         >
-          <ChevronRight className="h-5 w-5" strokeWidth={2} />
+          Latest
         </button>
-      </div>
+      ) : null}
     </div>
   )
 }
@@ -1221,84 +1019,6 @@ function ArchiveCatchUpHero({
   )
 }
 
-function ArchiveMonthNavigator({
-  years,
-  selectedYear,
-  selectedMonthKey,
-  activeMonths,
-  onSelectYear,
-  onSelectMonth,
-}: {
-  years: number[]
-  selectedYear: number
-  selectedMonthKey: string
-  activeMonths: ArchiveMonth[]
-  onSelectYear: (year: number) => void
-  onSelectMonth: (month: ArchiveMonth) => void
-}) {
-  const activeMonthByNumber = new Map(
-    activeMonths.map((month) => [month.month, month]),
-  )
-
-  return (
-    <div className="grid min-w-0 gap-3 rounded-[14px] border border-white/[0.07] bg-black/[0.16] p-3">
-      {years.length > 1 ? (
-        <div className="grid min-w-0 gap-2">
-          <p className="font-brand-mono text-[10px] font-bold uppercase tracking-[0.14em] text-white/28">
-            Select year
-          </p>
-          <div className="grid min-w-0 grid-cols-2 gap-1.5 sm:grid-cols-3">
-            {years.map((year) => (
-              <button
-                key={year}
-                type="button"
-                onClick={() => onSelectYear(year)}
-                className={`rounded-[10px] border px-3 py-2 font-brand-mono text-[11px] font-bold transition ${
-                  selectedYear === year
-                    ? 'border-[rgba(0,180,166,0.35)] bg-[rgba(0,180,166,0.12)] text-[var(--wardle-color-teal)]'
-                    : 'border-white/[0.07] bg-white/[0.025] text-white/38 hover:text-white/62'
-                }`}
-              >
-                {year}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      <div className="grid grid-cols-4 gap-1.5">
-        {MONTH_SHORT_LABELS.map((label, monthNumber) => {
-          const archiveMonth = activeMonthByNumber.get(monthNumber)
-          const active = Boolean(archiveMonth)
-          const selected = archiveMonth?.key === selectedMonthKey
-
-          return (
-            <button
-              key={label}
-              type="button"
-              disabled={!archiveMonth}
-              onClick={() => {
-                if (archiveMonth) {
-                  onSelectMonth(archiveMonth)
-                }
-              }}
-              className={`h-9 rounded-[10px] border font-brand-mono text-[10px] font-bold uppercase tracking-[0.08em] transition disabled:cursor-default ${
-                selected
-                  ? 'border-[rgba(0,180,166,0.42)] bg-[rgba(0,180,166,0.16)] text-[var(--wardle-color-mint)]'
-                  : active
-                    ? 'border-white/[0.08] bg-white/[0.035] text-white/58 hover:bg-white/[0.06] hover:text-white/78'
-                    : 'border-transparent bg-transparent text-white/14'
-              }`}
-            >
-              {label}
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 function CalendarCell({
   day,
   selected,
@@ -1465,7 +1185,7 @@ function MobileArchiveAssignmentRow({
       ? Clock3
       : item.track === 'PREMIUM'
         ? Sparkles
-        : Stethoscope
+        : BarChart3
   const iconTone = completed
     ? 'border-white/[0.07] bg-white/[0.025] text-white/34'
     : inProgress
