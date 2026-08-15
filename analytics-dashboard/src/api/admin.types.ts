@@ -3432,11 +3432,19 @@ export type SearchDiagnosisRegistryQuery = {
 
 export type LinkCaseDiagnosisPayload = {
   diagnosisRegistryId: string;
+  expectedRevisionId?: string;
+  commandIdempotencyKey?: string;
+  changeReason?: string;
+  changeSummary?: string;
   diagnosisEditorialNote?: string;
 };
 
 export type UpdateCaseDiagnosisPayload = {
   canonicalDiagnosis: string;
+  expectedRevisionId?: string;
+  commandIdempotencyKey?: string;
+  changeReason?: string;
+  changeSummary?: string;
 };
 
 export type CreateDiagnosisRegistryPayload = {
@@ -3536,7 +3544,18 @@ export type AiDiagnosisRegistryMetadataSuggestionResponse = {
 };
 
 export type CreateDiagnosisAndLinkPayload = CreateDiagnosisRegistryPayload & {
+  expectedRevisionId?: string;
+  commandIdempotencyKey?: string;
+  changeReason?: string;
+  changeSummary?: string;
   diagnosisEditorialNote?: string;
+};
+
+export type RestoreCaseRevisionPayload = {
+  expectedRevisionId: string;
+  commandIdempotencyKey: string;
+  changeReason: string;
+  changeSummary: string;
 };
 
 export type AddDiagnosisAliasPayload = {

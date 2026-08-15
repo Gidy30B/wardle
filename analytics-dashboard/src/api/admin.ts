@@ -102,6 +102,7 @@ import type {
   LinkCaseDiagnosisPayload,
   MarkCaseReadyToPublishResult,
   PublishResultsSummary,
+  RestoreCaseRevisionPayload,
   RestoreCaseRevisionResult,
   RerunCaseValidationResult,
   SearchDiagnosisRegistryQuery,
@@ -1319,9 +1320,11 @@ export function restoreCaseRevision(
   client: ApiClient,
   caseId: string,
   revisionId: string,
+  payload: RestoreCaseRevisionPayload,
 ) {
   return client.post<RestoreCaseRevisionResult>(
     `/admin/cases/${caseId}/revisions/${revisionId}/restore`,
+    payload,
   );
 }
 

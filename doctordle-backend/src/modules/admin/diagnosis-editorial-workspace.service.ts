@@ -926,40 +926,10 @@ export class DiagnosisEditorialWorkspaceService {
       };
     }
 
-    const patch = this.patchCaseCluesForRevisionDraft(draft);
-    const result = await this.prisma.$transaction(async (tx) => {
-      const updatedCase = await tx.case.update({
-        where: { id: draft.caseId },
-        data: {
-          clues: patch.clues,
-          diagnosisEditorialNote: this.appendCaseEditorialNote(
-            draft.case.diagnosisEditorialNote,
-            this.appliedClueRevisionNote(draft, patch),
-          ),
-        },
-        select: this.caseRevisionSnapshotSelect(),
-      });
-      await this.createCaseRevisionSnapshot(tx, {
-        caseRecord: updatedCase,
-        createdByUserId: input.reviewerUserId,
-      });
-      await tx.caseClueProgressionAnalysis.deleteMany({
-        where: { caseId: draft.caseId },
-      });
-      const applied = await tx.caseClueRevisionDraft.update({
-        where: { id: draft.id },
-        data: {
-          status: 'APPLIED',
-          appliedAt: new Date(),
-          appliedByUserId: input.reviewerUserId,
-        },
-      });
-      return applied;
-    });
-
     return {
-      ...this.caseClueRevisionDraftDto(result),
-      applied: true,
+      ...this.caseClueRevisionDraftDto(draft),
+      applied: false,
+      reason: 'app007_expected_revision_required',
       caseId: draft.caseId,
     };
   }

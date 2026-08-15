@@ -1,0 +1,52 @@
+{
+  "$schema": "../../schemas/document-approval-record.schema.json",
+  "recordId": "WEOS-AUTH-APP-007",
+  "recordType": "DOCUMENT_APPROVAL",
+  "schemaVersion": "1.0.0",
+  "documentId": "WEOS-AUTH-APP-007",
+  "documentVersion": "1.0",
+  "documentPath": "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-007.json",
+  "approvalScope": {
+    "scopeType": "NAMED_STAGE_RUNTIME_AUTHORIZATION",
+    "description": "Approval with conditions for Stage 2 runtime realization of bounded Case Revision mutation hardening only through canonical action CREATE_CASE_REVISION."
+  },
+  "approvalOutcome": "APPROVED_WITH_CONDITIONS",
+  "approver": {
+    "name": "Gideon Lemasika Saningo",
+    "role": "Founding Architecture Authority",
+    "authorityBasis": "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-001.json"
+  },
+  "approverAuthority": "Founding Architecture Authority bootstrap authority for bounded WEOS runtime governance realization following closed APP-006",
+  "approvalDate": "2026-08-09",
+  "effectiveDate": "2026-08-09",
+  "rationale": "WEOS requires Case material mutation to create immutable CaseRevision history rather than silently rewriting mutable Case content. This bounded runtime slice may harden ordinary case-revision authoring by requiring explicit base revision, deterministic material content hashing, stable clue identity handling, lineage, idempotency, concurrency safety, approval non-inheritance, validation/review non-inheritance, and interim learner-exposure safety without authorizing publication, learner exposure cutover, controlled AI application, graph, education, tenancy, backfill, repair, destructive migration, or a general governance-kernel rollout.",
+  "conditions": [
+    "authorized operation is limited to CREATE_CASE_REVISION",
+    "material Case edits must create a new CaseRevision rather than update existing CaseRevision material content",
+    "commands must identify the exact Case and expected base/current CaseRevision",
+    "stale expected-revision execution fails safely without mutation",
+    "idempotency key and canonical command fingerprint are required for governed revision creation",
+    "equivalent retries may replay only an existing compatible CREATE_CASE_REVISION result",
+    "same idempotency identity with different base revision or material payload must produce deterministic conflict",
+    "CaseRevision lineage must preserve createdFromRevisionId when evidence is available",
+    "material contentHash must be deterministic, exclude operational metadata, and preserve meaningful array and clue order",
+    "stable clue keys must not be derived solely from array index or mutable wording hash",
+    "duplicate clue keys in a resulting revision must fail closed",
+    "legacy revisions without governed clue keys must not be rewritten solely to fabricate historical clue identity",
+    "APP-006 approval decisions must remain bound to their original approved CaseRevision and must not be copied to new revisions",
+    "new material revisions must not inherit prior validation or review records",
+    "legacy Case approval compatibility projection must not imply that a new revision inherited approval",
+    "currently scheduled, published, or learner-exposable Case content must not be silently altered through compatibility projection",
+    "ordinary supported runtime material mutation paths must delegate to CREATE_CASE_REVISION or fail closed",
+    "existing runtime/editorial access controls may control who requests authoring edits, but no new APP-006 approval authority is created",
+    "publication, publication readiness, PublishedCaseVersion, DailyCase binding, gameplay, learner exposure, controlled AI application, graph promotion, education governance, tenancy, broad lifecycle conversion, historical backfill, repair and destructive migration remain excluded"
+  ],
+  "supportingDecision": "CREATE_CASE_REVISION_STAGE_2_RUNTIME_AUTHORIZATION",
+  "implementationAuthorization": "GRANTED_FOR_NAMED_STAGE",
+  "bootstrapAuthority": {
+    "isBootstrap": true,
+    "scope": "Stage 2 runtime implementation authorization only for Case Revision mutation hardening through CREATE_CASE_REVISION. Permitted implementation includes additive persistence, additive Prisma schema changes, additive migration, governed revision-creation command handling, exact base revision and expected-version validation, deterministic material content hashing, stable clue-key handling for resulting revisions, lineage persistence, idempotency persistence, compatibility projection safety, bypass hardening for ordinary runtime material writes, and automated verification for this operation only.",
+    "expiryCondition": "Expires when permanent runtime governance authority supersedes this pilot authorization, or when implementation extends beyond CREATE_CASE_REVISION without a separate approved authorization."
+  },
+  "createdAt": "2026-08-09T00:00:00Z"
+}

@@ -94,6 +94,7 @@ export type CreatedRevisionResult = {
   status: 'created';
   revisionId: string;
   revisionNumber: number;
+  contentHash?: string;
   snapshot: CaseRevisionSnapshot;
 };
 

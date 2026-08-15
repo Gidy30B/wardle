@@ -1266,7 +1266,7 @@ describe('DiagnosisEditorialWorkspaceService', () => {
     );
   });
 
-  it('applies approved clue revision drafts to editable case clue data', async () => {
+  it('fails closed without mutating approved clue drafts or editable case clue data', async () => {
     prisma.caseClueRevisionDraft.findUnique.mockResolvedValue(
       clueRevisionDraft({
         status: 'APPROVED',
@@ -1276,28 +1276,19 @@ describe('DiagnosisEditorialWorkspaceService', () => {
       }),
     );
 
+    prisma.caseClueRevisionDraft.update.mockClear();
     const result = await service.applyApprovedClueRevisionDraft({
       draftId: 'draft-1',
       reviewerUserId: 'admin-1',
     });
 
-    expect(prisma.case.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'case-1' },
-        data: expect.objectContaining({
-          clues: expect.arrayContaining([
-            expect.objectContaining({
-              value: 'RLQ guarding replaces generalized tenderness.',
-            }),
-          ]),
-        }),
-      }),
-    );
-    expect(prisma.caseRevision.create).toHaveBeenCalled();
-    expect(prisma.caseClueProgressionAnalysis.deleteMany).toHaveBeenCalledWith({
-      where: { caseId: 'case-1' },
-    });
-    expect(result.applied).toBe(true);
+    expect(prisma.case.update).not.toHaveBeenCalled();
+    expect(prisma.caseRevision.create).not.toHaveBeenCalled();
+    expect(prisma.caseClueRevisionDraft.update).not.toHaveBeenCalled();
+    expect(prisma.caseClueProgressionAnalysis.deleteMany).not.toHaveBeenCalled();
+    expect(result.applied).toBe(false);
+    expect(result.reason).toBe('app007_expected_revision_required');
+    expect(result.status).toBe('APPROVED');
   });
 
   it('blocks applying approved drafts to published cases safely', async () => {
@@ -1341,7 +1332,7 @@ describe('DiagnosisEditorialWorkspaceService', () => {
     expect(result.reason).toBe('already_applied');
   });
 
-  it('blocks malformed clue revision drafts from applying', async () => {
+  it('blocks malformed approved clue revision drafts without mutating state', async () => {
     prisma.caseClueRevisionDraft.findUnique.mockResolvedValue(
       clueRevisionDraft({
         status: 'APPROVED',
@@ -1350,13 +1341,16 @@ describe('DiagnosisEditorialWorkspaceService', () => {
       }),
     );
 
-    await expect(
-      service.applyApprovedClueRevisionDraft({
-        draftId: 'draft-1',
-        reviewerUserId: 'admin-1',
-      }),
-    ).rejects.toThrow('Clue revision draft has no proposed clue text');
+    prisma.caseClueRevisionDraft.update.mockClear();
+    const result = await service.applyApprovedClueRevisionDraft({
+      draftId: 'draft-1',
+      reviewerUserId: 'admin-1',
+    });
+
     expect(prisma.case.update).not.toHaveBeenCalled();
+    expect(prisma.caseClueRevisionDraft.update).not.toHaveBeenCalled();
+    expect(result.applied).toBe(false);
+    expect(result.reason).toBe('app007_expected_revision_required');
   });
 
   it('creates and audits learning-goal coverage annotations', async () => {

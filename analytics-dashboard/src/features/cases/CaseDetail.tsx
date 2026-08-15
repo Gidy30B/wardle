@@ -260,6 +260,18 @@ export default function CaseDetail({
   const { feedback, clear, showError, showPending, showSuccess } =
     useActionFeedback();
 
+  function buildCreateRevisionCommandFields(action: string, summary: string) {
+    const expectedRevisionId = detail?.currentRevisionId ?? '';
+    return {
+      expectedRevisionId,
+      commandIdempotencyKey: `${action}:${detail?.id ?? 'case'}:${expectedRevisionId}:${
+        globalThis.crypto?.randomUUID?.() ?? Date.now().toString(36)
+      }`,
+      changeReason: summary,
+      changeSummary: summary,
+    };
+  }
+
   useEffect(() => {
     if (!detail) {
       setRevisions([]);
@@ -517,7 +529,13 @@ export default function CaseDetail({
           </p>
         </div>
       ),
-      run: () => restoreCaseRevision(client, caseId, revision.id),
+      run: () =>
+        restoreCaseRevision(client, caseId, revision.id, {
+          ...buildCreateRevisionCommandFields(
+            'restore-case-revision',
+            `Restore revision ${revision.revisionNumber}`,
+          ),
+        }),
     });
   }
 
@@ -602,7 +620,14 @@ export default function CaseDetail({
       id: 'link-diagnosis',
       pendingMessage: 'Linking diagnosis to case...',
       successMessage: 'Diagnosis linked to case.',
-      run: () => linkCaseDiagnosis(client, detail.id, payload),
+      run: () =>
+        linkCaseDiagnosis(client, detail.id, {
+          ...payload,
+          ...buildCreateRevisionCommandFields(
+            'link-case-diagnosis',
+            'Link case diagnosis',
+          ),
+        }),
     });
   }
 
@@ -615,7 +640,14 @@ export default function CaseDetail({
       id: 'update-case-diagnosis',
       pendingMessage: 'Saving canonical diagnosis...',
       successMessage: 'Canonical diagnosis saved.',
-      run: () => updateCaseDiagnosis(client, detail.id, payload),
+      run: () =>
+        updateCaseDiagnosis(client, detail.id, {
+          ...payload,
+          ...buildCreateRevisionCommandFields(
+            'update-case-diagnosis',
+            'Update case diagnosis',
+          ),
+        }),
     });
   }
 
@@ -630,7 +662,14 @@ export default function CaseDetail({
       id: 'create-link-diagnosis',
       pendingMessage: 'Creating diagnosis and linking case...',
       successMessage: 'Diagnosis created and linked to case.',
-      run: () => createAndLinkDiagnosis(client, detail.id, payload),
+      run: () =>
+        createAndLinkDiagnosis(client, detail.id, {
+          ...payload,
+          ...buildCreateRevisionCommandFields(
+            'create-and-link-diagnosis',
+            'Create and link case diagnosis',
+          ),
+        }),
     });
   }
 

@@ -1063,6 +1063,11 @@ model CaseRevision {
   id                         String                    @id @default(uuid())
   caseId                     String
   revisionNumber             Int                       @default(1)
+  contentHash                String?
+  createdFromRevisionId      String?
+  changeSummary              String?
+  changeReason               String?
+  materialChange             Json?
   source                     CaseSource?
   publishTrack               PublishTrack?
   title                      String
@@ -1087,6 +1092,8 @@ model CaseRevision {
   diagnosis                  Diagnosis?                @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
   diagnosisRegistry          DiagnosisRegistry?        @relation("CaseRevisionDiagnosisRegistry", fields: [diagnosisRegistryId], references: [id], onDelete: SetNull)
   createdBy                  User?                     @relation("CaseRevisionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdFromRevision        CaseRevision?             @relation("CaseRevisionLineage", fields: [createdFromRevisionId], references: [id], onDelete: SetNull)
+  derivedRevisions           CaseRevision[]            @relation("CaseRevisionLineage")
   currentForCase             Case?                     @relation("CaseCurrentRevision")
   validationRuns             CaseValidationRun[]
   reviews                    CaseReview[]
@@ -1096,11 +1103,31 @@ model CaseRevision {
 
   @@unique([caseId, revisionNumber])
   @@index([caseId])
+  @@index([contentHash])
+  @@index([createdFromRevisionId])
   @@index([diagnosisId])
   @@index([diagnosisRegistryId])
   @@index([diagnosisMappingStatus])
   @@index([createdByUserId])
   @@index([createdAt])
+}
+
+model CaseRevisionCreationCommand {
+  id                    String   @id @default(uuid())
+  commandAction         String
+  commandIdempotencyKey String   @unique
+  commandFingerprint    String
+  caseId                String
+  expectedRevisionId    String
+  resultRevisionId      String?
+  status                String
+  createdAt             DateTime @default(now())
+  completedAt           DateTime?
+
+  @@index([caseId])
+  @@index([expectedRevisionId])
+  @@index([resultRevisionId])
+  @@index([status])
 }
 
 model CaseDifferentialMapping {

@@ -205,6 +205,7 @@ describe('CaseReviewService', () => {
         count: jest.fn(),
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
         update: jest.fn(),
       },
       diagnosis: {
@@ -277,6 +278,16 @@ describe('CaseReviewService', () => {
           caseId: 'case-1',
         },
       }),
+      createCaseRevisionCommandInTransaction: jest.fn().mockResolvedValue({
+        revisionId: 'revision-new',
+        revisionNumber: 4,
+        snapshot: {
+          caseId: 'case-1',
+        },
+      }),
+      executeCreateCaseRevisionCommand: jest.fn(
+        async (_client, options) => options.runInTransaction(prisma),
+      ),
     };
     const caseValidationService = {
       validateSnapshot: jest.fn().mockReturnValue({
@@ -510,17 +521,28 @@ describe('CaseReviewService', () => {
       {
         diagnosisRegistryId: 'registry-1',
         diagnosisEditorialNote: 'Linked by editor',
+        expectedRevisionId: 'revision-3',
+        commandIdempotencyKey: 'create-revision-diagnosis-link',
+        changeReason: 'Link diagnosis during review',
+        changeSummary: 'Linked registry diagnosis',
       },
     );
 
     expect(
       fixture.diagnosisRegistryEditorialService.getLinkableDiagnosisRegistry,
     ).toHaveBeenCalledWith('registry-1', fixture.prisma);
-    expect(fixture.prisma.case.update).toHaveBeenNthCalledWith(
-      1,
+    expect(
+      fixture.caseRevisionService.createCaseRevisionCommandInTransaction,
+    ).toHaveBeenCalledWith(
+      fixture.prisma,
       expect.objectContaining({
-        where: { id: 'case-1' },
-        data: expect.objectContaining({
+        expectedRevisionId: 'revision-3',
+        commandIdempotencyKey: 'create-revision-diagnosis-link',
+        changeReason: 'Link diagnosis during review',
+        changeSummary: 'Linked registry diagnosis',
+        source: CaseSource.ADMIN_EDIT,
+        createdByUserId: 'user-1',
+        snapshot: expect.objectContaining({
           diagnosisId: 'diagnosis-1',
           diagnosisRegistryId: 'registry-1',
           proposedDiagnosisText: 'Acute asthma',
@@ -529,15 +551,6 @@ describe('CaseReviewService', () => {
           diagnosisMappingConfidence: 1,
           diagnosisEditorialNote: 'Linked by editor',
         }),
-      }),
-    );
-    expect(
-      fixture.caseRevisionService.createRevisionFromSnapshotInTransaction,
-    ).toHaveBeenCalledWith(
-      fixture.prisma,
-      expect.objectContaining({
-        source: CaseSource.ADMIN_EDIT,
-        createdByUserId: 'user-1',
       }),
     );
     expect(result).toEqual(
@@ -649,6 +662,10 @@ describe('CaseReviewService', () => {
         aliases: ['Wegener granulomatosis'],
         category: 'Rheumatology',
         diagnosisEditorialNote: 'Created while reviewing case',
+        expectedRevisionId: 'revision-3',
+        commandIdempotencyKey: 'create-revision-create-link',
+        changeReason: 'Create diagnosis while reviewing case',
+        changeSummary: 'Created and linked diagnosis',
       },
     );
 
@@ -662,10 +679,14 @@ describe('CaseReviewService', () => {
       }),
       fixture.prisma,
     );
-    expect(fixture.prisma.case.update).toHaveBeenNthCalledWith(
-      1,
+    expect(
+      fixture.caseRevisionService.createCaseRevisionCommandInTransaction,
+    ).toHaveBeenCalledWith(
+      fixture.prisma,
       expect.objectContaining({
-        data: expect.objectContaining({
+        expectedRevisionId: 'revision-3',
+        commandIdempotencyKey: 'create-revision-create-link',
+        snapshot: expect.objectContaining({
           diagnosisMappingMethod: DiagnosisMappingMethod.MANUAL_CREATED,
           diagnosisRegistryId: 'registry-9',
         }),
@@ -760,6 +781,10 @@ describe('CaseReviewService', () => {
       'user-1',
       {
         canonicalDiagnosis: 'Granulomatosis with polyangiitis',
+        expectedRevisionId: 'revision-3',
+        commandIdempotencyKey: 'create-revision-diagnosis-update',
+        changeReason: 'Update canonical diagnosis',
+        changeSummary: 'Updated case diagnosis',
       },
     );
 
@@ -771,26 +796,22 @@ describe('CaseReviewService', () => {
       },
       fixture.prisma,
     );
-    expect(fixture.prisma.case.update).toHaveBeenNthCalledWith(
-      1,
+    expect(
+      fixture.caseRevisionService.createCaseRevisionCommandInTransaction,
+    ).toHaveBeenCalledWith(
+      fixture.prisma,
       expect.objectContaining({
-        where: { id: 'case-1' },
-        data: expect.objectContaining({
+        expectedRevisionId: 'revision-3',
+        commandIdempotencyKey: 'create-revision-diagnosis-update',
+        source: CaseSource.ADMIN_EDIT,
+        createdByUserId: 'user-1',
+        snapshot: expect.objectContaining({
           diagnosisId: null,
           diagnosisRegistryId: 'registry-new',
           diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
           diagnosisMappingMethod: DiagnosisMappingMethod.MANUAL_CREATED,
           diagnosisMappingConfidence: 1,
         }),
-      }),
-    );
-    expect(
-      fixture.caseRevisionService.createRevisionFromSnapshotInTransaction,
-    ).toHaveBeenCalledWith(
-      fixture.prisma,
-      expect.objectContaining({
-        source: CaseSource.ADMIN_EDIT,
-        createdByUserId: 'user-1',
       }),
     );
     expect(result).toEqual(
@@ -837,6 +858,13 @@ describe('CaseReviewService', () => {
         approvedByUserId: null,
         currentRevisionId: 'revision-new',
       });
+    fixture.prisma.case.findUniqueOrThrow.mockResolvedValueOnce({
+      id: 'case-1',
+      editorialStatus: CaseEditorialStatus.VALIDATED,
+      approvedAt: null,
+      approvedByUserId: null,
+      currentRevisionId: 'revision-new',
+    });
     fixture.prisma.caseValidationRun.create.mockResolvedValue({
       id: 'validation-1',
       outcome: ValidationOutcome.PASSED,
@@ -845,7 +873,12 @@ describe('CaseReviewService', () => {
       completedAt: new Date('2026-04-20T00:00:01.000Z'),
     });
 
-    await fixture.service.restoreRevision('case-1', 'revision-old', 'user-1');
+    await fixture.service.restoreRevision('case-1', 'revision-old', 'user-1', {
+      expectedRevisionId: 'revision-3',
+      commandIdempotencyKey: 'create-revision-restore',
+      changeReason: 'Restore historical revision',
+      changeSummary: 'Restored prior revision',
+    });
 
     expect(
       fixture.diagnosisRegistryLinkService.resolveForWrite,
@@ -856,11 +889,15 @@ describe('CaseReviewService', () => {
       },
       fixture.prisma,
     );
-    expect(fixture.prisma.case.update).toHaveBeenNthCalledWith(
-      1,
+    expect(
+      fixture.caseRevisionService.createCaseRevisionCommandInTransaction,
+    ).toHaveBeenCalledWith(
+      fixture.prisma,
       expect.objectContaining({
-        where: { id: 'case-1' },
-        data: expect.objectContaining({
+        expectedRevisionId: 'revision-3',
+        commandIdempotencyKey: 'create-revision-restore',
+        source: CaseSource.RESTORED,
+        snapshot: expect.objectContaining({
           diagnosisId: 'diagnosis-1',
           diagnosisRegistryId: 'registry-1',
           proposedDiagnosisText: 'Asthma',
@@ -868,6 +905,18 @@ describe('CaseReviewService', () => {
           diagnosisMappingMethod: DiagnosisMappingMethod.LEGACY_BACKFILL,
           diagnosisMappingConfidence: 1,
           diagnosisEditorialNote: null,
+        }),
+      }),
+    );
+    expect(fixture.prisma.caseValidationRun.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          revisionId: 'revision-new',
+          materialContextHash: expect.any(String),
+          reviewContextIdentity: expect.stringContaining(
+            'case-review-context:revision-new:',
+          ),
+          source: CaseSource.RESTORED,
         }),
       }),
     );

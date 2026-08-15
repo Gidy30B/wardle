@@ -31,6 +31,20 @@ export class CreateAndLinkDiagnosisDto {
   @MaxLength(255)
   canonicalName!: string;
 
+  @IsString()
+  expectedRevisionId!: string;
+
+  @IsString()
+  commandIdempotencyKey!: string;
+
+  @IsString()
+  @MaxLength(5000)
+  changeReason!: string;
+
+  @IsString()
+  @MaxLength(5000)
+  changeSummary!: string;
+
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)

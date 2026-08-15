@@ -91,6 +91,7 @@ import { CreateDiagnosisAliasDto } from './dto/create-diagnosis-alias.dto';
 import { CreateDiagnosisRegistryDto } from './dto/create-diagnosis-registry.dto';
 import { LinkCaseDiagnosisDto } from './dto/link-case-diagnosis.dto';
 import { ListEditorialCasesDto } from './dto/list-editorial-cases.dto';
+import { RestoreCaseRevisionDto } from './dto/restore-case-revision.dto';
 import { SearchDiagnosisRegistryDto } from './dto/search-diagnosis-registry.dto';
 import { SubmitCaseReviewDto } from './dto/submit-case-review.dto';
 import { UpdateCaseDiagnosisDto } from './dto/update-case-diagnosis.dto';
@@ -1682,12 +1683,14 @@ export class AdminController {
   async restoreRevision(
     @Param('caseId', new ParseUUIDPipe()) caseId: string,
     @Param('revisionId', new ParseUUIDPipe()) revisionId: string,
+    @Body() body: RestoreCaseRevisionDto,
     @Req() request: AuthenticatedRequest,
   ) {
     return this.caseReviewService.restoreRevision(
       caseId,
       revisionId,
       request.user.id,
+      body,
     );
   }
 

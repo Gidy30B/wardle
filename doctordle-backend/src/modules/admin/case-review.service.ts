@@ -2,10 +2,11 @@ import {
   Injectable,
   Logger,
   BadRequestException,
+  ConflictException,
   NotFoundException,
   Inject,
 } from '@nestjs/common';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import {
   CaseEditorialStatus,
   CaseSource,
@@ -17,8 +18,13 @@ import {
   type PrismaClient,
 } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service.js';
-import { CaseRevisionService } from '../case-validation/case-revision.service.js';
+import {
+  CaseRevisionService,
+  type CreateCaseRevisionCommandInput,
+} from '../case-validation/case-revision.service.js';
 import { CaseValidationService } from '../case-validation/case-validation.service.js';
+import { buildCaseRevisionMaterialHash } from '../case-validation/case-revision-material.js';
+import type { CreatedRevisionResult } from '../case-validation/case-validation.types.js';
 import { DiagnosisRegistryEditorialService } from '../diagnosis-registry/diagnosis-registry-editorial.service.js';
 import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
 import { normalizeDiagnosisTerm } from '../diagnosis-registry/diagnosis-term-normalizer.js';
@@ -42,6 +48,7 @@ import type { CreateDiagnosisAliasDto } from './dto/create-diagnosis-alias.dto.j
 import type { CreateDiagnosisRegistryDto } from './dto/create-diagnosis-registry.dto.js';
 import type { LinkCaseDiagnosisDto } from './dto/link-case-diagnosis.dto.js';
 import type { ListEditorialCasesDto } from './dto/list-editorial-cases.dto.js';
+import type { RestoreCaseRevisionDto } from './dto/restore-case-revision.dto.js';
 import type { SearchDiagnosisRegistryDto } from './dto/search-diagnosis-registry.dto.js';
 import type { SubmitCaseReviewDto } from './dto/submit-case-review.dto.js';
 import type { UpdateCaseDiagnosisDto } from './dto/update-case-diagnosis.dto.js';
@@ -472,22 +479,32 @@ export class CaseReviewService {
       }),
     );
 
-    const result = await this.withSerializableRetry(() =>
-      this.prisma.$transaction(
-        async (tx) =>
-          this.applyDiagnosisLinkInTransaction(tx, {
+    let replayInput: CreateCaseRevisionCommandInput | undefined;
+    const result =
+      await this.caseRevisionService.executeCreateCaseRevisionCommand(
+        this.prisma,
+        {
+          runInTransaction: (tx) =>
+            this.applyDiagnosisLinkInTransaction(tx, {
             caseId,
             createdByUserId,
             diagnosisRegistryId: input.diagnosisRegistryId,
             diagnosisEditorialNote: input.diagnosisEditorialNote,
+            expectedRevisionId: input.expectedRevisionId,
+            commandIdempotencyKey: input.commandIdempotencyKey,
+            changeReason: input.changeReason,
+            changeSummary: input.changeSummary,
             mappingMethod: DiagnosisMappingMethod.EDITOR_SELECTED,
             eventName: 'admin.case.diagnosis_link.completed',
+            onCommandInput: (commandInput) => {
+              replayInput = commandInput;
+            },
           }),
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          getReplayInput: () => replayInput,
+          replay: (revision) =>
+            this.replayDiagnosisRevisionResult(caseId, revision),
         },
-      ),
-    );
+      );
 
     this.editorialMetrics.recordValidationResult(
       CaseSource.ADMIN_EDIT,
@@ -515,9 +532,12 @@ export class CaseReviewService {
       }),
     );
 
-    const result = await this.withSerializableRetry(() =>
-      this.prisma.$transaction(
-        async (tx) => {
+    let replayInput: CreateCaseRevisionCommandInput | undefined;
+    const result =
+      await this.caseRevisionService.executeCreateCaseRevisionCommand(
+        this.prisma,
+        {
+          runInTransaction: async (tx) => {
           const createdDiagnosis =
             await this.diagnosisRegistryEditorialService.createDiagnosis(
               {
@@ -529,20 +549,27 @@ export class CaseReviewService {
             caseId,
             createdByUserId,
             diagnosisRegistryId: createdDiagnosis.diagnosisRegistryId,
+            expectedRevisionId: input.expectedRevisionId,
+            commandIdempotencyKey: input.commandIdempotencyKey,
+            changeReason: input.changeReason,
+            changeSummary: input.changeSummary,
             mappingMethod: DiagnosisMappingMethod.MANUAL_CREATED,
             eventName: 'admin.case.diagnosis_update.completed',
+            onCommandInput: (commandInput) => {
+              replayInput = commandInput;
+            },
           });
 
           return {
             case: linkResult.case,
             validationRun: linkResult.validationRun,
           };
+          },
+          getReplayInput: () => replayInput,
+          replay: (revision) =>
+            this.replayDiagnosisRevisionResult(caseId, revision),
         },
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        },
-      ),
-    );
+      );
 
     this.editorialMetrics.recordValidationResult(
       CaseSource.ADMIN_EDIT,
@@ -566,9 +593,12 @@ export class CaseReviewService {
       }),
     );
 
-    const result = await this.withSerializableRetry(() =>
-      this.prisma.$transaction(
-        async (tx) => {
+    let replayInput: CreateCaseRevisionCommandInput | undefined;
+    const result =
+      await this.caseRevisionService.executeCreateCaseRevisionCommand(
+        this.prisma,
+        {
+          runInTransaction: async (tx) => {
           const createdDiagnosis =
             await this.diagnosisRegistryEditorialService.createDiagnosis(
               {
@@ -601,15 +631,22 @@ export class CaseReviewService {
             createdByUserId,
             diagnosisRegistryId: createdDiagnosis.diagnosisRegistryId,
             diagnosisEditorialNote: input.diagnosisEditorialNote,
+            expectedRevisionId: input.expectedRevisionId,
+            commandIdempotencyKey: input.commandIdempotencyKey,
+            changeReason: input.changeReason,
+            changeSummary: input.changeSummary,
             mappingMethod: DiagnosisMappingMethod.MANUAL_CREATED,
             eventName: 'admin.case.diagnosis_create_and_link.completed',
+            onCommandInput: (commandInput) => {
+              replayInput = commandInput;
+            },
           });
+          },
+          getReplayInput: () => replayInput,
+          replay: (revision) =>
+            this.replayDiagnosisRevisionResult(caseId, revision),
         },
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        },
-      ),
-    );
+      );
 
     this.editorialMetrics.recordValidationResult(
       CaseSource.ADMIN_EDIT,
@@ -1775,6 +1812,7 @@ export class CaseReviewService {
     caseId: string,
     revisionId: string,
     createdByUserId: string,
+    input: RestoreCaseRevisionDto,
   ) {
     this.logger.log(
       JSON.stringify({
@@ -1785,14 +1823,18 @@ export class CaseReviewService {
       }),
     );
 
-    const result = await this.withSerializableRetry(() =>
-      this.prisma.$transaction(
-        async (tx) => {
+    let replayInput: CreateCaseRevisionCommandInput | undefined;
+    const result =
+      await this.caseRevisionService.executeCreateCaseRevisionCommand(
+        this.prisma,
+        {
+          runInTransaction: async (tx) => {
           const caseRecord = await tx.case.findUnique({
             where: { id: caseId },
             select: {
               id: true,
               editorialStatus: true,
+              currentRevisionId: true,
             },
           });
 
@@ -1862,40 +1904,6 @@ export class CaseReviewService {
             diagnosisEditorialNote: revision.diagnosisEditorialNote,
           };
 
-          await tx.case.update({
-            where: { id: caseId },
-            data: {
-              title: snapshot.title,
-              date: snapshot.date,
-              difficulty: snapshot.difficulty,
-              history: snapshot.history,
-              symptoms: snapshot.symptoms,
-              labs: this.toNullableJsonValue(snapshot.labs),
-              clues: this.toNullableJsonValue(snapshot.clues),
-              explanation: this.toNullableJsonValue(snapshot.explanation),
-              differentials: snapshot.differentials,
-              diagnosisId: snapshot.diagnosisId,
-              diagnosisRegistryId: snapshot.diagnosisRegistryId,
-              proposedDiagnosisText: snapshot.proposedDiagnosisText,
-              diagnosisMappingStatus: snapshot.diagnosisMappingStatus,
-              diagnosisMappingMethod: snapshot.diagnosisMappingMethod,
-              diagnosisMappingConfidence: snapshot.diagnosisMappingConfidence,
-              diagnosisEditorialNote: snapshot.diagnosisEditorialNote,
-              ...getApprovalResetFields(),
-            },
-          });
-
-          const restoredRevision =
-            await this.caseRevisionService.createRevisionFromSnapshotInTransaction(
-              tx,
-              {
-                caseId,
-                snapshot,
-                source: CaseSource.RESTORED,
-                createdByUserId,
-              },
-            );
-
           let validationReport;
           try {
             validationReport =
@@ -1910,38 +1918,90 @@ export class CaseReviewService {
               validationReport,
             );
 
-          const validationRun = await tx.caseValidationRun.create({
-            data: {
-              caseId,
-              revisionId: restoredRevision.revisionId,
-              source: CaseSource.RESTORED,
+          const nextEditorialStatus =
+            getEditorialStatusForValidationOutcome({
+              currentStatus: caseRecord.editorialStatus,
               outcome: validationReport.outcome,
-              validatorVersion: validationReport.validatorVersion,
-              summary: persistencePayload.summary,
-              findings: persistencePayload.findings,
-              triggeredByUserId: createdByUserId,
-              startedAt: new Date(),
-              completedAt: new Date(),
+            }) ?? CaseEditorialStatus.VALIDATED;
+          const restoredRevision =
+            await this.caseRevisionService.createCaseRevisionCommandInTransaction(
+              tx,
+              {
+                caseId,
+                expectedRevisionId: input.expectedRevisionId,
+                commandIdempotencyKey: input.commandIdempotencyKey,
+                snapshot,
+                source: CaseSource.RESTORED,
+                createdByUserId,
+                changeReason: input.changeReason,
+                changeSummary: input.changeSummary,
+                materialChange: {
+                  restoredFromRevisionId: revisionId,
+                  changedFields: [
+                    'title',
+                    'date',
+                    'difficulty',
+                    'history',
+                    'symptoms',
+                    'labs',
+                    'clues',
+                    'explanation',
+                    'differentials',
+                    'diagnosisId',
+                    'diagnosisRegistryId',
+                    'proposedDiagnosisText',
+                    'diagnosisMappingStatus',
+                    'diagnosisMappingMethod',
+                    'diagnosisMappingConfidence',
+                    'diagnosisEditorialNote',
+                  ],
+                },
+                editorialStatusAfterProjection: nextEditorialStatus,
+              },
+            );
+          replayInput = {
+            caseId,
+            expectedRevisionId: input.expectedRevisionId,
+            commandIdempotencyKey: input.commandIdempotencyKey,
+            snapshot,
+            source: CaseSource.RESTORED,
+            createdByUserId,
+            changeReason: input.changeReason,
+            changeSummary: input.changeSummary,
+            materialChange: {
+              restoredFromRevisionId: revisionId,
+              changedFields: [
+                'title',
+                'date',
+                'difficulty',
+                'history',
+                'symptoms',
+                'labs',
+                'clues',
+                'explanation',
+                'differentials',
+                'diagnosisId',
+                'diagnosisRegistryId',
+                'proposedDiagnosisText',
+                'diagnosisMappingStatus',
+                'diagnosisMappingMethod',
+                'diagnosisMappingConfidence',
+                'diagnosisEditorialNote',
+              ],
             },
-            select: {
-              id: true,
-              outcome: true,
-              validatorVersion: true,
-              startedAt: true,
-              completedAt: true,
-            },
+            editorialStatusAfterProjection: nextEditorialStatus,
+          };
+
+          const validationRun = await this.createValidationRunForSnapshot(tx, {
+            caseId,
+            revisionId: restoredRevision.revisionId,
+            source: CaseSource.RESTORED,
+            triggeredByUserId: createdByUserId,
+            snapshot: restoredRevision.snapshot,
           });
 
-          const updatedCase = await tx.case.update({
+          const updatedCase = await tx.case.findUniqueOrThrow({
             where: { id: caseId },
-            data: {
-              editorialStatus:
-                getEditorialStatusForValidationOutcome({
-                  currentStatus: caseRecord.editorialStatus,
-                  outcome: validationReport.outcome,
-                }) ?? CaseEditorialStatus.VALIDATED,
-              ...getApprovalResetFields(),
-            },
             select: {
               id: true,
               editorialStatus: true,
@@ -1978,11 +2038,11 @@ export class CaseReviewService {
             validationRun,
           };
         },
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          getReplayInput: () => replayInput,
+          replay: (revision) =>
+            this.replayRestoreRevisionResult(caseId, revisionId, revision),
         },
-      ),
-    );
+      );
 
     this.editorialMetrics.recordValidationResult(
       CaseSource.RESTORED,
@@ -2172,6 +2232,89 @@ export class CaseReviewService {
     };
   }
 
+  private async replayDiagnosisRevisionResult(
+    caseId: string,
+    revision: CreatedRevisionResult,
+  ) {
+    const [detail, validationRun, linkableDiagnosis] = await Promise.all([
+      this.getCaseDetailRecord(this.prisma, caseId),
+      this.getLatestValidationRunForRevision(caseId, revision.revisionId),
+      this.diagnosisRegistryEditorialService.getLinkableDiagnosisRegistry(
+        revision.snapshot.diagnosisRegistryId,
+        this.prisma,
+      ),
+    ]);
+
+    return {
+      case: detail,
+      revision: {
+        id: revision.revisionId,
+        revisionNumber: revision.revisionNumber,
+      },
+      validationRun,
+      diagnosisRegistry: linkableDiagnosis.registry,
+    };
+  }
+
+  private async replayRestoreRevisionResult(
+    caseId: string,
+    restoredFromRevisionId: string,
+    revision: CreatedRevisionResult,
+  ) {
+    const [caseRecord, validationRun] = await Promise.all([
+      this.prisma.case.findUniqueOrThrow({
+        where: { id: caseId },
+        select: {
+          id: true,
+          editorialStatus: true,
+          approvedAt: true,
+          approvedByUserId: true,
+          currentRevisionId: true,
+        },
+      }),
+      this.getLatestValidationRunForRevision(caseId, revision.revisionId),
+    ]);
+
+    return {
+      case: caseRecord,
+      restoredFromRevisionId,
+      revision: {
+        id: revision.revisionId,
+        revisionNumber: revision.revisionNumber,
+        source: CaseSource.RESTORED,
+        snapshot: revision.snapshot,
+      },
+      validationRun,
+    };
+  }
+
+  private async getLatestValidationRunForRevision(
+    caseId: string,
+    revisionId: string,
+  ) {
+    return this.prisma.caseValidationRun.findFirstOrThrow({
+      where: {
+        caseId,
+        revisionId,
+      },
+      orderBy: {
+        startedAt: 'desc',
+      },
+      select: {
+        id: true,
+        revisionId: true,
+        materialContextHash: true,
+        reviewContextIdentity: true,
+        outcome: true,
+        validatorVersion: true,
+        summary: true,
+        findings: true,
+        startedAt: true,
+        completedAt: true,
+      },
+    });
+  }
+
   // TODO(diagnosis-phase-7): Daily publish selection still accepts APPROVED cases
   // through broader editorial status checks. Reuse diagnosis publish readiness
   // there when Phase 7 turns this policy into an enforced publish gate.
@@ -2183,8 +2326,13 @@ export class CaseReviewService {
       createdByUserId: string;
       diagnosisRegistryId: string;
       diagnosisEditorialNote?: string;
+      expectedRevisionId: string;
+      commandIdempotencyKey: string;
+      changeReason: string;
+      changeSummary: string;
       mappingMethod: 'EDITOR_SELECTED' | 'MANUAL_CREATED';
       eventName: string;
+      onCommandInput?: (input: CreateCaseRevisionCommandInput) => void;
     },
   ) {
     const caseRecord = await tx.case.findUnique({
@@ -2192,6 +2340,7 @@ export class CaseReviewService {
       select: {
         id: true,
         editorialStatus: true,
+        currentRevisionId: true,
         proposedDiagnosisText: true,
         diagnosisEditorialNote: true,
       },
@@ -2217,34 +2366,59 @@ export class CaseReviewService {
       caseRecord.diagnosisEditorialNote ??
       null;
 
-    await tx.case.update({
-      where: { id: input.caseId },
-      data: {
-        diagnosisId: linkableDiagnosis.diagnosisId,
-        diagnosisRegistryId: linkableDiagnosis.diagnosisRegistryId,
-        proposedDiagnosisText: caseRecord.proposedDiagnosisText,
-        diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
-        diagnosisMappingMethod: input.mappingMethod,
-        diagnosisMappingConfidence: 1,
-        diagnosisEditorialNote: resolvedEditorialNote,
-        ...getApprovalResetFields(),
-      },
-    });
-
-    const snapshot =
+    const currentSnapshot =
       await this.caseRevisionService.getCurrentCaseSnapshotInTransaction(
         tx,
         input.caseId,
       );
+    const snapshot = {
+      ...currentSnapshot,
+      diagnosisId: linkableDiagnosis.diagnosisId,
+      diagnosisRegistryId: linkableDiagnosis.diagnosisRegistryId,
+      proposedDiagnosisText: caseRecord.proposedDiagnosisText,
+      diagnosisMappingStatus: DiagnosisMappingStatus.MATCHED,
+      diagnosisMappingMethod: input.mappingMethod,
+      diagnosisMappingConfidence: 1,
+      diagnosisEditorialNote: resolvedEditorialNote,
+    };
+    let validationReport;
+    try {
+      validationReport = this.caseValidationService.validateSnapshot(snapshot);
+    } catch (error) {
+      validationReport =
+        this.caseValidationService.buildExecutionErrorReport(error);
+    }
+
+    const commandInput: CreateCaseRevisionCommandInput = {
+      caseId: input.caseId,
+      expectedRevisionId: input.expectedRevisionId,
+      commandIdempotencyKey: input.commandIdempotencyKey,
+      snapshot,
+      source: CaseSource.ADMIN_EDIT,
+      createdByUserId: input.createdByUserId,
+      changeReason: input.changeReason,
+      changeSummary: input.changeSummary,
+      materialChange: {
+        changedFields: [
+          'diagnosisId',
+          'diagnosisRegistryId',
+          'diagnosisMappingStatus',
+          'diagnosisMappingMethod',
+          'diagnosisMappingConfidence',
+          'diagnosisEditorialNote',
+        ],
+      },
+      editorialStatusAfterProjection:
+        validationReport.outcome === ValidationOutcome.PASSED
+          ? CaseEditorialStatus.VALIDATED
+          : CaseEditorialStatus.NEEDS_EDIT,
+    };
+    input.onCommandInput?.(commandInput);
+
     const revision =
-      await this.caseRevisionService.createRevisionFromSnapshotInTransaction(
+      await this.caseRevisionService.createCaseRevisionCommandInTransaction(
         tx,
-        {
-          caseId: input.caseId,
-          snapshot,
-          source: CaseSource.ADMIN_EDIT,
-          createdByUserId: input.createdByUserId,
-        },
+        commandInput,
       );
     const validationRun = await this.createValidationRunForSnapshot(tx, {
       caseId: input.caseId,
@@ -2254,20 +2428,7 @@ export class CaseReviewService {
       snapshot,
     });
 
-    const updatedCase = await tx.case.update({
-      where: { id: input.caseId },
-      data: {
-        editorialStatus:
-          validationRun.outcome === ValidationOutcome.PASSED
-            ? CaseEditorialStatus.VALIDATED
-            : CaseEditorialStatus.NEEDS_EDIT,
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    const detail = await this.getCaseDetailRecord(tx, updatedCase.id);
+    const detail = await this.getCaseDetailRecord(tx, input.caseId);
 
     this.logger.log(
       JSON.stringify({
@@ -2512,43 +2673,24 @@ export class CaseReviewService {
   }
 
   private buildCaseMaterialContextHash(input: Record<string, unknown>): string {
-    const material = {
-      title: input.title,
-      date: input.date,
-      difficulty: input.difficulty,
-      history: input.history,
-      symptoms: input.symptoms,
-      labs: input.labs,
-      clues: input.clues,
-      explanation: input.explanation,
-      differentials: input.differentials,
-      diagnosisId: input.diagnosisId,
-      diagnosisRegistryId: input.diagnosisRegistryId,
-      proposedDiagnosisText: input.proposedDiagnosisText,
-      diagnosisMappingStatus: input.diagnosisMappingStatus,
-      diagnosisMappingMethod: input.diagnosisMappingMethod,
-      diagnosisMappingConfidence: input.diagnosisMappingConfidence,
-      diagnosisEditorialNote: input.diagnosisEditorialNote,
-    };
-    return createHash('sha256')
-      .update(stableStringify(this.normalizeForMaterialHash(material)))
-      .digest('hex');
-  }
-
-  private normalizeForMaterialHash(value: unknown): unknown {
-    if (value instanceof Date) return value.toISOString();
-    if (Array.isArray(value)) {
-      return value.map((entry) => this.normalizeForMaterialHash(entry));
-    }
-    if (value && typeof value === 'object') {
-      return Object.fromEntries(
-        Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
-          key,
-          this.normalizeForMaterialHash(entry),
-        ]),
-      );
-    }
-    return value;
+    return buildCaseRevisionMaterialHash({
+      title: input.title as never,
+      date: input.date as never,
+      difficulty: input.difficulty as never,
+      history: input.history as never,
+      symptoms: input.symptoms as never,
+      labs: input.labs as never,
+      clues: input.clues as never,
+      explanation: input.explanation as never,
+      differentials: input.differentials as never,
+      diagnosisId: input.diagnosisId as never,
+      diagnosisRegistryId: input.diagnosisRegistryId as never,
+      proposedDiagnosisText: input.proposedDiagnosisText as never,
+      diagnosisMappingStatus: input.diagnosisMappingStatus as never,
+      diagnosisMappingMethod: input.diagnosisMappingMethod as never,
+      diagnosisMappingConfidence: input.diagnosisMappingConfidence as never,
+      diagnosisEditorialNote: input.diagnosisEditorialNote as never,
+    });
   }
 
   private toCanonicalFindings(value: unknown): string[] {
