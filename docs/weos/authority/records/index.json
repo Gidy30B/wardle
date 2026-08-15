@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
-  "repositoryAuthorityRecordVersion": "2026-08-09-stage-2-case-revision-mutation-hardening",
-  "reviewedDate": "2026-08-09",
+  "repositoryAuthorityRecordVersion": "2026-08-15-stage-2-revision-targeted-publication-and-learner-exposure",
+  "reviewedDate": "2026-08-15",
   "warning": "Absence of an authority record means authority is unresolved, not denied or approved. File existence is not approval.",
   "recordFamilies": [
     {
@@ -32,7 +32,8 @@
     "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-004.json",
     "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-005.json",
     "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-006.json",
-    "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-007.json"
+    "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-007.json",
+    "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-008.json"
   ],
   "activeApprovals": [
     {
@@ -88,6 +89,14 @@
       "documentId": "WEOS-AUTH-APP-007",
       "documentVersion": "1.0",
       "documentPath": "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-007.json",
+      "approvalOutcome": "APPROVED_WITH_CONDITIONS",
+      "implementationAuthorization": "GRANTED_FOR_NAMED_STAGE"
+    },
+    {
+      "recordId": "WEOS-AUTH-APP-008",
+      "documentId": "WEOS-AUTH-APP-008",
+      "documentVersion": "1.0",
+      "documentPath": "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-008.json",
       "approvalOutcome": "APPROVED_WITH_CONDITIONS",
       "implementationAuthorization": "GRANTED_FOR_NAMED_STAGE"
     }

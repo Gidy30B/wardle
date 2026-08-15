@@ -1,6 +1,6 @@
 # WEOS Implementation Map
 
-Inspection date: 2026-08-09
+Inspection date: 2026-08-15
 
 This map tells future agents where current behavior lives. It is evidence, not
 approval.
@@ -76,12 +76,39 @@ R1 remediation evidence:
 | APP-007 PostgreSQL race evidence | `PASS` in `test/app007-case-revision-race.e2e-spec.ts` on local `weos_integration`. |
 | APP-006 PostgreSQL regression | `PASS` in `test/app006-case-approval-race.e2e-spec.ts` after integration schema sync. |
 
+## Authorized Not Implemented Publication Slice
+
+`WEOS-AUTH-APP-008` authorizes later staged Revision-Targeted Case Publication
+and Learner Exposure work. It is authority-only in this package and does not
+change runtime code, Prisma schema, migrations, scheduler behavior,
+`DailyCase`, `GameSession`, `Attempt`, learner-facing APIs, or backfill/repair
+state.
+
+APP-008 preserves the package boundaries:
+
+- APP-006: approval of an exact `CaseRevision`;
+- APP-007: controlled creation and mutation hardening of `CaseRevision`;
+- APP-008: separate authorization for publication and learner exposure of an
+  exact approved revision.
+
+Authorized later sequence:
+
+1. APP-008A - Revision-Targeted Publication Governance.
+2. APP-008B - `DailyCase` Revision / Publication Binding.
+3. APP-008C - `GameSession` Revision Binding and Revision-Bound Learner
+   Hydration.
+4. APP-008D - Attempt Provenance and Legacy Hardening.
+
+APP-007 remains `IMPLEMENTED_PENDING_INDEPENDENT_REVIEW`; APP-008A must treat
+APP-007 independent-review closure or explicit human waiver as a prerequisite
+before runtime implementation.
+
 | Area                         | Canonical / Current Service Owner                                                                                                  | Legacy Compatibility Owner                                       | Known Direct Mutation Paths                                                                                                                                 | Test Locations                                                                      | Status                                                                                      |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Case review                  | Stage 2 owner for `APPROVE_CASE_REVISION`: `CaseReviewService` governed approval branch under `WEOS-AUTH-APP-006`                  | `Case` status/timestamps and `CaseReview` records                | Admin case review route delegates approved decisions to governed approval; approvals require explicit expected revision plus matching material review context; ready-to-publish, diagnosis link/update, and revision restore remain separate | `doctordle-backend/src/modules/admin/case-review.service.spec.ts`; `doctordle-backend/test/app006-case-approval-race.e2e-spec.ts` | `APPROVE_CASE_REVISION` implemented; `CONFORMANT_WITH_NONBLOCKING_FINDINGS`; `CLOSED`; publication/exposure not included. |
 | Case revision                | Stage 2 owner for `CREATE_CASE_REVISION`: `CaseRevisionService.createCaseRevisionCommandInTransaction` under `WEOS-AUTH-APP-007`                                                           | `Case.currentRevisionId`, mutable `Case` fields                  | Diagnosis relink/update and revision restore delegate to `CREATE_CASE_REVISION`; completed matching commands replay before stale rejection; command fingerprint excludes random effect allocation; root-Prisma rollback replay handles qualified PostgreSQL conflicts; clue draft apply and existing-date `/cases` updates fail closed until explicit revision/idempotency semantics exist. Generated case creation remains outside APP-007 mutation hardening. | `case-revision.service.spec.ts`; `case-revision-material.spec.ts`; `cases.service.spec.ts`; case review specs; `test/app007-case-revision-race.e2e-spec.ts` | `IMPLEMENTED_PENDING_INDEPENDENT_REVIEW`; not learner-exposure binding.                                                      |
-| Publication path             | Current owner: `CaseReviewService` and `CaseAssignmentService` projections                                                         | `Case.editorialStatus`, `approvedAt`, `publishedAt`, `DailyCase` | mark ready, schedule/assignment publishes projection                                                                                                        | daily cases/session/case review specs                                               | Divergent; revision-targeted publication unresolved.                                        |
-| Learner exposure path        | Current owner: gameplay services                                                                                                   | `DailyCase.caseId` to mutable `Case`                             | daily-case schedule, start game, submit attempts                                                                                                            | `daily-cases.service.spec.ts`, `session.service.spec.ts`, `attempt.service.spec.ts` | Divergent; version binding absent.                                                          |
+| Publication path             | Current owner: `CaseReviewService` and `CaseAssignmentService` projections; APP-008 authorizes later APP-008A revision-targeted publication governance | `Case.editorialStatus`, `approvedAt`, `publishedAt`, `DailyCase` | mark ready, schedule/assignment publishes projection                                                                                                        | daily cases/session/case review specs                                               | Divergent; APP-008 authorized but runtime not implemented.                                  |
+| Learner exposure path        | Current owner: gameplay services; APP-008 authorizes later APP-008B/APP-008C/APP-008D binding and provenance work                  | `DailyCase.caseId` to mutable `Case`                             | daily-case schedule, start game, submit attempts                                                                                                            | `daily-cases.service.spec.ts`, `session.service.spec.ts`, `attempt.service.spec.ts` | Divergent; APP-008 authorized but version binding absent.                                   |
 | Authority path               | Stage 2 owner for `APPROVE_CASE_REVISION`: `EditorialAuthorityAssignmentRepository` plus Stage 1 authority-assignment resolver under APP-006 | Runtime guards and roles                                         | Admin guards remain technical access; governed approval loads persisted assignment candidates in-transaction and rejects absent, expired, revoked, insufficient, or out-of-scope authority assignments | admin permission specs, authority assignment specs, `case-review.service.spec.ts`   | APP-006 authority path closed for `APPROVE_CASE_REVISION`; no role-to-authority conversion. |
 | Governance decision envelope | Stage 2 owner for case revision approval history: `GovernedCaseRevisionApprovalDecision` and typed `CASE_REVISION_APPROVAL` extension | Case-specific review/audit records                               | Approved case review constructs a canonical OD-018 envelope, validates APP-006 target references/authority/obligations/projection metadata, stores validated envelope and extension payload, then writes legacy projection | governance-decision specs; `case-review.service.spec.ts`                            | APP-006 OD-018 envelope path closed for `APPROVE_CASE_REVISION`.                           |
 | Expected-version commands    | Stage 2 owner for case revision approval: `CaseReviewService` explicit expected revision/review checks, material context identity, and idempotency fingerprint; Stage 2 owner for case material mutation: `CaseRevisionService` explicit expected current revision plus idempotency command fingerprint | Service-specific transaction/version behavior                    | Approved case review rejects missing or stale expected revision, stale review/material/validation context, and idempotency key conflicts; APP-006 approval-decision uniqueness races and approval serialization conflicts exit the failed PostgreSQL transaction before root-client replay. APP-007 `CREATE_CASE_REVISION` rejects stale new commands, replays matching completed commands before stale rejection, conflicts same-key/different-fingerprint commands, and resolves qualified PostgreSQL races only after rollback through root-client command lookup. | governed-command specs; `case-review.service.spec.ts`; `case-revision.service.spec.ts`; local Docker PostgreSQL `weos_integration` APP-006 and APP-007 race specs | APP-006 expected-version/idempotency path closed; APP-007 implemented pending independent review.       |
@@ -115,5 +142,5 @@ importers as verification.
 - autonomous clue mutation paths that lack explicit expected revision and
   idempotency identity.
 
-Next candidate slice after APP-007 review: revision-targeted publication and
-learner-exposure cutover remain separate authorization work.
+Exact next candidate implementation slice: APP-008A - Revision-Targeted
+Publication Governance.

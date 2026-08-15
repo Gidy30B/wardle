@@ -1,0 +1,55 @@
+{
+  "$schema": "../../schemas/document-approval-record.schema.json",
+  "recordId": "WEOS-AUTH-APP-008",
+  "recordType": "DOCUMENT_APPROVAL",
+  "schemaVersion": "1.0.0",
+  "documentId": "WEOS-AUTH-APP-008",
+  "documentVersion": "1.0",
+  "documentPath": "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-008.json",
+  "approvalScope": {
+    "scopeType": "NAMED_STAGE_RUNTIME_AUTHORIZATION",
+    "description": "Approval with conditions for later staged Stage 2 runtime realization of Revision-Targeted Case Publication and Learner Exposure only. This authority record does not implement runtime code."
+  },
+  "approvalOutcome": "APPROVED_WITH_CONDITIONS",
+  "approver": {
+    "name": "Gideon Lemasika Saningo",
+    "role": "Founding Architecture Authority",
+    "authorityBasis": "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-001.json"
+  },
+  "approverAuthority": "Founding Architecture Authority bootstrap authority for bounded WEOS runtime governance realization after APP-006 exact CaseRevision approval and APP-007 CaseRevision mutation hardening",
+  "approvalDate": "2026-08-15",
+  "effectiveDate": "2026-08-15",
+  "rationale": "WEOS requires publication and learner exposure to target an exact approved CaseRevision rather than mutable Case material or scheduler state. APP-006 approved governed approval of an exact CaseRevision. APP-007 implemented controlled CaseRevision creation and mutation hardening, and remains a prerequisite governance package for publication work while pending independent review. This bounded authority permits later APP-008A through APP-008D implementation of revision-targeted Case publication, DailyCase publication binding, GameSession revision-bound exposure, and attempt provenance/legacy hardening without authorizing runtime changes in this authority package.",
+  "conditions": [
+    "APP-008 is separate from APP-006 and APP-007: APP-006 governs approval of an exact CaseRevision, APP-007 governs controlled CaseRevision creation and mutation hardening, and APP-008 governs later publication and learner exposure of an exact approved revision.",
+    "APP-008 depends on APP-006 exact CaseRevision approval and APP-007 CaseRevision mutation hardening; APP-008A must treat APP-007 independent-review closure or an explicit human waiver as a prerequisite before runtime implementation proceeds.",
+    "approval is not publication, publication is not scheduling, Case is not CaseRevision, canonical governance records are not compatibility projections, and historical exposure must not fabricate governance history.",
+    "the canonical publication unit must identify Case, exact CaseRevision, APP-006 approval evidence, material/content context, actor, authority evidence, readiness assessment, decision time, effective time, standing, and derived learner exposures.",
+    "clinically material learner content must be reproducible from the published revision and publication context; APP-008A must classify stable content versus presentational metadata before implementation and must not blindly snapshot the entire DiagnosisRegistry.",
+    "publication readiness must be revision-specific and computed as READY or BLOCKED with explicit blockers and warnings; READY_TO_PUBLISH remains a compatibility or workflow projection only.",
+    "runtime route access, technical role, scheduler execution, DailyCase assignment, or visible UI state must not create publication authority.",
+    "publication commands must declare expected CaseRevision identity, expected APP-006 approval identity, expected material context or content hash, expected validation identity or context when applicable, expected publication standing, authority assignment, idempotency key, and canonical command fingerprint.",
+    "later runtime implementation must evaluate publication preconditions atomically with decision persistence and compatibility projection updates.",
+    "publication lifecycle terms are AUTHORIZED, WITHDRAWN, and SUPERSEDED; decision state, effective state, schedule state, and learner exposure state remain distinct.",
+    "authorizing a later revision must not erase, rewrite, or retroactively alter historical exposure for an earlier revision.",
+    "future DailyCase binding must preserve Case identity while adding exact CaseRevision and publication-decision identity for newly governed learner exposure.",
+    "historical DailyCase rows remain legacy-compatible unless exact revision and publication evidence are provable through committed runtime data.",
+    "future GameSession binding must preserve the exact revision exposed to the learner; mutation or newer revision publication must not alter content already seen in a session.",
+    "future learner hydration must use revision-bound published content after the APP-008C cutover, while legacy sessions remain explicitly classified.",
+    "APP-008D must decide whether Attempt stores direct CaseRevision identity or derives it from GameSession; APP-008 does not mandate direct Attempt revision storage.",
+    "legacy and backfill handling must be additive only; no fabricated historical decisions, actors, authority assignments, publication decisions, or revision exposure records may be created.",
+    "exact legacy revision backfill is permitted only when provable from existing runtime data; otherwise records must retain explicit null or legacy classification.",
+    "DailyCase, GameSession, Attempt, leaderboard, XP, and historical gameplay records must not be destructively rewritten without separate approved authority.",
+    "APP-008 authorizes only later staged work named APP-008A revision-targeted publication governance, APP-008B DailyCase revision/publication binding, APP-008C GameSession revision binding and revision-bound hydration, and APP-008D attempt provenance and legacy hardening.",
+    "APP-008A must precede APP-008B; APP-008B must precede canonical learner-read cutover in APP-008C; APP-008D must not fabricate historical provenance.",
+    "excluded from this authorization are destructive Case replacement, compatibility field removal, automatic publication after APP-006 approval, scheduler-created publication authority, autonomous AI publication, fabricated legacy governance, broad Diagnosis Education publication redesign, Teaching Rule publication redesign, graph publication redesign, generic cross-artifact publication framework beyond the Case vertical slice, destructive historical migration, unrelated editorial workspace redesign, and any runtime implementation in this authority package."
+  ],
+  "supportingDecision": "REVISION_TARGETED_CASE_PUBLICATION_AND_LEARNER_EXPOSURE_STAGE_2_RUNTIME_AUTHORIZATION",
+  "implementationAuthorization": "GRANTED_FOR_NAMED_STAGE",
+  "bootstrapAuthority": {
+    "isBootstrap": true,
+    "scope": "Stage 2 runtime implementation authorization only for later revision-targeted Case publication and learner exposure through APP-008A, APP-008B, APP-008C, and APP-008D. This record authorizes staged future implementation but creates no runtime code, schema migration, scheduler change, DailyCase binding change, GameSession binding change, Attempt provenance change, learner-facing API change, publication execution, backfill, repair, or destructive migration by itself.",
+    "expiryCondition": "Expires when permanent runtime governance authority supersedes this pilot authorization, or when implementation extends beyond the named Case publication and learner-exposure APP-008A through APP-008D sequence without a separate approved authorization."
+  },
+  "createdAt": "2026-08-15T00:00:00Z"
+}
