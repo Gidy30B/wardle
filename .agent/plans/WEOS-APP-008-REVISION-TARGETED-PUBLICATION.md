@@ -15,9 +15,9 @@ Revision-Targeted Case Publication and Learner Exposure.
 
 APP-008 depends on `WEOS-AUTH-APP-006` for approval of an exact
 `CaseRevision` and `WEOS-AUTH-APP-007` for controlled creation and mutation
-hardening of `CaseRevision`. APP-007 remains
-`IMPLEMENTED_PENDING_INDEPENDENT_REVIEW`; APP-008A must not proceed to runtime
-implementation without independent review closure or explicit human waiver.
+hardening of `CaseRevision`. APP-007 independent review closed on 2026-08-15,
+satisfying the APP-008A prerequisite. APP-008A still requires its own scoped
+implementation work and must not be inferred from APP-008 authority alone.
 
 ## Current Behavior
 
@@ -119,6 +119,5 @@ authorizes later staged implementation as APP-008A through APP-008D.
 
 ## Remaining Risks
 
-APP-007 remains pending independent review. Publication and learner exposure
-runtime gaps remain open until APP-008A through APP-008D are implemented and
-validated under this authority.
+Publication and learner exposure runtime gaps remain open until APP-008A
+through APP-008D are implemented and validated under this authority.

@@ -177,7 +177,7 @@ describe('APP-007 PostgreSQL CREATE_CASE_REVISION races', () => {
         editorialStatus: CaseEditorialStatus.REVIEW,
       },
     });
-    const { caseId: _snapshotCaseId, ...revisionSnapshot } = snapshot;
+    const { caseId: _revisionSnapshotCaseId, ...revisionSnapshot } = snapshot;
     await prisma.caseRevision.create({
       data: {
         id: revisionId,

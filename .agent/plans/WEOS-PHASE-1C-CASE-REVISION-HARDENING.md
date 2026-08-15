@@ -1,6 +1,6 @@
 # WEOS Phase 1C - APP-007 Case Revision Mutation Hardening
 
-Status: IMPLEMENTED_PENDING_INDEPENDENT_REVIEW
+Status: CLOSED
 
 ## Objective
 
@@ -147,6 +147,24 @@ Prisma schema using `prisma db push` after `migrate deploy` refused the
 pre-existing non-baselined integration database. No production database was
 used.
 
+Independent closure verification on 2026-08-15:
+
+| Evidence | Result |
+| --- | --- |
+| Base verification | `PASS`; branch `weos/phase-1c-case-revision-hardening`, starting HEAD `cbcbc03230a7cf71dfe0ce4688f2466530566486`, clean worktree. |
+| Integration database safety | `PASS`; `WEOS_INTEGRATION_TESTS=1`, local host, database name exactly `weos_integration`, ordinary `DATABASE_URL` cleared, guard refuses non-local/prod/shared URLs. |
+| APP-007 PostgreSQL race E2E | `PASS`; `test/app007-case-revision-race.e2e-spec.ts`, 3 tests. |
+| APP-007 test harness repair | `PASS`; fixed duplicate throwaway destructuring alias in the E2E fixture so the committed guard test can parse and run. |
+| APP-007 focused unit/spec validation | `PASS`; 5 suites, 94 tests. |
+| APP-006 PostgreSQL regression | `PASS`; `test/app006-case-approval-race.e2e-spec.ts`, 2 tests. |
+| Backend build | `PASS`; `npm run build`. |
+| Prisma schema validation | `PASS`; `npx prisma validate --schema prisma/schema.prisma` after elevated schema-engine access. |
+| WEOS authority validation | `PASS`; 1 suite, 11 tests. |
+| Analytics dashboard build | `PASS`; `npm run build`. |
+| Diff check | `PASS`; CRLF warnings only. |
+| Mutation-path audit | `PASS`; no supported material-edit bypass risk found. |
+| Closure evidence commit | This closure-evidence commit. |
+
 ## Findings
 
 - R1 blocking findings remediated: supported existing-date `/cases` material
@@ -166,5 +184,10 @@ used.
 
 ## Independent Review Gate
 
-Do not mark APP-007 conformant. Final implementation status may be only
-`IMPLEMENTED_PENDING_INDEPENDENT_REVIEW` or `BLOCKED`.
+Independent review completed on 2026-08-15. APP-007 is `CLOSED` with
+`CONFORMANT_WITH_NONBLOCKING_FINDINGS` conformance, matching the existing
+repository status vocabulary for independently verified bounded runtime
+implementation. The retained nonblocking finding is that generated case
+creation, repair/backfill scripts, registry merge repair, publication
+projection, and learner-exposure cutover remain outside APP-007 and require
+their own authority where applicable.

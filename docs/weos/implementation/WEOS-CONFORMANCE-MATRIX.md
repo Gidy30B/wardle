@@ -67,15 +67,17 @@ the observed `conflictTarget`/error classification, including
 `serializableWriteConflict`/`P2034` where applicable. This finding does not
 weaken the APP-006 governed approval invariant and does not reopen APP-006.
 
-## APP-007 Implementation Status
+## APP-007 Closure Status
 
 | Field | Value |
 | --- | --- |
 | Authority record | `WEOS-AUTH-APP-007` |
 | Authorized operation | `CREATE_CASE_REVISION` |
-| Implementation status | `IMPLEMENTED_PENDING_INDEPENDENT_REVIEW` |
-| Conformance | `NOT_CLOSED` |
+| Implementation status | `CLOSED` |
+| Conformance | `CONFORMANT_WITH_NONBLOCKING_FINDINGS` |
 | Baseline commit SHA | `fc0d24639f23cbf14d731bbb0ee5d07af3cde3b0` |
+| APP-007 implementation commit SHA | `1a53f131ae99cbde50e1174a7e3395461fe55710` |
+| Independent closure evidence commit | This closure-evidence commit |
 
 APP-007 adds bounded runtime hardening for material case mutation through
 `CREATE_CASE_REVISION`. The implementation adds nullable CaseRevision lineage,
@@ -112,6 +114,16 @@ R1 PostgreSQL evidence:
 | Same-key fingerprint mismatch | `DETERMINISTIC CONFLICT` |
 | APP-006 PostgreSQL regression on updated schema | `PASS` |
 
+Independent closure verification on 2026-08-15 reran the guarded APP-007
+PostgreSQL race E2E against local `weos_integration`, reran the APP-006
+PostgreSQL regression, backend build, Prisma validate, focused APP-007 unit
+and service specs, WEOS authority validation, dashboard build, and `git diff
+--check`. The review found no supported material-edit bypass risk. The
+retained nonblocking finding is scope containment: generated case/bootstrap
+creation, registry merge repair, repair/seed scripts, publication projection,
+and learner-exposure cutover remain outside APP-007 and require separate
+authority where applicable.
+
 APP-007 does not authorize publication, `PublishedCaseVersion`, DailyCase
 binding changes, gameplay cutover, attempt provenance changes, controlled AI
 application governance, graph promotion, education governance, tenancy,
@@ -125,7 +137,7 @@ backfill, repair, or destructive migration.
 | Authorized package | Revision-Targeted Case Publication and Learner Exposure |
 | Implementation status | `AUTHORIZED_NOT_IMPLEMENTED` |
 | Conformance | `NOT_IMPLEMENTED` |
-| Prerequisites | APP-006 exact `CaseRevision` approval; APP-007 `CREATE_CASE_REVISION` mutation hardening |
+| Prerequisites | APP-006 exact `CaseRevision` approval; APP-007 closed `CREATE_CASE_REVISION` mutation hardening |
 
 APP-008 authorizes later staged runtime work only. It preserves APP-006 as the
 approval authority for an exact `CaseRevision`, APP-007 as the controlled
@@ -134,9 +146,8 @@ separate publication and learner-exposure authority for an exact approved
 revision. It authorizes APP-008A revision-targeted publication governance,
 APP-008B `DailyCase` revision/publication binding, APP-008C `GameSession`
 revision binding and revision-bound learner hydration, and APP-008D attempt
-provenance and legacy hardening. It does not implement runtime code, close
-APP-007 independent review, or change the current conformance status of
-publication or learner exposure rows.
+provenance and legacy hardening. It does not implement runtime code or change
+the current conformance status of publication or learner exposure rows.
 
 | Requirement ID  | Source Requirement                      | Runtime Invariant                                                                    | Current Implementation                                                                                                                                                                                              | Target Implementation                                                                                 | Test / Evidence                                    | Status            | Authority Dependency                                          |
 | --------------- | --------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ----------------- | ------------------------------------------------------------- |
@@ -146,6 +157,6 @@ publication or learner exposure rows.
 | `WEOS-CONF-004` | Revision-targeted publication           | Publication targets an approved revision.                                            | No first-class published version binding in learner exposure path; APP-008 now authorizes later APP-008A publication governance but implements no runtime code.                                                       | Publication decision references exact approved revision.                                              | Phase 0 read path                                  | `NOT_IMPLEMENTED` | APP-008A implementation required.                             |
 | `WEOS-CONF-005` | Learner exposure version identity       | Learner exposure records preserve content identity.                                  | Exposure reads mutable `Case`; sessions/attempts lack revision/version/hash; APP-008 authorizes later APP-008B through APP-008D binding/provenance work but implements no runtime code.                              | `DailyCase`/session/attempt or equivalent exposure record stores approved published version identity. | Phase 0 read path; gameplay tests                  | `DIVERGENT`       | APP-008B, APP-008C and APP-008D implementation required.      |
 | `WEOS-CONF-006` | Authority distinction                   | Runtime access is not canonical authority.                                           | Closed Stage 2 `APPROVE_CASE_REVISION` loads persisted `EditorialAuthorityAssignment` candidates in the approval transaction, then resolves them through the Stage 1 authority-assignment resolver; guards remain technical access controls only. | Runtime commands validate scoped authority assignments independent of role.                           | `WEOS-AUTH-APP-006`; `case-review.service.spec.ts`; `editorial-authority-assignment.repository.ts` | `PARTIAL`         | APP-006 implementation is `CLOSED` and `CONFORMANT_WITH_NONBLOCKING_FINDINGS`; authority outside APP-006 still requires approval. |
-| `WEOS-CONF-007` | Expected-version commands               | Stale governed writes fail without mutation.                                         | Closed Stage 2 `APPROVE_CASE_REVISION` requires expected revision, accepts expected review tokens, and fails closed on stale or conflicting idempotency inputs. APP-007 `CREATE_CASE_REVISION` requires expected current revision and command idempotency for diagnosis relink/update and restore, blocks unsafe clue draft materialization, fails closed for existing-date `/cases` material updates, replays compatible completed commands before stale rejection, and uses root-Prisma post-rollback replay after qualifying PostgreSQL conflicts. | Governed commands declare expected state and fail closed on stale inputs.                             | `WEOS-AUTH-APP-006`; `WEOS-AUTH-APP-007`; `case-review.service.spec.ts`; `case-revision.service.spec.ts`; `cases.service.spec.ts`; `test/app006-case-approval-race.e2e-spec.ts`; `test/app007-case-revision-race.e2e-spec.ts` using local Docker `weos_integration` | `PARTIAL`         | Repository-wide command enforcement not approved; APP-006 closed; APP-007 pending independent review. |
+| `WEOS-CONF-007` | Expected-version commands               | Stale governed writes fail without mutation.                                         | Closed Stage 2 `APPROVE_CASE_REVISION` requires expected revision, accepts expected review tokens, and fails closed on stale or conflicting idempotency inputs. Closed Stage 2 APP-007 `CREATE_CASE_REVISION` requires expected current revision and command idempotency for diagnosis relink/update and restore, blocks unsafe clue draft materialization, fails closed for existing-date `/cases` material updates, replays compatible completed commands before stale rejection, and uses root-Prisma post-rollback replay after qualifying PostgreSQL conflicts. | Governed commands declare expected state and fail closed on stale inputs.                             | `WEOS-AUTH-APP-006`; `WEOS-AUTH-APP-007`; `case-review.service.spec.ts`; `case-revision.service.spec.ts`; `cases.service.spec.ts`; `test/app006-case-approval-race.e2e-spec.ts`; `test/app007-case-revision-race.e2e-spec.ts` using local Docker `weos_integration` | `PARTIAL`         | Repository-wide command enforcement not approved; APP-006 and APP-007 closed for their named operations. |
 | `WEOS-CONF-008` | Immutable governance history            | Decisions preserve actor, authority, target, rationale, effect, and time.            | Closed Stage 2 `APPROVE_CASE_REVISION` builds and semantically validates an OD-018 `GovernanceDecisionEnvelope` with typed `CASE_REVISION_APPROVAL` payload, target references for revision/review/validation/context, persisted authority evidence, empty APP-006 obligations, exact projection metadata, review basis, and command fingerprint. The governed decision is inserted before legacy review/case projection updates inside the same serializable transaction so failed attempts commit neither decision nor projection. | Approved governance decision envelope integrated with runtime persistence.                            | `WEOS-AUTH-APP-006`; `case-review.service.spec.ts`; `app006-case-revision-approval.decision.ts`; real Prisma/PostgreSQL race spec | `PARTIAL`         | APP-006 implementation is `CLOSED`; other decision families still require authorization. |
 | `WEOS-CONF-009` | Controlled AI application               | AI output remains candidate until accepted and applied through controlled operation. | AI draft audit and clue draft flows exist; acceptance/application semantics are service-local.                                                                                                                      | Separate accepted candidate, application authority, target, effect, and history.                      | mutation inventory; workspace specs                | `BLOCKED`         | Controlled application approval record required.              |
