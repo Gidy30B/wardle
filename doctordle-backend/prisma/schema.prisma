@@ -24,6 +24,12 @@ enum CaseEditorialStatus {
   REJECTED
 }
 
+enum CaseRevisionPublicationStanding {
+  AUTHORIZED
+  WITHDRAWN
+  SUPERSEDED
+}
+
 enum ValidationOutcome {
   PASSED
   FAILED
@@ -881,6 +887,7 @@ model Case {
   validationRuns             CaseValidationRun[]
   reviews                    CaseReview[]
   governedApprovalDecisions  GovernedCaseRevisionApprovalDecision[]
+  publicationDecisions       CaseRevisionPublicationDecision[]
   revisions                  CaseRevision[]                  @relation("CaseRevisions")
   differentialMappings       CaseDifferentialMapping[]
   differentialLinks          CaseDifferentialLink[]
@@ -1098,6 +1105,7 @@ model CaseRevision {
   validationRuns             CaseValidationRun[]
   reviews                    CaseReview[]
   governedApprovalDecisions  GovernedCaseRevisionApprovalDecision[]
+  publicationDecisions       CaseRevisionPublicationDecision[]
   differentialMappings       CaseDifferentialMapping[]
   differentialLinks          CaseDifferentialLink[]
 
@@ -1396,12 +1404,86 @@ model GovernedCaseRevisionApprovalDecision {
   case                       Case         @relation(fields: [caseId], references: [id], onDelete: Cascade)
   targetRevision             CaseRevision @relation(fields: [targetRevisionId], references: [id], onDelete: Restrict)
   review                     CaseReview   @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  publicationDecisions       CaseRevisionPublicationDecision[] @relation("CaseRevisionPublicationApprovalDecision")
 
   @@index([caseId])
   @@index([targetRevisionId])
   @@index([actorUserId])
   @@index([approvalRecordId])
   @@index([occurredAt])
+}
+
+model CaseRevisionPublicationDecision {
+  id                          String                          @id @default(uuid())
+  commandAction               String
+  commandIdempotencyKey       String                          @unique
+  commandFingerprint          String
+  caseId                      String
+  caseRevisionId              String
+  expectedRevisionId          String
+  approvalDecisionId          String
+  expectedApprovalDecisionId  String
+  materialContextHash         String
+  expectedMaterialContextHash String
+  validationRunId             String?
+  expectedValidationRunId     String?
+  reviewContextIdentity       String?
+  actorUserId                 String
+  approvalRecordId            String
+  authorityAssignmentId       String
+  authorityEvidenceReference  String
+  authorityScopeSnapshot      Json
+  authorityResolvedAt         DateTime
+  readinessResult             String
+  readinessSnapshot           Json
+  contentBoundarySnapshot     Json
+  standing                    CaseRevisionPublicationStanding @default(AUTHORIZED)
+  standingReason              String?
+  supersedesPublicationId     String?
+  withdrawnAt                 DateTime?
+  withdrawnByUserId           String?
+  decisionType                String
+  outcome                     String
+  effectiveAction             String
+  rationale                   String
+  findings                    Json
+  compatibilityProjection     Json
+  occurredAt                  DateTime                        @default(now())
+  effectiveAt                 DateTime                        @default(now())
+  createdAt                   DateTime                        @default(now())
+  case                        Case                            @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseRevision                CaseRevision                    @relation(fields: [caseRevisionId], references: [id], onDelete: Restrict)
+  approvalDecision            GovernedCaseRevisionApprovalDecision @relation("CaseRevisionPublicationApprovalDecision", fields: [approvalDecisionId], references: [id], onDelete: Restrict)
+  actor                       User                            @relation("CaseRevisionPublicationActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  supersedesPublication       CaseRevisionPublicationDecision? @relation("CaseRevisionPublicationSupersession", fields: [supersedesPublicationId], references: [id], onDelete: SetNull)
+  supersededByPublications    CaseRevisionPublicationDecision[] @relation("CaseRevisionPublicationSupersession")
+
+  @@index([caseId])
+  @@index([caseRevisionId])
+  @@index([approvalDecisionId])
+  @@index([actorUserId])
+  @@index([standing])
+  @@index([occurredAt])
+}
+
+model CaseRevisionPublicationCommand {
+  id                          String   @id @default(uuid())
+  commandAction               String
+  commandIdempotencyKey       String   @unique
+  commandFingerprint          String
+  caseId                      String
+  expectedRevisionId          String
+  expectedApprovalDecisionId  String
+  resultPublicationDecisionId String?
+  status                      String
+  createdAt                   DateTime @default(now())
+  completedAt                 DateTime?
+
+  @@index([caseId])
+  @@index([expectedRevisionId])
+  @@index([expectedApprovalDecisionId])
+  @@index([resultPublicationDecisionId])
+  @@index([status])
 }
 
 model EditorialAuthorityAssignment {
@@ -1566,6 +1648,7 @@ model User {
   triggeredCaseValidations               CaseValidationRun[]             @relation("CaseValidationRunTriggeredByUser")
   caseReviews                            CaseReview[]                    @relation("CaseReviewReviewerUser")
   governedCaseRevisionApprovalDecisions  GovernedCaseRevisionApprovalDecision[] @relation("GovernedCaseRevisionApprovalActor")
+  caseRevisionPublicationDecisions       CaseRevisionPublicationDecision[] @relation("CaseRevisionPublicationActor")
   editorialAuthorityAssignments          EditorialAuthorityAssignment[]   @relation("EditorialAuthorityAssignmentSubjectUser")
   reviewedDiagnosisEducation             DiagnosisEducation[]            @relation("DiagnosisEducationReviewedByUser")
   createdDiagnosisEducationRevisions     DiagnosisEducationRevision[]    @relation("DiagnosisEducationRevisionCreatedByUser")

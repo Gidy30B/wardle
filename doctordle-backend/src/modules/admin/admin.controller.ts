@@ -24,6 +24,7 @@ import { canPublishEditorial } from '../../auth/roles';
 import { CaseGeneratorService } from '../case-generator/case-generator.service';
 import { AdminGuard } from './admin.guard';
 import { CaseReviewService } from './case-review.service';
+import { CasePublicationGovernanceService } from './case-publication-governance.service';
 import { CaseInventoryHealthService } from './case-inventory-health.service';
 import { DiagnosisEditorialWorkspaceService } from './diagnosis-editorial-workspace.service';
 import {
@@ -91,6 +92,7 @@ import { CreateDiagnosisAliasDto } from './dto/create-diagnosis-alias.dto';
 import { CreateDiagnosisRegistryDto } from './dto/create-diagnosis-registry.dto';
 import { LinkCaseDiagnosisDto } from './dto/link-case-diagnosis.dto';
 import { ListEditorialCasesDto } from './dto/list-editorial-cases.dto';
+import { AuthorizeCaseRevisionPublicationDto } from './dto/authorize-case-revision-publication.dto';
 import { RestoreCaseRevisionDto } from './dto/restore-case-revision.dto';
 import { SearchDiagnosisRegistryDto } from './dto/search-diagnosis-registry.dto';
 import { SubmitCaseReviewDto } from './dto/submit-case-review.dto';
@@ -167,6 +169,7 @@ export class AdminController {
   constructor(
     private readonly caseGenerator: CaseGeneratorService,
     private readonly caseReviewService: CaseReviewService,
+    private readonly casePublicationGovernanceService: CasePublicationGovernanceService,
     private readonly caseInventoryHealthService: CaseInventoryHealthService,
     private readonly diagnosisEditorialWorkspaceService: DiagnosisEditorialWorkspaceService,
     private readonly diagnosisWorkspaceQualityService: DiagnosisWorkspaceQualityService,
@@ -1676,6 +1679,56 @@ export class AdminController {
   @EditorialAccess()
   async listRevisions(@Param('caseId', new ParseUUIDPipe()) caseId: string) {
     return this.caseReviewService.listRevisions(caseId);
+  }
+
+  @Get('cases/:caseId/publications')
+  @EditorialAccess()
+  async listCasePublicationHistory(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+  ) {
+    return this.casePublicationGovernanceService.listCasePublicationHistory(
+      caseId,
+    );
+  }
+
+  @Get('cases/:caseId/revisions/:revisionId/publication-readiness')
+  @EditorialAccess()
+  async getRevisionPublicationReadiness(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+    @Param('revisionId', new ParseUUIDPipe()) revisionId: string,
+  ) {
+    return this.casePublicationGovernanceService.getRevisionPublicationReadiness(
+      caseId,
+      revisionId,
+    );
+  }
+
+  @Get('cases/:caseId/revisions/:revisionId/publication')
+  @EditorialAccess()
+  async getRevisionPublicationStanding(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+    @Param('revisionId', new ParseUUIDPipe()) revisionId: string,
+  ) {
+    return this.casePublicationGovernanceService.getRevisionPublicationStanding(
+      caseId,
+      revisionId,
+    );
+  }
+
+  @Post('cases/:caseId/revisions/:revisionId/publication')
+  @SeniorEditorialAccess()
+  async authorizeRevisionPublication(
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+    @Param('revisionId', new ParseUUIDPipe()) revisionId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: AuthorizeCaseRevisionPublicationDto,
+  ) {
+    return this.casePublicationGovernanceService.authorizeRevisionPublication(
+      caseId,
+      revisionId,
+      request.user.id,
+      body,
+    );
   }
 
   @Post('cases/:caseId/revisions/:revisionId/restore')
