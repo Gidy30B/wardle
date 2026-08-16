@@ -35,10 +35,6 @@ const envSchema = z.object({
   APP_PROCESS_ROLE: z
     .preprocess(emptyToUndefined, z.enum(['api', 'worker']).optional())
     .default('api'),
-  DEV_BYPASS_DAILY_LIMIT: z
-    .string()
-    .optional()
-    .transform((value) => value === 'true'),
   ENABLE_DEV_REPLAY: z
     .string()
     .optional()
@@ -140,13 +136,6 @@ export function validateEnv(): AppEnv {
       .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
       .join('; ');
     throw new Error(`Invalid environment configuration: ${details}`);
-  }
-
-  if (
-    parsed.data.NODE_ENV === 'production' &&
-    parsed.data.DEV_BYPASS_DAILY_LIMIT
-  ) {
-    throw new Error('DEV_BYPASS_DAILY_LIMIT must not be enabled in production');
   }
 
   if (parsed.data.NODE_ENV === 'production' && parsed.data.ENABLE_DEV_REPLAY) {

@@ -27,7 +27,6 @@ import {
   formatDailyCaseDisplayLabel,
   formatDailyCaseTrackDisplayLabel,
 } from './daily-case-labels.js';
-import { DailyLimitService } from './daily-limit.service';
 import type { GameplayDiagnosisReadModel } from './dto/submit-game-guess.dto';
 import { normalizeWardleDayDate } from './wardle-day';
 
@@ -253,7 +252,6 @@ export class DailyCasesService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly dailyLimitService: DailyLimitService,
     private readonly caseEligibilityPolicy: CaseEligibilityPolicyService,
     @Optional()
     private caseAssignmentService?: CaseAssignmentService,
@@ -687,17 +685,6 @@ export class DailyCasesService {
                 user,
               } satisfies ActiveSessionResult;
             }
-
-            const startOfDayUtc = normalizedDateRangeStart(dailyCase.date);
-            const endOfDayUtc = new Date(startOfDayUtc);
-            endOfDayUtc.setUTCDate(endOfDayUtc.getUTCDate() + 1);
-
-            await this.dailyLimitService.assertCanStartInTransaction(tx, {
-              userId: user.id,
-              subscriptionTier: user.subscriptionTier,
-              startOfDayUtc,
-              endOfDayUtc,
-            });
 
             const session = await tx.gameSession.create({
               data: {
@@ -1219,10 +1206,4 @@ export class DailyCasesService {
       }
     }
   }
-}
-
-function normalizedDateRangeStart(value: Date): Date {
-  return new Date(
-    Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
-  );
 }

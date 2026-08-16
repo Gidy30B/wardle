@@ -465,17 +465,11 @@ function createDailyCasesFixture(options?: { forceCreateRace?: boolean }) {
     },
   });
 
-  const dailyLimitService = {
-    assertCanStartInTransaction: jest.fn().mockResolvedValue(undefined),
-  };
-
   return {
     prisma,
     store,
-    dailyLimitService,
     service: new DailyCasesService(
       prisma as never,
-      dailyLimitService as never,
       new CaseEligibilityPolicyService(),
     ),
   };
@@ -1068,6 +1062,202 @@ describe('DailyCasesService', () => {
         trackDisplayLabel: 'Premium Case 2026-04-18 #2',
       },
     ]);
+  });
+
+  it('allows a free user to replay the same daily case without creating a duplicate session', async () => {
+    const { service, store } = createDailyCasesFixture();
+    const date = normalizeDailyDate('2026-04-18');
+    store.users.push({ id: 'free-user', subscriptionTier: 'free' });
+    store.cases.push({
+      id: 'case-daily',
+      title: 'Daily Case',
+      date,
+      difficulty: 'easy',
+      diagnosisId: 'd1',
+      clues: [{ type: 'history', value: 'daily clue', order: 0 }],
+      explanation: null,
+      editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
+      approvedAt: new Date(),
+      currentRevision: { publishTrack: PublishTrack.DAILY, date },
+    });
+    store.dailyCases.push({
+      id: 'dc-daily',
+      caseId: 'case-daily',
+      date,
+      track: PublishTrack.DAILY,
+      sequenceIndex: 1,
+      createdAt: new Date(),
+    });
+    store.sessions.push({
+      id: 'session-1',
+      caseId: 'case-daily',
+      userId: 'free-user',
+      dailyCaseId: 'dc-daily',
+      userTierAtStart: 'free',
+      status: 'completed',
+      startedAt: new Date('2026-04-18T08:00:00.000Z'),
+      completedAt: new Date('2026-04-18T08:05:00.000Z'),
+      processingAt: null,
+      processedAt: new Date('2026-04-18T08:05:01.000Z'),
+      xpAwardedAt: new Date('2026-04-18T08:05:02.000Z'),
+      currentClueIndexLegacy: 3,
+      attempts: [{ result: 'correct' }],
+    });
+
+    const result = await service.getOrCreateGameSessionForDailyCase(
+      'free-user',
+      'dc-daily',
+    );
+
+    expect(result.session.id).toBe('session-1');
+    expect(result.session.dailyCaseId).toBe('dc-daily');
+    expect(store.sessions).toHaveLength(1);
+  });
+
+  it('allows a free user to start the current daily case after completing an archived daily assignment', async () => {
+    const { service, store } = createDailyCasesFixture();
+    const date = normalizeDailyDate('2026-04-18');
+    store.users.push({ id: 'free-user', subscriptionTier: 'free' });
+    store.cases.push(
+      {
+        id: 'case-archive',
+        title: 'Archive Case',
+        date: normalizeDailyDate('2026-04-17'),
+        difficulty: 'easy',
+        diagnosisId: 'd1',
+        clues: [{ type: 'history', value: 'archive clue', order: 0 }],
+        explanation: null,
+        editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
+        approvedAt: new Date(),
+        currentRevision: { publishTrack: PublishTrack.DAILY, date: normalizeDailyDate('2026-04-17') },
+      },
+      {
+        id: 'case-current',
+        title: 'Current Daily',
+        date,
+        difficulty: 'easy',
+        diagnosisId: 'd2',
+        clues: [{ type: 'history', value: 'current clue', order: 0 }],
+        explanation: null,
+        editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
+        approvedAt: new Date(),
+        currentRevision: { publishTrack: PublishTrack.DAILY, date },
+      },
+    );
+    store.dailyCases.push(
+      {
+        id: 'dc-archive',
+        caseId: 'case-archive',
+        date: normalizeDailyDate('2026-04-17'),
+        track: PublishTrack.DAILY,
+        sequenceIndex: 1,
+        createdAt: new Date(),
+      },
+      {
+        id: 'dc-current',
+        caseId: 'case-current',
+        date,
+        track: PublishTrack.DAILY,
+        sequenceIndex: 1,
+        createdAt: new Date(),
+      },
+    );
+    store.sessions.push({
+      id: 'archive-session',
+      caseId: 'case-archive',
+      userId: 'free-user',
+      dailyCaseId: 'dc-archive',
+      userTierAtStart: 'free',
+      status: 'completed',
+      startedAt: new Date('2026-04-17T08:00:00.000Z'),
+      completedAt: new Date('2026-04-17T08:05:00.000Z'),
+      processingAt: null,
+      processedAt: new Date('2026-04-17T08:05:01.000Z'),
+      xpAwardedAt: new Date('2026-04-17T08:05:02.000Z'),
+      currentClueIndexLegacy: 3,
+      attempts: [{ result: 'correct' }],
+    });
+
+    const result = await service.getOrCreateGameSessionForDailyCase(
+      'free-user',
+      'dc-current',
+    );
+
+    expect(result.session.dailyCaseId).toBe('dc-current');
+    expect(store.sessions).toHaveLength(2);
+  });
+
+  it('allows a free user to start an archive daily case after completing the current daily case', async () => {
+    const { service, store } = createDailyCasesFixture();
+    const date = normalizeDailyDate('2026-04-18');
+    store.users.push({ id: 'free-user', subscriptionTier: 'free' });
+    store.cases.push(
+      {
+        id: 'case-current',
+        title: 'Current Daily',
+        date,
+        difficulty: 'easy',
+        diagnosisId: 'd1',
+        clues: [{ type: 'history', value: 'current clue', order: 0 }],
+        explanation: null,
+        editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
+        approvedAt: new Date(),
+        currentRevision: { publishTrack: PublishTrack.DAILY, date },
+      },
+      {
+        id: 'case-archive',
+        title: 'Archive Case',
+        date: normalizeDailyDate('2026-04-17'),
+        difficulty: 'easy',
+        diagnosisId: 'd2',
+        clues: [{ type: 'history', value: 'archive clue', order: 0 }],
+        explanation: null,
+        editorialStatus: CaseEditorialStatus.READY_TO_PUBLISH,
+        approvedAt: new Date(),
+        currentRevision: { publishTrack: PublishTrack.DAILY, date: normalizeDailyDate('2026-04-17') },
+      },
+    );
+    store.dailyCases.push(
+      {
+        id: 'dc-current',
+        caseId: 'case-current',
+        date,
+        track: PublishTrack.DAILY,
+        sequenceIndex: 1,
+        createdAt: new Date(),
+      },
+      {
+        id: 'dc-archive',
+        caseId: 'case-archive',
+        date: normalizeDailyDate('2026-04-17'),
+        track: PublishTrack.DAILY,
+        sequenceIndex: 1,
+        createdAt: new Date(),
+      },
+    );
+    store.sessions.push({
+      id: 'current-session',
+      caseId: 'case-current',
+      userId: 'free-user',
+      dailyCaseId: 'dc-current',
+      userTierAtStart: 'free',
+      status: 'completed',
+      startedAt: new Date('2026-04-18T08:00:00.000Z'),
+      completedAt: new Date('2026-04-18T08:05:00.000Z'),
+      processingAt: null,
+      processedAt: new Date('2026-04-18T08:05:01.000Z'),
+      xpAwardedAt: new Date('2026-04-18T08:05:02.000Z'),
+      currentClueIndexLegacy: 3,
+      attempts: [{ result: 'correct' }],
+    });
+
+    const result = await service.getOrCreateGameSessionForDailyCase(
+      'free-user',
+      'dc-archive',
+    );
+
+    expect(result.session.dailyCaseId).toBe('dc-archive');
+    expect(store.sessions).toHaveLength(2);
   });
 
   it('forbids free users from starting premium daily cases', async () => {
