@@ -139,7 +139,6 @@ describe('ClerkAuthGuard local QA auth', () => {
   it('refuses local QA auth in production env validation', async () => {
     setEnv({
       NODE_ENV: 'production',
-      DEV_BYPASS_DAILY_LIMIT: 'false',
       ENABLE_DEV_REPLAY: 'false',
       LOCAL_QA_AUTH_ENABLED: 'true',
       LOCAL_QA_AUTH_TOKEN: 'local-qa-token-123',

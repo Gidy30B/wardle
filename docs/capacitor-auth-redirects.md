@@ -21,7 +21,7 @@ Register these allowed redirect URLs for the mobile OAuth provider:
 Keep the web callback registered as well:
 
 - `https://<web-host>/sso-callback`
-- local dev origins such as `http://localhost:5173/sso-callback` when needed
+- local learner-app origins such as `http://127.0.0.1:8081/sso-callback` when needed
 
 ## Android App Links
 

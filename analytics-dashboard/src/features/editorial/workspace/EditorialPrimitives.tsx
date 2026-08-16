@@ -148,8 +148,8 @@ export function EditorialStream({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-[var(--color-navy-border)] bg-white/[0.03] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="rounded-lg border border-[var(--color-navy-border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.055),rgba(255,255,255,0.025))] p-4 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-3">
         <div className="min-w-0">
           {eyebrow ? <p className="editorial-eyebrow">{eyebrow}</p> : null}
           <h2 className="mt-1 text-base font-semibold text-slate-100">{title}</h2>
@@ -187,7 +187,7 @@ export function EditorialEntity({
     <article
       className={`rounded-lg border ${toneBorderClass(tone)} ${toneBgClass(
         tone,
-      )} px-4 py-3`}
+      )} px-4 py-3 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -316,13 +316,18 @@ export function StreamDisclosure({
   title,
   summary,
   children,
+  testId,
 }: {
   title: string;
   summary?: string;
   children: ReactNode;
+  testId?: string;
 }) {
   return (
-    <details className="group rounded-md border border-white/10 bg-white/[0.03]">
+    <details
+      data-testid={testId}
+      className="group rounded-md border border-white/10 bg-white/[0.03]"
+    >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
         <span>
           <span className="block text-xs font-semibold text-slate-200">
@@ -411,7 +416,7 @@ export function CompactPanel({
   children: ReactNode;
 }) {
   return (
-    <section className="editorial-panel overflow-hidden rounded-lg">
+    <section className="editorial-panel overflow-hidden rounded-lg shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]">
       <div className="editorial-panel-header">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -484,7 +489,7 @@ export function EditorialRow({
             : 'bg-[var(--color-navy-border)]';
 
   return (
-    <div className="group relative overflow-hidden rounded-lg border border-[var(--color-navy-border)] bg-white/4 transition hover:bg-white/10">
+    <div className="group relative overflow-hidden rounded-lg border border-[var(--color-navy-border)] bg-white/[0.045] transition hover:border-slate-500/50 hover:bg-white/10">
       <div className={`absolute inset-y-0 left-0 w-0.5 ${toneBar}`} />
       <div className="flex flex-wrap items-start justify-between gap-3 px-3 py-2.5 pl-4">
         <div className="min-w-0 flex-1">
@@ -534,6 +539,103 @@ export function StatusStrip({
             </p>
           ) : null}
         </div>
+      ))}
+    </div>
+  );
+}
+
+export function OperatorDashboard({
+  eyebrow,
+  title,
+  subtitle,
+  status,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  subtitle?: string;
+  status?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border border-[var(--color-navy-border)] bg-[linear-gradient(135deg,rgba(0,180,166,0.08),rgba(255,255,255,0.035)_42%,rgba(232,160,32,0.055))] p-4 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="editorial-eyebrow">{eyebrow}</p>
+          <h2 className="mt-1 text-base font-semibold text-slate-100">
+            {title}
+          </h2>
+          {subtitle ? (
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+              {subtitle}
+            </p>
+          ) : null}
+        </div>
+        {status ? <div className="shrink-0">{status}</div> : null}
+      </div>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
+export function OperatorMetricGrid({
+  items,
+}: {
+  items: Array<{
+    label: string;
+    value: string | number | null | undefined;
+    detail?: string;
+    tone?: StatusBadgeTone;
+  }>;
+}) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      {items.map((item) => (
+        <div
+          key={item.label}
+          className={`rounded-lg border ${toneBorderClass(
+            item.tone ?? 'neutral',
+          )} ${toneBgClass(item.tone ?? 'neutral')} px-3 py-2.5`}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              {item.label}
+            </p>
+            <StatusBadge
+              status={
+                item.value === null || item.value === undefined
+                  ? 'Unknown'
+                  : String(item.value)
+              }
+              tone={item.tone ?? 'neutral'}
+            />
+          </div>
+          {item.detail ? (
+            <p className="mt-2 text-xs leading-5 text-slate-400">
+              {item.detail}
+            </p>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function EditorialChipRow({
+  items,
+}: {
+  items: Array<{ label: string; tone?: StatusBadgeTone }>;
+}) {
+  if (!items.length) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((item) => (
+        <StatusBadge
+          key={`${item.label}-${item.tone ?? 'neutral'}`}
+          status={item.label}
+          tone={item.tone ?? 'neutral'}
+        />
       ))}
     </div>
   );
@@ -948,7 +1050,7 @@ export function WorkspaceLoadingSkeleton() {
           </CompactPanel>
         </main>
         <aside className="space-y-4">
-          <CompactPanel title="Loading copilot rail">
+          <CompactPanel title="Loading editorial review rail">
             <EditorialSkeleton rows={5} />
           </CompactPanel>
         </aside>
@@ -1135,7 +1237,7 @@ export function DraftAIActionsPanel({
           aria-hidden="true"
         />
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-300">
-          Draft-only AI actions
+          Editorial AI draft actions
         </p>
       </div>
       {actions.length ? (
@@ -1163,8 +1265,8 @@ export function DraftAIActionsPanel({
         </p>
       )}
       <p className="mt-3 text-xs text-slate-500">
-        These actions create or regenerate drafts for editor review; they do not
-        publish or activate output automatically.
+        These actions create or regenerate editorial drafts for review; they do not
+        publish or activate content automatically.
       </p>
     </div>
   );
@@ -1186,7 +1288,7 @@ export function TabNextStepCard({
   return (
     <section className="editorial-panel rounded-lg border-dashed p-4">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-amber)]">
-        Editor next step
+        Editorial next step
       </p>
       <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">

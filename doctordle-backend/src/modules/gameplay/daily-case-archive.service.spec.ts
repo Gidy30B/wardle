@@ -4,11 +4,7 @@ import { CaseEligibilityPolicyService } from '../cases/case-eligibility-policy.s
 import { DailyCasesService, normalizeDailyDate } from './daily-cases.service';
 
 function createService(prisma: any) {
-  return new DailyCasesService(
-    prisma,
-    { assertCanStartInTransaction: jest.fn() } as never,
-    new CaseEligibilityPolicyService(),
-  );
+  return new DailyCasesService(prisma, new CaseEligibilityPolicyService());
 }
 
 function dailyCase(overrides: Partial<any> = {}) {

@@ -4,16 +4,61 @@
 
 - Decision ID: `WEOS-OD-023`
 - Version: `0.1`
-- Status: `Draft`
-- Disposition: `REVIEW_REQUIRED`
-- Approval state: `NOT_APPROVED`
-- Implementation authority: `NOT_GRANTED`
+- Status: `Approved with conditions`
+- Disposition: `APPROVED_WITH_CONDITIONS`
+- Approval state: `APPROVED_WITH_CONDITIONS`
+- Implementation authority: `GRANTED_FOR_STAGE_1_CONTRACTS_ONLY`
 - Evidence baseline: `6f41136c21c9e854cbf231752d71939fab82bdac`
 - Review date: `2026-07-29`
 
 ## Decision Question
 
 What expected-version or concurrency token must governed mutation commands provide, and how must stale commands fail?
+
+## Selected Decision
+
+WEOS adopts Option D: a hybrid expected-state command contract.
+
+Every governed command type must declare its concurrency policy. Each command instance must carry explicit expected-state preconditions for every authoritative dependency relevant to its requested effect.
+
+Revisioned canonical artifacts use exact expected revision identifiers.
+
+Mutable identity records or compatibility projections may use expected versions or approved server-issued opaque concurrency tokens where an exact revision identifier is unavailable or insufficient.
+
+A command involving multiple authoritative dependencies must declare every dependency explicitly. A primary-target version must not silently represent other state that affects correctness.
+
+Expected-state validation and authority validation are independent. Both must pass before a governed command may be considered eligible for mutation.
+
+A stale or otherwise invalid command fails closed and produces:
+
+- no canonical mutation;
+- no resulting revision;
+- no Governance Decision;
+- no projection update;
+- no partial batch effect;
+- no duplicate effect through retry.
+
+A rejected attempt may later be represented as an Audit Event under a separate approved policy. It must not be represented as a Governance Decision.
+
+Stage 1 defines documentation, JSON schemas, serializable TypeScript contracts, pure registries, pure validation, pure stale-state comparison, pure idempotency resolution, pure batch-policy evaluation and deterministic conformance tests.
+
+This decision does not authorize Prisma, migrations, database compare-and-swap, transactions, DTOs, controllers, services, command handlers, API responses, projection synchronization, audit persistence, token issuance, runtime idempotency storage or production enforcement.
+
+## Approval Conditions
+
+- Every governed command declares an approved concurrency contract.
+- Revisioned canonical artifacts use exact expected revision identifiers.
+- Every authoritative dependency is declared explicitly.
+- Expected version and opaque-token use is registered and policy-defined.
+- Authority and expected-state validation remain independent.
+- Stale commands fail closed without mutation, projection update or Governance Decision.
+- Governed batches are atomic by default.
+- Idempotency cannot bypass concurrency or authority checks.
+- Duplicate retries cannot produce duplicate effects.
+- Stale commands are not silently rebased or automatically retried.
+- Safe current-state details require disclosure authorization.
+- Legacy concurrency history is not invented.
+- Stage 1 does not claim current runtime command compliance, production enforcement, API 409 mapping, database concurrency safety, audit persistence, projection synchronization or token security.
 
 ## Why This Decision Is Blocking
 
@@ -29,7 +74,7 @@ This decision does not alter DTOs, services, database schema, client behavior or
 
 ## Current Repository Evidence
 
-- `docs/weos/gaps/IMPLEMENTATION-GAPS.md` marks `WEOS-GAP-004` open.
+- `docs/weos/gaps/IMPLEMENTATION-GAPS.md` now marks `WEOS-GAP-004` partially mitigated by Stage 1 contract evidence.
 - `docs/weos/capability-map/DATABASE-MODEL-MAP.md` states `CaseRevision` and `DiagnosisEducationRevision` uniqueness prevents duplicate version numbers only.
 - `doctordle-backend/src/modules/admin/case-review.service.ts` uses serializable transactions on selected case paths but not a generic expected-version command input.
 - `doctordle-backend/src/modules/education/diagnosis-education.service.ts` increments education version and creates revisions without a universal stale-write contract.
@@ -169,10 +214,10 @@ This recommendation is not an approval, does not resolve the decision, and does 
 
 ## Unresolved Questions
 
-- Which commands need idempotency keys?
-- Which artifacts require multi-dependency tokens?
-- Should stale rejected attempts be persisted as audit events?
-- How long should clients retry before requiring refresh?
+- Which commands require idempotency keys? Every governed command requires a unique `commandId`. An `idempotencyKey` is additionally mandatory when its registered contract represents client retry, queued delivery, automation, at-least-once delivery or external integration. Each command contract declares its idempotency policy.
+- Which artifacts require multi-dependency tokens? Every authoritative dependency affecting command correctness must be declared. Typed exact-revision or expected-version preconditions are preferred. An opaque token may be used only where an approved token policy binds the complete declared dependency set. The production command inventory remains deferred.
+- Should stale rejected attempts be persisted as audit events? A stale attempt may be classified as an Audit Event, never as a Governance Decision. Persistence, retention and sensitive-field policy remain deferred.
+- How long should clients retry before refreshing? Stale conflicts are not transient retries. Clients must refresh or rebase before issuing a new command. Transport retries may reuse an existing idempotency key but must not alter the command fingerprint or expected-state preconditions. No retry duration is invented here.
 
 ## Dependencies
 
@@ -193,9 +238,27 @@ This recommendation is not an approval, does not resolve the decision, and does 
 
 ## Approval Record
 
-- Decision status: `OPEN`
-- Approved option: `NOT_SELECTED`
-- Approver: `NOT_RECORDED`
-- Approval date: `NOT_RECORDED`
-- Approval evidence: `NOT_RECORDED`
-- Implementation authorization: `NOT_GRANTED`
+- Decision status: `APPROVED_WITH_CONDITIONS`
+- Approved option: `OPTION_D_HYBRID_EXPECTED_REVISION_VERSION_AND_TOKEN_CONTRACT`
+- Approver: `Gideon Lemasika Saningo`
+- Approver role: `Founding Architecture Authority`
+- Approval date: `2026-08-01`
+- Approval evidence: `docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-004.json`
+- Authority basis: `docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-001.json`
+- Dependency evidence: `docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-003.json`
+- Supporting foundation: `docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-002.json`
+- Conditions:
+  - every governed command declares an approved concurrency contract;
+  - revisioned canonical artifacts use exact expected revision identifiers;
+  - every authoritative dependency is declared explicitly;
+  - version and opaque-token policies are registered and approved;
+  - authority and expected-state validation remain independent;
+  - stale commands fail closed without mutation or Governance Decision;
+  - governed batches are atomic by default;
+  - idempotency cannot bypass concurrency or authority;
+  - retries cannot create duplicate effects;
+  - stale commands are not silently rebased or automatically retried;
+  - safe current-state details require disclosure authorization;
+  - legacy concurrency history is not invented;
+  - no persistence, runtime integration or enforcement is authorized.
+- Implementation authorization: `GRANTED_FOR_STAGE_1_CONTRACTS_ONLY`

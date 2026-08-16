@@ -4,10 +4,10 @@
 
 - Decision ID: `WEOS-OD-019`
 - Version: `0.1`
-- Status: `Draft`
-- Disposition: `REVIEW_REQUIRED`
-- Approval state: `NOT_APPROVED`
-- Implementation authority: `NOT_GRANTED`
+- Status: `Approved with conditions`
+- Disposition: `APPROVED_WITH_CONDITIONS`
+- Approval state: `APPROVED_WITH_CONDITIONS`
+- Implementation authority: `GRANTED_FOR_STAGE_1_CONTRACTS_ONLY`
 - Evidence baseline: `6f41136c21c9e854cbf231752d71939fab82bdac`
 - Review date: `2026-07-29`
 
@@ -15,17 +15,42 @@
 
 Who owns each legacy or current-state compatibility projection, and may it be written directly or only derived through governed command handlers?
 
-## Why This Decision Is Blocking
+## Selected Decision
 
-Mutable fields such as `Case.editorialStatus`, `Case.approvedAt`, `DiagnosisEducation.editorialStatus` and `DiagnosisRegistry` status/permission flags remain active runtime state. Phase 2 maps classify them as compatibility projections or mutable current state, not independent canonical authority.
+WEOS adopts Option D: a transitional hybrid projection-ownership model with an explicit end state of canonical-record ownership and restricted compatibility projection writes.
 
-## Scope
+Every operational compatibility projection requires one approved canonical owner.
 
-Ownership, writer policy, transaction boundary, read consumers, synchronization strategy, drift detection, repair mechanism, direct-write policy and deprecation conditions for representative compatibility projections.
+Canonical owners may include an approved Governance Decision, immutable artifact revision, lifecycle record, publication record, controlled-application result or another separately approved canonical record type.
 
-## Out of Scope
+Projection fields do not independently establish:
 
-This decision does not remove fields, change direct writes, run backfills, alter live data, or declare any existing projection canonical.
+- approval;
+- publication;
+- playability;
+- generatability;
+- learner exposure;
+- lifecycle standing;
+- clinical authority;
+- institutional authority.
+
+During migration, a projection may use one approved strategy:
+
+- `DERIVED_ON_READ`;
+- `ATOMIC_SYNCHRONOUS`;
+- `ASYNCHRONOUS_BOUNDED_DRIFT`;
+- `LEGACY_OBSERVED_ONLY`;
+- `DEPRECATED`.
+
+An unresolved legacy projection remains explicitly unresolved. Its current value must not be interpreted as proven canonical history.
+
+Once an approved canonical owner and governed writer exist, ordinary direct writes are prohibited.
+
+Temporary compatibility writes require explicit transitional metadata and must not create or alter canonical authority.
+
+Stage 1 defines documentation, metadata contracts, schemas, pure registries, pure validation, drift classification, future synchronization eligibility, repair eligibility, deprecation checks and deterministic conformance tests.
+
+This decision does not authorize Prisma, migrations, persistence, projection synchronization, backfill, repair execution, direct-write enforcement, command-handler integration, consumer migration or field removal.
 
 ## Current Repository Evidence
 
@@ -34,173 +59,112 @@ This decision does not remove fields, change direct writes, run backfills, alter
 - `doctordle-backend/src/modules/admin/case-review.service.ts` writes case status and approval projections.
 - `doctordle-backend/src/modules/education/diagnosis-education.service.ts` writes education status/revision projections.
 - `docs/weos/gaps/IMPLEMENTATION-GAPS.md` identifies `WEOS-GAP-010` as the primary canonical-record-versus-compatibility-projection gap.
-- `docs/weos/gaps/IMPLEMENTATION-GAPS.md` ties projection synchronization to `WEOS-GAP-004`, `WEOS-GAP-015` and other related gaps.
+- Runtime field locations, current service writers, admin access and historical convention are evidence only. They do not establish canonical ownership.
 
-## Canonical Constraints
+## Mandatory Conditions
 
-- No projection is independent authority.
-- Every projection has one owner.
-- Direct writes are inventoried and restricted.
-- Drift is detectable.
-- Backfill never invents history.
-- Unknown legacy state remains unknown.
-- Command handlers update canonical records before or atomically with projections.
+### One Canonical Owner
 
-## Terminology
+Each projection definition declares one ownership status:
 
-- Compatibility projection: mutable field used by current runtime reads that represents or approximates canonical standing.
-- Canonical owner: future decision/record that owns meaning.
-- Direct write: service update to projection without creating/deriving from canonical record.
-- Drift: projection value inconsistent with canonical record or expected derivation.
+- `APPROVED_CANONICAL_OWNER`;
+- `UNRESOLVED_OWNER`;
+- `DEPRECATED_NO_OWNER_REQUIRED`.
 
-## Decision Drivers
+Approved ownership requires exactly one canonical-owner definition: `canonicalOwnerType`, `canonicalOwnerReference`, `canonicalOwnerDecisionType`, `canonicalOwnerSchemaVersion` and `supportingApprovalRecordId`.
 
-- Preserve existing runtime reads while adding governance.
-- Avoid treating projections as canonical decisions.
-- Support gradual migration.
-- Detect and repair drift.
-- Prevent direct writes after command handlers exist.
+Unresolved ownership cannot invent an owner, claim authoritative synchronization or authorize automatic repair. Deprecated projections require deprecation criteria and no current governed consumer dependency.
 
-## Options Considered
+### Ownership Is Semantic
 
-### Option A - Derived-only projections
+Ownership requires approved repository-visible metadata and approval evidence. Prisma model location, database field location, current service writer, frontend consumer, most recent writer, runtime role, admin access, historical convention and field name do not establish ownership.
 
-Canonical records are authoritative; projections are rebuilt. This is clean but requires canonical records to exist and can be disruptive.
+### Synchronization Strategy
 
-### Option B - Synchronized dual writes
+Supported strategies are `DERIVED_ON_READ`, `ATOMIC_SYNCHRONOUS`, `ASYNCHRONOUS_BOUNDED_DRIFT`, `LEGACY_OBSERVED_ONLY` and `DEPRECATED`.
 
-Governed command handler writes canonical record and projection in one transaction. This preserves current reads but requires strict transaction and rollback design.
+`DERIVED_ON_READ` requires a declared canonical source and deterministic derivation, and prohibits independent writes. `ATOMIC_SYNCHRONOUS` requires the future canonical effect and projection update to share a declared atomic application boundary. `ASYNCHRONOUS_BOUNDED_DRIFT` requires a complete approved drift policy and must not be selected by default for authority-sensitive projections. `LEGACY_OBSERVED_ONLY` preserves observed compatibility state without canonical provenance. `DEPRECATED` requires consumer-removal and removal-readiness criteria.
 
-### Option C - Event-driven asynchronous projection
+### Authority-Sensitive Defaults
 
-Canonical record commits first; projection updates asynchronously. This scales but introduces temporary drift and requires replay/monitoring.
+Projection sensitivity supports `AUTHORITY_SENSITIVE`, `LEARNER_EXPOSURE_GATING`, `OPERATIONAL_ELIGIBILITY`, `NON_AUTHORITY_COMPATIBILITY` and `UNKNOWN`.
 
-### Option D - Transitional hybrid
+Authority-sensitive and learner-exposure-gating projections default to `DERIVED_ON_READ` or `ATOMIC_SYNCHRONOUS`. Asynchronous bounded drift requires explicit approval evidence, proof the drift window cannot produce unauthorized effects and a complete policy.
 
-Different projections use different strategies during migration, with a documented end state of canonical-record ownership and restricted projection writes.
+### Writer Policy
 
-## Comparative Evaluation
+Each definition declares exactly one writer policy: `GOVERNED_HANDLER_ONLY`, `DERIVATION_ONLY`, `TEMPORARY_COMPATIBILITY_WRITE`, `OBSERVE_ONLY` or `NO_WRITES`.
 
-| Criterion              | Option A | Option B | Option C | Option D                 |
-| ---------------------- | -------- | -------- | -------- | ------------------------ |
-| Runtime compatibility  | Medium   | High     | High     | High                     |
-| Drift risk             | Low      | Low      | Medium   | Medium during transition |
-| Migration ease         | Low      | Medium   | Medium   | High                     |
-| Operational complexity | Medium   | Medium   | High     | Medium-high              |
+`DERIVATION_ONLY` aligns with derived-on-read and allows no direct writer. `GOVERNED_HANDLER_ONLY` requires approved ownership and future authority plus expected-state eligibility. `TEMPORARY_COMPATIBILITY_WRITE` requires rationale, allowed writer references, expiry condition, migration milestone, audit classification and transitional approval evidence. `OBSERVE_ONLY` and `NO_WRITES` cannot produce projection mutation.
 
-## Recommended Direction for Human Architecture Review
+### Inventory, Drift and Repair
 
-Use a transitional hybrid with an explicit end state: canonical governance records own meaning; projections are either derived or atomically synchronized by governed command handlers; direct writes are restricted after owners exist.
+Writer and reader inventories are independent. Incomplete inventory remains visibly incomplete; empty writer lists are not proof of no writers unless inventory is complete and supported by evidence.
 
-This recommendation is not an approval, does not resolve the decision, and does not grant implementation authority.
+Future application order is authority validation, expected-state validation, Governance Decision, canonical effect or revision and only then compatibility projection synchronization. A projection must never be updated first and then treated as evidence of canonical decision.
 
-## Rejected Options and Reasons
+Stale commands, rejected authority, invalid commands and successful idempotent replay permit no projection update.
 
-- Reject permanent direct projection writes because projections would remain independent authority.
-- Reject immediate derived-only migration without live-data audit because runtime consumers still depend on fields.
-- Reject asynchronous-only projection for authority-bearing publication or approval state unless drift windows are explicitly tolerated.
+Drift evaluation is pure, receives explicit snapshots and evaluation time, reads no database or files, mutates no input and performs no repair. Repair eligibility is declarative only, requires separately proven authority and expected-state eligibility, and cannot invent a Governance Decision, approver, rationale, timestamp or canonical effect.
 
-## Consequences
+Legacy observations record observed values only. Unknown legacy state remains unknown.
 
-### Positive
+## Resolved Unresolved Questions
 
-- Preserves compatibility while moving authority into records.
-- Lets each projection choose a safe migration path.
-- Enables drift detection and repair.
-- Prevents future confusion between status fields and decisions.
+Which projections can be derived immediately?
 
-### Negative
+A projection may become `DERIVED_ON_READ` only after its canonical owner, derivation rule and required source fields are approved and complete. OD-019 does not declare any representative projection immediately derivable.
 
-- Requires projection ownership inventory.
-- Requires dual-read or drift reports during migration.
-- Some fields may need long-lived compatibility support.
+Which runtime reads require compatibility fields indefinitely?
 
-### Risks
+Compatibility retention is consumer-driven and transitional. Each projection definition records known consumers and deprecation criteria. No projection becomes permanent merely because current runtime code reads it.
 
-- Projection owners may be misassigned.
-- Repair jobs could invent history if not constrained.
-- Asynchronous projections could create temporary user-facing inconsistency.
+What drift windows are acceptable?
 
-### Compatibility Effects
+No universal drift window exists. Each asynchronous projection requires a projection-specific approved policy. Authority-sensitive and learner-exposure-gating projections default to no tolerated asynchronous drift unless separately approved.
 
-- Current fields remain available to existing reads.
-- Future command handlers must update canonical records before or atomically with projections.
-- Deprecated direct writes need compatibility shims or blocked paths.
+Who may authorize repair?
 
-## Migration Prerequisites
+Repair requires separately proven controlled-application or operational permission authority, expected-state eligibility and an approved repair policy. OD-019 Stage 1 does not grant repair authority. Permanent repair-authority semantics remain deferred to OD-024 or an approved successor.
 
-- Inventory direct writes for representative fields.
-- Identify read consumers for each projection.
-- Define canonical owner per projection.
-- Define drift detection query and repair policy.
-- Classify unknown legacy standing without invention.
+## Conservative Production Registry
 
-## Implementation Prerequisites
+The initial production projection registry and inventory are empty. OD-019 does not create production entries for `Case.editorialStatus`, `Case.approvedAt`, `Case.approvedByUserId`, `Case.publishedAt`, `DiagnosisEducation.editorialStatus`, `DiagnosisEducation.reviewedAt`, `DiagnosisEducation.publishedAt`, `DiagnosisRegistry.status`, `DiagnosisRegistry.active`, `DiagnosisRegistry.isPlayable` or `DiagnosisRegistry.isGeneratable`.
 
-- Approve projection ownership metadata.
-- Approve per-projection synchronization strategy.
-- Define command handler transaction boundaries.
-- Define drift reports and repair authorization.
-
-## Data and Backfill Constraints
-
-- Backfill records observed current values only.
-- Historical authority/rationale remains unknown if not recorded.
-- Repair must not create governance decisions unless a real decision occurred after approval.
-
-## Security and Authority Implications
-
-- Projection writes must happen under authority-checked commands after rollout.
-- Direct scripts, seeds or backfills must be classified and restricted.
-- Drift reports may expose governance risks.
-
-## Audit and Observability Requirements
-
-- Monitor projection drift.
-- Log direct-write attempts after restriction.
-- Record repair actions separately from governance decisions unless authorized.
-
-## Acceptance Criteria
-
-- No projection is independent authority.
-- Every projection has one owner.
-- Direct writes are inventoried and restricted.
-- Drift is detectable.
-- Backfill never invents history.
-- Unknown legacy state remains unknown.
-- Command handlers update canonical records before or atomically with projections.
-
-## Unresolved Questions
-
-- Which projections can be derived immediately?
-- Which runtime reads require compatibility fields indefinitely?
-- What drift windows are acceptable?
-- Who may authorize repair?
+Representative classifications remain migration analysis only.
 
 ## Dependencies
 
-- Depends on `WEOS-OD-023` for stale command safety.
-- `WEOS-GAP-010` is the primary gap governed by `WEOS-OD-019`.
-- `WEOS-GAP-004` uses `WEOS-OD-019` only for related projection synchronization after `WEOS-OD-023` defines concurrency.
-- `WEOS-GAP-015` uses `WEOS-OD-019` only for education projection synchronization after review/publication separation is decided.
+- Depends on `WEOS-OD-023` for stale command safety and idempotency replay handling.
+- Uses `WEOS-AUTH-APP-004` as dependency evidence.
+- Uses `WEOS-AUTH-APP-002` and `WEOS-AUTH-APP-003` as supporting foundations.
 - Feeds `WEOS-OD-024`, `WEOS-OD-025` and downstream publication/history decisions without broadening into authority, publication or concurrency ownership.
-
-## Exact Implementation Sequence After Approval
-
-1. Approve projection ownership strategy.
-2. Create projection ownership metadata contract.
-3. Inventory direct writes and read consumers.
-4. Mark direct-write policy per projection.
-5. Add drift detection reports.
-6. Add canonical command writes for a pilot projection.
-7. Restrict direct writes after observe/warning phases.
-8. Deprecate projections only when consumers no longer need them.
 
 ## Approval Record
 
-- Decision status: `OPEN`
-- Approved option: `NOT_SELECTED`
-- Approver: `NOT_RECORDED`
-- Approval date: `NOT_RECORDED`
-- Approval evidence: `NOT_RECORDED`
-- Implementation authorization: `NOT_GRANTED`
+- Decision status: `APPROVED_WITH_CONDITIONS`
+- Approved option: `OPTION_D_TRANSITIONAL_HYBRID_CANONICAL_OWNER_AND_CONTROLLED_PROJECTIONS`
+- Approver: `Gideon Lemasika Saningo`
+- Approver role: `Founding Architecture Authority`
+- Approval date: `2026-08-02`
+- Approval evidence: `docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-005.json`
+- Authority basis: `docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-001.json`
+- Dependency evidence: `docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-004.json`
+- Supporting foundations:
+  - `docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-002.json`
+  - `docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-003.json`
+- Conditions:
+  - projections never independently establish canonical authority;
+  - every operational projection requires exactly one approved canonical owner;
+  - unresolved ownership remains explicitly unresolved;
+  - synchronization strategy and writer policy are declared per projection;
+  - authority-sensitive projections default to derived or atomic treatment;
+  - direct writes become prohibited after governed ownership exists;
+  - stale or unauthorized commands update neither canonical state nor projections;
+  - asynchronous drift requires an explicit bounded-drift policy;
+  - drift detection does not authorize repair;
+  - repair cannot invent governance history;
+  - legacy projection values remain observed state without proven provenance;
+  - production ownership is not invented;
+  - no persistence, backfill, synchronization, repair execution or runtime enforcement is authorized.
+- Implementation authorization: `GRANTED_FOR_STAGE_1_CONTRACTS_ONLY`

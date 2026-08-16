@@ -31,11 +31,11 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
       REDIS_URL: redis://cache:6379
-      LOCAL_QA_AUTH_ENABLED: "true"
-      LOCAL_QA_AUTH_TOKEN: "local-qa-secret"
-      LOCAL_QA_AUTH_USER_ID: "local-qa-admin"
-      LOCAL_QA_AUTH_EMAIL: "localqa@wardle.local"
-      LOCAL_QA_AUTH_ROLE: "admin"
+      LOCAL_QA_AUTH_ENABLED: ${LOCAL_QA_AUTH_ENABLED:-false}
+      LOCAL_QA_AUTH_TOKEN: ${LOCAL_QA_AUTH_TOKEN:-}
+      LOCAL_QA_AUTH_USER_ID: ${LOCAL_QA_AUTH_USER_ID:-local-qa-editor}
+      LOCAL_QA_AUTH_EMAIL: ${LOCAL_QA_AUTH_EMAIL:-local-qa-editor@example.test}
+      LOCAL_QA_AUTH_ROLE: ${LOCAL_QA_AUTH_ROLE:-admin}
       EDITORIAL_WORKSPACE_QA_SEED: "1"
     ports:
       - "3000:3000"
@@ -78,7 +78,9 @@ services:
     build:
       context: ./analytics-dashboard
       args:
-        VITE_API_URL: ${VITE_API_URL}
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+        VITE_LOCAL_QA_AUTH_ENABLED: ${VITE_LOCAL_QA_AUTH_ENABLED:-false}
+        VITE_LOCAL_QA_AUTH_TOKEN: ${VITE_LOCAL_QA_AUTH_TOKEN:-}
         VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY}
         VITE_CLERK_JWT_AUDIENCE: ${VITE_CLERK_JWT_AUDIENCE}
     container_name: doctordle-frontend

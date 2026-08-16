@@ -1,0 +1,44 @@
+{
+  "$schema": "../../schemas/document-approval-record.schema.json",
+  "recordId": "WEOS-AUTH-APP-002",
+  "recordType": "DOCUMENT_APPROVAL",
+  "schemaVersion": "1.0.0",
+  "documentId": "WEOS-OD-018",
+  "documentVersion": "0.1",
+  "documentPath": "docs/weos/phase-3-governance-foundations/WEOS-OD-018-governance-decision-envelope.md",
+  "approvalScope": {
+    "scopeType": "DOCUMENT_VERSION",
+    "description": "Approval with conditions for WEOS-OD-018 Stage 1 repository-native Governance Decision Envelope contracts, schemas, extension-registry contracts, pure validation, standing and supersession resolution utilities, conformance tests and documentation integration."
+  },
+  "approvalOutcome": "APPROVED_WITH_CONDITIONS",
+  "approver": {
+    "name": "Gideon Lemasika Saningo",
+    "role": "Founding Architecture Authority",
+    "authorityBasis": "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-001.json"
+  },
+  "approverAuthority": "Founding Architecture Authority bootstrap authority for initial WEOS governance foundation only",
+  "approvalDate": "2026-07-29",
+  "effectiveDate": "2026-07-29",
+  "rationale": "WEOS requires a common immutable Governance Decision Envelope with versioned domain-specific extension contracts before agents or future runtime work can compare authority-bearing decisions across artifacts. This record approves WEOS-OD-018 with conditions for Stage 1 repository-native contracts only.",
+  "conditions": [
+    "exact and multi-target references are required through primaryTarget and targetReferences",
+    "exact revision requirements are controlled by the registered extension policy",
+    "authority evidence is preserved at decision time and later expiry or revocation must not rewrite history",
+    "finalized decisions are append-only; correction, withdrawal or replacement requires a new decision ID",
+    "supersession is scoped and must not silently become global",
+    "outcome and effective-action semantics are controlled by the registered extension policy",
+    "envelopeSchemaVersion and extensionSchemaVersion are independently versioned",
+    "WEOS-OD-021 records remain canonical for document authority and are not replaced or converted",
+    "non-human authority requires an explicit approved extension policy",
+    "legacy history is never invented from workflow, validation, audit or projection records",
+    "no Prisma, persistence, API, runtime service, command handler, projection synchronization, deployment or enforcement work is authorized"
+  ],
+  "supportingDecision": "WEOS-OD-018",
+  "implementationAuthorization": "GRANTED_FOR_STAGE_1_CONTRACTS_ONLY",
+  "bootstrapAuthority": {
+    "isBootstrap": true,
+    "scope": "Initial WEOS governance foundation for repository-native Governance Decision Envelope contracts, JSON schemas, TypeScript contracts, pure in-memory extension registry, validation, immutability checks, standing and supersession resolution, conformance tests and documentation integration only. This does not grant editorial, publication, clinical, institutional, operational, Prisma, database, API, runtime enforcement or production rollout authority.",
+    "expiryCondition": "Expires when a permanent authority-assignment process approved under WEOS-OD-022 becomes effective."
+  },
+  "createdAt": "2026-07-29T00:00:00Z"
+}

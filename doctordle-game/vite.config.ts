@@ -50,7 +50,7 @@ export default defineConfig({
     // For live-reload on device: set host to your machine's LAN IP
     // and update capacitor.config.ts server.url to match.
     host: true,
-    port: 5173,
+    port: 8081,
     proxy: {
       "/api": {
         target: "http://localhost:3000",

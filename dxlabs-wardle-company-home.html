@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="DxLabs is a clinician-led health technology company and the home of Wardle, building digital products for medical learning and selected healthcare delivery challenges.">
+  <meta name="theme-color" content="#070c16">
+  <title>DxLabs | Home of Wardle</title>
+  <style>
+    :root {
+      --bg: #070c16;
+      --bg-2: #0b1322;
+      --surface: #0f1a2e;
+      --surface-2: #152238;
+      --surface-3: #1c2b44;
+      --ink: #f5f7fa;
+      --muted: #9aa7bb;
+      --soft: #c9d3e1;
+      --line: rgba(240,244,250,.1);
+      --teal: #00b4a6;
+      --teal-soft: rgba(0,180,166,.14);
+      --amber: #f4a261;
+      --paper: #f5f7fa;
+      --max: 1160px;
+      --radius: 8px;
+      --shadow: 0 24px 80px rgba(0,0,0,.28);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(180deg, rgba(0,180,166,.08), transparent 430px),
+        var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    body.menu-open { overflow: hidden; }
+    a { color: inherit; text-decoration: none; }
+    button, input, textarea, select { font: inherit; }
+    button { cursor: pointer; }
+    :focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
+
+    .container { width: min(calc(100% - 48px), var(--max)); margin-inline: auto; }
+    .section { padding: 92px 0; }
+    .section-alt { background: linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,.01)); border-block: 1px solid var(--line); }
+    .section-head { max-width: 720px; margin-bottom: 36px; }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      color: var(--teal);
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .eyebrow:before {
+      content: "";
+      width: 22px;
+      height: 2px;
+      background: currentColor;
+    }
+    h1, h2, h3 { margin: 0; letter-spacing: -.035em; }
+    h1 { max-width: 820px; font-size: clamp(3rem, 7vw, 6.4rem); line-height: .96; }
+    h2 { font-size: clamp(2rem, 4vw, 3.4rem); line-height: 1.05; }
+    h3 { font-size: 1.08rem; line-height: 1.25; }
+    p { margin: 0; }
+    .lede { max-width: 680px; color: var(--muted); font-size: clamp(1rem, 1.4vw, 1.17rem); }
+    .muted { color: var(--muted); }
+
+    .skip-link {
+      position: fixed;
+      z-index: 1000;
+      top: 12px;
+      left: 12px;
+      padding: 10px 14px;
+      color: var(--bg);
+      background: var(--teal);
+      border-radius: var(--radius);
+      transform: translateY(-160%);
+      transition: transform .2s;
+    }
+    .skip-link:focus { transform: none; }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(7,12,22,.82);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(18px);
+    }
+    .nav-shell {
+      min-height: 74px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 26px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 11px;
+      font-weight: 850;
+      letter-spacing: -.02em;
+    }
+    .brand-mark {
+      position: relative;
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      color: var(--bg);
+      background: var(--teal);
+      border-radius: var(--radius);
+      box-shadow: 0 0 0 5px rgba(0,180,166,.1);
+    }
+    .brand-mark:before, .brand-mark:after {
+      position: absolute;
+      content: "";
+      background: var(--bg);
+      border-radius: 99px;
+    }
+    .brand-mark:before { width: 17px; height: 4px; }
+    .brand-mark:after { width: 4px; height: 17px; }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 26px;
+      color: var(--muted);
+      font-size: .9rem;
+      font-weight: 700;
+    }
+    .nav-links a:hover { color: var(--ink); }
+    .menu-toggle {
+      display: none;
+      width: 44px;
+      height: 44px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      color: var(--ink);
+      background: rgba(255,255,255,.04);
+    }
+    .menu-toggle span, .menu-toggle:before, .menu-toggle:after {
+      display: block;
+      width: 19px;
+      height: 2px;
+      margin: 4px auto;
+      content: "";
+      background: currentColor;
+      transition: .2s;
+    }
+    .menu-toggle.active span { opacity: 0; }
+    .menu-toggle.active:before { transform: translateY(6px) rotate(45deg); }
+    .menu-toggle.active:after { transform: translateY(-6px) rotate(-45deg); }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 46px;
+      padding: 0 18px;
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      font-weight: 800;
+      transition: background .2s, color .2s, border-color .2s;
+    }
+    .button-primary { color: var(--bg); background: var(--teal); }
+    .button-primary:hover { background: #25d5c6; }
+    .button-secondary { color: var(--ink); background: rgba(255,255,255,.05); border-color: var(--line); }
+    .button-secondary:hover { border-color: rgba(0,180,166,.55); background: rgba(0,180,166,.08); }
+    .text-link { color: var(--teal); font-weight: 800; border-bottom: 1px solid rgba(0,180,166,.45); }
+    .text-link:hover { color: #36ddcf; border-color: currentColor; }
+
+    .hero {
+      position: relative;
+      padding: 112px 0 76px;
+      overflow: hidden;
+      border-bottom: 1px solid var(--line);
+    }
+    .hero:before {
+      position: absolute;
+      inset: 0;
+      content: "";
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(240,244,250,.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(240,244,250,.045) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: linear-gradient(to bottom, black, transparent 88%);
+    }
+    .hero-grid {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(360px, .95fr);
+      gap: 72px;
+      align-items: center;
+    }
+    .hero h1 span { color: var(--teal); }
+    .hero .lede { margin-top: 26px; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 30px;
+      color: var(--muted);
+      font-size: .78rem;
+      font-weight: 750;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .hero-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .hero-meta span:before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--amber);
+    }
+
+    .signal-board {
+      position: relative;
+      min-height: 520px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(145deg, rgba(21,34,56,.94), rgba(15,26,46,.96));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .signal-board:before {
+      position: absolute;
+      inset: 0;
+      content: "";
+      background-image:
+        linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+      background-size: 32px 32px;
+      opacity: .8;
+    }
+    .signal-inner {
+      position: relative;
+      height: 100%;
+      padding: 28px;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 22px;
+    }
+    .signal-top, .signal-bottom {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      color: var(--muted);
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+    .signal-badge {
+      color: var(--teal);
+      padding: 6px 9px;
+      border: 1px solid rgba(0,180,166,.28);
+      border-radius: var(--radius);
+      background: var(--teal-soft);
+    }
+    .product-window {
+      align-self: center;
+      border: 1px solid rgba(255,255,255,.11);
+      border-radius: var(--radius);
+      background: rgba(7,12,22,.78);
+      overflow: hidden;
+    }
+    .window-bar {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 13px 15px;
+      border-bottom: 1px solid var(--line);
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.22); }
+    .window-title {
+      margin-left: 8px;
+      color: var(--soft);
+      font-size: .75rem;
+      font-weight: 800;
+    }
+    .case-ui { padding: 24px; }
+    .case-ui small {
+      display: block;
+      margin-bottom: 12px;
+      color: var(--teal);
+      font-size: .68rem;
+      font-weight: 850;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .case-ui h2 {
+      max-width: 440px;
+      font-size: clamp(1.35rem, 2.4vw, 2.1rem);
+      line-height: 1.1;
+    }
+    .clue-stack {
+      display: grid;
+      gap: 10px;
+      margin-top: 24px;
+    }
+    .clue-row {
+      display: grid;
+      grid-template-columns: 38px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.035);
+    }
+    .clue-row b {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      color: var(--bg);
+      background: var(--teal);
+      border-radius: var(--radius);
+      font-size: .74rem;
+    }
+    .clue-row strong { display: block; font-size: .85rem; }
+    .clue-row span { color: var(--muted); font-size: .72rem; }
+    .clue-row em { color: var(--amber); font-size: .72rem; font-style: normal; font-weight: 850; }
+    .signal-line {
+      width: 100%;
+      height: 74px;
+      margin-top: 26px;
+    }
+    .signal-line path {
+      fill: none;
+      stroke: var(--amber);
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: 620;
+      animation: draw 7s linear infinite;
+    }
+    @keyframes draw {
+      from { stroke-dashoffset: 620; }
+      to { stroke-dashoffset: -620; }
+    }
+
+    .intro-strip {
+      padding: 28px 0;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,.02);
+    }
+    .intro-grid {
+      display: grid;
+      grid-template-columns: .65fr 1.35fr;
+      gap: 44px;
+      align-items: center;
+    }
+    .intro-grid span {
+      color: var(--teal);
+      font-size: .72rem;
+      font-weight: 850;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .intro-grid p {
+      color: var(--soft);
+      font-size: clamp(1.15rem, 2vw, 1.55rem);
+      line-height: 1.45;
+      letter-spacing: -.02em;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, .86fr) minmax(420px, 1.14fr);
+      gap: 68px;
+      align-items: start;
+    }
+    .copy-block h2 { margin-bottom: 18px; }
+    .copy-block .lede { margin-bottom: 28px; }
+    .point-list {
+      display: grid;
+      gap: 1px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--line);
+    }
+    .point {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      gap: 18px;
+      padding: 22px;
+      background: rgba(255,255,255,.035);
+    }
+    .point span {
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      color: var(--bg);
+      background: var(--amber);
+      border-radius: var(--radius);
+      font-size: .73rem;
+      font-weight: 900;
+    }
+    .point h3 { margin-bottom: 6px; }
+    .point p { color: var(--muted); font-size: .92rem; }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 17px 18px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .72rem;
+      font-weight: 850;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .panel-body { padding: 26px; }
+    .loop {
+      display: grid;
+      gap: 14px;
+    }
+    .loop-item {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 14px;
+      align-items: start;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .loop-item:last-child { padding-bottom: 0; border-bottom: 0; }
+    .loop-item b {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius);
+      color: var(--teal);
+      background: var(--teal-soft);
+      font-size: .76rem;
+    }
+    .loop-item strong { display: block; margin-bottom: 3px; }
+    .loop-item p { color: var(--muted); font-size: .88rem; }
+
+    .direction-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .direction-card {
+      min-height: 230px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.035);
+    }
+    .direction-card:first-child {
+      background: var(--teal-soft);
+      border-color: rgba(0,180,166,.28);
+    }
+    .direction-card span {
+      display: block;
+      margin-bottom: 28px;
+      color: var(--teal);
+      font-size: .7rem;
+      font-weight: 900;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .direction-card h3 { margin-bottom: 10px; }
+    .direction-card p { color: var(--muted); font-size: .9rem; }
+
+    .hosting-grid {
+      display: grid;
+      grid-template-columns: .8fr 1.2fr;
+      gap: 54px;
+      align-items: start;
+    }
+    .hosting-rows {
+      display: grid;
+      border-top: 1px solid var(--line);
+    }
+    .hosting-row {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      gap: 28px;
+      padding: 24px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .hosting-row span {
+      color: var(--amber);
+      font-size: .72rem;
+      font-weight: 850;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .hosting-row p { color: var(--muted); }
+
+    .alignment-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .alignment-card {
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.035);
+    }
+    .alignment-card h3 {
+      margin-bottom: 18px;
+      color: var(--teal);
+    }
+    .alignment-card ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+    }
+    .alignment-card li + li { margin-top: 10px; }
+    .alignment-card.private h3 { color: var(--amber); }
+
+    .contact-section {
+      padding: 92px 0;
+      background: var(--paper);
+      color: #101827;
+    }
+    .contact-shell {
+      display: grid;
+      grid-template-columns: .86fr 1.14fr;
+      overflow: hidden;
+      border: 1px solid rgba(16,24,39,.12);
+      border-radius: var(--radius);
+      background: #fff;
+      box-shadow: 0 24px 80px rgba(16,24,39,.12);
+    }
+    .contact-copy {
+      padding: 44px;
+      color: var(--ink);
+      background: var(--surface);
+    }
+    .contact-copy p { color: var(--muted); margin-top: 18px; }
+    .contact-copy .email {
+      display: inline-flex;
+      margin-top: 34px;
+      color: var(--teal);
+      font-weight: 850;
+      overflow-wrap: anywhere;
+    }
+    .contact-actions {
+      display: grid;
+      gap: 12px;
+      padding: 44px;
+    }
+    .contact-action {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 14px;
+      align-items: center;
+      padding: 18px;
+      border: 1px solid rgba(16,24,39,.12);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+    .contact-action b {
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      border-radius: var(--radius);
+      color: var(--bg);
+      background: var(--teal);
+      font-size: .72rem;
+    }
+    .contact-action strong { display: block; }
+    .contact-action span { display: block; color: #667085; font-size: .9rem; }
+    .contact-action:hover { border-color: rgba(0,180,166,.6); }
+
+    footer {
+      padding: 48px 0 34px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      background: #050913;
+    }
+    .footer-grid {
+      display: flex;
+      justify-content: space-between;
+      gap: 34px;
+      align-items: flex-start;
+    }
+    .footer-grid p { max-width: 560px; font-size: .88rem; }
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      font-size: .86rem;
+      font-weight: 750;
+    }
+    .footer-links a:hover { color: var(--ink); }
+    .footer-bottom {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      margin-top: 30px;
+      padding-top: 22px;
+      border-top: 1px solid var(--line);
+      font-size: .75rem;
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity .6s ease, transform .6s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: none;
+    }
+
+    @media (max-width: 980px) {
+      .hero-grid, .split, .hosting-grid, .contact-shell { grid-template-columns: 1fr; }
+      .signal-board { min-height: 460px; }
+      .direction-grid { grid-template-columns: repeat(2, 1fr); }
+      .intro-grid { grid-template-columns: 1fr; gap: 12px; }
+    }
+
+    @media (max-width: 760px) {
+      .container { width: min(calc(100% - 32px), var(--max)); }
+      .section, .contact-section { padding: 68px 0; }
+      .hero { padding: 72px 0 58px; }
+      h1 { font-size: clamp(2.7rem, 13vw, 4.2rem); }
+      .nav-links, .desktop-cta { display: none; }
+      .menu-toggle { display: block; }
+      .nav-links.open {
+        position: fixed;
+        top: 82px;
+        left: 16px;
+        right: 16px;
+        display: grid;
+        gap: 2px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+      .nav-links.open a { padding: 12px; }
+      .hero-actions { display: grid; grid-template-columns: 1fr; }
+      .button { width: 100%; }
+      .signal-board { min-height: 430px; }
+      .signal-inner { padding: 18px; }
+      .case-ui { padding: 18px; }
+      .clue-row { grid-template-columns: 34px 1fr; }
+      .clue-row em { grid-column: 2; }
+      .direction-grid, .alignment-grid { grid-template-columns: 1fr; }
+      .hosting-row { grid-template-columns: 1fr; gap: 8px; }
+      .contact-copy, .contact-actions { padding: 30px 22px; }
+      .footer-grid, .footer-bottom { flex-direction: column; }
+    }
+
+    @media (max-width: 440px) {
+      .hero-meta { display: grid; }
+      .signal-board { min-height: 390px; }
+      .signal-line { height: 54px; }
+      .point { grid-template-columns: 1fr; }
+      .contact-action { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *:before, *:after { animation: none !important; transition: none !important; }
+      .reveal { opacity: 1; transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="container nav-shell">
+      <a class="brand" href="#top" aria-label="DxLabs home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>DxLabs</span>
+      </a>
+      <nav class="nav-links" id="navLinks" aria-label="Primary navigation">
+        <a href="#company">Company</a>
+        <a href="#wardle">Wardle</a>
+        <a href="#direction">Direction</a>
+        <a href="#hosting">Hosting</a>
+        <a href="#contact">Contact</a>
+      </nav>
+      <a class="button button-primary desktop-cta" href="#contact">Start a conversation</a>
+      <button class="menu-toggle" id="menuToggle" type="button" aria-controls="navLinks" aria-expanded="false" aria-label="Open navigation"><span></span></button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="container hero-grid">
+        <div class="reveal">
+          <div class="eyebrow">Home of Wardle</div>
+          <h1>Clinician-led technology for <span>medical learning</span> and practical healthcare work.</h1>
+          <p class="lede">DxLabs builds digital health products shaped by clinical experience, beginning with Wardle and extending carefully into selected healthcare delivery challenges.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://wardle.it.com" target="_blank" rel="noopener">Visit Wardle</a>
+            <a class="button button-secondary" href="#company">Explore DxLabs</a>
+          </div>
+          <div class="hero-meta" aria-label="Company focus areas">
+            <span>Medical education</span>
+            <span>Health systems</span>
+            <span>Responsible product development</span>
+          </div>
+        </div>
+
+        <div class="signal-board reveal" aria-label="Wardle product and clinical signal visual">
+          <div class="signal-inner">
+            <div class="signal-top"><span>DxLabs system</span><span class="signal-badge">Wardle live</span></div>
+            <div class="product-window">
+              <div class="window-bar">
+                <i class="dot"></i><i class="dot"></i><i class="dot"></i>
+                <span class="window-title">wardle.it.com</span>
+              </div>
+              <div class="case-ui">
+                <small>Daily reasoning loop</small>
+                <h2>Progressive clinical clues, committed diagnosis, structured review.</h2>
+                <div class="clue-stack">
+                  <div class="clue-row"><b>01</b><div><strong>History</strong><span>Initial presentation and context</span></div><em>Reveal</em></div>
+                  <div class="clue-row"><b>02</b><div><strong>Exam</strong><span>Discriminating findings</span></div><em>Think</em></div>
+                  <div class="clue-row"><b>03</b><div><strong>Result</strong><span>Reasoning feedback and teaching points</span></div><em>Learn</em></div>
+                </div>
+                <svg class="signal-line" aria-hidden="true" viewBox="0 0 520 100">
+                  <path d="M4 58h85l18-27 29 52 33-72 35 48h70l20-22 29 44 28-22h165"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="signal-bottom"><span>Clinician-led</span><span>Built from healthcare experience</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="intro-strip" id="company">
+      <div class="container intro-grid reveal">
+        <span>Company position</span>
+        <p>DxLabs should read publicly as a focused health technology company, not a broad research lab. Wardle is the first product, the proof of direction, and the clearest public anchor.</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container split">
+        <div class="copy-block reveal">
+          <div class="eyebrow">Why DxLabs</div>
+          <h2>From clinical knowledge to better practice.</h2>
+          <p class="lede">Healthcare depends on how well knowledge becomes judgement, routine, coordination and action. DxLabs works in that gap with products that are clinically grounded, usable and measured.</p>
+          <a class="text-link" href="#alignment">See public alignment</a>
+        </div>
+        <div class="point-list reveal">
+          <article class="point">
+            <span>01</span>
+            <div><h3>Education first</h3><p>Wardle gives the company a clear public product in medical education, where clinical reasoning can be practised daily.</p></div>
+          </article>
+          <article class="point">
+            <span>02</span>
+            <div><h3>Healthcare delivery next</h3><p>The broader company direction can stay selective: workflow, access, clinical information and service reliability.</p></div>
+          </article>
+          <article class="point">
+            <span>03</span>
+            <div><h3>Responsible disclosure</h3><p>The website can describe direction and principles while keeping architecture, partner details and experimental roadmap private.</p></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-alt" id="wardle">
+      <div class="container split">
+        <div class="copy-block reveal">
+          <div class="eyebrow">Flagship product</div>
+          <h2>Wardle is clinical reasoning, practised daily.</h2>
+          <p class="lede">Wardle is a case-based learning platform for medical students and early-career clinicians. Learners work through progressive clinical information, commit to a diagnosis and review the reasoning behind the case.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://wardle.it.com" target="_blank" rel="noopener">Open Wardle</a>
+            <a class="button button-secondary" href="#contact">Discuss Wardle</a>
+          </div>
+        </div>
+        <div class="panel reveal">
+          <div class="panel-head"><span>Wardle loop</span><span>A DxLabs product</span></div>
+          <div class="panel-body">
+            <div class="loop">
+              <div class="loop-item"><b>1</b><div><strong>Interpret the case</strong><p>Progressive clues reveal enough information to reason without turning the exercise into recall alone.</p></div></div>
+              <div class="loop-item"><b>2</b><div><strong>Commit to an answer</strong><p>The learner has to choose, compare uncertainty and build diagnostic discipline.</p></div></div>
+              <div class="loop-item"><b>3</b><div><strong>Review the reasoning</strong><p>The explanation connects the clue order, differential diagnosis and management teaching points.</p></div></div>
+              <div class="loop-item"><b>4</b><div><strong>Build a habit</strong><p>Daily cases keep learning lightweight enough to repeat and structured enough to improve.</p></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="direction">
+      <div class="container">
+        <div class="section-head reveal">
+          <div class="eyebrow">Company direction</div>
+          <h2>One company, four connected areas.</h2>
+          <p class="lede">The public story should be directional but restrained: clear enough to understand the company, careful enough not to expose private product or infrastructure plans too early.</p>
+        </div>
+        <div class="direction-grid">
+          <article class="direction-card reveal">
+            <span>Current</span>
+            <h3>Medical education</h3>
+            <p>Learning products that strengthen clinical reasoning and purposeful practice, led by Wardle.</p>
+          </article>
+          <article class="direction-card reveal">
+            <span>Selective</span>
+            <h3>Health systems</h3>
+            <p>Digital tools for coordinated clinical work, reliable information and accessible services where the use case is focused.</p>
+          </article>
+          <article class="direction-card reveal">
+            <span>Long term</span>
+            <h3>Diagnostic support</h3>
+            <p>Responsible exploration of technology that improves how clinical information is interpreted and taught.</p>
+          </article>
+          <article class="direction-card reveal">
+            <span>Research</span>
+            <h3>Imaging science</h3>
+            <p>Interest in the quality, usefulness and accessibility of medical imaging, without overstating public commitments.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-alt" id="hosting">
+      <div class="container hosting-grid">
+        <div class="copy-block reveal">
+          <div class="eyebrow">Hosting plan direction</div>
+          <h2>Publicly simple. Operationally ready.</h2>
+          <p class="lede">The site should signal that DxLabs can host and operate real products, while keeping deployment details, security design and partner-specific environments out of the public copy.</p>
+        </div>
+        <div class="hosting-rows reveal">
+          <div class="hosting-row"><span>Company web</span><p>Use this page as the public DxLabs home, with Wardle as the primary product pathway and a restrained company narrative.</p></div>
+          <div class="hosting-row"><span>Product domain</span><p>Keep Wardle on its own product domain so learners and institutions have a direct product destination.</p></div>
+          <div class="hosting-row"><span>Platform posture</span><p>Describe production readiness at a high level: web app delivery, account access, analytics and support workflows.</p></div>
+          <div class="hosting-row"><span>Institutional path</span><p>Frame institutional deployments as considered case by case, without publishing non-public technical or commercial terms.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="alignment">
+      <div class="container">
+        <div class="section-head reveal">
+          <div class="eyebrow">Public alignment</div>
+          <h2>Say enough to build trust. Hold enough to stay strategic.</h2>
+        </div>
+        <div class="alignment-grid">
+          <article class="alignment-card reveal">
+            <h3>Say clearly</h3>
+            <ul>
+              <li>DxLabs is clinician-led and grounded in healthcare experience.</li>
+              <li>Wardle is the flagship product and the current public focus.</li>
+              <li>The company is interested in medical education, health systems and responsible clinical technology.</li>
+              <li>The work is shaped by African healthcare context and practical constraints.</li>
+            </ul>
+          </article>
+          <article class="alignment-card private reveal">
+            <h3>Keep directional</h3>
+            <ul>
+              <li>Specific hosting architecture, vendors and deployment details.</li>
+              <li>Unannounced partnerships, institutional pilots or commercial terms.</li>
+              <li>Experimental diagnostic, imaging or AI work before it is ready.</li>
+              <li>Internal product roadmap beyond broad areas of interest.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="contact-section" id="contact">
+      <div class="container contact-shell reveal">
+        <div class="contact-copy">
+          <div class="eyebrow">Contact</div>
+          <h2>For Wardle, partnerships or company enquiries.</h2>
+          <p>Keep the ask focused: product conversations, medical education collaboration, institutional interest and selective health technology partnerships.</p>
+          <a class="email" href="mailto:dxlabss@gmail.com">dxlabss@gmail.com</a>
+        </div>
+        <div class="contact-actions">
+          <a class="contact-action" href="https://wardle.it.com" target="_blank" rel="noopener"><b>W</b><div><strong>Visit Wardle</strong><span>Open the live product destination.</span></div></a>
+          <a class="contact-action" href="mailto:dxlabss@gmail.com?subject=Wardle%20partnership%20or%20DxLabs%20enquiry"><b>@</b><div><strong>Email DxLabs</strong><span>Start a direct conversation.</span></div></a>
+          <a class="contact-action" href="#hosting"><b>H</b><div><strong>Hosting direction</strong><span>Review the public platform posture.</span></div></a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <a class="brand" href="#top" aria-label="DxLabs home">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span>DxLabs</span>
+          </a>
+          <p>Clinician-led health technology company and home of Wardle. Building products for medical learning and selected healthcare delivery challenges.</p>
+        </div>
+        <nav class="footer-links" aria-label="Footer navigation">
+          <a href="#company">Company</a>
+          <a href="#wardle">Wardle</a>
+          <a href="#direction">Direction</a>
+          <a href="#contact">Contact</a>
+        </nav>
+      </div>
+      <div class="footer-bottom">
+        <span>DxLabs. Home of Wardle.</span>
+        <span>wardle.it.com | dxlabss@gmail.com</span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const menuToggle = document.getElementById("menuToggle");
+    const navLinks = document.getElementById("navLinks");
+
+    menuToggle?.addEventListener("click", () => {
+      const isOpen = navLinks.classList.toggle("open");
+      menuToggle.classList.toggle("active", isOpen);
+      menuToggle.setAttribute("aria-expanded", String(isOpen));
+      document.body.classList.toggle("menu-open", isOpen);
+    });
+
+    navLinks?.querySelectorAll("a").forEach((link) => {
+      link.addEventListener("click", () => {
+        navLinks.classList.remove("open");
+        menuToggle?.classList.remove("active");
+        menuToggle?.setAttribute("aria-expanded", "false");
+        document.body.classList.remove("menu-open");
+      });
+    });
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("visible");
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12 });
+
+    document.querySelectorAll(".reveal").forEach((item) => observer.observe(item));
+  </script>
+</body>
+</html>

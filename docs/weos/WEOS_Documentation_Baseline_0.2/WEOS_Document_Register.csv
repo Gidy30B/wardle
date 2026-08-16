@@ -1,0 +1,18 @@
+Document_ID,Title,Family,Version,Status,Included
+WEOS-ARCH-001,Vision and Editorial Philosophy,Architecture,Uncontrolled source,Draft complete,Yes
+WEOS-ARCH-002,Editorial Domain Model,Architecture,Uncontrolled source,Draft complete,Yes
+WEOS-ARCH-003,Editorial Capabilities,Architecture,Uncontrolled source,Draft complete,Yes
+WEOS-ARCH-004,Knowledge Evolution and Editorial Lifecycles,Architecture,Uncontrolled source,Draft complete,Yes
+WEOS-ARCH-005,Knowledge Production and Editorial Intelligence,Architecture,Uncontrolled source,Draft complete,Yes
+WEOS-ARCH-006,Editorial Intelligence and Decision Architecture,Architecture,Uncontrolled source,Draft complete,Yes
+WEOS-ARCH-007,Editorial Workspace Architecture,Architecture,Uncontrolled source,Draft complete,Yes
+WEOS-ARCH-008,Institutional Editorial Governance,Architecture,0.1,Draft for approval,Yes
+WEOS-ARCH-009,Evolution of the Editorial Knowledge Ecosystem,Architecture,Uncontrolled source,Draft complete,Yes
+WEOS-CANON-001,Canon Foundations,Editorial Canon,Uncontrolled source,Draft complete,Yes
+WEOS-CANON-002,Diagnosis Governance,Editorial Canon,Uncontrolled source,Draft complete,Yes
+WEOS-CANON-003,Clinical Case Standards,Editorial Canon,Uncontrolled source,Draft complete,Yes
+WEOS-CANON-004,Diagnosis Education Standards,Editorial Canon,0.1,Draft for approval,Yes
+WEOS-CANON-005,Knowledge and Reasoning Governance,Editorial Canon,Uncontrolled source,Draft complete,Yes
+WEOS-CANON-006,AI Draft Standards,Editorial Canon,Uncontrolled source,Draft complete,Yes
+WEOS-CANON-007,Governance Record Standards,Editorial Canon,0.1,Draft for approval,Yes
+WEOS-GOV-PLAN-001,Documentation Completion and Control Plan,Document Control,0.2,Draft for approval,Yes

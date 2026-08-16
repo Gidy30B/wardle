@@ -42,6 +42,7 @@ export function buildUnsupportedClaimDeepLink(input: {
   targetTab?: string | null;
 }) {
   const params = new URLSearchParams();
+  params.set('workspaceShell', 'legacy');
   const tab =
     input.targetTab && input.targetTab !== 'education'
       ? input.targetTab

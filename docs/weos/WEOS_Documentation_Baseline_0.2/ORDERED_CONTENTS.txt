@@ -1,0 +1,24 @@
+WEOS Documentation Baseline 0.2 - Ordered Contents
+
+Architecture
+  WEOS-ARCH-001 - Vision and Editorial Philosophy (7 pages)
+  WEOS-ARCH-002 - Editorial Domain Model (8 pages)
+  WEOS-ARCH-003 - Editorial Capabilities (9 pages)
+  WEOS-ARCH-004 - Knowledge Evolution and Editorial Lifecycles (12 pages)
+  WEOS-ARCH-005 - Knowledge Production and Editorial Intelligence (9 pages)
+  WEOS-ARCH-006 - Editorial Intelligence and Decision Architecture (9 pages)
+  WEOS-ARCH-007 - Editorial Workspace Architecture (8 pages)
+  WEOS-ARCH-008 - Institutional Editorial Governance (15 pages)
+  WEOS-ARCH-009 - Evolution of the Editorial Knowledge Ecosystem (8 pages)
+
+Editorial Canon
+  WEOS-CANON-001 - Canon Foundations (21 pages)
+  WEOS-CANON-002 - Diagnosis Governance (33 pages)
+  WEOS-CANON-003 - Clinical Case Standards (32 pages)
+  WEOS-CANON-004 - Diagnosis Education Standards (30 pages)
+  WEOS-CANON-005 - Knowledge and Reasoning Governance (41 pages)
+  WEOS-CANON-006 - AI Draft Standards (37 pages)
+  WEOS-CANON-007 - Governance Record Standards (32 pages)
+
+Document Control
+  WEOS-GOV-PLAN-001 - Documentation Completion and Control Plan (6 pages)

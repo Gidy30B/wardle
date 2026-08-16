@@ -269,6 +269,8 @@ export function TabBar({
           <button
             key={tab.id}
             type="button"
+            data-testid={`workspace-tab-${tab.id}`}
+            aria-pressed={activeTab === tab.id}
             onClick={() => onChange(tab.id)}
             className={[
               'rounded-lg px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors sm:px-4',

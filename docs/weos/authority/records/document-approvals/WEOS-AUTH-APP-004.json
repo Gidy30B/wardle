@@ -1,0 +1,46 @@
+{
+  "$schema": "../../schemas/document-approval-record.schema.json",
+  "recordId": "WEOS-AUTH-APP-004",
+  "recordType": "DOCUMENT_APPROVAL",
+  "schemaVersion": "1.0.0",
+  "documentId": "WEOS-OD-023",
+  "documentVersion": "0.1",
+  "documentPath": "docs/weos/phase-3-governance-foundations/WEOS-OD-023-expected-version-command-contract.md",
+  "approvalScope": {
+    "scopeType": "DOCUMENT_VERSION",
+    "description": "Approval with conditions for WEOS-OD-023 Stage 1 repository-native governed-command contracts, schemas, pure command-contract and token-policy registries, validation, stale-state resolution, idempotency, batch-policy and eligibility infrastructure. Dependency evidence: WEOS-AUTH-APP-003. Supporting foundation: WEOS-AUTH-APP-002."
+  },
+  "approvalOutcome": "APPROVED_WITH_CONDITIONS",
+  "approver": {
+    "name": "Gideon Lemasika Saningo",
+    "role": "Founding Architecture Authority",
+    "authorityBasis": "docs/weos/authority/records/document-approvals/WEOS-AUTH-APP-001.json"
+  },
+  "approverAuthority": "Founding Architecture Authority bootstrap authority for initial WEOS governance foundation only",
+  "approvalDate": "2026-08-01",
+  "effectiveDate": "2026-08-01",
+  "rationale": "WEOS requires explicit expected-state preconditions for governed mutation commands so stale state cannot be overwritten by authority, route access, idempotency or retries. This record approves WEOS-OD-023 with conditions for Stage 1 repository-native contracts only, using WEOS-AUTH-APP-003 as dependency evidence and WEOS-AUTH-APP-002 as supporting foundation evidence.",
+  "conditions": [
+    "every governed command declares an approved concurrency contract",
+    "revisioned canonical artifacts use exact expected revision identifiers",
+    "every authoritative dependency is explicit",
+    "expected version and opaque-token use is policy-defined",
+    "authority and expected-state checks are independent",
+    "stale commands fail closed without mutation or Governance Decision",
+    "governed batches are atomic by default",
+    "idempotency does not bypass concurrency or authority",
+    "duplicate retries cannot produce duplicate effects",
+    "stale commands are not silently rebased",
+    "safe conflict metadata requires disclosure authorization",
+    "legacy concurrency history is not invented",
+    "no Prisma, persistence, runtime command integration or enforcement is authorized"
+  ],
+  "supportingDecision": "WEOS-OD-023",
+  "implementationAuthorization": "GRANTED_FOR_STAGE_1_CONTRACTS_ONLY",
+  "bootstrapAuthority": {
+    "isBootstrap": true,
+    "scope": "Initial WEOS governance foundation for repository-native governed-command documentation, APP-004 approval evidence, JSON schemas, TypeScript serializable contracts, pure in-memory command-contract registry, pure in-memory token-policy registry, validation, precondition comparison, idempotency resolution, batch-policy evaluation, eligibility resolution, deterministic conformance tests and documentation integration only. This does not grant Prisma, persistence, database compare-and-swap, transactions, DTOs, controllers, guards, services, command handlers, projection synchronization, audit persistence, token issuing, runtime idempotency storage, production command declarations, production token policies, deployment or runtime enforcement authority.",
+    "expiryCondition": "Expires when a permanent governed-command runtime enforcement process approved under WEOS-OD-023 or an approved successor becomes effective."
+  },
+  "createdAt": "2026-08-01T00:00:00Z"
+}

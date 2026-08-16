@@ -8,7 +8,6 @@ import { CasesModule } from '../cases/cases.module';
 import { CaseAssignmentService } from './case-assignment.service';
 import { DailyCaseSchedulerService } from './daily-case-scheduler.service';
 import { DailyCasesService } from './daily-cases.service';
-import { DailyLimitService } from './daily-limit.service';
 import { InternalDailyCasesController } from './internal-daily-cases.controller';
 
 @Module({
@@ -18,7 +17,6 @@ import { InternalDailyCasesController } from './internal-daily-cases.controller'
     CaseAssignmentService,
     DailyCasesService,
     DailyCaseSchedulerService,
-    DailyLimitService,
     DiagnosisRegistryLifecyclePolicyService,
     DevOnlyGuard,
     InternalApiGuard,

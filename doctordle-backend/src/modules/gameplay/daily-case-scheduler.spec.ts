@@ -25,7 +25,6 @@ const baseEnv = {
   CLERK_JWT_AUDIENCE: 'doctordle',
   NODE_ENV: 'test',
   APP_PROCESS_ROLE: 'api',
-  DEV_BYPASS_DAILY_LIMIT: 'false',
   ENABLE_DEV_REPLAY: 'false',
   DIAGNOSIS_REGISTRY_ENABLED: 'true',
   STRICT_ALIAS_MATCH_ENABLED: 'true',

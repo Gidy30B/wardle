@@ -92,7 +92,6 @@ describe('CasesService', () => {
       CLERK_JWT_ISSUER: 'https://issuer.example.com',
       CLERK_JWT_AUDIENCE: 'wardle',
       NODE_ENV: 'test',
-      DEV_BYPASS_DAILY_LIMIT: 'false',
       ENABLE_DEV_REPLAY: 'false',
       LOG_LEVEL: 'info',
       EMBEDDING_MODEL: 'text-embedding-3-small',

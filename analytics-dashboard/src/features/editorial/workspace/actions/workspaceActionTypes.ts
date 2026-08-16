@@ -1,0 +1,205 @@
+import type { ApiClient } from '../../../../api/client.ts';
+import type {
+  CaseEscalationAnnotationPayload,
+  CaseLearningGoalCoveragePayload,
+  CreateCaseClueDiscriminatorAnnotationPayload,
+  DiagnosisRegistryLifecycleAction,
+  DiagnosisTeachingRuleReviewAction,
+  EvidenceGraphReviewAction,
+  ReasoningPathReviewAction,
+  RegenerateEducationSectionPayload,
+  UpdateCaseClueDiscriminatorAnnotationPayload,
+} from '../../../../api/admin.types.ts';
+import type {
+  WorkspaceWorkflowId,
+} from '../viewModels/workflowNavigationViewModel.ts';
+
+export type WorkspaceActionDomain =
+  | 'teachingRule'
+  | 'evidence'
+  | 'reasoningPath'
+  | 'clueRevision'
+  | 'education'
+  | 'publication'
+  | 'claimRepair'
+  | 'lifecycle'
+  | 'caseCoverage'
+  | 'caseAnnotation';
+
+export type WorkspaceActionIntent =
+  | 'approve'
+  | 'reject'
+  | 'requestChanges'
+  | 'supersede'
+  | 'apply'
+  | 'generate'
+  | 'repair'
+  | 'normalize'
+  | 'markReady'
+  | 'review'
+  | 'create'
+  | 'update'
+  | 'delete';
+
+export type WorkspaceActionId =
+  | 'teachingRule.approve'
+  | 'teachingRule.reject'
+  | 'teachingRule.requestChanges'
+  | 'teachingRule.generateCandidates'
+  | 'teachingRule.seedLegacy'
+  | 'evidence.approveRelationship'
+  | 'evidence.rejectRelationship'
+  | 'evidence.generateCandidates'
+  | 'reasoningPath.approve'
+  | 'reasoningPath.reject'
+  | 'reasoningPath.requestChanges'
+  | 'reasoningPath.generateCandidates'
+  | 'reasoningPath.validateDraft'
+  | 'clueRevision.approve'
+  | 'clueRevision.reject'
+  | 'clueRevision.requestChanges'
+  | 'clueRevision.supersede'
+  | 'clueRevision.apply'
+  | 'clueRevision.update'
+  | 'education.repairUnsupportedClaim'
+  | 'education.regenerateSection'
+  | 'education.review'
+  | 'publication.normalizeLifecycle'
+  | 'publication.performLifecycleAction'
+  | 'publication.markCaseReady'
+  | 'caseCoverage.create'
+  | 'caseCoverage.update'
+  | 'caseCoverage.delete'
+  | 'caseAnnotation.create'
+  | 'caseAnnotation.update'
+  | 'caseAnnotation.delete';
+
+export type WorkspaceActionDescriptor = {
+  id: WorkspaceActionId;
+  domain: WorkspaceActionDomain;
+  intent: WorkspaceActionIntent;
+  label: string;
+  description: string;
+  requiredAccess: 'editorial' | 'seniorEditorial';
+  destructive?: boolean;
+  confirmationRequired?: boolean;
+  successMessage: string;
+  failureMessage: string;
+  sourceWorkflows: WorkspaceWorkflowId[];
+};
+
+export type WorkspaceActionAccess = {
+  canAccessEditorial: boolean;
+  canPublishEditorial: boolean;
+};
+
+export type WorkspaceActionRunnerContext = {
+  client: ApiClient;
+  diagnosisRegistryId: string;
+  access: WorkspaceActionAccess;
+  refreshWorkspace: () => Promise<void>;
+  showPending?: (message: string) => void;
+  showSuccess?: (message: string) => void;
+  showError?: (message: string) => void;
+};
+
+type BaseActionPayload = {
+  confirmed?: boolean;
+};
+
+export type TeachingRuleActionPayload = BaseActionPayload & {
+  ruleId?: string;
+  action?: DiagnosisTeachingRuleReviewAction;
+  note?: string;
+};
+
+export type EvidenceRelationshipActionPayload = BaseActionPayload & {
+  relationshipId?: string;
+  action?: EvidenceGraphReviewAction;
+  note?: string;
+};
+
+export type ReasoningPathActionPayload = BaseActionPayload & {
+  reasoningPathId?: string;
+  action?: ReasoningPathReviewAction;
+  note?: string;
+  artifactType?: string;
+  artifactId?: string;
+};
+
+export type ClueRevisionActionPayload = BaseActionPayload & {
+  draftId?: string;
+  note?: string;
+  patch?: Record<string, unknown>;
+};
+
+export type ClaimRepairActionPayload = BaseActionPayload & {
+  claimId?: string;
+};
+
+export type EducationActionPayload = BaseActionPayload & {
+  educationId?: string;
+  section?: RegenerateEducationSectionPayload['section'];
+  status?: string;
+  note?: string;
+};
+
+export type LifecycleActionPayload = BaseActionPayload & {
+  action?: DiagnosisRegistryLifecycleAction;
+  isGeneratable?: boolean;
+};
+
+export type CaseReadyActionPayload = BaseActionPayload & {
+  caseId?: string;
+};
+
+export type CaseCoverageActionPayload = BaseActionPayload & {
+  coverageId?: string;
+  payload?: CaseLearningGoalCoveragePayload;
+};
+
+export type CaseAnnotationActionPayload = BaseActionPayload & {
+  caseId?: string;
+  annotationId?: string;
+  payload?:
+    | CaseEscalationAnnotationPayload
+    | CreateCaseClueDiscriminatorAnnotationPayload
+    | UpdateCaseClueDiscriminatorAnnotationPayload;
+  annotationType?: 'escalation' | 'discriminator';
+};
+
+export type WorkspaceActionPayload =
+  | TeachingRuleActionPayload
+  | EvidenceRelationshipActionPayload
+  | ReasoningPathActionPayload
+  | ClueRevisionActionPayload
+  | ClaimRepairActionPayload
+  | EducationActionPayload
+  | LifecycleActionPayload
+  | CaseReadyActionPayload
+  | CaseCoverageActionPayload
+  | CaseAnnotationActionPayload;
+
+export type WorkspaceActionResult = {
+  ok: boolean;
+  actionId: WorkspaceActionId | string;
+  message: string;
+  error?: string;
+  data?: unknown;
+};
+
+export type WorkspaceActionRequestHandler = (
+  actionId: WorkspaceActionId,
+  payload: WorkspaceActionPayload,
+  subjectId: string,
+) => Promise<WorkspaceActionResult>;
+
+export type WorkspaceActionExecutor = (
+  actionId: WorkspaceActionId,
+  payload: WorkspaceActionPayload,
+  context: WorkspaceActionRunnerContext,
+) => Promise<unknown>;
+
+export type WorkspaceActionExecutorMap = Partial<
+  Record<WorkspaceActionDomain, WorkspaceActionExecutor>
+>;
