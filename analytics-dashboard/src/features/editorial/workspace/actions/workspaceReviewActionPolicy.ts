@@ -60,6 +60,7 @@ const WORKFLOW_SAFE_ACTIONS = new Set<WorkspaceActionId>([
   'clueRevision.requestChanges',
   'clueRevision.supersede',
   'education.repairUnsupportedClaim',
+  'education.regenerateSection',
 ]);
 
 export function getReviewItemActions(

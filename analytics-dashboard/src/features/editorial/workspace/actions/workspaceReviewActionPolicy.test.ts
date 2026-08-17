@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  canRunWorkspaceAction,
+  requiresConfirmation,
+} from './workspaceActionRegistry.ts';
+import {
   classifyReviewItemActions,
   getDeferredReviewItemActions,
   getReviewActionPayload,
@@ -98,13 +102,32 @@ test('unsafe workflow operations are never surfaced', () => {
     'caseCoverage.delete',
     'teachingRule.generateCandidates',
     'clueRevision.apply',
-    'education.regenerateSection',
     'bulk.review',
   ];
 
   unsafe.forEach((actionId) => {
     assert.equal(isActionSafeForWorkflowShell(actionId), false, actionId);
   });
+});
+
+test('education regeneration remains workflow-safe while preserving confirmation and permission gates', () => {
+  assert.equal(isActionSafeForWorkflowShell('education.regenerateSection'), true);
+  assert.equal(canRunWorkspaceAction('education.regenerateSection', SENIOR_ACCESS), true);
+  assert.equal(requiresConfirmation('education.regenerateSection'), true);
+  assert.equal(
+    classifyReviewItemActions(
+      { kind: 'generation', sourceId: 'dx-1' },
+      SENIOR_ACCESS,
+    )[0]?.state,
+    'deferred',
+  );
+  assert.equal(
+    classifyReviewItemActions(
+      { kind: 'unsupportedClaim', sourceId: 'claim-1', repairable: true },
+      SENIOR_ACCESS,
+    )[0]?.state,
+    'wired',
+  );
 });
 
 test('classifies permission, confirmation, deferred, and not-applicable states', () => {
