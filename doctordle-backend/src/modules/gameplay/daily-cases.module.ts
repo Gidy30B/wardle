@@ -5,9 +5,13 @@ import { DatabaseModule } from '../../core/db/database.module';
 import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
 import { DevOnlyGuard } from '../cases/guards/dev-only.guard';
 import { CasesModule } from '../cases/cases.module';
+import { app008aAuthorityTypeRegistryProvider } from '../admin/app008a-authority-registry';
+import { CasePublicationGovernanceService } from '../admin/case-publication-governance.service';
+import { EditorialAuthorityAssignmentRepository } from '../admin/editorial-authority-assignment.repository';
 import { CaseAssignmentService } from './case-assignment.service';
 import { DailyCaseSchedulerService } from './daily-case-scheduler.service';
 import { DailyCasesService } from './daily-cases.service';
+import { DailyLimitService } from './daily-limit.service';
 import { InternalDailyCasesController } from './internal-daily-cases.controller';
 
 @Module({
@@ -15,8 +19,12 @@ import { InternalDailyCasesController } from './internal-daily-cases.controller'
   controllers: [InternalDailyCasesController],
   providers: [
     CaseAssignmentService,
+    app008aAuthorityTypeRegistryProvider,
+    CasePublicationGovernanceService,
     DailyCasesService,
     DailyCaseSchedulerService,
+    DailyLimitService,
+    EditorialAuthorityAssignmentRepository,
     DiagnosisRegistryLifecyclePolicyService,
     DevOnlyGuard,
     InternalApiGuard,

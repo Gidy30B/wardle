@@ -14,8 +14,10 @@ import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-re
 import { EditorialObservabilityModule } from '../editorial/editorial-observability.module.js';
 import { DiagnosisGraphModule } from '../diagnosis-graph/diagnosis-graph.module.js';
 import { CaseReviewService } from './case-review.service';
-import { CaseReviewContextService } from './case-review-context.service';
-import { CaseReviewGovernanceRepository } from './case-review-governance.repository';
+import { EditorialAuthorityAssignmentRepository } from './editorial-authority-assignment.repository';
+import { app006AuthorityTypeRegistryProvider } from './app006-authority-registry';
+import { app008aAuthorityTypeRegistryProvider } from './app008a-authority-registry';
+import { CasePublicationGovernanceService } from './case-publication-governance.service';
 import { CaseInventoryHealthService } from './case-inventory-health.service';
 import { CaseQualityProjectionService } from './case-quality-projection.service';
 import { ClueProgressionAnalysisService } from './clue-progression-analysis.service';
@@ -67,9 +69,11 @@ import { DiagnosisRegistryMergeExecutionService } from '../diagnosis-registry/di
     AdminGuard,
     EditorialGuard,
     SeniorEditorialGuard,
+    app006AuthorityTypeRegistryProvider,
+    app008aAuthorityTypeRegistryProvider,
     CaseReviewService,
-    CaseReviewContextService,
-    CaseReviewGovernanceRepository,
+    CasePublicationGovernanceService,
+    EditorialAuthorityAssignmentRepository,
     CaseInventoryHealthService,
     CaseQualityProjectionService,
     ClueProgressionAnalysisService,

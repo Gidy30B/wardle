@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/projection-state-snapshot.schema.json",
+  "title": "WEOS Projection State Snapshot",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["projectionId", "snapshotKind", "stateStatus"],
+  "properties": {
+    "projectionId": { "type": "string", "minLength": 1 },
+    "snapshotKind": { "enum": ["CANONICAL", "PROJECTED"] },
+    "stateStatus": { "enum": ["KNOWN", "UNKNOWN", "UNAVAILABLE", "MISSING"] },
+    "stateValue": true,
+    "recordReference": { "type": "string" },
+    "recordType": { "type": "string" },
+    "recordVersion": { "type": "string" },
+    "governanceDecisionId": { "type": "string" },
+    "commandId": { "type": "string" },
+    "appliedAt": { "type": "string", "format": "date-time" },
+    "observedAt": { "type": "string", "format": "date-time" },
+    "projectionUpdatedAt": { "type": "string", "format": "date-time" },
+    "projectionSchemaVersion": { "type": "string" },
+    "provenanceReferences": { "type": "array", "items": { "type": "string" } },
+    "disclosureAllowed": { "type": "boolean" }
+  }
+}

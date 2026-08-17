@@ -1,4 +1,4 @@
-import { GoneException } from '@nestjs/common';
+import { ConflictException, GoneException } from '@nestjs/common';
 import { PublishTrack } from '@prisma/client';
 import { resetEnvCacheForTests } from '../../core/config/env.validation';
 import { CaseEligibilityPolicyService } from './case-eligibility-policy.service';
@@ -245,6 +245,31 @@ describe('CasesService', () => {
         }),
       }),
     );
+  });
+
+  it('fails closed instead of updating existing dated cases through POST /cases', async () => {
+    const create = jest.fn();
+    const upsert = jest.fn();
+    const fixture = createServiceFixture({
+      case: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'case-existing' }),
+        create,
+        upsert,
+      },
+    });
+
+    await expect(
+      fixture.service.createCase({
+        title: 'Changed material',
+        date: '2026-04-20',
+        history: 'Changed history',
+        symptoms: ['changed'],
+        diagnosisRegistryId: 'registry-1',
+      }),
+    ).rejects.toThrow(ConflictException);
+
+    expect(create).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
   });
 
 

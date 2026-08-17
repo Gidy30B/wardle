@@ -36,6 +36,11 @@ import CaseQualityCard from './CaseQualityCard';
 import CaseHistorySection from './CaseHistorySection';
 import DiagnosisEducationPanel from './DiagnosisEducationPanel';
 import CaseValidationSection from './CaseValidationSection';
+import {
+  buildReviewPayload,
+  createCaseReviewIdempotencyKey,
+  isStaleApprovalConflict,
+} from './caseReviewApprovalPayload';
 import CaseWorkflowSection from './CaseWorkflowSection';
 import {
   getValidationIssueBuckets,
@@ -255,6 +260,18 @@ export default function CaseDetail({
   const { feedback, clear, showError, showPending, showSuccess } =
     useActionFeedback();
 
+  function buildCreateRevisionCommandFields(action: string, summary: string) {
+    const expectedRevisionId = detail?.currentRevisionId ?? '';
+    return {
+      expectedRevisionId,
+      commandIdempotencyKey: `${action}:${detail?.id ?? 'case'}:${expectedRevisionId}:${
+        globalThis.crypto?.randomUUID?.() ?? Date.now().toString(36)
+      }`,
+      changeReason: summary,
+      changeSummary: summary,
+    };
+  }
+
   useEffect(() => {
     if (!detail) {
       setRevisions([]);
@@ -416,8 +433,13 @@ export default function CaseDetail({
       onRequestRefresh();
       return true;
     } catch (actionError) {
+      if (isStaleApprovalConflict(actionError)) {
+        onRequestRefresh();
+      }
       showError(
-        actionError instanceof Error
+        isStaleApprovalConflict(actionError)
+          ? 'Review context changed. Refresh the case and approve the current revision explicitly.'
+          : actionError instanceof Error
           ? actionError.message
           : 'The action could not be completed.',
       );
@@ -434,6 +456,9 @@ export default function CaseDetail({
 
     const caseId = detail.id;
     const isReject = decision === 'REJECTED';
+    const commandIdempotencyKey = isReject
+      ? undefined
+      : createCaseReviewIdempotencyKey(caseId);
 
     setConfirmAction({
       id: `review-${decision.toLowerCase()}`,
@@ -459,10 +484,16 @@ export default function CaseDetail({
         </div>
       ),
       run: () =>
-        submitCaseReview(client, caseId, {
-          decision,
-          notes: reviewNotes.trim() || undefined,
-        }),
+        submitCaseReview(
+          client,
+          caseId,
+          buildReviewPayload({
+            detail,
+            decision,
+            notes: reviewNotes,
+            commandIdempotencyKey,
+          }),
+        ),
     });
   }
 
@@ -498,7 +529,13 @@ export default function CaseDetail({
           </p>
         </div>
       ),
-      run: () => restoreCaseRevision(client, caseId, revision.id),
+      run: () =>
+        restoreCaseRevision(client, caseId, revision.id, {
+          ...buildCreateRevisionCommandFields(
+            'restore-case-revision',
+            `Restore revision ${revision.revisionNumber}`,
+          ),
+        }),
     });
   }
 
@@ -583,7 +620,14 @@ export default function CaseDetail({
       id: 'link-diagnosis',
       pendingMessage: 'Linking diagnosis to case...',
       successMessage: 'Diagnosis linked to case.',
-      run: () => linkCaseDiagnosis(client, detail.id, payload),
+      run: () =>
+        linkCaseDiagnosis(client, detail.id, {
+          ...payload,
+          ...buildCreateRevisionCommandFields(
+            'link-case-diagnosis',
+            'Link case diagnosis',
+          ),
+        }),
     });
   }
 
@@ -596,7 +640,14 @@ export default function CaseDetail({
       id: 'update-case-diagnosis',
       pendingMessage: 'Saving canonical diagnosis...',
       successMessage: 'Canonical diagnosis saved.',
-      run: () => updateCaseDiagnosis(client, detail.id, payload),
+      run: () =>
+        updateCaseDiagnosis(client, detail.id, {
+          ...payload,
+          ...buildCreateRevisionCommandFields(
+            'update-case-diagnosis',
+            'Update case diagnosis',
+          ),
+        }),
     });
   }
 
@@ -611,7 +662,14 @@ export default function CaseDetail({
       id: 'create-link-diagnosis',
       pendingMessage: 'Creating diagnosis and linking case...',
       successMessage: 'Diagnosis created and linked to case.',
-      run: () => createAndLinkDiagnosis(client, detail.id, payload),
+      run: () =>
+        createAndLinkDiagnosis(client, detail.id, {
+          ...payload,
+          ...buildCreateRevisionCommandFields(
+            'create-and-link-diagnosis',
+            'Create and link case diagnosis',
+          ),
+        }),
     });
   }
 

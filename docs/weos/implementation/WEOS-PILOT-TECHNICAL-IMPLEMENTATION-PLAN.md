@@ -1,11 +1,11 @@
 # WEOS Pilot-Ready Technical Implementation Plan
 
-**Proposed repository path:** `docs/weos/implementation/WEOS-PILOT-TECHNICAL-IMPLEMENTATION-PLAN.md`  
-**Document type:** Implementation Plan  
-**Status:** Draft for approval  
-**Version:** 0.1  
-**Date:** 6 August 2026  
-**Owner:** Wardle / DxLabs  
+**Proposed repository path:** `docs/weos/implementation/WEOS-PILOT-TECHNICAL-IMPLEMENTATION-PLAN.md`
+**Document type:** Implementation Plan
+**Status:** Draft for approval
+**Version:** 0.1
+**Date:** 6 August 2026
+**Owner:** Wardle / DxLabs
 **Implementation method:** Human-governed delivery using Codex as a bounded implementation agent
 
 ---
@@ -207,8 +207,8 @@ The workspace frontend may begin against agreed mock contracts, but it must not 
 
 ## WEOS-TECH-001 — Current HEAD Audit
 
-**Branch:** `weos/00-head-audit`  
-**Estimate:** 2–3 days  
+**Branch:** `weos/00-head-audit`
+**Estimate:** 2–3 days
 **Runtime changes:** None
 
 ### Objective
@@ -277,8 +277,8 @@ docs/weos/implementation/LEARNER-EXPOSURE-READ-PATH.md
 
 ## WEOS-TECH-002 — Governance Architecture Decisions
 
-**Branch:** `weos/01-authority-decisions`  
-**Estimate:** 3–5 days  
+**Branch:** `weos/01-authority-decisions`
+**Estimate:** 3–5 days
 **Runtime changes:** None
 
 ### Objective
@@ -342,7 +342,7 @@ No schema or runtime implementation begins until these ADRs are approved.
 
 ## WEOS-TECH-003 — Characterization Tests
 
-**Branch:** `weos/02-characterization-tests`  
+**Branch:** `weos/02-characterization-tests`
 **Estimate:** 4–6 days
 
 ### Objective
@@ -387,7 +387,7 @@ Determine whether the current system permits:
 
 ## WEOS-TECH-004 — Additive Governance Schema
 
-**Branch:** `weos/03-governance-schema`  
+**Branch:** `weos/03-governance-schema`
 **Estimate:** 5–8 days
 
 ### Objective
@@ -545,7 +545,7 @@ createdAt
 
 ## WEOS-TECH-005 — Governance Record Core
 
-**Branch:** `weos/04-governance-core`  
+**Branch:** `weos/04-governance-core`
 **Estimate:** 4–6 days
 
 ### Components
@@ -588,7 +588,7 @@ GET /admin/governance/records/:recordId
 
 ## WEOS-TECH-006 — Scoped Authority Engine
 
-**Branch:** `weos/05-authority-engine`  
+**Branch:** `weos/05-authority-engine`
 **Estimate:** 4–6 days
 
 ### Components
@@ -644,7 +644,7 @@ SPECIALTY
 
 ## WEOS-TECH-007 — Expected-Version Command Contract
 
-**Branch:** `weos/06-expected-version`  
+**Branch:** `weos/06-expected-version`
 **Estimate:** 3–5 days
 
 ### Objective
@@ -692,7 +692,7 @@ Two reviewers cannot silently act on different revisions through racing requests
 
 ## WEOS-TECH-008 — Case Revision Hardening
 
-**Branch:** `weos/07-case-revision-hardening`  
+**Branch:** `weos/07-case-revision-hardening`
 **Estimate:** 6–8 days
 
 ### Invariant
@@ -764,7 +764,7 @@ A new material revision must:
 
 ## WEOS-TECH-009 — Governed Case Review
 
-**Branch:** `weos/08-governed-case-review`  
+**Branch:** `weos/08-governed-case-review`
 **Estimate:** 7–10 days
 
 ### Commands
@@ -834,7 +834,7 @@ They must not remain independently writable sources of authority.
 
 ## WEOS-TECH-010 — Operation-Specific Readiness Engine
 
-**Branch:** `weos/12-readiness-engine`  
+**Branch:** `weos/12-readiness-engine`
 **Estimate:** 5–7 days
 
 ### Readiness operations
@@ -889,7 +889,7 @@ GET /admin/editorial/cases/:caseId/revisions/:revisionId/readiness/:operation
 
 ## WEOS-TECH-011 — Revision-Targeted Publication
 
-**Branch:** `weos/09-publication-version`  
+**Branch:** `weos/09-publication-version`
 **Estimate:** 7–10 days
 
 ### Commands
@@ -948,7 +948,7 @@ Previous publications must never be deleted to simulate replacement.
 
 ## WEOS-TECH-012 — Daily Case and Gameplay Cutover
 
-**Branch:** `weos/10-gameplay-cutover`  
+**Branch:** `weos/10-gameplay-cutover`
 **Estimate:** 5–8 days
 
 ### Database change
@@ -1010,7 +1010,7 @@ WEOS_PUBLISHED_VERSION_READ_PATH
 
 ## WEOS-TECH-013 — Governance Backfill and Historical Classification
 
-**Branch:** `weos/11-governance-backfill`  
+**Branch:** `weos/11-governance-backfill`
 **Estimate:** 7–10 days
 
 ### Classification states
@@ -1072,7 +1072,7 @@ Each script should support:
 
 ## WEOS-TECH-014 — Editorial Workspace API
 
-**Branch:** `weos/13-workspace-api`  
+**Branch:** `weos/13-workspace-api`
 **Estimate:** 6–8 days
 
 ### Read models
@@ -1129,7 +1129,7 @@ Controllers should remain thin and delegate to canonical command handlers.
 
 ## WEOS-TECH-015 — Editorial Workspace Frontend
 
-**Branch:** `weos/14-workspace-ui`  
+**Branch:** `weos/14-workspace-ui`
 **Estimate:** 8–12 days
 
 ### Pilot-critical surfaces
@@ -1215,7 +1215,7 @@ Display:
 
 ## WEOS-TECH-016 — Controlled AI Application
 
-**Branch:** `weos/15-ai-controlled-application`  
+**Branch:** `weos/15-ai-controlled-application`
 **Estimate:** 6–9 days
 
 ### Required lifecycle
@@ -1270,7 +1270,7 @@ APPLY_ACCEPTED_AI_DRAFT
 
 ## WEOS-TECH-017 — Pilot Hardening and Conformance
 
-**Branch:** `weos/16-pilot-hardening`  
+**Branch:** `weos/16-pilot-hardening`
 **Estimate:** 8–12 days
 
 ### Security

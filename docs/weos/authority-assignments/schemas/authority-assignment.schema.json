@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/authority-assignment.schema.json",
+  "title": "WEOS Authority Assignment Collection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "collectionStatus", "assignments"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": "1.0.0" },
+    "collectionStatus": { "type": "string" },
+    "assignments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/AuthorityAssignment" }
+    }
+  },
+  "$defs": {
+    "NonEmptyString": { "type": "string", "minLength": 1 },
+    "NonEmptyStringArray": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/NonEmptyString" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "AuthorityScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "organizationIds": { "$ref": "#/$defs/NonEmptyStringArray" },
+        "specialtyIds": { "$ref": "#/$defs/NonEmptyStringArray" },
+        "artifactTypes": { "$ref": "#/$defs/NonEmptyStringArray" },
+        "artifactIds": { "$ref": "#/$defs/NonEmptyStringArray" },
+        "artifactRevisionIds": { "$ref": "#/$defs/NonEmptyStringArray" },
+        "decisionTypes": { "$ref": "#/$defs/NonEmptyStringArray" },
+        "environmentScopes": { "$ref": "#/$defs/NonEmptyStringArray" }
+      }
+    },
+    "AuthorityAssignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assignmentId",
+        "assignmentSchemaVersion",
+        "subjectType",
+        "subjectId",
+        "authorityType",
+        "authorityTypeSchemaVersion",
+        "status",
+        "scopeMode",
+        "scope",
+        "allowedDecisionTypes",
+        "authorityEvidenceReference",
+        "grantingAuthoritySnapshot",
+        "grantedByActorType",
+        "grantedByActorId",
+        "grantingAuthorityAssignmentId",
+        "grantedAt",
+        "validFrom",
+        "rationale",
+        "delegationAllowed",
+        "maximumDelegationDepth"
+      ],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/NonEmptyString" },
+        "assignmentSchemaVersion": { "const": "1.0.0" },
+        "subjectType": {
+          "enum": ["USER", "SERVICE_ACCOUNT", "AUTOMATION", "SYSTEM"]
+        },
+        "subjectId": { "$ref": "#/$defs/NonEmptyString" },
+        "authorityType": { "$ref": "#/$defs/NonEmptyString" },
+        "authorityTypeSchemaVersion": { "$ref": "#/$defs/NonEmptyString" },
+        "status": {
+          "enum": [
+            "PENDING",
+            "ACTIVE",
+            "SUSPENDED",
+            "EXPIRED",
+            "REVOKED",
+            "SUPERSEDED",
+            "INVALID"
+          ]
+        },
+        "scopeMode": { "enum": ["SCOPED", "GLOBAL"] },
+        "scope": { "$ref": "#/$defs/AuthorityScope" },
+        "allowedDecisionTypes": { "$ref": "#/$defs/NonEmptyStringArray" },
+        "authorityEvidenceReference": { "$ref": "#/$defs/NonEmptyString" },
+        "grantingAuthoritySnapshot": { "type": "object" },
+        "grantedByActorType": {
+          "enum": ["USER", "SERVICE_ACCOUNT", "AUTOMATION", "SYSTEM"]
+        },
+        "grantedByActorId": { "$ref": "#/$defs/NonEmptyString" },
+        "grantingAuthorityAssignmentId": { "$ref": "#/$defs/NonEmptyString" },
+        "grantedAt": { "type": "string", "format": "date-time" },
+        "validFrom": { "type": "string", "format": "date-time" },
+        "validUntil": { "type": "string", "format": "date-time" },
+        "reviewDueAt": { "type": "string", "format": "date-time" },
+        "rationale": { "$ref": "#/$defs/NonEmptyString" },
+        "delegationAllowed": { "type": "boolean" },
+        "maximumDelegationDepth": { "type": "integer", "minimum": 0 },
+        "parentAssignmentId": { "$ref": "#/$defs/NonEmptyString" },
+        "humanAuthorityActorId": { "$ref": "#/$defs/NonEmptyString" },
+        "suspendedAt": { "type": "string", "format": "date-time" },
+        "revokedAt": { "type": "string", "format": "date-time" },
+        "revokedByActorId": { "$ref": "#/$defs/NonEmptyString" },
+        "supersededByAssignmentId": { "$ref": "#/$defs/NonEmptyString" }
+      }
+    }
+  }
+}

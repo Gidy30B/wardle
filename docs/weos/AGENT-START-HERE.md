@@ -32,13 +32,14 @@ Primary implementation evidence lives in:
 5. `docs/weos/WEOS-IMP-003-editorial-action-decision-catalogue.md`
 6. `docs/weos/WEOS-IMP-004-legacy-status-crosswalk.md`
 7. `docs/weos/WEOS-IMP-005-phase-2-open-decisions.md`
-8. `docs/weos/capability-map/WEOS-CAPABILITY-MAP.md`
-9. `docs/weos/capability-map/RUNTIME-ACTION-CROSSWALK.md`
-10. `docs/weos/capability-map/DATABASE-MODEL-MAP.md`
-11. `docs/weos/capability-map/PERMISSION-MAP.md`
-12. `docs/weos/glossary/WEOS-TERMS.md`
-13. `docs/weos/gaps/IMPLEMENTATION-GAPS.md`
-14. `docs/weos/agent-rules/DO-NOT-GUESS.md`
+8. `docs/weos/phase-3-governance-foundations/README.md`
+9. `docs/weos/capability-map/WEOS-CAPABILITY-MAP.md`
+10. `docs/weos/capability-map/RUNTIME-ACTION-CROSSWALK.md`
+11. `docs/weos/capability-map/DATABASE-MODEL-MAP.md`
+12. `docs/weos/capability-map/PERMISSION-MAP.md`
+13. `docs/weos/glossary/WEOS-TERMS.md`
+14. `docs/weos/gaps/IMPLEMENTATION-GAPS.md`
+15. `docs/weos/agent-rules/DO-NOT-GUESS.md`
 
 ## Phase 2 Interpretation Closure
 
@@ -75,11 +76,32 @@ Architecture authority and implementation evidence are different things. The
 canonical documents describe intended WEOS concepts; runtime services,
 controllers, schemas, and dashboard files show current behavior.
 
+## Repository Authority Records
+
+Authority records live under `docs/weos/authority/records/`. Authority schemas live under `docs/weos/authority/schemas/`.
+
+Agents must validate authority records before using them. File existence is not approval. Absent or invalid records mean authority remains unresolved for the affected document, version and scope.
+
+`WEOS-OD-021` is approved with conditions only for Stage 1 repository-native contracts, schemas, pure validation/resolution utilities, conformance tests and documentation integration. `WEOS-OD-018` is approved with conditions only for Stage 1 Governance Decision Envelope contracts and validation evidence. Dependent decisions remain open unless they have their own valid approval record.
+Governance Decision Envelope Stage 1 contracts live under `docs/weos/governance-decisions/`. Pure TypeScript contracts and conformance tests live under `doctordle-backend/src/modules/editorial-governance/governance-decision/`.
+
+Only registered approved extensions may validate Governance Decisions. The repository registry initially contains no approved production extension, and unregistered extensions cannot establish a valid decision. `WEOS-OD-021` authority records are not replaced, duplicated or retroactively converted by `WEOS-OD-018`.
+
+Runtime enforcement, Prisma persistence, command handlers, projection synchronization and production rollout are not authorized by Stage 1 Governance Decision Envelope contracts. `WEOS-AUTH-APP-006` authorizes a bounded Stage 2 runtime slice only for governed exact `CaseRevision` approval through `APPROVE_CASE_REVISION`; it does not authorize general governance-kernel implementation or publication/exposure work.
+
+Governed-command contracts live under `docs/weos/governed-commands/`. Pure TypeScript contracts live under `doctordle-backend/src/modules/editorial-governance/governed-command/`. Every governed mutation must declare expected-state policy; revisioned content uses exact expected revision where required. Production command and token registries are empty. Authority success does not bypass stale state. Stale commands produce no Governance Decision or mutation. Idempotency does not make stale state current. Automatic stale rebase is prohibited. No runtime enforcement is authorized.
+
+Authority-assignment Stage 1 contracts live under `docs/weos/authority-assignments/`. Pure TypeScript contracts and conformance tests live under `doctordle-backend/src/modules/editorial-governance/authority-assignment/`. Runtime roles are not authority. Only valid `ACTIVE` assignments under approved authority-type policy may authorize in pure resolution. Production registries are empty, command-context assignment references are claims, no production assignment exists, no runtime enforcement is authorized and bootstrap authority is not converted.
+
+Compatibility-projection contracts live under `docs/weos/compatibility-projections/`. Pure TypeScript contracts live under `doctordle-backend/src/modules/editorial-governance/compatibility-projection/`. Projections never independently establish canonical authority. Every operational projection requires one approved owner. Unresolved ownership remains unresolved. Production projection registry and inventory are empty. Drift detection performs no repair. Repair eligibility performs no repair. Stale commands permit no projection update. Direct writes remain runtime evidence, not authority. Runtime synchronization and enforcement are authorized only for the APP-006 `APPROVE_CASE_REVISION` compatibility projections.
+
 ## Human-Controlled Decisions
 
 Open governance questions remain human-controlled in
 `docs/weos/WEOS-IMP-005-phase-2-open-decisions.md`. Agents must not close,
 silently resolve, or override those decisions.
+
+The Phase 3 Governance Foundations Decision Pack provides recommended directions for human architecture review. `WEOS-OD-021`, `WEOS-OD-018`, `WEOS-OD-022`, `WEOS-OD-023` and `WEOS-OD-019` are approved with conditions for Stage 1 contracts only. Other dependent Phase 3 decisions remain open unless an explicit approval record and implementation authorization exist for that decision.
 
 Branch-missing models, repositories, tests, action registries and dashboard files
 must not be treated as implemented. If a file exists only in local worktree state

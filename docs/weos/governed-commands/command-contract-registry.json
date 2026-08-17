@@ -1,0 +1,6 @@
+{
+  "$schema": "./schemas/governed-command-contract-registry.schema.json",
+  "schemaVersion": "1.0.0",
+  "registryStatus": "STAGE_1_CONTRACT_EVIDENCE_ONLY",
+  "commandContracts": []
+}

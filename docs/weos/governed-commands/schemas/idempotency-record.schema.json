@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/idempotency-record.schema.json",
+  "title": "WEOS Idempotency Record Input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "idempotencyKey",
+    "commandFingerprint",
+    "commandId",
+    "commandType",
+    "resultStatus",
+    "resultReference",
+    "recordedAt"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "idempotencyKey": { "type": "string", "minLength": 1 },
+    "commandFingerprint": { "type": "string", "minLength": 1 },
+    "commandId": { "type": "string", "minLength": 1 },
+    "commandType": { "type": "string", "minLength": 1 },
+    "resultStatus": {
+      "enum": [
+        "SUCCESS",
+        "REJECTED_STALE",
+        "REJECTED_INVALID",
+        "REJECTED_AUTHORITY",
+        "FAILED_NO_EFFECT"
+      ]
+    },
+    "resultReference": { "type": "string", "minLength": 1 },
+    "recordedAt": { "type": "string", "format": "date-time" }
+  }
+}

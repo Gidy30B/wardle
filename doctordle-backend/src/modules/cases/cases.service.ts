@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   GoneException,
   Injectable,
   Logger,
@@ -98,52 +99,37 @@ export class CasesService {
     });
 
     const created = await this.withPublicNumberRetry(async () => {
+      if (dto.date) {
+        const existingCase = await this.prisma.case.findUnique({
+          where: { date },
+          select: { id: true },
+        });
+        if (existingCase) {
+          throw new ConflictException(
+            'Existing cases cannot be updated through POST /cases; use the governed CREATE_CASE_REVISION edit path',
+          );
+        }
+      }
+
       const publicNumber = await this.getNextCasePublicNumber(this.prisma);
 
-      return dto.date
-        ? this.prisma.case.upsert({
-            where: { date },
-            update: {
-              title: dto.title,
-              history: dto.history,
-              symptoms: dto.symptoms,
-              diagnosisId: diagnosisRegistry.legacyDiagnosisId,
-              diagnosisRegistryId: diagnosisRegistry.id,
-              ...diagnosisMappingFields,
-            },
-            create: {
-              publicNumber,
-              title: dto.title,
-              date,
-              difficulty: 'medium',
-              history: dto.history,
-              symptoms: dto.symptoms,
-              diagnosisId: diagnosisRegistry.legacyDiagnosisId,
-              diagnosisRegistryId: diagnosisRegistry.id,
-              ...diagnosisMappingFields,
-            },
-            include: {
-              diagnosis: true,
-              diagnosisRegistry: true,
-            },
-          })
-        : this.prisma.case.create({
-            data: {
-              publicNumber,
-              title: dto.title,
-              date,
-              difficulty: 'medium',
-              history: dto.history,
-              symptoms: dto.symptoms,
-              diagnosisId: diagnosisRegistry.legacyDiagnosisId,
-              diagnosisRegistryId: diagnosisRegistry.id,
-              ...diagnosisMappingFields,
-            },
-            include: {
-              diagnosis: true,
-              diagnosisRegistry: true,
-            },
-          });
+      return this.prisma.case.create({
+        data: {
+          publicNumber,
+          title: dto.title,
+          date,
+          difficulty: 'medium',
+          history: dto.history,
+          symptoms: dto.symptoms,
+          diagnosisId: diagnosisRegistry.legacyDiagnosisId,
+          diagnosisRegistryId: diagnosisRegistry.id,
+          ...diagnosisMappingFields,
+        },
+        include: {
+          diagnosis: true,
+          diagnosisRegistry: true,
+        },
+      });
     });
 
     this.logger.log(

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/concurrency-token-policy-definition.schema.json",
+  "title": "WEOS Concurrency Token Policy Definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tokenPolicyType",
+    "tokenPolicyVersion",
+    "status",
+    "coveredDependencyRoles",
+    "coveredArtifactTypes",
+    "tokenSemantics",
+    "requiresCompleteDependencyCoverage"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "tokenPolicyType": { "type": "string", "minLength": 1 },
+    "tokenPolicyVersion": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["DRAFT", "APPROVED", "DEPRECATED", "WITHDRAWN"] },
+    "coveredDependencyRoles": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "coveredArtifactTypes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "tokenSemantics": { "type": "string", "minLength": 1 },
+    "requiresCompleteDependencyCoverage": { "type": "boolean" }
+  }
+}

@@ -34,6 +34,28 @@ Selected authority baseline: `weos/phase-3-governance-foundations` at
   contracts only.
 - `WEOS-AUTH-APP-005`: approves `WEOS-OD-019` with conditions for Stage 1
   contracts only.
+- `WEOS-AUTH-APP-006`: authorizes bounded Stage 2 runtime implementation only
+  for governed exact `CaseRevision` approval through `APPROVE_CASE_REVISION`.
+
+## Implementation Closure Evidence
+
+Authorization status and implementation/conformance status are distinct.
+`WEOS-AUTH-APP-006` remains an active approved authority record. Its bounded
+`APPROVE_CASE_REVISION` implementation is now recorded as:
+
+| Field | Value |
+| --- | --- |
+| Implementation status | `CLOSED` |
+| Conformance | `CONFORMANT_WITH_NONBLOCKING_FINDINGS` |
+| Closure authority | Final independent APP-006 conformance review |
+| Authorized operation | `APPROVE_CASE_REVISION` |
+| Governance baseline commit SHA | `1009a80494b429cfc9eb9f7de50f1c677e1e4c7c` |
+| APP-006 implementation commit SHA | `c428fe1094e7a1a49250fb34bfb2b83d893df112` |
+
+This closure does not create or approve Phase 1C, `WEOS-AUTH-APP-007`,
+publication, learner exposure, controlled AI application, graph promotion,
+Diagnosis Education governance, backfill, repair, destructive migration, or a
+general governance-kernel rollout.
 
 ## Non-Authority Notes
 

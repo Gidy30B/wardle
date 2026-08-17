@@ -11,20 +11,6 @@ Older diagnosis-standardization guidance has been preserved at
 `docs/agents/DIAGNOSIS-STANDARDIZATION.md` and applies only when the task is
 specifically about diagnosis standardization.
 
-## Gameplay Agent Layer
-
-For learner gameplay/runtime work, start with `docs/gameplay/README.md` after
-reading the applicable `AGENTS.md` files. Runtime code and schema remain the
-source of truth for current gameplay behavior. `docs/gameplay/PARTICIPATION-POLICY.md`
-is a target-state implementation specification for later participation-policy
-work; it does not describe behavior that is already fully implemented unless it
-explicitly says so.
-
-WEOS documentation governs editorial, governance, publication, authority, and
-learner-exposure concerns. Gameplay documentation governs learner gameplay and
-runtime interpretation. Do not infer gameplay runtime architecture from WEOS
-concepts unless the connection is explicit.
-
 ## Repository Rules
 
 1. Read `docs/weos/AGENT-START-HERE.md` before WEOS or editorial work.

@@ -1,0 +1,6 @@
+{
+  "$schema": "./schemas/authority-assignment.schema.json",
+  "schemaVersion": "1.0.0",
+  "collectionStatus": "STAGE_1_CONTRACT_EVIDENCE_ONLY",
+  "assignments": []
+}

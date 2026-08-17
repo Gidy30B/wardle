@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/authority-type-registry.schema.json",
+  "title": "WEOS Authority Type Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "registryStatus", "authorityTypes"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": "1.0.0" },
+    "registryStatus": { "type": "string", "minLength": 1 },
+    "authorityTypes": {
+      "type": "array",
+      "items": { "$ref": "authority-type-definition.schema.json" },
+      "uniqueItems": true
+    }
+  }
+}

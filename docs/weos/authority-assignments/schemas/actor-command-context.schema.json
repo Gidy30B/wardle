@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weos.local/schemas/actor-command-context.schema.json",
+  "title": "WEOS Actor Command Context",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "actorType",
+    "actorId",
+    "runtimeRoles",
+    "organizationContextIds",
+    "specialtyContextIds",
+    "authorityAssignmentReferences",
+    "correlationId",
+    "causationId",
+    "requestedAt"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "actorType": {
+      "enum": ["USER", "SERVICE_ACCOUNT", "AUTOMATION", "SYSTEM"]
+    },
+    "actorId": { "type": "string", "minLength": 1 },
+    "runtimeRoles": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "organizationContextIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "specialtyContextIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "authorityAssignmentReferences": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "correlationId": { "type": "string", "minLength": 1 },
+    "causationId": { "type": "string", "minLength": 1 },
+    "requestedAt": { "type": "string", "format": "date-time" }
+  }
+}
