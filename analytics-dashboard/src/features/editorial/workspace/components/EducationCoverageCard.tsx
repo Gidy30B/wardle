@@ -1,12 +1,24 @@
 import StatusBadge from '../../../../components/ui/StatusBadge';
+import type { EducationRegenerableSection } from '../../../../api/admin.types.ts';
 import type { EducationCoverageCardViewModel } from '../viewModels/contentCoverageViewModel.ts';
 import { toneToBadge } from './BoardVerdict.tsx';
-import { getSafeReviewActionIds } from '../actions/workspaceReviewActionPolicy.ts';
+import {
+  getSafeReviewActionIds,
+  getWorkspaceActionPendingKey,
+} from '../actions/workspaceReviewActionPolicy.ts';
+import { canRunWorkspaceAction } from '../actions/workspaceActionRegistry.ts';
 import type {
   WorkspaceActionAccess,
   WorkspaceActionRequestHandler,
 } from '../actions/workspaceActionTypes.ts';
 import { WorkspaceReviewActionButtons } from './WorkspaceReviewActionButtons.tsx';
+
+const REGENERABLE_SECTIONS = new Set<EducationRegenerableSection>([
+  'differentials',
+  'investigations',
+  'examPearls',
+  'management',
+]);
 
 export function EducationCoverageCard({
   section,
@@ -19,6 +31,45 @@ export function EducationCoverageCard({
   pendingAction: string | null;
   onRunAction: WorkspaceActionRequestHandler;
 }) {
+  const regenerableSection = isRegenerableEducationSection(section.section)
+    ? section.section
+    : null;
+  const canShowRegenerateSectionAction =
+    section.regenerationRecommended && regenerableSection !== null;
+  const regenerateSectionActionId = 'education.regenerateSection' as const;
+  const regenerateSectionPendingKey = getWorkspaceActionPendingKey(
+    regenerateSectionActionId,
+    section.section,
+  );
+  const regenerateSectionPending = pendingAction === regenerateSectionPendingKey;
+  const canRunRegenerateSectionAction = canRunWorkspaceAction(
+    regenerateSectionActionId,
+    actionAccess,
+  );
+
+  function handleRegenerateSection() {
+    if (!canShowRegenerateSectionAction) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Regenerate ${section.label.toLowerCase()} using current canonical sources?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    void onRunAction(
+      regenerateSectionActionId,
+      {
+        section: regenerableSection,
+        confirmed: true,
+      },
+      section.section,
+    );
+  }
+
   return (
     <article className="rounded-lg border border-[var(--color-navy-border)] bg-white/[0.03] p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -41,6 +92,26 @@ export function EducationCoverageCard({
             <li key={issue}>- {issue}</li>
           ))}
         </ul>
+      ) : null}
+
+      {canShowRegenerateSectionAction ? (
+        <div className="mt-3 border-t border-white/10 pt-3">
+          <button
+            type="button"
+            disabled={!canRunRegenerateSectionAction || regenerateSectionPending}
+            title={
+              canRunRegenerateSectionAction
+                ? undefined
+                : 'Requires editorial access'
+            }
+            onClick={handleRegenerateSection}
+            className="rounded-md border border-[var(--color-navy-border)] bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-[var(--color-teal)] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            {regenerateSectionPending
+              ? 'Regenerating...'
+              : `Regenerate ${section.label}`}
+          </button>
+        </div>
       ) : null}
 
       {section.unsupportedClaims.length ? (
@@ -74,4 +145,10 @@ export function EducationCoverageCard({
 
 function formatScore(value: number | null): string {
   return value === null ? 'n/a' : `${Math.round(value * 100)}%`;
+}
+
+function isRegenerableEducationSection(
+  section: string,
+): section is EducationRegenerableSection {
+  return REGENERABLE_SECTIONS.has(section as EducationRegenerableSection);
 }

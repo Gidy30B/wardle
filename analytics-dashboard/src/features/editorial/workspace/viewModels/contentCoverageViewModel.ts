@@ -41,6 +41,7 @@ export type EducationCoverageCardViewModel = {
   label: string;
   status: string;
   tone: ContentCoverageTone;
+  regenerationRecommended: boolean;
   score: number | null;
   coverageScore: number | null;
   warnings: string[];
@@ -214,6 +215,7 @@ function buildEducationSections(params: {
       label: labelize(section.section),
       status: hasBlocker ? 'blocked' : hasWarning ? 'needs_review' : 'reviewable',
       tone: hasBlocker ? 'danger' : hasWarning ? 'warning' : 'success',
+      regenerationRecommended: section.regenerationRecommended,
       score: section.score,
       coverageScore: section.coverageScore,
       warnings: section.warnings,
