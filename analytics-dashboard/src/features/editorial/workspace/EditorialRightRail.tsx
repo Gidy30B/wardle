@@ -226,9 +226,6 @@ function RailCommandButton({
   return (
     <button
       type="button"
-      data-testid={`workspace-rail-command-${command.id}`}
-      data-target-tab={command.targetTab}
-      data-target-section={command.sectionId ?? ''}
       disabled={!canOpen}
       aria-disabled={!canOpen}
       onClick={openCommand}
@@ -896,9 +893,6 @@ function IntegrityBlockerCard({
       </div>
       <button
         type="button"
-        data-testid="workspace-rail-integrity-blockers"
-        data-target-tab={target.tab}
-        data-target-section={target.sectionId}
         onClick={() => onSectionNavigate(target)}
         aria-current={isActive ? 'location' : undefined}
         className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-teal)]"
@@ -1155,9 +1149,6 @@ function ImpactFixButton({
   return (
     <button
       type="button"
-      data-testid={`workspace-impact-fix-${fix.id}`}
-      data-target-tab={target.tab}
-      data-target-section={target.sectionId}
       onClick={() => onSectionNavigate(target)}
       aria-current={isActive ? 'location' : undefined}
       className={[
@@ -1242,9 +1233,6 @@ function CopilotSuggestionsCard({
             <button
               key={suggestion.id}
               type="button"
-              data-testid={`workspace-copilot-suggestion-${suggestion.id}`}
-              data-target-tab={target.tab}
-              data-target-section={target.sectionId}
               disabled={!suggestion.enabled}
               aria-disabled={!suggestion.enabled}
               aria-current={isActive ? 'location' : undefined}

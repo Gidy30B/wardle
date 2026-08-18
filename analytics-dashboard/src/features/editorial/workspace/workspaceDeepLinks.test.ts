@@ -18,7 +18,7 @@ describe('workspace deep links', () => {
         sectionId: 'management',
         targetTab: 'education',
       }),
-      '/editorial/diagnoses/dx-1?workspaceShell=legacy&tab=integrity&claimId=claim-1&sectionId=management',
+      '/editorial/diagnoses/dx-1?tab=integrity&claimId=claim-1&sectionId=management',
     );
   });
 

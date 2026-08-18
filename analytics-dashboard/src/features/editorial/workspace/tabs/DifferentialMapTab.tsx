@@ -52,8 +52,6 @@ import {
   ExplainabilityMetric,
   InlineReviewBar,
   MetricGrid,
-  OperatorDashboard,
-  OperatorMetricGrid,
   RelationshipActionButton,
   ReasoningThread,
   SecondaryActionDisclosure,
@@ -75,10 +73,6 @@ import {
   groupEvidenceRelationships,
   groupReasoningPaths,
 } from '../workspaceTransforms';
-import {
-  buildEditorialWorkspaceViewModel,
-  type GraphBoardViewModel,
-} from '../viewModels/editorialWorkspaceViewModel';
 export function DifferentialMapTab({
   workspace,
   selectedRow,
@@ -121,7 +115,6 @@ export function DifferentialMapTab({
   const allMimicItems = mimicGroups.flatMap((group) => group.items);
   const activeMimic =
     allMimicItems.find((item) => item.id === activeMimicId) ?? allMimicItems[0] ?? null;
-  const viewModel = buildEditorialWorkspaceViewModel(workspace);
 
   async function runGraphDraftAction(
     id: string,
@@ -151,11 +144,7 @@ export function DifferentialMapTab({
           description="Generate or review graph and evidence candidates so discriminators, mimics, and reasoning paths can support this diagnosis."
         />
       ) : null}
-      <GraphOperatorDashboard
-        workspace={workspace}
-        mimicGroups={mimicGroups}
-        board={viewModel.graphBoard}
-      />
+      <GraphOperatorDashboard workspace={workspace} mimicGroups={mimicGroups} />
       <div
         id="mimic-separation-stream"
         className="scroll-mt-24"
@@ -337,51 +326,51 @@ export function DifferentialMapTab({
               <StreamDisclosure
                 title="Teaching relationship details"
                 summary={`${workspace.graph.teachingRelationships?.length ?? 0} relationship${(workspace.graph.teachingRelationships?.length ?? 0) === 1 ? '' : 's'}`}
-          >
-                <TeachingRelationshipPanel
-                  diagnosisRegistryId={workspace.diagnosis.id}
-                  relationships={workspace.graph.teachingRelationships ?? []}
-                  access={access}
-                  client={client}
-                  onRefresh={onRefresh}
-                  showError={showError}
-                  showPending={showPending}
-                  showSuccess={showSuccess}
-                />
+              >
+              <TeachingRelationshipPanel
+                diagnosisRegistryId={workspace.diagnosis.id}
+                relationships={workspace.graph.teachingRelationships ?? []}
+                access={access}
+                client={client}
+                onRefresh={onRefresh}
+                showError={showError}
+                showPending={showPending}
+                showSuccess={showSuccess}
+              />
               </StreamDisclosure>
             </div>
             <StreamDisclosure
               title="Reasoning paths"
               summary={`${workspace.reasoningPaths?.length ?? 0} draft or active path${(workspace.reasoningPaths?.length ?? 0) === 1 ? '' : 's'}`}
             >
-                <ReasoningPathsPanel
-                  diagnosisRegistryId={workspace.diagnosis.id}
-                  paths={workspace.reasoningPaths ?? []}
-                  access={access}
-                  client={client}
-                  onRefresh={onRefresh}
-                  onGenerateTargetedCase={onGenerateTargetedCase}
-                  showError={showError}
-                  showPending={showPending}
-                  showSuccess={showSuccess}
-                />
+              <ReasoningPathsPanel
+                diagnosisRegistryId={workspace.diagnosis.id}
+                paths={workspace.reasoningPaths ?? []}
+                access={access}
+                client={client}
+                onRefresh={onRefresh}
+                onGenerateTargetedCase={onGenerateTargetedCase}
+                showError={showError}
+                showPending={showPending}
+                showSuccess={showSuccess}
+              />
             </StreamDisclosure>
             <div id="evidence-graph" className="scroll-mt-24" tabIndex={-1}>
               <StreamDisclosure
                 title="Evidence supporting this distinction"
                 summary={`${workspace.evidenceGraph?.relationships?.length ?? 0} evidence relationship${(workspace.evidenceGraph?.relationships?.length ?? 0) === 1 ? '' : 's'}`}
               >
-                <EvidenceGraphPanel
-                  diagnosisRegistryId={workspace.diagnosis.id}
-                  relationships={workspace.evidenceGraph?.relationships ?? []}
-                  summary={workspace.evidenceGraph?.summary}
-                  access={access}
-                  client={client}
-                  onRefresh={onRefresh}
-                  showError={showError}
-                  showPending={showPending}
-                  showSuccess={showSuccess}
-                />
+              <EvidenceGraphPanel
+                diagnosisRegistryId={workspace.diagnosis.id}
+                relationships={workspace.evidenceGraph?.relationships ?? []}
+                summary={workspace.evidenceGraph?.summary}
+                access={access}
+                client={client}
+                onRefresh={onRefresh}
+                showError={showError}
+                showPending={showPending}
+                showSuccess={showSuccess}
+              />
               </StreamDisclosure>
             </div>
             <div id="evidence-coverage" className="scroll-mt-24" tabIndex={-1}>
@@ -396,26 +385,26 @@ export function DifferentialMapTab({
               title="Coverage matrix"
               summary={`${workspace.coverageMatrix.filter((row) => row.graphCoverage !== 'covered').length} uncovered or partial rows`}
             >
-                <CoverageMatrixCard
-                  rows={workspace.coverageMatrix.filter(
-                    (row) => row.graphCoverage !== 'covered',
-                  )}
-                  selectedRow={selectedRow}
-                  onRowSelect={onRowSelect}
-                />
+              <CoverageMatrixCard
+                rows={workspace.coverageMatrix.filter(
+                  (row) => row.graphCoverage !== 'covered',
+                )}
+                selectedRow={selectedRow}
+                onRowSelect={onRowSelect}
+              />
             </StreamDisclosure>
             <StreamDisclosure
               title="Linked differential records"
               summary={`${(workspace.linkedDifferentials ?? []).length} linked differential${(workspace.linkedDifferentials ?? []).length === 1 ? '' : 's'}`}
             >
-                <LinkedDifferentialsList links={workspace.linkedDifferentials ?? []} />
+              <LinkedDifferentialsList links={workspace.linkedDifferentials ?? []} />
             </StreamDisclosure>
             <div id="graph-candidates" className="scroll-mt-24" tabIndex={-1}>
               <StreamDisclosure
                 title="Unreviewed graph candidates"
                 summary={`${workspace.graph.candidates.length} candidate${workspace.graph.candidates.length === 1 ? '' : 's'}`}
               >
-                  <GraphCandidateList candidates={workspace.graph.candidates} />
+                <GraphCandidateList candidates={workspace.graph.candidates} />
               </StreamDisclosure>
             </div>
           </EditorialStream>
@@ -429,11 +418,9 @@ export function DifferentialMapTab({
 function GraphOperatorDashboard({
   workspace,
   mimicGroups,
-  board,
 }: {
   workspace: DiagnosisEditorialWorkspace;
   mimicGroups: MimicReasoningGroup[];
-  board: GraphBoardViewModel;
 }) {
   const mimicItems = mimicGroups.flatMap((group) => group.items);
   const unresolvedDifferentials = mimicItems.filter((item) => {
@@ -444,28 +431,27 @@ function GraphOperatorDashboard({
       item.caseNeeded
     );
   });
-  const weakEdges = board.weakEdges;
-  const duplicateRisks = board.duplicateConcepts;
+  const weakEdges = workspace.graph.teachingRelationships.filter(
+    (relationship) =>
+      relationship.status !== 'ACTIVE' ||
+      (!relationship.supportingGraphFact &&
+        !relationship.supportingTeachingRule &&
+        !relationship.supportingDifferentialLinkId),
+  );
+  const duplicateRisks =
+    workspace.evidenceCoverage?.redundancy.overusedEvidence ?? [];
+  const pendingCandidates = workspace.graph.candidates.filter(
+    (candidate) => candidate.status === 'CANDIDATE',
+  );
 
   return (
     <div id="graph-readiness" className="scroll-mt-24" tabIndex={-1}>
-      <OperatorDashboard
+      <EditorialStream
         eyebrow="Graph"
         title="Graph command view"
         subtitle="Readiness, relationship support, weak edges, evidence coverage, and candidate pressure at a glance."
-        status={
-          <StatusBadge
-            status={formatLabel(workspace.graph.readiness)}
-            tone={
-              workspace.graph.readiness === 'ready' ||
-              workspace.graph.readiness === 'fact_ready'
-                ? 'success'
-                : 'warning'
-            }
-          />
-        }
       >
-        <OperatorMetricGrid
+        <CompactMetricGrid
           items={[
             {
               label: 'Readiness',
@@ -490,20 +476,13 @@ function GraphOperatorDashboard({
             },
             {
               label: 'Pending candidates',
-              value: board.pendingCandidates,
-              tone: board.pendingCandidates
+              value: workspace.graph.reviewableCandidateCount,
+              tone: workspace.graph.reviewableCandidateCount
                 ? 'warning'
                 : 'success',
             },
           ]}
         />
-      </OperatorDashboard>
-      <EditorialStream
-        eyebrow="Graph"
-        title="Relationship risk panels"
-        subtitle="The central diagnosis map is below; use these panels to triage weak edges, candidates, duplicate risks, and unresolved mimics."
-      >
-        <GraphRelationshipMap board={board} />
         <div className="grid gap-3 lg:grid-cols-2">
           <GraphSignalCard
             title="Weak edges"
@@ -530,85 +509,23 @@ function GraphOperatorDashboard({
             count={duplicateRisks.length}
             detail={
               duplicateRisks[0]
-                ? `${duplicateRisks[0].label}: ${duplicateRisks[0].reason}`
+                ? `${duplicateRisks[0].evidenceKey}: ${duplicateRisks[0].reason}`
                 : 'Evidence redundancy is not currently flagged.'
             }
             tone={duplicateRisks.length ? 'warning' : 'success'}
           />
           <GraphSignalCard
             title="Candidate pressure"
-            count={board.pendingCandidates}
+            count={pendingCandidates.length}
             detail={
-              workspace.graph.candidates.find((candidate) => candidate.status === 'CANDIDATE')?.rawText ??
+              pendingCandidates[0]?.rawText ??
               'No unreviewed candidate is currently attached.'
             }
-            tone={board.pendingCandidates ? 'warning' : 'success'}
+            tone={pendingCandidates.length ? 'warning' : 'success'}
           />
         </div>
       </EditorialStream>
     </div>
-  );
-}
-
-function GraphRelationshipMap({
-  board,
-}: {
-  board: GraphBoardViewModel;
-}) {
-  return (
-    <section className="rounded-lg border border-[var(--color-navy-border)] bg-[radial-gradient(circle_at_center,rgba(0,180,166,0.12),rgba(255,255,255,0.035)_42%,rgba(255,255,255,0.02))] p-3">
-      <div className="grid gap-3 xl:grid-cols-[minmax(13rem,0.7fr)_minmax(0,1.3fr)]">
-        <div className="flex min-h-40 flex-col items-center justify-center rounded-lg border border-[var(--color-teal)]/30 bg-[var(--color-teal)]/10 px-4 py-5 text-center">
-          <p className="editorial-eyebrow text-[var(--color-teal)]">
-            Central diagnosis
-          </p>
-          <h3 className="mt-2 text-lg font-semibold leading-6 text-slate-50">
-            {board.centralDiagnosis}
-          </h3>
-          <p className="mt-2 text-xs leading-5 text-slate-400">
-            {board.relationships.reduce((count, group) => count + group.relationships.length, 0)
-              ? `${board.relationships.reduce((count, group) => count + group.relationships.length, 0)} teaching relationships mapped`
-              : 'No teaching relationships mapped yet.'}
-          </p>
-        </div>
-        <div className="grid gap-2 md:grid-cols-2">
-          {board.relationships.map((group) => (
-            <div
-              key={group.id}
-              className="rounded-lg border border-[var(--color-navy-border)] bg-white/5 p-3"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  {group.label}
-                </p>
-                <StatusBadge status={`${group.relationships.length}`} tone={group.tone} />
-              </div>
-              {group.relationships.length ? (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {group.relationships.slice(0, 5).map((relationship) => (
-                    <StatusBadge
-                      key={`${group.id}-${relationship.id}`}
-                      status={relationship.targetDiagnosisRegistry.displayLabel}
-                      tone={group.tone}
-                    />
-                  ))}
-                  {group.relationships.length > 5 ? (
-                    <StatusBadge
-                      status={`+${group.relationships.length - 5}`}
-                      tone="neutral"
-                    />
-                  ) : null}
-                </div>
-              ) : (
-                <p className="mt-2 text-xs leading-5 text-slate-500">
-                  No real relationship data in this group yet.
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
   );
 }
 

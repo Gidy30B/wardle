@@ -5,20 +5,15 @@ import type {
   DiagnosisTeachingRulesResponse,
   WorkspaceCoverageMatrixRow,
 } from '../../../../api/admin';
-import StatusBadge from '../../../../components/ui/StatusBadge';
 import TeachingRulesCard from '../../../cases/education/TeachingRulesCard';
 import { CoverageMatrixCard } from '../CoveragePanels';
 import {
   CoverageStateStrip,
   DistinctionStream,
-  EditorialChipRow,
   EditorialFlowDivider,
-  EditorialRow,
   EditorialStream,
   EmbeddedActionBar,
   EvidenceConfidenceStrip,
-  OperatorDashboard,
-  OperatorMetricGrid,
   ReasoningThread,
   SecondaryActionDisclosure,
   StreamDisclosure,
@@ -26,10 +21,6 @@ import {
   WorkflowStateInline,
 } from '../EditorialPrimitives';
 import { coverageCompositeStatus, formatLabel } from '../workspaceTransforms';
-import {
-  buildEditorialWorkspaceViewModel,
-  type TeachingRuleCardViewModel,
-} from '../viewModels/editorialWorkspaceViewModel';
 
 export function TeachingLearningTab({
   workspace,
@@ -77,10 +68,9 @@ export function TeachingLearningTab({
   const coverageByRule = new Map(
     workspace.coverageMatrix
       .filter((row) => row.teachingRuleId)
-      .map((row) => [row.teachingRuleId as string, row]),
+      .map((row) => [row.teachingRuleId, row]),
   );
   const visibleRules = workspace.teachingRules.items.slice(0, 12);
-  const viewModel = buildEditorialWorkspaceViewModel(workspace);
 
   return (
     <div className="space-y-4">
@@ -94,52 +84,6 @@ export function TeachingLearningTab({
         />
       ) : null}
       <div id="teaching-rules-stream" className="scroll-mt-24" tabIndex={-1}>
-        <OperatorDashboard
-          eyebrow="Teaching rules"
-          title="Distinction command board"
-          subtitle="Active rules, weak discriminators, evidence support, and generation coverage in the compact operator shape from the mockup."
-          status={
-            <WorkflowStateInline
-              label={`${workspace.teachingRules.summary.needsReview} needs review`}
-              tone={
-                workspace.teachingRules.summary.needsReview
-                  ? 'warning'
-                  : 'success'
-              }
-            />
-          }
-        >
-          <OperatorMetricGrid
-            items={[
-              {
-                label: 'Active rules',
-                value: viewModel.teachingRulesBoard.totals.active,
-                tone: viewModel.teachingRulesBoard.totals.active
-                  ? 'success'
-                  : 'warning',
-                detail: 'Rules driving current teaching output',
-              },
-              {
-                label: 'Weak or draft',
-                value: viewModel.teachingRulesBoard.totals.weak,
-                tone: viewModel.teachingRulesBoard.totals.weak ? 'warning' : 'success',
-                detail: 'Needs evidence, review, or discriminator tightening',
-              },
-              {
-                label: 'Case-linked',
-                value: viewModel.teachingRulesBoard.totals.caseLinked,
-                tone: viewModel.teachingRulesBoard.totals.caseLinked ? 'success' : 'warning',
-                detail: 'Can influence playable case generation',
-              },
-              {
-                label: 'Graph-linked',
-                value: viewModel.teachingRulesBoard.totals.graphLinked,
-                tone: viewModel.teachingRulesBoard.totals.graphLinked ? 'success' : 'warning',
-                detail: 'Can support relationship graph edges',
-              },
-            ]}
-          />
-        </OperatorDashboard>
         <EditorialStream
           eyebrow="Teaching & learning"
           title="Clinical distinction stream"
@@ -177,19 +121,6 @@ export function TeachingLearningTab({
           ]}
         />
 
-        <WeakRuleQueue
-          rules={[
-            ...viewModel.teachingRulesBoard.candidateRules,
-            ...viewModel.teachingRulesBoard.weakRules,
-          ]}
-          coverageByRule={coverageByRule}
-          canReviewRules={canReviewRules}
-          reviewDisabledReason={reviewDisabledReason}
-          pendingAction={pendingAction}
-          onReviewRule={onReviewRule}
-          onRowSelect={onRowSelect}
-        />
-
         {visibleRules.map((rule, index) => {
           const coverage = coverageByRule.get(rule.id);
           const composite = coverage ? coverageCompositeStatus(coverage) : null;
@@ -209,46 +140,21 @@ export function TeachingLearningTab({
               learnerConfusion={summarizeJson(rule.requiredDifferentials)}
               discriminator={rule.rationale}
               action={
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <WorkflowStateInline
-                    label={formatLabel(rule.status)}
-                    tone={rule.status === 'ACTIVE' ? 'success' : 'warning'}
-                  />
-                  {primaryAction ? (
-                    <button
-                      type="button"
-                      disabled={!canReviewRules || pendingAction !== null}
-                      title={!canReviewRules ? reviewDisabledReason : undefined}
-                      onClick={() => onReviewRule(rule.id, primaryAction)}
-                      className="editorial-action editorial-action-primary disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {primaryLabel}
-                    </button>
-                  ) : null}
-                </div>
+                primaryAction ? (
+                  <button
+                    type="button"
+                    disabled={!canReviewRules || pendingAction !== null}
+                    title={!canReviewRules ? reviewDisabledReason : undefined}
+                    onClick={() => onReviewRule(rule.id, primaryAction)}
+                    className="editorial-action editorial-action-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {primaryLabel}
+                  </button>
+                ) : (
+                  <WorkflowStateInline label="Active" tone="success" />
+                )
               }
             >
-              <EditorialChipRow
-                items={[
-                  { label: formatLabel(rule.importance), tone: rule.importance === 'critical' ? 'danger' : 'info' },
-                  {
-                    label: rule.expectedEvidence ? 'Evidence linked' : 'Evidence missing',
-                    tone: rule.expectedEvidence ? 'success' : 'warning',
-                  },
-                  {
-                    label: rule.appliesToEducation ? 'Education' : 'No education target',
-                    tone: rule.appliesToEducation ? 'success' : 'neutral',
-                  },
-                  {
-                    label: rule.appliesToCaseGeneration ? 'Cases' : 'No case target',
-                    tone: rule.appliesToCaseGeneration ? 'success' : 'neutral',
-                  },
-                  {
-                    label: rule.appliesToGraph ? 'Graph' : 'No graph target',
-                    tone: rule.appliesToGraph ? 'success' : 'neutral',
-                  },
-                ]}
-              />
               <StreamDisclosure
                 title="Support and coverage"
                 summary={composite?.label ?? 'Coverage context'}
@@ -407,160 +313,27 @@ export function TeachingLearningTab({
             className="scroll-mt-24 space-y-3"
             tabIndex={-1}
           >
-            <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="editorial-eyebrow">Advanced rule editor</p>
-                <WorkflowStateInline
-                  label={`${visibleRules.length} shown`}
-                  tone="info"
-                />
-              </div>
-              <TeachingRulesCard
-                rules={rules}
-                loading={loading}
-                error={null}
-                pendingAction={pendingAction}
-                onGenerateCandidates={onGenerateCandidates}
-                onSeedLegacy={onSeedLegacy}
-                onCreateRule={onCreateRule}
-                onUpdateRule={onUpdateRule}
-                onReviewRule={onReviewRule}
-                canReviewRules={canReviewRules}
-                reviewDisabledReason={reviewDisabledReason}
-              />
-            </div>
-            <div className="rounded-lg border border-[var(--color-navy-border)] bg-white/4 p-3">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="editorial-eyebrow">Coverage matrix</p>
-                <WorkflowStateInline
-                  label={`${workspace.coverageMatrix.length} rows`}
-                  tone={workspace.coverageMatrix.length ? 'success' : 'warning'}
-                />
-              </div>
-              <CoverageMatrixCard
-                rows={workspace.coverageMatrix}
-                selectedRow={selectedRow}
-                onRowSelect={onRowSelect}
-              />
-            </div>
+            <TeachingRulesCard
+              rules={rules}
+              loading={loading}
+              error={null}
+              pendingAction={pendingAction}
+              onGenerateCandidates={onGenerateCandidates}
+              onSeedLegacy={onSeedLegacy}
+              onCreateRule={onCreateRule}
+              onUpdateRule={onUpdateRule}
+              onReviewRule={onReviewRule}
+              canReviewRules={canReviewRules}
+              reviewDisabledReason={reviewDisabledReason}
+            />
+            <CoverageMatrixCard
+              rows={workspace.coverageMatrix}
+              selectedRow={selectedRow}
+              onRowSelect={onRowSelect}
+            />
           </div>
         </StreamDisclosure>
         </EditorialStream>
-      </div>
-    </div>
-  );
-}
-
-function WeakRuleQueue({
-  rules,
-  coverageByRule,
-  canReviewRules,
-  reviewDisabledReason,
-  pendingAction,
-  onReviewRule,
-  onRowSelect,
-}: {
-  rules: TeachingRuleCardViewModel[];
-  coverageByRule: Map<string, WorkspaceCoverageMatrixRow>;
-  canReviewRules: boolean;
-  reviewDisabledReason: string;
-  pendingAction: string | null;
-  onReviewRule: (
-    ruleId: string,
-    action: DiagnosisTeachingRuleReviewAction,
-  ) => void;
-  onRowSelect: (row: WorkspaceCoverageMatrixRow) => void;
-}) {
-  if (!rules.length) {
-    return null;
-  }
-
-  return (
-    <div className="rounded-lg border border-[var(--color-amber)]/25 bg-[var(--color-amber)]/10 p-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="editorial-eyebrow text-[var(--color-amber)]">
-            Editorial queue
-          </p>
-          <h3 className="mt-1 text-sm font-semibold text-slate-100">
-            Weak or candidate distinctions
-          </h3>
-          <p className="mt-1 text-xs leading-5 text-slate-400">
-            Tighten these before relying on the rule set for education, cases,
-            or graph support.
-          </p>
-        </div>
-        <StatusBadge status={`${rules.length} queued`} tone="warning" />
-      </div>
-      <div className="mt-3 grid gap-2">
-        {rules.slice(0, 5).map((rule) => {
-          const coverage = coverageByRule.get(rule.id);
-          return (
-            <EditorialRow
-              key={rule.id}
-              title={rule.title}
-              subtitle={
-                rule.reason ||
-                'Needs evidence or review before becoming an active teaching distinction.'
-              }
-              tone={rule.raw.status === 'ACTIVE' ? 'warning' : 'danger'}
-              meta={
-                <StatusBadge
-                  status={rule.state}
-                  tone={rule.raw.status === 'ACTIVE' ? 'warning' : 'danger'}
-                />
-              }
-              action={
-                <div className="flex flex-wrap gap-2">
-                  {coverage ? (
-                    <button
-                      type="button"
-                      onClick={() => onRowSelect(coverage)}
-                      className="editorial-action px-2 py-1 text-xs"
-                    >
-                      Coverage
-                    </button>
-                  ) : null}
-                  {rule.raw.status !== 'ACTIVE' ? (
-                    <button
-                      type="button"
-                      disabled={!canReviewRules || pendingAction !== null}
-                      title={!canReviewRules ? reviewDisabledReason : undefined}
-                      onClick={() =>
-                        onReviewRule(
-                          rule.id,
-                          rule.raw.status === 'CANDIDATE' ? 'approve' : 'activate',
-                        )
-                      }
-                      className="editorial-action editorial-action-primary px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Promote
-                    </button>
-                  ) : null}
-                </div>
-              }
-            >
-              <EditorialChipRow
-                items={[
-                  {
-                    label: rule.evidenceCount
-                      ? 'Evidence linked'
-                      : 'Evidence missing',
-                    tone: rule.evidenceCount ? 'success' : 'warning',
-                  },
-                  {
-                    label: `${rule.linkedCases} linked cases`,
-                    tone: rule.linkedCases ? 'success' : 'neutral',
-                  },
-                  {
-                    label: `${rule.graphEdges} graph edges`,
-                    tone: rule.graphEdges ? 'success' : 'neutral',
-                  },
-                ]}
-              />
-            </EditorialRow>
-          );
-        })}
       </div>
     </div>
   );
