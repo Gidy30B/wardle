@@ -16,6 +16,7 @@ export type SafeReviewSubject = {
     | 'reasoningPath'
     | 'clueRevision'
     | 'unsupportedClaim'
+    | 'caseDraft'
     | 'aiDraft'
     | 'publication'
     | 'lifecycle'
@@ -59,6 +60,9 @@ const WORKFLOW_SAFE_ACTIONS = new Set<WorkspaceActionId>([
   'clueRevision.reject',
   'clueRevision.requestChanges',
   'clueRevision.supersede',
+  'caseDraft.accept',
+  'caseDraft.reject',
+  'caseDraft.requestChanges',
   'education.repairUnsupportedClaim',
   'education.regenerateSection',
 ]);
@@ -136,6 +140,8 @@ export function getReviewActionSubject(
       return { kind: 'reasoningPath', ...common };
     case 'clue_revision_draft':
       return { kind: 'clueRevision', ...common };
+    case 'clinical_case_draft':
+      return { kind: 'caseDraft', ...common };
     case 'unsupported_claim':
       return {
         kind: 'unsupportedClaim',
@@ -157,6 +163,7 @@ export function getReviewActionPayload(
     return { reasoningPathId: sourceId };
   }
   if (actionId.startsWith('clueRevision.')) return { draftId: sourceId };
+  if (actionId.startsWith('caseDraft.')) return { draftId: sourceId };
   if (actionId === 'education.repairUnsupportedClaim') {
     return { claimId: sourceId };
   }
@@ -209,6 +216,17 @@ function applicableActions(subject: SafeReviewSubject): WorkspaceActionId[] {
       ];
     }
     if (subject.status === 'APPROVED') return ['clueRevision.apply'];
+  }
+
+  if (subject.kind === 'caseDraft') {
+    if (subject.status === 'PENDING_REVIEW') {
+      return [
+        'caseDraft.accept',
+        'caseDraft.requestChanges',
+        'caseDraft.reject',
+      ];
+    }
+    if (subject.status === 'ACCEPTED') return ['caseDraft.apply'];
   }
 
   if (subject.kind === 'unsupportedClaim' && subject.repairable) {

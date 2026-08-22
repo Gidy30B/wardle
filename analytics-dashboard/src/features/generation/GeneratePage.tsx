@@ -944,6 +944,8 @@ function CreatedList({ items }: { items: DraftCreatedResult[] }) {
 }
 
 function CreatedCard({ item }: { item: DraftCreatedResult }) {
+  const reviewUrl = `/editorial/workspace/${item.diagnosisRegistryId}?workflow=cases&board=diagnosticCases&draftId=${item.draftId}`;
+
   return (
     <article className="rounded-xl border border-teal-200 bg-teal-50 p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">
@@ -956,6 +958,12 @@ function CreatedCard({ item }: { item: DraftCreatedResult }) {
       <p className="mt-2 text-xs text-slate-600">
         Review: {item.reviewStatus} / Validation: {item.validationStatus}
       </p>
+      <a
+        className="mt-3 inline-flex rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+        href={reviewUrl}
+      >
+        Open review packet
+      </a>
     </article>
   );
 }

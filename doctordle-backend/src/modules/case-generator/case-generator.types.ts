@@ -270,6 +270,7 @@ export type BatchGeneratedCaseResult =
       index: number;
       status: 'draft_created';
       draftId: string;
+      diagnosisRegistryId: string;
       answer: string;
       reviewStatus: string;
       validationStatus: string;

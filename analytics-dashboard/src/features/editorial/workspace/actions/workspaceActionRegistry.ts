@@ -362,6 +362,51 @@ export const WORKSPACE_ACTION_REGISTRY: Record<
     failureMessage: 'Unable to delete case annotation.',
     sourceWorkflows: ['cases', 'reasoning'],
   }),
+  'caseDraft.accept': descriptor({
+    id: 'caseDraft.accept',
+    domain: 'caseDraft',
+    intent: 'approve',
+    label: 'Accept clinical case draft',
+    description: 'Accept a generated Clinical Case Draft without applying it.',
+    requiredAccess: 'editorial',
+    successMessage: 'Clinical Case Draft accepted.',
+    failureMessage: 'Unable to accept Clinical Case Draft.',
+    sourceWorkflows: ['cases', 'reviewQueue'],
+  }),
+  'caseDraft.reject': descriptor({
+    id: 'caseDraft.reject',
+    domain: 'caseDraft',
+    intent: 'reject',
+    label: 'Reject clinical case draft',
+    description: 'Reject a generated Clinical Case Draft.',
+    requiredAccess: 'editorial',
+    successMessage: 'Clinical Case Draft rejected.',
+    failureMessage: 'Unable to reject Clinical Case Draft.',
+    sourceWorkflows: ['cases', 'reviewQueue'],
+  }),
+  'caseDraft.requestChanges': descriptor({
+    id: 'caseDraft.requestChanges',
+    domain: 'caseDraft',
+    intent: 'requestChanges',
+    label: 'Request clinical case draft changes',
+    description: 'Return a generated Clinical Case Draft for changes.',
+    requiredAccess: 'editorial',
+    successMessage: 'Clinical Case Draft changes requested.',
+    failureMessage: 'Unable to request Clinical Case Draft changes.',
+    sourceWorkflows: ['cases', 'reviewQueue'],
+  }),
+  'caseDraft.apply': descriptor({
+    id: 'caseDraft.apply',
+    domain: 'caseDraft',
+    intent: 'apply',
+    label: 'Apply accepted Clinical Case Draft',
+    description: 'Apply an accepted draft into an initial CaseRevision.',
+    requiredAccess: 'editorial',
+    confirmationRequired: true,
+    successMessage: 'Accepted Clinical Case Draft applied.',
+    failureMessage: 'Unable to apply accepted Clinical Case Draft.',
+    sourceWorkflows: ['cases', 'reviewQueue'],
+  }),
 };
 
 export const WORKSPACE_ACTION_DOMAINS: WorkspaceActionDomain[] = [
@@ -375,6 +420,7 @@ export const WORKSPACE_ACTION_DOMAINS: WorkspaceActionDomain[] = [
   'lifecycle',
   'caseCoverage',
   'caseAnnotation',
+  'caseDraft',
 ];
 
 export const WORKSPACE_ACTION_INTENTS: WorkspaceActionIntent[] = [

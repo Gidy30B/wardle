@@ -8,6 +8,7 @@ import type {
   EvidenceGraphReviewAction,
   ReasoningPathReviewAction,
   RegenerateEducationSectionPayload,
+  ReviewClinicalCaseDraftPayload,
   UpdateCaseClueDiscriminatorAnnotationPayload,
 } from '../../../../api/admin.types.ts';
 import type {
@@ -24,7 +25,8 @@ export type WorkspaceActionDomain =
   | 'claimRepair'
   | 'lifecycle'
   | 'caseCoverage'
-  | 'caseAnnotation';
+  | 'caseAnnotation'
+  | 'caseDraft';
 
 export type WorkspaceActionIntent =
   | 'approve'
@@ -72,7 +74,11 @@ export type WorkspaceActionId =
   | 'caseCoverage.delete'
   | 'caseAnnotation.create'
   | 'caseAnnotation.update'
-  | 'caseAnnotation.delete';
+  | 'caseAnnotation.delete'
+  | 'caseDraft.accept'
+  | 'caseDraft.reject'
+  | 'caseDraft.requestChanges'
+  | 'caseDraft.apply';
 
 export type WorkspaceActionDescriptor = {
   id: WorkspaceActionId;
@@ -133,6 +139,13 @@ export type ClueRevisionActionPayload = BaseActionPayload & {
   patch?: Record<string, unknown>;
 };
 
+export type CaseDraftActionPayload = BaseActionPayload & {
+  draftId?: string;
+  note?: string;
+  decision?: ReviewClinicalCaseDraftPayload['decision'];
+  idempotencyKey?: string;
+};
+
 export type ClaimRepairActionPayload = BaseActionPayload & {
   claimId?: string;
 };
@@ -173,6 +186,7 @@ export type WorkspaceActionPayload =
   | EvidenceRelationshipActionPayload
   | ReasoningPathActionPayload
   | ClueRevisionActionPayload
+  | CaseDraftActionPayload
   | ClaimRepairActionPayload
   | EducationActionPayload
   | LifecycleActionPayload

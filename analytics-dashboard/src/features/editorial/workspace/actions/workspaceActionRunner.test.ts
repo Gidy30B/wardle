@@ -90,6 +90,43 @@ test('runner blocks confirmation-required actions without confirmation', async (
   assert.match(result.error ?? '', /confirmation/);
 });
 
+test('runner dispatches Clinical Case Draft review and apply actions', async () => {
+  const calls: Array<{ actionId: string; payload: unknown }> = [];
+  let refreshCount = 0;
+  const executors: WorkspaceActionExecutorMap = {
+    caseDraft: async (actionId, payload) => {
+      calls.push({ actionId, payload });
+      return { ok: true };
+    },
+  };
+  const context = makeContext({
+    refreshWorkspace: async () => {
+      refreshCount += 1;
+    },
+  });
+
+  const accept = await runWorkspaceAction(
+    'caseDraft.accept',
+    { draftId: 'draft-1' },
+    context,
+    executors,
+  );
+  const apply = await runWorkspaceAction(
+    'caseDraft.apply',
+    { draftId: 'draft-1', confirmed: true },
+    context,
+    executors,
+  );
+
+  assert.equal(accept.ok, true);
+  assert.equal(apply.ok, true);
+  assert.deepEqual(
+    calls.map((call) => call.actionId),
+    ['caseDraft.accept', 'caseDraft.apply'],
+  );
+  assert.equal(refreshCount, 2);
+});
+
 test('runner dispatches expanded safe review actions and refreshes each success', async () => {
   const calls: Array<{ actionId: string; payload: unknown }> = [];
   let refreshCount = 0;
@@ -102,6 +139,7 @@ test('runner dispatches expanded safe review actions and refreshes each success'
     evidence: recordCall,
     reasoningPath: recordCall,
     clueRevision: recordCall,
+    caseDraft: recordCall,
     claimRepair: recordCall,
   };
   const context = makeContext({
@@ -119,6 +157,9 @@ test('runner dispatches expanded safe review actions and refreshes each success'
     ['clueRevision.reject', { draftId: 'draft-1' }],
     ['clueRevision.requestChanges', { draftId: 'draft-1' }],
     ['clueRevision.supersede', { draftId: 'draft-1' }],
+    ['caseDraft.accept', { draftId: 'draft-1' }],
+    ['caseDraft.reject', { draftId: 'draft-1' }],
+    ['caseDraft.requestChanges', { draftId: 'draft-1' }],
     ['education.repairUnsupportedClaim', { claimId: 'claim-1' }],
   ] as const;
 

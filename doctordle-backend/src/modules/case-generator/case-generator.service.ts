@@ -1526,6 +1526,7 @@ export class CaseGeneratorService {
           index: input.index,
           status: 'draft_created',
           draftId: savedCase.id,
+          diagnosisRegistryId: savedCase.diagnosisRegistryId,
           answer: normalizedCase.answer,
           reviewStatus: savedCase.reviewStatus,
           validationStatus: savedCase.validationStatus,

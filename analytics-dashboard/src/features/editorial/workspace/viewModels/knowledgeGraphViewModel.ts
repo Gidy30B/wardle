@@ -29,6 +29,7 @@ export type KnowledgeReviewItemKind =
   | 'evidence_relationship'
   | 'reasoning_path'
   | 'discriminator_draft'
+  | 'clinical_case_draft'
   | 'clue_revision_draft'
   | 'case_quality';
 

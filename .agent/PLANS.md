@@ -282,3 +282,149 @@ Full Clinical Case Draft review UX and workspace queue integration remain
 CLOSE-005. Manual `POST /cases` remains a direct authoring path outside this
 package. Generic cross-artifact controlled-application authority remains
 partially mitigated, not fully resolved.
+
+---
+
+# ExecPlan: WEOS CLOSE-005 Clinical Case Draft Review Packet and Workspace Integration
+
+## Purpose
+
+Make the CLOSE-004 Clinical Case Draft lifecycle operational from the WEOS
+Editorial Workspace without terminal/API/database use, while preserving the hard
+separation between human review decisions and controlled application.
+
+## Approved Authority
+
+Implementation package: user-provided `WEOS CLOSE-005 - Clinical Case Draft
+Review Packet and Workspace Integration`.
+Branch/worktree: `C:\Users\user\DxLab-workspace-closure`,
+`weos/workspace-closure`.
+Required baseline: `388288807b72d7e8b5297cf7fa313e40627206bf`.
+
+This package authorizes workspace read models, review packet UI, workspace
+action registration, queue/next-best-action projection and narrow draft
+inventory/read endpoints for Clinical Case Drafts only. It does not authorize
+CLOSE-006, publication/scheduling/learner exposure changes, APP-006/007/008
+architecture changes, manual case authoring redesign, seed/repair changes or a
+new generator.
+
+## Current Behavior
+
+CLOSE-004 added Clinical Case Draft persistence, review endpoints and apply
+endpoint. The dashboard API client has low-level draft read/review/apply helpers,
+and the Generate page displays draft IDs, but the diagnosis workspace does not
+yet surface diagnosis-scoped draft inventory, draft review packets, queue items
+or governed workspace actions for Clinical Case Draft decisions.
+
+## Required Invariant
+
+Clinical Case Drafts are visible and reviewable in the diagnosis workspace as
+candidate artifacts distinct from governed Cases. Pending drafts expose Accept,
+Request Changes and Reject. Accepted drafts separately expose Apply Accepted
+Draft. Applying creates a Case/CaseRevision handoff without implying APP-006
+approval, publication readiness, scheduling or learner exposure.
+
+## Scope
+
+Included: audit/reuse existing workspace action system and review queue,
+diagnosis-scoped Clinical Case Draft inventory/read model endpoint if needed,
+dashboard API types/clients, draft review packet view model/components,
+workspace action registry/runner/policy entries, Cases workflow integration,
+queue/next-action projections, generation success navigation affordance, focused
+tests and documentation updates.
+
+Excluded: new schema/migration, full workspace redesign, new generation
+architecture, publication/scheduling/learner exposure, APP architecture changes,
+seed/repair scripts, manual `POST /cases` governance redesign, and CLOSE-006.
+
+## Files Expected To Change
+
+- `.agent/PLANS.md`
+- `doctordle-backend/src/modules/case-generator/clinical-case-draft.service.ts`
+- `doctordle-backend/src/modules/admin/admin.controller.ts`
+- focused backend specs if backend read model changes
+- `analytics-dashboard/src/api/admin.ts`
+- `analytics-dashboard/src/api/admin.types.ts`
+- `analytics-dashboard/src/features/editorial/EditorialDiagnosisWorkspacePage.tsx`
+- `analytics-dashboard/src/features/editorial/workspace/actions/*`
+- `analytics-dashboard/src/features/editorial/workspace/components/*`
+- `analytics-dashboard/src/features/editorial/workspace/tabs/CasesTab.tsx`
+- `analytics-dashboard/src/features/editorial/workspace/viewModels/*`
+- focused dashboard tests for packet/policy/runner/queue behavior
+- `docs/weos/gaps/IMPLEMENTATION-GAPS.md`
+
+## Prohibited Changes
+
+No schema/migration. No seed/repair edits. No publication, readiness,
+scheduling, learner-facing or APP-006/007/008 semantic changes. No hidden
+accept-and-apply. No raw JSON/database inspector packet. No original dirty
+`DxLab` worktree edits.
+
+## Data Model Implications
+
+None expected. Existing CLOSE-004 draft models are sufficient.
+
+## API Implications
+
+Add or reuse narrow admin read endpoints so the workspace can list
+diagnosis-scoped Clinical Case Drafts efficiently and fetch a review packet.
+Existing review/apply endpoints remain authoritative for state transitions and
+conflict handling.
+
+## Testing Strategy
+
+Focused tests for draft packet view model states/actions, workspace action
+policy/runner/API invocation, queue and next-action projection, draft inventory
+not counted as Case inventory, generation-to-review navigation where feasible,
+backend read model if changed, backend build, dashboard build, `git diff
+--check` and clean final status. Playwright will be attempted only if existing
+local QA infrastructure is available without live AI generation.
+
+## Rollback/Recovery
+
+Backend changes are read-focused code only and can be reverted file-wise.
+Frontend packet/action integration can be reverted without data changes.
+
+## Progress
+
+- [x] Verify CLOSE-005 boundary and clean starting worktree.
+- [x] Audit workspace review/action/queue patterns.
+- [x] Add backend diagnosis-scoped draft read model if needed.
+- [x] Add dashboard draft packet view model and components.
+- [x] Register Clinical Case Draft workspace actions.
+- [x] Integrate Cases workflow inventory, packet, generation navigation.
+- [x] Integrate review queue and next-best-action projections.
+- [x] Add focused tests.
+- [x] Update docs.
+- [x] Run verification.
+- [x] Commit.
+
+## Remaining Risks
+
+Full end-to-end workspace operational closure, publication/scheduling path
+verification, remaining non-workspace editorial bypasses, manual case authoring
+classification and final conformance report remain for CLOSE-006.
+
+## Discoveries
+
+The existing workflow shell already centralizes action execution through
+`workspaceActionRunner`, so Clinical Case Draft review could be added as another
+domain executor instead of creating a parallel packet action path.
+
+`WorkspaceReviewActionButtons` intentionally filtered confirmation-required
+actions. CLOSE-005 keeps that behavior for queue-safe actions and allows packet
+components to include confirmation-required Apply only after a browser
+confirmation.
+
+The workspace full read model was the right place to add diagnosis-scoped draft
+inventory; no new route or schema was required.
+
+## Decisions
+
+Clinical Case Drafts are projected as draft packets on the existing Diagnostic
+Cases board rather than as a new board ID. Review queue items deep-link to the
+Cases workflow/Diagnostic Cases board.
+
+Batch generation results now carry `diagnosisRegistryId` for draft-created
+items so the standalone Generate page can link to the workspace review packet
+path without client-side inference.

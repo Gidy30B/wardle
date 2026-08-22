@@ -44,6 +44,8 @@ test('senior and destructive actions are marked explicitly', () => {
   );
   assert.equal(requiresConfirmation('publication.normalizeLifecycle'), true);
   assert.equal(requiresConfirmation('clueRevision.apply'), true);
+  assert.equal(requiresConfirmation('caseDraft.apply'), true);
+  assert.equal(requiresConfirmation('caseDraft.accept'), false);
   assert.equal(getWorkspaceActionDescriptor('caseCoverage.delete').destructive, true);
   assert.equal(requiresConfirmation('caseCoverage.delete'), true);
   assert.equal(requiresConfirmation('teachingRule.reject'), false);

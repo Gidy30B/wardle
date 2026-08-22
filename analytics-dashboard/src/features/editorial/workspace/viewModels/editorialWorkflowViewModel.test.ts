@@ -677,6 +677,44 @@ describe('buildEditorialWorkflowViewModel', () => {
     );
   });
 
+  it('projects Clinical Case Draft packets into Cases and Review Queue', () => {
+    const viewModel = buildEditorialWorkflowViewModel(
+      baseWorkspace({
+        clinicalCaseDrafts: {
+          summary: {
+            total: 1,
+            pendingReview: 1,
+            changesRequested: 0,
+            accepted: 0,
+            awaitingApplication: 0,
+            applied: 0,
+            rejected: 0,
+            blockerCount: 0,
+            warningCount: 1,
+            byStatus: { PENDING_REVIEW: 1 },
+          },
+          items: [clinicalCaseDraft()],
+        },
+      }),
+    );
+
+    assert.equal(viewModel.cases.diagnosticCases.cases.length, 0);
+    assert.equal(
+      viewModel.cases.diagnosticCases.clinicalCaseDraftPackets.length,
+      1,
+    );
+    assert.ok(
+      viewModel.reviewQueue.items.some(
+        (item) =>
+          item.kind === 'clinical_case_draft' &&
+          item.sourceId === 'draft-1',
+      ),
+    );
+    assert.ok(
+      viewModel.reviewQueue.groups.some((group) => group.id === 'drafts'),
+    );
+  });
+
   it('returns a safe empty Cases model', () => {
     const viewModel = buildEditorialWorkflowViewModel(baseWorkspace());
 
@@ -981,6 +1019,57 @@ function contentRevision(snapshot: Record<string, unknown> = {}) {
       ],
       ...snapshot,
     },
+  };
+}
+
+function clinicalCaseDraft() {
+  return {
+    id: 'draft-1',
+    diagnosisRegistryId: 'dx-1',
+    diagnosisDisplayName: 'Subarachnoid Hemorrhage',
+    generationPurpose: 'TARGETED_DISCRIMINATOR_CASE',
+    generationPurposeLabel: 'Targeted discriminator case',
+    generationMethod: 'AI_GENERATED',
+    selectionSource: 'workspace',
+    sourceIssue: null,
+    sourceIssueSummary: 'Migraine discriminator needs case support.',
+    generatedCase: {
+      title: 'Late discriminator case',
+      finalDiagnosis: 'Subarachnoid Hemorrhage',
+      difficulty: 'intermediate',
+      clueCount: 1,
+      clues: [{ value: 'Opening clue keeps mimic plausible.' }],
+      differentials: ['Migraine'],
+      explanation: { summary: 'Thunderclap onset wins.' },
+      summary: 'A generated case candidate.',
+    },
+    validation: {
+      status: 'PASSED',
+      summary: {},
+      findings: {},
+      blockers: [],
+      warnings: ['Needs human review.'],
+      blockerCount: 0,
+      warningCount: 1,
+      passed: true,
+    },
+    provenance: {
+      generationContext: {},
+      generationContextHash: 'hash-1',
+      generatedContent: {},
+      generatorVersion: 'test-v1',
+      generatedAt: '2026-08-22T00:00:00.000Z',
+      targetDifficulty: 'intermediate',
+    },
+    reviewStatus: 'PENDING_REVIEW' as const,
+    currentRequiredDecision: 'Accept, reject, or request changes.',
+    applicationAllowed: false,
+    resultingCaseId: null,
+    resultingCaseRevisionId: null,
+    latestReviewDecision: null,
+    governanceHistory: [],
+    createdAt: '2026-08-22T00:00:00.000Z',
+    updatedAt: '2026-08-22T00:00:00.000Z',
   };
 }
 

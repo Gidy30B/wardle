@@ -2,6 +2,7 @@ import { CompactPanel } from '../EditorialPrimitives.tsx';
 import { BoardEmptyState } from '../components/BoardEmptyState.tsx';
 import { BoardVerdict } from '../components/BoardVerdict.tsx';
 import { CaseReasoningCard } from '../components/CaseReasoningCard.tsx';
+import { ClinicalCaseDraftReviewPacket } from '../components/ClinicalCaseDraftReviewPacket.tsx';
 import { ClueRevisionDraftCard } from '../components/ClueRevisionDraftCard.tsx';
 import type {
   WorkspaceActionAccess,
@@ -41,6 +42,30 @@ export function DiagnosticCasesBoard({
           <BoardEmptyState
             title="No clinical cases projected"
             detail="Clinical case coverage will appear once cases are assigned to this diagnosis."
+          />
+        )}
+      </CompactPanel>
+
+      <CompactPanel
+        title="Clinical Case Draft review packets"
+        subtitle="Draft review is separate from controlled application into CaseRevision #1."
+      >
+        {board.clinicalCaseDraftPackets.length ? (
+          <div className="space-y-3">
+            {board.clinicalCaseDraftPackets.map((packet) => (
+              <ClinicalCaseDraftReviewPacket
+                key={packet.id}
+                packet={packet}
+                actionAccess={actionAccess}
+                pendingAction={pendingAction}
+                onRunAction={onRunAction}
+              />
+            ))}
+          </div>
+        ) : (
+          <BoardEmptyState
+            title="No Clinical Case Drafts"
+            detail="Generated Clinical Case Drafts will appear here before they become governed Cases."
           />
         )}
       </CompactPanel>

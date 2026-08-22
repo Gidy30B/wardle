@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import {
   CaseEditorialStatus,
+  ClinicalCaseDraftReviewDecision,
+  ClinicalCaseDraftStatus,
   CaseSource,
   DifferentialResolutionStatus,
   DiagnosisRegistryCandidateStatus,
@@ -245,6 +247,55 @@ type CaseRow = {
   }>;
 };
 
+type ClinicalCaseDraftRow = {
+  id: string;
+  diagnosisRegistryId: string;
+  generationPurpose: string;
+  generationMethod: string;
+  selectionSource: string | null;
+  sourceIssue: Prisma.JsonValue | null;
+  generationContext: Prisma.JsonValue;
+  generationContextHash: string;
+  generatedContent: Prisma.JsonValue;
+  validationStatus: ValidationOutcome;
+  validationSummary: Prisma.JsonValue;
+  validationFindings: Prisma.JsonValue;
+  blockingFindings: Prisma.JsonValue | null;
+  warningFindings: Prisma.JsonValue | null;
+  reviewStatus: ClinicalCaseDraftStatus;
+  acceptedAt: Date | null;
+  appliedAt: Date | null;
+  resultingCaseId: string | null;
+  resultingCaseRevisionId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  latestReviewDecision: {
+    id: string;
+    decision: ClinicalCaseDraftReviewDecision;
+    rationale: string | null;
+    reviewerUserId: string | null;
+    decidedAt: Date;
+  } | null;
+  reviewDecisions: Array<{
+    id: string;
+    decision: ClinicalCaseDraftReviewDecision;
+    rationale: string | null;
+    reviewerUserId: string | null;
+    decidedAt: Date;
+  }>;
+  applicationCommands: Array<{
+    id: string;
+    status: string;
+    commandAction: string;
+    actorUserId: string | null;
+    resultCaseId: string | null;
+    resultCaseRevisionId: string | null;
+    conflictReason: string | null;
+    createdAt: Date;
+    completedAt: Date | null;
+  }>;
+};
+
 type GraphFactRow = {
   id: string;
   type: DiagnosisGraphCandidateType;
@@ -293,6 +344,7 @@ type RegistryRow = {
     updatedAt: Date;
   } | null;
   cases: CaseRow[];
+  clinicalCaseDrafts: ClinicalCaseDraftRow[];
   graphFacts: GraphFactRow[];
 };
 
@@ -448,6 +500,10 @@ export class DiagnosisEditorialWorkspaceService {
       linkedDifferentials,
       teachingRelationships,
     });
+    const clinicalCaseDrafts = this.buildClinicalCaseDraftInventory(
+      registry.clinicalCaseDrafts,
+      this.diagnosisName(registry),
+    );
     const coverageMatrix = this.buildCoverageMatrix({
       coverage,
       rules: rules.rules,
@@ -538,7 +594,7 @@ export class DiagnosisEditorialWorkspaceService {
         evidenceCoverage?.coverageBreakdown?.hallucinationRiskDraftCount ?? 0,
       pendingDraftCount: aiDraftAuditTrail.filter((audit) =>
         ['PENDING_REVIEW', 'REVIEW_REQUIRED'].includes(audit.reviewStatus),
-      ).length,
+      ).length + clinicalCaseDrafts.summary.pendingReview,
       maturityOverall: maturityGovernance.breakdown.overall,
       lifecyclePlayable: lifecycle.gameplay === 'complete',
       lifecycleActive: lifecycle.curriculum !== 'blocked',
@@ -614,6 +670,7 @@ export class DiagnosisEditorialWorkspaceService {
         items: revisions,
       },
       cases,
+      clinicalCaseDrafts,
       graph: {
         readiness:
           summary?.graphReadiness.status ??
@@ -1351,6 +1408,66 @@ export class DiagnosisEditorialWorkspaceService {
                 appliedByUserId: true,
                 createdAt: true,
                 updatedAt: true,
+              },
+            },
+          },
+        },
+        clinicalCaseDrafts: {
+          orderBy: [{ createdAt: 'desc' }],
+          take: 50,
+          select: {
+            id: true,
+            diagnosisRegistryId: true,
+            generationPurpose: true,
+            generationMethod: true,
+            selectionSource: true,
+            sourceIssue: true,
+            generationContext: true,
+            generationContextHash: true,
+            generatedContent: true,
+            validationStatus: true,
+            validationSummary: true,
+            validationFindings: true,
+            blockingFindings: true,
+            warningFindings: true,
+            reviewStatus: true,
+            acceptedAt: true,
+            appliedAt: true,
+            resultingCaseId: true,
+            resultingCaseRevisionId: true,
+            createdAt: true,
+            updatedAt: true,
+            latestReviewDecision: {
+              select: {
+                id: true,
+                decision: true,
+                rationale: true,
+                reviewerUserId: true,
+                decidedAt: true,
+              },
+            },
+            reviewDecisions: {
+              orderBy: [{ decidedAt: 'asc' }],
+              select: {
+                id: true,
+                decision: true,
+                rationale: true,
+                reviewerUserId: true,
+                decidedAt: true,
+              },
+            },
+            applicationCommands: {
+              orderBy: [{ createdAt: 'asc' }],
+              select: {
+                id: true,
+                status: true,
+                commandAction: true,
+                actorUserId: true,
+                resultCaseId: true,
+                resultCaseRevisionId: true,
+                conflictReason: true,
+                createdAt: true,
+                completedAt: true,
               },
             },
           },
@@ -3527,6 +3644,246 @@ export class DiagnosisEditorialWorkspaceService {
       },
       items,
     };
+  }
+
+  private buildClinicalCaseDraftInventory(
+    drafts: ClinicalCaseDraftRow[],
+    diagnosisName: string,
+  ) {
+    const items = drafts.map((draft) =>
+      this.clinicalCaseDraftDto(draft, diagnosisName),
+    );
+    return {
+      summary: {
+        total: items.length,
+        pendingReview: items.filter((item) => item.reviewStatus === 'PENDING_REVIEW')
+          .length,
+        changesRequested: items.filter(
+          (item) => item.reviewStatus === 'CHANGES_REQUESTED',
+        ).length,
+        accepted: items.filter((item) => item.reviewStatus === 'ACCEPTED')
+          .length,
+        awaitingApplication: items.filter(
+          (item) => item.reviewStatus === 'ACCEPTED' && item.applicationAllowed,
+        ).length,
+        applied: items.filter((item) => item.reviewStatus === 'APPLIED').length,
+        rejected: items.filter((item) => item.reviewStatus === 'REJECTED').length,
+        blockerCount: items.reduce(
+          (count, item) => count + item.validation.blockerCount,
+          0,
+        ),
+        warningCount: items.reduce(
+          (count, item) => count + item.validation.warningCount,
+          0,
+        ),
+        byStatus: this.countBy(items.map((item) => item.reviewStatus)),
+      },
+      items,
+    };
+  }
+
+  private clinicalCaseDraftDto(
+    draft: ClinicalCaseDraftRow,
+    diagnosisName: string,
+  ) {
+    const generatedContent = this.jsonRecord(draft.generatedContent);
+    const generatedCase = this.jsonRecord(generatedContent.generatedCase);
+    const snapshot = this.jsonRecord(generatedContent.snapshot);
+    const explanation = this.jsonRecord(
+      generatedCase.explanation ?? snapshot.explanation,
+    );
+    const context = this.jsonRecord(draft.generationContext);
+    const sourceIssue = this.jsonRecord(draft.sourceIssue);
+    const discriminatorTarget = this.jsonRecord(
+      sourceIssue.target ?? context.sourceIssue,
+    );
+    const blockingFindings = this.issueArray(draft.blockingFindings);
+    const warningFindings = this.issueArray(draft.warningFindings);
+    const clues = this.asRecordArray(
+      (generatedCase.clues ?? snapshot.clues) as Prisma.JsonValue,
+    );
+    const differentials = this.stringArray(
+      (generatedCase.differentials ?? snapshot.differentials) as
+        | Prisma.JsonValue
+        | null,
+    );
+    const finalDiagnosis =
+      this.stringValue(generatedCase.answer) ??
+      this.stringValue(explanation.diagnosis) ??
+      diagnosisName;
+    const purpose = this.clinicalCaseDraftPurposeLabel(
+      draft.generationPurpose,
+      discriminatorTarget,
+    );
+
+    return {
+      id: draft.id,
+      diagnosisRegistryId: draft.diagnosisRegistryId,
+      diagnosisDisplayName: diagnosisName,
+      generationPurpose: draft.generationPurpose,
+      generationPurposeLabel: purpose,
+      generationMethod: draft.generationMethod,
+      selectionSource: draft.selectionSource,
+      sourceIssue: draft.sourceIssue,
+      sourceIssueSummary: this.clinicalCaseDraftSourceSummary(
+        discriminatorTarget,
+        sourceIssue,
+      ),
+      generatedCase: {
+        title: this.stringValue(generatedCase.title) ?? finalDiagnosis,
+        finalDiagnosis,
+        difficulty:
+          this.stringValue(generatedCase.difficulty) ??
+          this.stringValue(snapshot.difficulty),
+        clueCount: clues.length,
+        clues,
+        differentials,
+        explanation,
+        summary: this.stringValue(explanation.summary),
+      },
+      validation: {
+        status: draft.validationStatus,
+        summary: draft.validationSummary,
+        findings: draft.validationFindings,
+        blockers: blockingFindings,
+        warnings: warningFindings,
+        blockerCount: blockingFindings.length,
+        warningCount: warningFindings.length,
+        passed: draft.validationStatus === ValidationOutcome.PASSED,
+      },
+      provenance: {
+        generationContext: draft.generationContext,
+        generationContextHash: draft.generationContextHash,
+        generatedContent: draft.generatedContent,
+        generatorVersion: this.stringValue(context.generatorVersion),
+        generatedAt:
+          this.stringValue(context.generatedAt) ?? this.toIso(draft.createdAt),
+        targetDifficulty:
+          this.stringValue(context.difficulty) ??
+          this.stringValue(generatedContent.difficulty),
+      },
+      reviewStatus: draft.reviewStatus,
+      currentRequiredDecision: this.clinicalCaseDraftRequiredDecision(draft),
+      applicationAllowed:
+        draft.reviewStatus === ClinicalCaseDraftStatus.ACCEPTED &&
+        draft.validationStatus === ValidationOutcome.PASSED &&
+        !draft.resultingCaseId,
+      resultingCaseId: draft.resultingCaseId,
+      resultingCaseRevisionId: draft.resultingCaseRevisionId,
+      latestReviewDecision: draft.latestReviewDecision
+        ? {
+            ...draft.latestReviewDecision,
+            decidedAt: this.toIso(draft.latestReviewDecision.decidedAt),
+          }
+        : null,
+      governanceHistory: this.clinicalCaseDraftHistory(draft),
+      createdAt: this.toIso(draft.createdAt),
+      updatedAt: this.toIso(draft.updatedAt),
+    };
+  }
+
+  private clinicalCaseDraftPurposeLabel(
+    purpose: string,
+    discriminatorTarget: Record<string, Prisma.JsonValue>,
+  ) {
+    if (purpose === 'TARGETED_DISCRIMINATOR_CASE_DRAFT') {
+      const mimic = this.stringValue(discriminatorTarget.mimicName);
+      return mimic ? `Improve discrimination from ${mimic}` : 'Targeted discriminator case';
+    }
+    return 'AI clinical case generation';
+  }
+
+  private clinicalCaseDraftSourceSummary(
+    discriminatorTarget: Record<string, Prisma.JsonValue>,
+    sourceIssue: Record<string, Prisma.JsonValue>,
+  ) {
+    const discriminator = this.stringValue(discriminatorTarget.discriminator);
+    const learnerRisk = this.stringValue(discriminatorTarget.learnerRisk);
+    const editorialReason = this.stringValue(discriminatorTarget.editorialReason);
+    if (discriminator) return discriminator;
+    if (learnerRisk) return learnerRisk;
+    if (editorialReason) return editorialReason;
+    return this.stringValue(sourceIssue.source) ?? null;
+  }
+
+  private clinicalCaseDraftRequiredDecision(draft: ClinicalCaseDraftRow) {
+    if (draft.reviewStatus === ClinicalCaseDraftStatus.PENDING_REVIEW) {
+      return 'Review generated case';
+    }
+    if (draft.reviewStatus === ClinicalCaseDraftStatus.ACCEPTED) {
+      return draft.resultingCaseId ? 'Application complete' : 'Apply accepted draft';
+    }
+    if (draft.reviewStatus === ClinicalCaseDraftStatus.CHANGES_REQUESTED) {
+      return 'Await revised generation';
+    }
+    if (draft.reviewStatus === ClinicalCaseDraftStatus.REJECTED) {
+      return 'No further draft action';
+    }
+    if (draft.reviewStatus === ClinicalCaseDraftStatus.APPLIED) {
+      return 'Review resulting CaseRevision';
+    }
+    return 'Review current state';
+  }
+
+  private clinicalCaseDraftHistory(draft: ClinicalCaseDraftRow) {
+    const history = [
+      {
+        id: `${draft.id}:generated`,
+        event: 'Generated',
+        status: 'GENERATED',
+        at: this.toIso(draft.createdAt),
+        actorUserId: null,
+        note: null,
+      },
+      {
+        id: `${draft.id}:validated`,
+        event: 'Validated',
+        status: draft.validationStatus,
+        at: this.toIso(draft.createdAt),
+        actorUserId: null,
+        note: 'Automated validation only; not human approval.',
+      },
+      ...draft.reviewDecisions.map((decision) => ({
+        id: decision.id,
+        event: this.reviewDecisionLabel(decision.decision),
+        status: decision.decision,
+        at: this.toIso(decision.decidedAt),
+        actorUserId: decision.reviewerUserId,
+        note: decision.rationale,
+      })),
+      ...draft.applicationCommands.map((command) => ({
+        id: command.id,
+        event:
+          command.status === 'SUCCESS'
+            ? 'Applied accepted draft'
+            : 'Application command',
+        status: command.status,
+        at: this.toIso(command.completedAt ?? command.createdAt),
+        actorUserId: command.actorUserId,
+        note:
+          command.conflictReason ??
+          (command.resultCaseRevisionId
+            ? `CaseRevision ${command.resultCaseRevisionId}`
+            : null),
+        resultingCaseId: command.resultCaseId,
+        resultingCaseRevisionId: command.resultCaseRevisionId,
+      })),
+    ];
+
+    return history.sort((left, right) => left.at.localeCompare(right.at));
+  }
+
+  private reviewDecisionLabel(decision: ClinicalCaseDraftReviewDecision) {
+    if (decision === ClinicalCaseDraftReviewDecision.ACCEPT) return 'Accepted';
+    if (decision === ClinicalCaseDraftReviewDecision.REJECT) return 'Rejected';
+    return 'Changes requested';
+  }
+
+  private issueArray(value: Prisma.JsonValue | null | undefined) {
+    const record = this.jsonRecord(value);
+    if (Array.isArray(record.issues)) return record.issues;
+    if (Array.isArray(value)) return value;
+    return [];
   }
 
   private summarizeClueProgression(

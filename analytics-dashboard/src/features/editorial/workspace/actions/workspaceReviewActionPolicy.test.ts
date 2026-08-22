@@ -84,6 +84,28 @@ test('pending clue revisions expose decisions while apply stays deferred', () =>
   );
 });
 
+test('clinical case drafts expose review decisions and defer controlled apply', () => {
+  assert.deepEqual(
+    getReviewItemActions({
+      kind: 'caseDraft',
+      sourceId: 'draft-1',
+      status: 'PENDING_REVIEW',
+    }),
+    ['caseDraft.accept', 'caseDraft.requestChanges', 'caseDraft.reject'],
+  );
+  assert.deepEqual(
+    getDeferredReviewItemActions({
+      kind: 'caseDraft',
+      sourceId: 'draft-1',
+      status: 'ACCEPTED',
+    }),
+    ['caseDraft.apply'],
+  );
+  assert.deepEqual(getReviewActionPayload('caseDraft.accept', 'draft-1'), {
+    draftId: 'draft-1',
+  });
+});
+
 test('repairable unsupported claims expose repair', () => {
   assert.deepEqual(
     getReviewItemActions({
@@ -102,6 +124,7 @@ test('unsafe workflow operations are never surfaced', () => {
     'caseCoverage.delete',
     'teachingRule.generateCandidates',
     'clueRevision.apply',
+    'caseDraft.apply',
     'bulk.review',
   ];
 

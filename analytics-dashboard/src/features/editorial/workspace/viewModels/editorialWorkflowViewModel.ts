@@ -1,6 +1,7 @@
 import type {
   DiagnosisEditorialWorkspace,
   DiagnosisTeachingRule,
+  WorkspaceClinicalCaseDraft,
   WorkspaceCoverageGap,
   WorkspaceCoverageMatrixRow,
 } from '../../../../api/admin.types.ts';
@@ -26,6 +27,10 @@ import {
   type RecallPromptCardViewModel,
   type ScoringSystemCardViewModel,
 } from './contentCoverageViewModel.ts';
+import {
+  buildClinicalCaseDraftReviewPacket,
+  type ClinicalCaseDraftReviewPacketViewModel,
+} from './clinicalCaseDraftReviewPacketViewModel.ts';
 import {
   buildKnowledgeGraphViewModel,
   type KnowledgeGraphViewModel,
@@ -242,6 +247,7 @@ export type ReasoningWorkflowViewModel = WorkflowSectionViewModel & {
 export type DiagnosticCasesBoardViewModel = WorkflowBoardSummary & {
   cases: CaseReasoningCardViewModel[];
   clueRevisionDrafts: KnowledgeGraphViewModel['cases']['clueRevisionDrafts'];
+  clinicalCaseDraftPackets: ClinicalCaseDraftReviewPacketViewModel[];
 };
 
 export type ClueProgressionBoardViewModel = WorkflowBoardSummary & {
@@ -332,6 +338,7 @@ export function buildEditorialWorkflowViewModel(
     diagnosticReasoning,
     caseReasoning.reviewItems,
     contentCoverage.reviewItems,
+    workspace.clinicalCaseDrafts?.items ?? [],
   );
   const reviewQueueGroups = buildReviewQueueGroups(reviewQueueItems);
   const overviewConcerns = buildOverviewConcerns(knowledge, diagnosticReasoning);
@@ -370,6 +377,7 @@ export function buildEditorialWorkflowViewModel(
   const diagnosticCasesBoard = buildDiagnosticCasesBoard(
     caseReasoning,
     knowledge,
+    workspace.clinicalCaseDrafts?.items ?? [],
   );
   const clueProgressionBoard = buildClueProgressionBoard(caseReasoning);
   const caseReasoningCoverageBoard =
@@ -896,6 +904,7 @@ function buildTeachingVerdict(
 function buildDiagnosticCasesBoard(
   caseReasoning: CaseReasoningViewModel,
   knowledge: KnowledgeGraphViewModel,
+  clinicalCaseDrafts: WorkspaceClinicalCaseDraft[] = [],
 ): DiagnosticCasesBoardViewModel {
   const blockers = caseReasoning.cases.filter(
     (caseItem) => caseItem.quality === 'blocked',
@@ -904,16 +913,19 @@ function buildDiagnosticCasesBoard(
     (caseItem) => caseItem.quality === 'watch',
   ).length;
 
+  const draftPackets = clinicalCaseDrafts.map(buildClinicalCaseDraftReviewPacket);
+
   return {
     id: 'diagnosticCases',
     label: 'Diagnostic Cases',
     question: 'Diagnostic reasoning coverage',
     verdict: caseReasoning.cases.length
-      ? `${caseReasoning.cases.length} case reasoning projection(s), ${blockers} blocked.`
+      ? `${caseReasoning.cases.length} case reasoning projection(s), ${draftPackets.length} draft packet(s), ${blockers} blocked.`
       : 'No diagnostic cases are projected yet.',
     tone: blockers ? 'danger' : warnings ? 'warning' : 'success',
-    itemCount: caseReasoning.cases.length,
+    itemCount: caseReasoning.cases.length + draftPackets.length,
     cases: caseReasoning.cases,
+    clinicalCaseDraftPackets: draftPackets,
     clueRevisionDrafts: knowledge.cases.clueRevisionDrafts.filter((draft) =>
       [
         'DRAFT',
@@ -1162,6 +1174,7 @@ function buildReviewQueueItems(
   diagnosticReasoning: DiagnosticReasoningViewModel,
   caseReviewItems: KnowledgeReviewItem[] = [],
   contentReviewItems: KnowledgeReviewItem[] = [],
+  clinicalCaseDrafts: WorkspaceClinicalCaseDraft[] = [],
 ): ReviewQueueItemViewModel[] {
   const reasoningReviewItems = diagnosticReasoning.teachingRisks.map((risk) => ({
     id: `diagnostic-risk:${risk.id}`,
@@ -1200,8 +1213,47 @@ function buildReviewQueueItems(
       editorialReason: editorialReasonForReviewItem(item),
       metadata: metadataForReviewItem(item),
     })),
+    ...clinicalCaseDrafts.flatMap(mapClinicalCaseDraftQueueItem),
     ...reasoningReviewItems,
   ]);
+}
+
+function mapClinicalCaseDraftQueueItem(
+  draft: WorkspaceClinicalCaseDraft,
+): ReviewQueueItemViewModel[] {
+  if (draft.reviewStatus !== 'PENDING_REVIEW' && !draft.applicationAllowed) {
+    return [];
+  }
+
+  const apply = draft.reviewStatus === 'ACCEPTED' && draft.applicationAllowed;
+  const item: ReviewQueueItemViewModel = {
+    id: apply ? `clinical-case-draft-apply:${draft.id}` : `clinical-case-draft:${draft.id}`,
+    kind: 'clinical_case_draft',
+    severity: draft.validation.blockerCount > 0 ? 'blocker' : 'warning',
+    title: apply
+      ? 'Apply accepted Clinical Case Draft'
+      : 'Review generated Clinical Case Draft',
+    detail:
+      draft.sourceIssueSummary ??
+      draft.generatedCase.summary ??
+      draft.generationPurposeLabel,
+    targetWorkflow: 'cases',
+    targetBoard: 'diagnosticCases',
+    sourceId: draft.id,
+    reviewStatus: draft.reviewStatus,
+    raw: draft,
+    groupId: 'drafts',
+    editorialReason: apply
+      ? 'Accepted draft is awaiting separate controlled application.'
+      : 'Generated candidate case needs a human review decision before it can be applied.',
+    metadata: [
+      `Diagnosis: ${draft.diagnosisDisplayName}`,
+      `Validation: ${draft.validation.status}`,
+      `Draft: ${draft.id}`,
+    ],
+  };
+
+  return [item];
 }
 
 function buildReviewQueueGroups(
@@ -1514,6 +1566,7 @@ function groupForReviewItem(item: KnowledgeReviewItem): ReviewQueueGroupId {
   if (item.kind === 'unsupported_claim') return 'unsupportedClaims';
   if (
     item.kind === 'discriminator_draft' ||
+    item.kind === 'clinical_case_draft' ||
     item.kind === 'clue_revision_draft'
   ) {
     return 'drafts';

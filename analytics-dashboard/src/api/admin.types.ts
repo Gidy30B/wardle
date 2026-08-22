@@ -120,6 +120,7 @@ export type GenerateCaseResultItem =
       index: number;
       status: 'draft_created';
       draftId: string;
+      diagnosisRegistryId: string;
       answer: string;
       reviewStatus: string;
       validationStatus: string;
@@ -197,6 +198,80 @@ export type ClinicalCaseDraft = {
   resultingCaseRevisionId?: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type WorkspaceClinicalCaseDraft = {
+  id: string;
+  diagnosisRegistryId: string;
+  diagnosisDisplayName: string;
+  generationPurpose: string;
+  generationPurposeLabel: string;
+  generationMethod: string;
+  selectionSource?: string | null;
+  sourceIssue?: unknown;
+  sourceIssueSummary?: string | null;
+  generatedCase: {
+    title: string;
+    finalDiagnosis: string;
+    difficulty?: string | null;
+    clueCount: number;
+    clues: Array<Record<string, unknown>>;
+    differentials: string[];
+    explanation: Record<string, unknown>;
+    summary?: string | null;
+  };
+  validation: {
+    status: string;
+    summary: unknown;
+    findings: unknown;
+    blockers: unknown[];
+    warnings: unknown[];
+    blockerCount: number;
+    warningCount: number;
+    passed: boolean;
+  };
+  provenance: {
+    generationContext: unknown;
+    generationContextHash: string;
+    generatedContent: unknown;
+    generatorVersion?: string | null;
+    generatedAt: string;
+    targetDifficulty?: string | null;
+  };
+  reviewStatus: ClinicalCaseDraftReviewStatus;
+  currentRequiredDecision: string;
+  applicationAllowed: boolean;
+  resultingCaseId?: string | null;
+  resultingCaseRevisionId?: string | null;
+  latestReviewDecision?: unknown;
+  governanceHistory: Array<{
+    id: string;
+    event: string;
+    status: string;
+    at: string;
+    actorUserId?: string | null;
+    note?: string | null;
+    resultingCaseId?: string | null;
+    resultingCaseRevisionId?: string | null;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkspaceClinicalCaseDraftInventory = {
+  summary: {
+    total: number;
+    pendingReview: number;
+    changesRequested: number;
+    accepted: number;
+    awaitingApplication: number;
+    applied: number;
+    rejected: number;
+    blockerCount: number;
+    warningCount: number;
+    byStatus: Record<string, number>;
+  };
+  items: WorkspaceClinicalCaseDraft[];
 };
 
 export type ReviewClinicalCaseDraftPayload = {
@@ -2029,6 +2104,7 @@ export type DiagnosisEditorialWorkspace = {
   aiDraftAuditTrail?: AiDraftRevisionAudit[];
   discriminatorDraftReviews?: DiscriminatorDraftReview[];
   materializedClueRevisionDrafts?: CaseClueRevisionDraft[];
+  clinicalCaseDrafts?: WorkspaceClinicalCaseDraftInventory;
   workspaceSummary: {
     status: DiagnosisWorkspaceOverallStatus | 'ready' | 'needs_review' | string;
     overallScore: number | null;
@@ -3371,6 +3447,7 @@ export type EditorialCaseDetail = {
 
 export type GenerateTargetedCaseResult = {
   result: GenerateCasesResult;
+  generatedDraft?: ClinicalCaseDraft | null;
   generatedCase: EditorialCaseDetail | null;
   validation: EditorialCaseDetail['validationRuns'][number] | null;
   qualityProjection: AdminCaseQualityProjection | null;
