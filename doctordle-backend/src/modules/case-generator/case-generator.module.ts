@@ -12,6 +12,7 @@ import { EducationTeachingRulesService } from '../education/education-teaching-r
 import { DiagnosisGraphModule } from '../diagnosis-graph/diagnosis-graph.module.js';
 import { CaseGeneratorService } from './case-generator.service.js';
 import { CaseTeachingAlignmentService } from './case-teaching-alignment.service.js';
+import { ClinicalCaseDraftService } from './clinical-case-draft.service.js';
 import { DiagnosisSelectionService } from './diagnosis-selection.service.js';
 import { GenerationDeduplicationService } from './generation-deduplication.service.js';
 import { GenerationPlannerService } from './generation-planner.service.js';
@@ -20,6 +21,7 @@ import { GenerationPlannerService } from './generation-planner.service.js';
   imports: [DatabaseModule, CaseValidationModule, DiagnosisGraphModule],
   providers: [
     CaseGeneratorService,
+    ClinicalCaseDraftService,
     CaseTeachingAlignmentService,
     EditorialIntentProjectionService,
     EducationKnowledgeRulesService,
@@ -33,6 +35,6 @@ import { GenerationPlannerService } from './generation-planner.service.js';
     GenerationDeduplicationService,
     GenerationPlannerService,
   ],
-  exports: [CaseGeneratorService],
+  exports: [CaseGeneratorService, ClinicalCaseDraftService],
 })
 export class CaseGeneratorModule {}

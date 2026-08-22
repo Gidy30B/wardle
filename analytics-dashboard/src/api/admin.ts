@@ -89,6 +89,8 @@ import type {
   GenerateTargetedDiscriminatorCasePayload,
   GenerateTargetedCaseResult,
   CaseInventoryHealth,
+  ClinicalCaseDraft,
+  ClinicalCaseDraftApplicationResult,
   AiDraftDecisionAction,
   AiDraftRevisionAudit,
   ApplyCaseClueRevisionDraftResult,
@@ -105,6 +107,7 @@ import type {
   RestoreCaseRevisionPayload,
   RestoreCaseRevisionResult,
   RerunCaseValidationResult,
+  ReviewClinicalCaseDraftPayload,
   SearchDiagnosisRegistryQuery,
   StartCaseReviewResult,
   SubmitCaseReviewPayload,
@@ -544,6 +547,32 @@ export function generateCases(
   payload: GenerateCasesPayload,
 ) {
   return client.post<GenerateCasesResult>('/admin/generate-cases', payload);
+}
+
+export function getClinicalCaseDraft(client: ApiClient, draftId: string) {
+  return client.get<ClinicalCaseDraft>(`/admin/clinical-case-drafts/${draftId}`);
+}
+
+export function reviewClinicalCaseDraft(
+  client: ApiClient,
+  draftId: string,
+  payload: ReviewClinicalCaseDraftPayload,
+) {
+  return client.post(
+    `/admin/clinical-case-drafts/${draftId}/review`,
+    payload,
+  );
+}
+
+export function applyClinicalCaseDraft(
+  client: ApiClient,
+  draftId: string,
+  idempotencyKey: string,
+) {
+  return client.post<ClinicalCaseDraftApplicationResult>(
+    `/admin/clinical-case-drafts/${draftId}/apply`,
+    { idempotencyKey },
+  );
 }
 
 export function getEditorialStatusSummary(client: ApiClient) {

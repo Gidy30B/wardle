@@ -92,15 +92,18 @@ export function buildGenerationSummary(
     event: 'generate_cases.completed',
     requested: result.requested,
     created: result.created,
+    draftCreated: result.draftCreated,
     failed: result.failed,
     skipped: result.skipped,
     generationMode: 'registry_target',
     plannerDiagnostics: result.plannerDiagnostics,
-    createdCases: result.results
-      .filter((item) => item.status === 'created')
+    createdDrafts: result.results
+      .filter((item) => item.status === 'draft_created')
       .map((item) => ({
-        id: item.caseId,
+        id: item.draftId,
         title: item.answer,
+        reviewStatus: item.reviewStatus,
+        validationStatus: item.validationStatus,
       })),
     errors: result.results
       .filter((item) => item.status === 'failed')

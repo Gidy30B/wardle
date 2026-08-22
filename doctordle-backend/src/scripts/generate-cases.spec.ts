@@ -38,14 +38,15 @@ describe('generate-cases CLI helpers', () => {
     });
   });
 
-  it('builds a stdout summary with planner diagnostics, created cases, and errors', () => {
+  it('builds a stdout summary with planner diagnostics, created drafts, and errors', () => {
     const result: GenerateBatchResult = {
       batchId: 'batch-1',
       requested: 3,
       generated: 3,
       accepted: 1,
       rejected: 1,
-      created: 1,
+      created: 0,
+      draftCreated: 1,
       skipped: 1,
       failed: 1,
       averageQualityScore: 91,
@@ -74,9 +75,11 @@ describe('generate-cases CLI helpers', () => {
       results: [
         {
           index: 0,
-          status: 'created',
-          caseId: 'case-1',
+          status: 'draft_created',
+          draftId: 'draft-1',
           answer: 'Asthma',
+          reviewStatus: 'PENDING_REVIEW',
+          validationStatus: 'PASSED',
         },
         {
           index: 1,
@@ -97,15 +100,18 @@ describe('generate-cases CLI helpers', () => {
     ).toEqual({
       event: 'generate_cases.completed',
       requested: 3,
-      created: 1,
+      created: 0,
+      draftCreated: 1,
       failed: 1,
       skipped: 1,
       generationMode: 'registry_target',
       plannerDiagnostics: result.plannerDiagnostics,
-      createdCases: [
+      createdDrafts: [
         {
-          id: 'case-1',
+          id: 'draft-1',
           title: 'Asthma',
+          reviewStatus: 'PENDING_REVIEW',
+          validationStatus: 'PASSED',
         },
       ],
       errors: [

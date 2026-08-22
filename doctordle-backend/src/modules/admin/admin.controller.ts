@@ -13,7 +13,10 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { DifferentialResolutionStatus } from '@prisma/client';
+import {
+  ClinicalCaseDraftReviewDecision,
+  DifferentialResolutionStatus,
+} from '@prisma/client';
 import { DiagnosisRegistryCandidateStatus } from '@prisma/client';
 import type { AuthenticatedRequest } from '../../auth/authenticated-request.interface';
 import {
@@ -22,6 +25,7 @@ import {
 } from '../../auth/editorial-permission.decorator';
 import { canPublishEditorial } from '../../auth/roles';
 import { CaseGeneratorService } from '../case-generator/case-generator.service';
+import { ClinicalCaseDraftService } from '../case-generator/clinical-case-draft.service';
 import { AdminGuard } from './admin.guard';
 import { CaseReviewService } from './case-review.service';
 import { CasePublicationGovernanceService } from './case-publication-governance.service';
@@ -118,6 +122,15 @@ type AiDraftDecisionBody = {
   note?: string | null;
 };
 
+type ClinicalCaseDraftReviewBody = {
+  decision?: ClinicalCaseDraftReviewDecision;
+  rationale?: string | null;
+};
+
+type ClinicalCaseDraftApplyBody = {
+  idempotencyKey?: string;
+};
+
 type CaseClueRevisionDraftUpdateBody = {
   revisedClue?: string | null;
   addedClue?: string | null;
@@ -193,6 +206,7 @@ export class AdminController {
     private readonly diagnosisRegistryMetadataSuggestionService: DiagnosisRegistryMetadataSuggestionService,
     private readonly diagnosisRegistryMergeAnalysisService: DiagnosisRegistryMergeAnalysisService,
     private readonly diagnosisRegistryMergeExecutionService: DiagnosisRegistryMergeExecutionService,
+    private readonly clinicalCaseDraftService: ClinicalCaseDraftService,
     private readonly reasoningDraftValidationService?: ReasoningDraftValidationService,
   ) {}
 
@@ -963,6 +977,52 @@ export class AdminController {
     @Param('caseId', new ParseUUIDPipe()) caseId: string,
   ) {
     return this.caseReviewService.getCaseDetail(caseId);
+  }
+
+  @Get('clinical-case-drafts/:draftId')
+  @EditorialAccess()
+  async getClinicalCaseDraft(
+    @Param('draftId', new ParseUUIDPipe()) draftId: string,
+  ) {
+    return this.clinicalCaseDraftService.getDraft(draftId);
+  }
+
+  @Post('clinical-case-drafts/:draftId/review')
+  @EditorialAccess()
+  async reviewClinicalCaseDraft(
+    @Param('draftId', new ParseUUIDPipe()) draftId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: ClinicalCaseDraftReviewBody,
+  ) {
+    if (
+      !body?.decision ||
+      !Object.values(ClinicalCaseDraftReviewDecision).includes(body.decision)
+    ) {
+      throw new BadRequestException(
+        'decision must be ACCEPT, REJECT, or REQUEST_CHANGES',
+      );
+    }
+
+    return this.clinicalCaseDraftService.reviewDraft({
+      draftId,
+      decision: body.decision,
+      reviewerUserId: request.user.id,
+      rationale: body.rationale ?? null,
+    });
+  }
+
+  @Post('clinical-case-drafts/:draftId/apply')
+  @EditorialAccess()
+  async applyClinicalCaseDraft(
+    @Param('draftId', new ParseUUIDPipe()) draftId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: ClinicalCaseDraftApplyBody,
+  ) {
+    return this.clinicalCaseDraftService.applyAcceptedDraft({
+      draftId,
+      idempotencyKey: body?.idempotencyKey ?? '',
+      actorUserId: request.user.id,
+    });
   }
 
   @Get('diagnosis-workspace/:diagnosisRegistryId/full')

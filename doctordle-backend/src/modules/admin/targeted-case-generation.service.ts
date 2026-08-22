@@ -3,12 +3,11 @@ import { DiagnosisRegistryStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { CaseGeneratorService } from '../case-generator/case-generator.service';
 import type { GenerateCaseInput } from '../case-generator/case-generator.types';
-import { CaseReviewService } from './case-review.service';
+import { ClinicalCaseDraftService } from '../case-generator/clinical-case-draft.service';
 import type {
   DiscriminatorGenerationIntent,
   TargetedDiscriminatorGenerationRequest,
 } from './clue-progression-analysis.service';
-import { ReasoningDraftValidationService } from './reasoning-draft-validation.service';
 import { ReasoningPathService } from './reasoning-path.service';
 import { TeachingRulesAdminService } from './teaching-rules-admin.service';
 
@@ -42,10 +41,9 @@ export class TargetedCaseGenerationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly caseGenerator: CaseGeneratorService,
-    private readonly caseReviewService: CaseReviewService,
+    private readonly clinicalCaseDraftService: ClinicalCaseDraftService,
     private readonly teachingRulesAdminService?: TeachingRulesAdminService,
     private readonly reasoningPathService?: ReasoningPathService,
-    private readonly reasoningDraftValidationService?: ReasoningDraftValidationService,
   ) {}
 
   async generate(input: {
@@ -80,32 +78,32 @@ export class TargetedCaseGenerationService {
         discriminatorTarget: input.payload.discriminatorTarget,
       },
     });
-    const created = result.results.find((item) => item.status === 'created');
+    const created = result.results.find(
+      (item) => item.status === 'draft_created',
+    );
 
     if (!created) {
       return {
         result,
+        generatedDraft: null,
         generatedCase: null,
         validation: null,
+        draftValidation: null,
         qualityProjection: null,
       };
     }
 
-    const generatedCase = await this.caseReviewService.getCaseDetail(
-      created.caseId,
+    const generatedDraft = await this.clinicalCaseDraftService.getDraft(
+      created.draftId,
     );
-    const draftValidation =
-      await this.reasoningDraftValidationService?.runAfterGeneration({
-        artifactType: 'CASE',
-        artifactId: created.caseId,
-      });
 
     return {
       result,
-      generatedCase,
-      validation: generatedCase.validationRuns?.[0] ?? null,
-      draftValidation,
-      qualityProjection: generatedCase.qualityProjection ?? null,
+      generatedDraft,
+      generatedCase: null,
+      validation: generatedDraft.validation ?? null,
+      draftValidation: null,
+      qualityProjection: null,
     };
   }
 
@@ -141,8 +139,11 @@ export class TargetedCaseGenerationService {
       diagnosisRegistryId: input.diagnosisRegistryId,
       target,
       proposedOutput: {
-        title: result.generatedCase?.title ?? undefined,
-        caseDraft: result.generatedCase,
+        title:
+          result.generatedDraft?.generatedContent?.generatedCase?.title ??
+          result.generatedDraft?.diagnosis?.displayLabel ??
+          undefined,
+        caseDraft: result.generatedDraft,
         clueProgressionRationale:
           'Generated case should keep the mimic plausible early, then separate it with the target discriminator.',
         expectedMimicElimination: target.mimicName,
@@ -152,7 +153,7 @@ export class TargetedCaseGenerationService {
     const audit = await this.prisma.aiDraftRevisionAudit.create({
       data: {
         diagnosisRegistryId: input.diagnosisRegistryId,
-        caseId: result.generatedCase?.id ?? target.caseId ?? null,
+        caseId: target.caseId ?? null,
         actionType: 'generate_targeted_discriminator_case',
         sourceIssue: this.toInputJson({
           source: 'targeted_generation_opportunity',
@@ -167,6 +168,7 @@ export class TargetedCaseGenerationService {
         }),
         generatedOutput: this.toInputJson({
           result,
+          draftId: result.generatedDraft?.id ?? null,
           discriminatorTarget: target,
           reviewPayload,
           intendedMimicElimination: target.mimicName,
@@ -178,7 +180,7 @@ export class TargetedCaseGenerationService {
         }),
         affectedArtifactType: 'TARGETED_DISCRIMINATOR_CASE_DRAFT',
         affectedArtifactId:
-          result.generatedCase?.id ?? target.caseId ?? input.diagnosisRegistryId,
+          result.generatedDraft?.id ?? target.caseId ?? input.diagnosisRegistryId,
         reviewStatus: 'PENDING_REVIEW',
         createdByUserId: input.userId ?? null,
       },

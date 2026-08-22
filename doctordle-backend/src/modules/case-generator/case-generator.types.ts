@@ -1,4 +1,3 @@
-import type { Case as PrismaCase } from '@prisma/client';
 import type { GenerationContext } from '../editorial/generation-context-builder.service';
 
 export type DiscriminatorGenerationTarget = {
@@ -161,6 +160,11 @@ export type SaveGeneratedCaseOptions = {
   difficulty?: string;
   seenAnswers?: Set<string>;
   skipExistingAnswerCheck?: boolean;
+  generationContext?: unknown;
+  generationPurpose?: string;
+  selectionSource?: string | null;
+  sourceIssue?: unknown;
+  createdByUserId?: string | null;
 };
 
 export type GenerateBatchOptions = {
@@ -264,9 +268,11 @@ export type PlannedGenerationSlot = {
 export type BatchGeneratedCaseResult =
   | {
       index: number;
-      status: 'created';
-      caseId: string;
+      status: 'draft_created';
+      draftId: string;
       answer: string;
+      reviewStatus: string;
+      validationStatus: string;
     }
   | {
       index: number;
@@ -294,6 +300,7 @@ export type GenerateBatchResult = {
   accepted: number;
   rejected: number;
   created: number;
+  draftCreated: number;
   skipped: number;
   failed: number;
   averageQualityScore: number | null;
@@ -302,7 +309,9 @@ export type GenerateBatchResult = {
   failureSummary?: CaseGenerationFailureSummary;
 };
 
-export type SavedGeneratedCase = Pick<
-  PrismaCase,
-  'id' | 'title' | 'difficulty' | 'date'
->;
+export type SavedGeneratedCase = {
+  id: string;
+  diagnosisRegistryId: string;
+  reviewStatus: string;
+  validationStatus: string;
+};

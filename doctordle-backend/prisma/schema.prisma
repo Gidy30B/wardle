@@ -351,6 +351,27 @@ enum AiDraftReviewStatus {
   SUPERSEDED
 }
 
+enum ClinicalCaseDraftStatus {
+  PENDING_REVIEW
+  CHANGES_REQUESTED
+  ACCEPTED
+  REJECTED
+  SUPERSEDED
+  APPLIED
+}
+
+enum ClinicalCaseDraftReviewDecision {
+  ACCEPT
+  REJECT
+  REQUEST_CHANGES
+}
+
+enum ClinicalCaseDraftApplicationStatus {
+  PENDING
+  SUCCESS
+  CONFLICT
+}
+
 model Diagnosis {
   id            String               @id @default(uuid())
   name          String               @unique
@@ -476,6 +497,7 @@ model DiagnosisRegistry {
   caseEscalationAnnotations             CaseEscalationAnnotation[]
   caseClueProgressionAnalyses           CaseClueProgressionAnalysis[]
   aiDraftRevisionAudits                 AiDraftRevisionAudit[]
+  clinicalCaseDrafts                    ClinicalCaseDraft[]
 
   @@index([status])
   @@index([onboardingStatus])
@@ -492,9 +514,9 @@ model DiagnosisRegistry {
 }
 
 model ReasoningPath {
-  id                                String              @id @default(uuid())
+  id                                String                     @id @default(uuid())
   diagnosisRegistryId               String
-  normalizedKey                     String              @unique
+  normalizedKey                     String                     @unique
   title                             String
   reasoningGoal                     ReasoningGoal
   primaryDifferentialIds            Json?
@@ -507,14 +529,14 @@ model ReasoningPath {
   forbiddenEvidencePatterns         Json?
   recommendedClueDistribution       Json?
   generationPurpose                 GenerationPurpose
-  readinessScore                    Int                 @default(0)
-  status                            ReasoningPathStatus @default(CANDIDATE)
+  readinessScore                    Int                        @default(0)
+  status                            ReasoningPathStatus        @default(CANDIDATE)
   reviewedByUserId                  String?
   reviewedAt                        DateTime?
-  createdAt                         DateTime            @default(now())
-  updatedAt                         DateTime            @updatedAt
-  diagnosisRegistry                 DiagnosisRegistry   @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
-  reviewedByUser                    User?               @relation("ReasoningPathReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  createdAt                         DateTime                   @default(now())
+  updatedAt                         DateTime                   @updatedAt
+  diagnosisRegistry                 DiagnosisRegistry          @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  reviewedByUser                    User?                      @relation("ReasoningPathReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
   caseEscalationAnnotations         CaseEscalationAnnotation[]
 
   @@index([diagnosisRegistryId])
@@ -852,52 +874,53 @@ model DiagnosisAlias {
 }
 
 model Case {
-  id                         String                          @id @default(uuid())
-  publicNumber               Int?                            @unique
-  title                      String
-  date                       DateTime                        @unique
-  difficulty                 String
-  history                    String
-  symptoms                   String[]
-  labs                       Json?
-  clues                      Json?
-  explanation                Json?
-  differentials              String[]                        @default([])
-  editorialStatus            CaseEditorialStatus?
-  approvedAt                 DateTime?
-  publishedAt                DateTime?
-  approvedByUserId           String?
-  currentRevisionId          String?                         @unique
-  diagnosisId                String?
-  diagnosisRegistryId        String?
-  proposedDiagnosisText      String
-  diagnosisMappingStatus     DiagnosisMappingStatus
-  diagnosisMappingMethod     DiagnosisMappingMethod
-  diagnosisMappingConfidence Float?
-  diagnosisEditorialNote     String?
-  diagnosis                  Diagnosis?                      @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
-  diagnosisRegistry          DiagnosisRegistry?              @relation("CaseDiagnosisRegistry", fields: [diagnosisRegistryId], references: [id], onDelete: SetNull)
-  approvedBy                 User?                           @relation("CaseApprovedByUser", fields: [approvedByUserId], references: [id], onDelete: SetNull)
-  currentRevision            CaseRevision?                   @relation("CaseCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
-  attempts                   Attempt[]
-  sessions                   GameSession[]
-  dailyCases                 DailyCase[]
-  hints                      HintContent[]
-  explanations               ExplanationContent[]
-  validationRuns             CaseValidationRun[]
-  reviews                    CaseReview[]
-  governedApprovalDecisions  GovernedCaseRevisionApprovalDecision[]
-  publicationDecisions       CaseRevisionPublicationDecision[]
-  revisions                  CaseRevision[]                  @relation("CaseRevisions")
-  differentialMappings       CaseDifferentialMapping[]
-  differentialLinks          CaseDifferentialLink[]
-  evidenceRelationships      DiagnosisEvidenceRelationship[] @relation("DiagnosisEvidenceRelationshipCase")
-  learningGoalCoverage       CaseLearningGoalCoverage[]
-  escalationAnnotations      CaseEscalationAnnotation[]
-  clueProgressionAnalyses    CaseClueProgressionAnalysis[]
+  id                           String                                 @id @default(uuid())
+  publicNumber                 Int?                                   @unique
+  title                        String
+  date                         DateTime                               @unique
+  difficulty                   String
+  history                      String
+  symptoms                     String[]
+  labs                         Json?
+  clues                        Json?
+  explanation                  Json?
+  differentials                String[]                               @default([])
+  editorialStatus              CaseEditorialStatus?
+  approvedAt                   DateTime?
+  publishedAt                  DateTime?
+  approvedByUserId             String?
+  currentRevisionId            String?                                @unique
+  diagnosisId                  String?
+  diagnosisRegistryId          String?
+  proposedDiagnosisText        String
+  diagnosisMappingStatus       DiagnosisMappingStatus
+  diagnosisMappingMethod       DiagnosisMappingMethod
+  diagnosisMappingConfidence   Float?
+  diagnosisEditorialNote       String?
+  diagnosis                    Diagnosis?                             @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
+  diagnosisRegistry            DiagnosisRegistry?                     @relation("CaseDiagnosisRegistry", fields: [diagnosisRegistryId], references: [id], onDelete: SetNull)
+  approvedBy                   User?                                  @relation("CaseApprovedByUser", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  currentRevision              CaseRevision?                          @relation("CaseCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
+  attempts                     Attempt[]
+  sessions                     GameSession[]
+  dailyCases                   DailyCase[]
+  hints                        HintContent[]
+  explanations                 ExplanationContent[]
+  validationRuns               CaseValidationRun[]
+  reviews                      CaseReview[]
+  governedApprovalDecisions    GovernedCaseRevisionApprovalDecision[]
+  publicationDecisions         CaseRevisionPublicationDecision[]
+  revisions                    CaseRevision[]                         @relation("CaseRevisions")
+  differentialMappings         CaseDifferentialMapping[]
+  differentialLinks            CaseDifferentialLink[]
+  evidenceRelationships        DiagnosisEvidenceRelationship[]        @relation("DiagnosisEvidenceRelationshipCase")
+  learningGoalCoverage         CaseLearningGoalCoverage[]
+  escalationAnnotations        CaseEscalationAnnotation[]
+  clueProgressionAnalyses      CaseClueProgressionAnalysis[]
   clueDiscriminatorAnnotations CaseClueDiscriminatorAnnotation[]
-  clueRevisionDrafts         CaseClueRevisionDraft[]
-  aiDraftRevisionAudits      AiDraftRevisionAudit[]
+  clueRevisionDrafts           CaseClueRevisionDraft[]
+  aiDraftRevisionAudits        AiDraftRevisionAudit[]
+  clinicalCaseDrafts           ClinicalCaseDraft[]
 
   @@index([diagnosisId])
   @@index([diagnosisRegistryId])
@@ -905,7 +928,7 @@ model Case {
 }
 
 model CaseClueDiscriminatorAnnotation {
-  id                      String   @id @default(uuid())
+  id                      String    @id @default(uuid())
   caseId                  String
   clueOrder               Int
   clueIndex               Int?
@@ -913,50 +936,50 @@ model CaseClueDiscriminatorAnnotation {
   eliminatedDiagnosisName String
   discriminator           String
   reasoning               String?
-  eliminationStrength     String   @default("moderate")
-  educationalValue        String   @default("medium")
+  eliminationStrength     String    @default("moderate")
+  educationalValue        String    @default("medium")
   reviewerUserId          String?
   reviewedAt              DateTime?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-  case                    Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  case                    Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
 
   @@index([caseId, clueOrder])
   @@index([caseId, eliminatedDiagnosisName])
 }
 
 model CaseClueProgressionAnalysis {
-  id                        String            @id @default(uuid())
-  caseId                    String
-  diagnosisRegistryId       String?
-  analysisVersion           String            @default("heuristic_v1")
-  diagnosticStates          Json
-  mimicCollapses            Json
-  discriminatorEmergences   Json
-  differentialElimination   Json              @default("[]")
-  leadingDifferentials      Json
-  remainingMimics           Json
-  discriminatorSignals      Json
-  editorialSignals          Json
-  likelyLockInClue          Int?
-  confidenceEstimate        Float?
-  ambiguityScore            Float             @default(0)
-  prematureLeakFlag         Boolean           @default(false)
-  unresolvedAmbiguityFlag   Boolean           @default(false)
-  totalMimicsTracked        Int               @default(0)
-  eliminatedMimicCount      Int               @default(0)
-  unresolvedMimicCount      Int               @default(0)
-  persistentConfusionCount  Int               @default(0)
-  weakEliminationCount      Int               @default(0)
-  explicitDiscriminatorAnnotationCount Int     @default(0)
-  heuristicOnlyEliminationCount Int            @default(0)
-  missingEditorialAnnotationCount Int          @default(0)
-  editorialNotes            String?
-  generatedAt               DateTime          @default(now())
-  createdAt                 DateTime          @default(now())
-  updatedAt                 DateTime          @updatedAt
-  case                      Case              @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  diagnosisRegistry         DiagnosisRegistry? @relation(fields: [diagnosisRegistryId], references: [id], onDelete: SetNull)
+  id                                   String             @id @default(uuid())
+  caseId                               String
+  diagnosisRegistryId                  String?
+  analysisVersion                      String             @default("heuristic_v1")
+  diagnosticStates                     Json
+  mimicCollapses                       Json
+  discriminatorEmergences              Json
+  differentialElimination              Json               @default("[]")
+  leadingDifferentials                 Json
+  remainingMimics                      Json
+  discriminatorSignals                 Json
+  editorialSignals                     Json
+  likelyLockInClue                     Int?
+  confidenceEstimate                   Float?
+  ambiguityScore                       Float              @default(0)
+  prematureLeakFlag                    Boolean            @default(false)
+  unresolvedAmbiguityFlag              Boolean            @default(false)
+  totalMimicsTracked                   Int                @default(0)
+  eliminatedMimicCount                 Int                @default(0)
+  unresolvedMimicCount                 Int                @default(0)
+  persistentConfusionCount             Int                @default(0)
+  weakEliminationCount                 Int                @default(0)
+  explicitDiscriminatorAnnotationCount Int                @default(0)
+  heuristicOnlyEliminationCount        Int                @default(0)
+  missingEditorialAnnotationCount      Int                @default(0)
+  editorialNotes                       String?
+  generatedAt                          DateTime           @default(now())
+  createdAt                            DateTime           @default(now())
+  updatedAt                            DateTime           @updatedAt
+  case                                 Case               @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  diagnosisRegistry                    DiagnosisRegistry? @relation(fields: [diagnosisRegistryId], references: [id], onDelete: SetNull)
 
   @@unique([caseId])
   @@index([diagnosisRegistryId])
@@ -965,21 +988,21 @@ model CaseClueProgressionAnalysis {
 }
 
 model CaseLearningGoalCoverage {
-  id                  String            @id @default(uuid())
-  diagnosisRegistryId String
-  caseId              String
-  learningGoalId      String
-  learningGoal        String
-  coverageStrength    Int               @default(0)
+  id                    String            @id @default(uuid())
+  diagnosisRegistryId   String
+  caseId                String
+  learningGoalId        String
+  learningGoal          String
+  coverageStrength      Int               @default(0)
   coveredDiscriminators Json?
   missingDiscriminators Json?
-  coveredMimics       Json?
-  missingMimics       Json?
-  evidenceSource      String            @default("editorial_annotation")
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-  diagnosisRegistry   DiagnosisRegistry @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
-  case                Case              @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  coveredMimics         Json?
+  missingMimics         Json?
+  evidenceSource        String            @default("editorial_annotation")
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  diagnosisRegistry     DiagnosisRegistry @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  case                  Case              @relation(fields: [caseId], references: [id], onDelete: Cascade)
 
   @@unique([caseId, learningGoalId])
   @@index([diagnosisRegistryId])
@@ -1000,7 +1023,7 @@ model CaseEscalationAnnotation {
   updatedAt           DateTime          @updatedAt
   diagnosisRegistry   DiagnosisRegistry @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
   case                Case              @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  reasoningPath       ReasoningPath?     @relation(fields: [reasoningPathId], references: [id], onDelete: SetNull)
+  reasoningPath       ReasoningPath?    @relation(fields: [reasoningPathId], references: [id], onDelete: SetNull)
 
   @@unique([caseId, escalationType])
   @@index([diagnosisRegistryId])
@@ -1010,27 +1033,27 @@ model CaseEscalationAnnotation {
 }
 
 model AiDraftRevisionAudit {
-  id                  String              @id @default(uuid())
-  diagnosisRegistryId String
-  caseId              String?
-  actionType          String
-  sourceIssue         Json
-  inputContext        Json
-  generatedOutput     Json
-  editorDecision      String?
-  reviewerUserId      String?
-  decisionAt          DateTime?
-  reviewNote          String?
+  id                   String              @id @default(uuid())
+  diagnosisRegistryId  String
+  caseId               String?
+  actionType           String
+  sourceIssue          Json
+  inputContext         Json
+  generatedOutput      Json
+  editorDecision       String?
+  reviewerUserId       String?
+  decisionAt           DateTime?
+  reviewNote           String?
   affectedArtifactType String
-  affectedArtifactId  String
-  reviewStatus        AiDraftReviewStatus @default(PENDING_REVIEW)
-  createdByUserId     String?
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  diagnosisRegistry   DiagnosisRegistry   @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
-  case                Case?               @relation(fields: [caseId], references: [id], onDelete: SetNull)
-  createdByUser       User?               @relation("AiDraftRevisionAuditCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  reviewerUser        User?               @relation("AiDraftRevisionAuditReviewerUser", fields: [reviewerUserId], references: [id], onDelete: SetNull)
+  affectedArtifactId   String
+  reviewStatus         AiDraftReviewStatus @default(PENDING_REVIEW)
+  createdByUserId      String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  diagnosisRegistry    DiagnosisRegistry   @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  case                 Case?               @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  createdByUser        User?               @relation("AiDraftRevisionAuditCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  reviewerUser         User?               @relation("AiDraftRevisionAuditReviewerUser", fields: [reviewerUserId], references: [id], onDelete: SetNull)
 
   @@index([diagnosisRegistryId, createdAt])
   @@index([actionType])
@@ -1040,36 +1063,128 @@ model AiDraftRevisionAudit {
   @@index([reviewerUserId])
 }
 
+model ClinicalCaseDraft {
+  id                      String                                  @id @default(uuid())
+  diagnosisRegistryId     String
+  artifactFamily          String                                  @default("CLINICAL_CASE")
+  generationPurpose       String                                  @default("AI_CLINICAL_CASE_GENERATION")
+  generationMethod        String                                  @default("registry_target")
+  selectionSource         String?
+  sourceIssue             Json?
+  generationContext       Json
+  generationContextHash   String
+  generatedContent        Json
+  validationStatus        ValidationOutcome
+  validationSummary       Json
+  validationFindings      Json
+  blockingFindings        Json?
+  warningFindings         Json?
+  reviewStatus            ClinicalCaseDraftStatus                 @default(PENDING_REVIEW)
+  latestReviewDecisionId  String?                                 @unique
+  acceptedAt              DateTime?
+  acceptedByUserId        String?
+  appliedAt               DateTime?
+  appliedByUserId         String?
+  resultingCaseId         String?
+  resultingCaseRevisionId String?
+  supersededByDraftId     String?
+  createdByUserId         String?
+  createdAt               DateTime                                @default(now())
+  updatedAt               DateTime                                @updatedAt
+  diagnosisRegistry       DiagnosisRegistry                       @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  latestReviewDecision    ClinicalCaseDraftReviewDecisionRecord?  @relation("ClinicalCaseDraftLatestDecision", fields: [latestReviewDecisionId], references: [id], onDelete: SetNull)
+  acceptedByUser          User?                                   @relation("ClinicalCaseDraftAcceptedByUser", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+  appliedByUser           User?                                   @relation("ClinicalCaseDraftAppliedByUser", fields: [appliedByUserId], references: [id], onDelete: SetNull)
+  createdByUser           User?                                   @relation("ClinicalCaseDraftCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  resultingCase           Case?                                   @relation(fields: [resultingCaseId], references: [id], onDelete: SetNull)
+  resultingCaseRevision   CaseRevision?                           @relation(fields: [resultingCaseRevisionId], references: [id], onDelete: SetNull)
+  supersededByDraft       ClinicalCaseDraft?                      @relation("ClinicalCaseDraftSupersession", fields: [supersededByDraftId], references: [id], onDelete: SetNull)
+  supersededDrafts        ClinicalCaseDraft[]                     @relation("ClinicalCaseDraftSupersession")
+  reviewDecisions         ClinicalCaseDraftReviewDecisionRecord[] @relation("ClinicalCaseDraftReviewDecisionDraft")
+  applicationCommands     ClinicalCaseDraftApplicationCommand[]
+
+  @@index([diagnosisRegistryId, createdAt])
+  @@index([reviewStatus])
+  @@index([validationStatus])
+  @@index([generationPurpose])
+  @@index([generationContextHash])
+  @@index([resultingCaseId])
+  @@index([resultingCaseRevisionId])
+  @@index([createdByUserId])
+  @@index([acceptedByUserId])
+  @@index([appliedByUserId])
+}
+
+model ClinicalCaseDraftReviewDecisionRecord {
+  id              String                          @id @default(uuid())
+  draftId         String
+  decision        ClinicalCaseDraftReviewDecision
+  reviewerUserId  String?
+  rationale       String?
+  decidedAt       DateTime                        @default(now())
+  createdAt       DateTime                        @default(now())
+  draft           ClinicalCaseDraft               @relation("ClinicalCaseDraftReviewDecisionDraft", fields: [draftId], references: [id], onDelete: Cascade)
+  latestForDrafts ClinicalCaseDraft[]             @relation("ClinicalCaseDraftLatestDecision")
+  reviewerUser    User?                           @relation("ClinicalCaseDraftReviewDecisionReviewer", fields: [reviewerUserId], references: [id], onDelete: SetNull)
+
+  @@index([draftId, decidedAt])
+  @@index([reviewerUserId])
+  @@index([decision])
+}
+
+model ClinicalCaseDraftApplicationCommand {
+  id                    String                             @id @default(uuid())
+  draftId               String
+  commandAction         String
+  commandIdempotencyKey String                             @unique
+  commandFingerprint    String
+  actorUserId           String?
+  status                ClinicalCaseDraftApplicationStatus
+  resultCaseId          String?
+  resultCaseRevisionId  String?
+  conflictReason        String?
+  createdAt             DateTime                           @default(now())
+  completedAt           DateTime?
+  draft                 ClinicalCaseDraft                  @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  actorUser             User?                              @relation("ClinicalCaseDraftApplicationActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([draftId])
+  @@index([resultCaseId])
+  @@index([resultCaseRevisionId])
+  @@index([actorUserId])
+  @@index([status])
+}
+
 model CaseClueRevisionDraft {
-  id             String   @id @default(uuid())
-  caseId         String
-  sourceAuditId  String   @unique
-  clueOrder      Int?
-  clueIndex      Int?
-  originalClue   String?
-  revisedClue    String?
-  addedClue      String?
-  rationale      String?
-  expectedEffect String?
-  status         String   @default("PENDING_REVIEW")
-  reviewerUserId String?
-  decisionAt     DateTime?
+  id               String    @id @default(uuid())
+  caseId           String
+  sourceAuditId    String    @unique
+  clueOrder        Int?
+  clueIndex        Int?
+  originalClue     String?
+  revisedClue      String?
+  addedClue        String?
+  rationale        String?
+  expectedEffect   String?
+  status           String    @default("PENDING_REVIEW")
+  reviewerUserId   String?
+  decisionAt       DateTime?
   decisionByUserId String?
-  decisionNote   String?
-  appliedAt      DateTime?
-  appliedByUserId String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  case           Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  decisionNote     String?
+  appliedAt        DateTime?
+  appliedByUserId  String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  case             Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
 
   @@index([caseId])
   @@index([sourceAuditId])
 }
 
 model CaseRevision {
-  id                         String                    @id @default(uuid())
+  id                         String                                 @id @default(uuid())
   caseId                     String
-  revisionNumber             Int                       @default(1)
+  revisionNumber             Int                                    @default(1)
   contentHash                String?
   createdFromRevisionId      String?
   changeSummary              String?
@@ -1085,7 +1200,7 @@ model CaseRevision {
   labs                       Json?
   clues                      Json?
   explanation                Json?
-  differentials              String[]                  @default([])
+  differentials              String[]                               @default([])
   diagnosisId                String?
   diagnosisRegistryId        String?
   proposedDiagnosisText      String
@@ -1094,14 +1209,14 @@ model CaseRevision {
   diagnosisMappingConfidence Float?
   diagnosisEditorialNote     String?
   createdByUserId            String?
-  createdAt                  DateTime                  @default(now())
-  case                       Case                      @relation("CaseRevisions", fields: [caseId], references: [id], onDelete: Cascade)
-  diagnosis                  Diagnosis?                @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
-  diagnosisRegistry          DiagnosisRegistry?        @relation("CaseRevisionDiagnosisRegistry", fields: [diagnosisRegistryId], references: [id], onDelete: SetNull)
-  createdBy                  User?                     @relation("CaseRevisionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  createdFromRevision        CaseRevision?             @relation("CaseRevisionLineage", fields: [createdFromRevisionId], references: [id], onDelete: SetNull)
-  derivedRevisions           CaseRevision[]            @relation("CaseRevisionLineage")
-  currentForCase             Case?                     @relation("CaseCurrentRevision")
+  createdAt                  DateTime                               @default(now())
+  case                       Case                                   @relation("CaseRevisions", fields: [caseId], references: [id], onDelete: Cascade)
+  diagnosis                  Diagnosis?                             @relation(fields: [diagnosisId], references: [id], onDelete: Restrict)
+  diagnosisRegistry          DiagnosisRegistry?                     @relation("CaseRevisionDiagnosisRegistry", fields: [diagnosisRegistryId], references: [id], onDelete: SetNull)
+  createdBy                  User?                                  @relation("CaseRevisionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdFromRevision        CaseRevision?                          @relation("CaseRevisionLineage", fields: [createdFromRevisionId], references: [id], onDelete: SetNull)
+  derivedRevisions           CaseRevision[]                         @relation("CaseRevisionLineage")
+  currentForCase             Case?                                  @relation("CaseCurrentRevision")
   validationRuns             CaseValidationRun[]
   reviews                    CaseReview[]
   governedApprovalDecisions  GovernedCaseRevisionApprovalDecision[]
@@ -1109,6 +1224,7 @@ model CaseRevision {
   dailyCases                 DailyCase[]
   differentialMappings       CaseDifferentialMapping[]
   differentialLinks          CaseDifferentialLink[]
+  clinicalCaseDrafts         ClinicalCaseDraft[]
 
   @@unique([caseId, revisionNumber])
   @@index([caseId])
@@ -1122,15 +1238,15 @@ model CaseRevision {
 }
 
 model CaseRevisionCreationCommand {
-  id                    String   @id @default(uuid())
+  id                    String    @id @default(uuid())
   commandAction         String
-  commandIdempotencyKey String   @unique
+  commandIdempotencyKey String    @unique
   commandFingerprint    String
   caseId                String
   expectedRevisionId    String
   resultRevisionId      String?
   status                String
-  createdAt             DateTime @default(now())
+  createdAt             DateTime  @default(now())
   completedAt           DateTime?
 
   @@index([caseId])
@@ -1317,23 +1433,23 @@ model EducationDifferentialLink {
 }
 
 model CaseValidationRun {
-  id                String             @id @default(uuid())
-  caseId            String
-  revisionId        String?
-  materialContextHash String?
+  id                    String             @id @default(uuid())
+  caseId                String
+  revisionId            String?
+  materialContextHash   String?
   reviewContextIdentity String?
-  source            CaseSource?
-  publishTrack      PublishTrack?
-  outcome           ValidationOutcome?
-  validatorVersion  String?
-  summary           Json?
-  findings          Json?
-  triggeredByUserId String?
-  startedAt         DateTime           @default(now())
-  completedAt       DateTime?
-  case              Case               @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  revision          CaseRevision?      @relation(fields: [revisionId], references: [id], onDelete: SetNull)
-  triggeredBy       User?              @relation("CaseValidationRunTriggeredByUser", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
+  source                CaseSource?
+  publishTrack          PublishTrack?
+  outcome               ValidationOutcome?
+  validatorVersion      String?
+  summary               Json?
+  findings              Json?
+  triggeredByUserId     String?
+  startedAt             DateTime           @default(now())
+  completedAt           DateTime?
+  case                  Case               @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  revision              CaseRevision?      @relation(fields: [revisionId], references: [id], onDelete: SetNull)
+  triggeredBy           User?              @relation("CaseValidationRunTriggeredByUser", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
 
   @@index([caseId])
   @@index([revisionId])
@@ -1343,21 +1459,21 @@ model CaseValidationRun {
 }
 
 model CaseReview {
-  id             String          @id @default(uuid())
-  caseId         String
-  revisionId     String?
-  materialContextHash String?
-  reviewContextIdentity String?
-  reviewerUserId String?
-  decision       ReviewDecision?
-  notes          String?
-  source         CaseSource?
-  publishTrack   PublishTrack?
-  createdAt      DateTime        @default(now())
-  decidedAt      DateTime?
-  case           Case            @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  revision       CaseRevision?   @relation(fields: [revisionId], references: [id], onDelete: SetNull)
-  reviewer       User?           @relation("CaseReviewReviewerUser", fields: [reviewerUserId], references: [id], onDelete: SetNull)
+  id                       String                                @id @default(uuid())
+  caseId                   String
+  revisionId               String?
+  materialContextHash      String?
+  reviewContextIdentity    String?
+  reviewerUserId           String?
+  decision                 ReviewDecision?
+  notes                    String?
+  source                   CaseSource?
+  publishTrack             PublishTrack?
+  createdAt                DateTime                              @default(now())
+  decidedAt                DateTime?
+  case                     Case                                  @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  revision                 CaseRevision?                         @relation(fields: [revisionId], references: [id], onDelete: SetNull)
+  reviewer                 User?                                 @relation("CaseReviewReviewerUser", fields: [reviewerUserId], references: [id], onDelete: SetNull)
   governedApprovalDecision GovernedCaseRevisionApprovalDecision?
 
   @@index([caseId])
@@ -1368,9 +1484,9 @@ model CaseReview {
 }
 
 model GovernedCaseRevisionApprovalDecision {
-  id                         String       @id @default(uuid())
+  id                         String                            @id @default(uuid())
   commandAction              String
-  commandIdempotencyKey      String       @unique
+  commandIdempotencyKey      String                            @unique
   commandFingerprint         String
   envelopeSchemaVersion      String
   extensionType              String
@@ -1390,7 +1506,7 @@ model GovernedCaseRevisionApprovalDecision {
   caseId                     String
   targetRevisionId           String
   expectedRevisionId         String
-  reviewId                   String       @unique
+  reviewId                   String                            @unique
   decisionType               String
   outcome                    String
   effectiveAction            String
@@ -1399,12 +1515,12 @@ model GovernedCaseRevisionApprovalDecision {
   reviewBasis                Json
   obligations                Json
   compatibilityProjection    Json
-  occurredAt                 DateTime     @default(now())
-  createdAt                  DateTime     @default(now())
-  actor                      User         @relation("GovernedCaseRevisionApprovalActor", fields: [actorUserId], references: [id], onDelete: Restrict)
-  case                       Case         @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  targetRevision             CaseRevision @relation(fields: [targetRevisionId], references: [id], onDelete: Restrict)
-  review                     CaseReview   @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  occurredAt                 DateTime                          @default(now())
+  createdAt                  DateTime                          @default(now())
+  actor                      User                              @relation("GovernedCaseRevisionApprovalActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  case                       Case                              @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  targetRevision             CaseRevision                      @relation(fields: [targetRevisionId], references: [id], onDelete: Restrict)
+  review                     CaseReview                        @relation(fields: [reviewId], references: [id], onDelete: Restrict)
   publicationDecisions       CaseRevisionPublicationDecision[] @relation("CaseRevisionPublicationApprovalDecision")
 
   @@index([caseId])
@@ -1415,9 +1531,9 @@ model GovernedCaseRevisionApprovalDecision {
 }
 
 model CaseRevisionPublicationDecision {
-  id                          String                          @id @default(uuid())
+  id                          String                               @id @default(uuid())
   commandAction               String
-  commandIdempotencyKey       String                          @unique
+  commandIdempotencyKey       String                               @unique
   commandFingerprint          String
   caseId                      String
   caseRevisionId              String
@@ -1438,7 +1554,7 @@ model CaseRevisionPublicationDecision {
   readinessResult             String
   readinessSnapshot           Json
   contentBoundarySnapshot     Json
-  standing                    CaseRevisionPublicationStanding @default(AUTHORIZED)
+  standing                    CaseRevisionPublicationStanding      @default(AUTHORIZED)
   standingReason              String?
   supersedesPublicationId     String?
   withdrawnAt                 DateTime?
@@ -1449,15 +1565,15 @@ model CaseRevisionPublicationDecision {
   rationale                   String
   findings                    Json
   compatibilityProjection     Json
-  occurredAt                  DateTime                        @default(now())
-  effectiveAt                 DateTime                        @default(now())
-  createdAt                   DateTime                        @default(now())
-  case                        Case                            @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  caseRevision                CaseRevision                    @relation(fields: [caseRevisionId], references: [id], onDelete: Restrict)
+  occurredAt                  DateTime                             @default(now())
+  effectiveAt                 DateTime                             @default(now())
+  createdAt                   DateTime                             @default(now())
+  case                        Case                                 @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseRevision                CaseRevision                         @relation(fields: [caseRevisionId], references: [id], onDelete: Restrict)
   approvalDecision            GovernedCaseRevisionApprovalDecision @relation("CaseRevisionPublicationApprovalDecision", fields: [approvalDecisionId], references: [id], onDelete: Restrict)
-  actor                       User                            @relation("CaseRevisionPublicationActor", fields: [actorUserId], references: [id], onDelete: Restrict)
-  supersedesPublication       CaseRevisionPublicationDecision? @relation("CaseRevisionPublicationSupersession", fields: [supersedesPublicationId], references: [id], onDelete: SetNull)
-  supersededByPublications    CaseRevisionPublicationDecision[] @relation("CaseRevisionPublicationSupersession")
+  actor                       User                                 @relation("CaseRevisionPublicationActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  supersedesPublication       CaseRevisionPublicationDecision?     @relation("CaseRevisionPublicationSupersession", fields: [supersedesPublicationId], references: [id], onDelete: SetNull)
+  supersededByPublications    CaseRevisionPublicationDecision[]    @relation("CaseRevisionPublicationSupersession")
   dailyCases                  DailyCase[]
 
   @@index([caseId])
@@ -1469,16 +1585,16 @@ model CaseRevisionPublicationDecision {
 }
 
 model CaseRevisionPublicationCommand {
-  id                          String   @id @default(uuid())
+  id                          String    @id @default(uuid())
   commandAction               String
-  commandIdempotencyKey       String   @unique
+  commandIdempotencyKey       String    @unique
   commandFingerprint          String
   caseId                      String
   expectedRevisionId          String
   expectedApprovalDecisionId  String
   resultPublicationDecisionId String?
   status                      String
-  createdAt                   DateTime @default(now())
+  createdAt                   DateTime  @default(now())
   completedAt                 DateTime?
 
   @@index([caseId])
@@ -1489,7 +1605,7 @@ model CaseRevisionPublicationCommand {
 }
 
 model EditorialAuthorityAssignment {
-  id                            String   @id
+  id                            String    @id
   assignmentSchemaVersion       String
   subjectType                   String
   subjectId                     String
@@ -1509,17 +1625,17 @@ model EditorialAuthorityAssignment {
   validUntil                    DateTime?
   reviewDueAt                   DateTime?
   rationale                     String
-  delegationAllowed             Boolean  @default(false)
-  maximumDelegationDepth        Int      @default(0)
+  delegationAllowed             Boolean   @default(false)
+  maximumDelegationDepth        Int       @default(0)
   parentAssignmentId            String?
   humanAuthorityActorId         String?
   suspendedAt                   DateTime?
   revokedAt                     DateTime?
   revokedByActorId              String?
   supersededByAssignmentId      String?
-  createdAt                     DateTime @default(now())
-  updatedAt                     DateTime @updatedAt
-  subjectUser                   User?    @relation("EditorialAuthorityAssignmentSubjectUser", fields: [subjectId], references: [id], onDelete: Cascade)
+  createdAt                     DateTime  @default(now())
+  updatedAt                     DateTime  @updatedAt
+  subjectUser                   User?     @relation("EditorialAuthorityAssignmentSubjectUser", fields: [subjectId], references: [id], onDelete: Cascade)
 
   @@index([subjectId])
   @@index([authorityType])
@@ -1620,22 +1736,22 @@ model Attempt {
 }
 
 model User {
-  id                                     String                          @id
-  clerkId                                String?                         @unique
+  id                                     String                                  @id
+  clerkId                                String?                                 @unique
   email                                  String?
   username                               String?
-  normalizedUsername                     String?                         @unique
+  normalizedUsername                     String?                                 @unique
   trainingLevel                          String?
   country                                String?
-  individualMode                         Boolean                         @default(true)
-  onboardingStatus                       UserOnboardingStatus            @default(PROFILE_REQUIRED)
+  individualMode                         Boolean                                 @default(true)
+  onboardingStatus                       UserOnboardingStatus                    @default(PROFILE_REQUIRED)
   onboardingCompletedAt                  DateTime?
   primaryOrganizationId                  String?
-  role                                   String                          @default("user")
-  subscriptionTier                       String                          @default("free")
+  role                                   String                                  @default("user")
+  subscriptionTier                       String                                  @default("free")
   lastPlayedAt                           DateTime?
-  createdAt                              DateTime                        @default(now())
-  updatedAt                              DateTime                        @updatedAt
+  createdAt                              DateTime                                @default(now())
+  updatedAt                              DateTime                                @updatedAt
   sessions                               GameSession[]
   attempts                               Attempt[]
   stats                                  UserStats?
@@ -1645,27 +1761,32 @@ model User {
   notificationPreferences                NotificationPreference[]
   pushDeviceTokens                       PushDeviceToken[]
   leaderboard                            LeaderboardEntry[]
-  approvedCases                          Case[]                          @relation("CaseApprovedByUser")
-  createdCaseRevisions                   CaseRevision[]                  @relation("CaseRevisionCreatedByUser")
-  triggeredCaseValidations               CaseValidationRun[]             @relation("CaseValidationRunTriggeredByUser")
-  caseReviews                            CaseReview[]                    @relation("CaseReviewReviewerUser")
-  governedCaseRevisionApprovalDecisions  GovernedCaseRevisionApprovalDecision[] @relation("GovernedCaseRevisionApprovalActor")
-  caseRevisionPublicationDecisions       CaseRevisionPublicationDecision[] @relation("CaseRevisionPublicationActor")
-  editorialAuthorityAssignments          EditorialAuthorityAssignment[]   @relation("EditorialAuthorityAssignmentSubjectUser")
-  reviewedDiagnosisEducation             DiagnosisEducation[]            @relation("DiagnosisEducationReviewedByUser")
-  createdDiagnosisEducationRevisions     DiagnosisEducationRevision[]    @relation("DiagnosisEducationRevisionCreatedByUser")
-  reviewedDiagnosisGraphCandidates       DiagnosisGraphCandidate[]       @relation("DiagnosisGraphCandidateReviewedByUser")
-  reviewedDiagnosisTeachingRelationships DiagnosisTeachingRelationship[] @relation("DiagnosisTeachingRelationshipReviewedByUser")
-  reviewedDiagnosisEvidenceRelationships DiagnosisEvidenceRelationship[] @relation("DiagnosisEvidenceRelationshipReviewedByUser")
-  reviewedCaseDifferentialMappings       CaseDifferentialMapping[]       @relation("CaseDifferentialMappingReviewedByUser")
-  reviewedEducationDifferentialMappings  EducationDifferentialMapping[]  @relation("EducationDifferentialMappingReviewedByUser")
-  reviewedDiagnosisRegistryCandidates    DiagnosisRegistryCandidate[]    @relation("DiagnosisRegistryCandidateReviewer")
-  approvedDiagnosisRegistryCandidates    DiagnosisRegistryCandidate[]    @relation("DiagnosisRegistryCandidateApprovedByUser")
-  activationReviewedDiagnoses            DiagnosisRegistry[]             @relation("DiagnosisRegistryActivationReviewedByUser")
-  reviewedReasoningPaths                 ReasoningPath[]                 @relation("ReasoningPathReviewedByUser")
-  aiDraftRevisionAudits                  AiDraftRevisionAudit[]          @relation("AiDraftRevisionAuditCreatedByUser")
-  reviewedAiDraftRevisionAudits          AiDraftRevisionAudit[]          @relation("AiDraftRevisionAuditReviewerUser")
-  primaryOrganization                    Organization?                   @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
+  approvedCases                          Case[]                                  @relation("CaseApprovedByUser")
+  createdCaseRevisions                   CaseRevision[]                          @relation("CaseRevisionCreatedByUser")
+  triggeredCaseValidations               CaseValidationRun[]                     @relation("CaseValidationRunTriggeredByUser")
+  caseReviews                            CaseReview[]                            @relation("CaseReviewReviewerUser")
+  governedCaseRevisionApprovalDecisions  GovernedCaseRevisionApprovalDecision[]  @relation("GovernedCaseRevisionApprovalActor")
+  caseRevisionPublicationDecisions       CaseRevisionPublicationDecision[]       @relation("CaseRevisionPublicationActor")
+  editorialAuthorityAssignments          EditorialAuthorityAssignment[]          @relation("EditorialAuthorityAssignmentSubjectUser")
+  reviewedDiagnosisEducation             DiagnosisEducation[]                    @relation("DiagnosisEducationReviewedByUser")
+  createdDiagnosisEducationRevisions     DiagnosisEducationRevision[]            @relation("DiagnosisEducationRevisionCreatedByUser")
+  reviewedDiagnosisGraphCandidates       DiagnosisGraphCandidate[]               @relation("DiagnosisGraphCandidateReviewedByUser")
+  reviewedDiagnosisTeachingRelationships DiagnosisTeachingRelationship[]         @relation("DiagnosisTeachingRelationshipReviewedByUser")
+  reviewedDiagnosisEvidenceRelationships DiagnosisEvidenceRelationship[]         @relation("DiagnosisEvidenceRelationshipReviewedByUser")
+  reviewedCaseDifferentialMappings       CaseDifferentialMapping[]               @relation("CaseDifferentialMappingReviewedByUser")
+  reviewedEducationDifferentialMappings  EducationDifferentialMapping[]          @relation("EducationDifferentialMappingReviewedByUser")
+  reviewedDiagnosisRegistryCandidates    DiagnosisRegistryCandidate[]            @relation("DiagnosisRegistryCandidateReviewer")
+  approvedDiagnosisRegistryCandidates    DiagnosisRegistryCandidate[]            @relation("DiagnosisRegistryCandidateApprovedByUser")
+  activationReviewedDiagnoses            DiagnosisRegistry[]                     @relation("DiagnosisRegistryActivationReviewedByUser")
+  reviewedReasoningPaths                 ReasoningPath[]                         @relation("ReasoningPathReviewedByUser")
+  aiDraftRevisionAudits                  AiDraftRevisionAudit[]                  @relation("AiDraftRevisionAuditCreatedByUser")
+  reviewedAiDraftRevisionAudits          AiDraftRevisionAudit[]                  @relation("AiDraftRevisionAuditReviewerUser")
+  createdClinicalCaseDrafts              ClinicalCaseDraft[]                     @relation("ClinicalCaseDraftCreatedByUser")
+  acceptedClinicalCaseDrafts             ClinicalCaseDraft[]                     @relation("ClinicalCaseDraftAcceptedByUser")
+  appliedClinicalCaseDrafts              ClinicalCaseDraft[]                     @relation("ClinicalCaseDraftAppliedByUser")
+  reviewedClinicalCaseDrafts             ClinicalCaseDraftReviewDecisionRecord[] @relation("ClinicalCaseDraftReviewDecisionReviewer")
+  appliedClinicalCaseDraftCommands       ClinicalCaseDraftApplicationCommand[]   @relation("ClinicalCaseDraftApplicationActor")
+  primaryOrganization                    Organization?                           @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
   organizations                          UserOrganization[]
 
   @@index([role])
@@ -1800,19 +1921,19 @@ model UserStats {
 }
 
 model DailyCase {
-  id                 String             @id @default(uuid())
-  caseId             String
-  caseRevisionId     String?
+  id                    String                           @id @default(uuid())
+  caseId                String
+  caseRevisionId        String?
   publicationDecisionId String?
-  date               DateTime           @db.Date
-  track              PublishTrack
-  sequenceIndex      Int
-  createdAt          DateTime           @default(now())
-  case               Case               @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  caseRevision       CaseRevision?      @relation(fields: [caseRevisionId], references: [id], onDelete: Restrict)
-  publicationDecision CaseRevisionPublicationDecision? @relation(fields: [publicationDecisionId], references: [id], onDelete: Restrict)
-  sessions           GameSession[]
-  leaderboardEntries LeaderboardEntry[]
+  date                  DateTime                         @db.Date
+  track                 PublishTrack
+  sequenceIndex         Int
+  createdAt             DateTime                         @default(now())
+  case                  Case                             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseRevision          CaseRevision?                    @relation(fields: [caseRevisionId], references: [id], onDelete: Restrict)
+  publicationDecision   CaseRevisionPublicationDecision? @relation(fields: [publicationDecisionId], references: [id], onDelete: Restrict)
+  sessions              GameSession[]
+  leaderboardEntries    LeaderboardEntry[]
 
   @@unique([date, track, sequenceIndex])
   @@index([caseId])

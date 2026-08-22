@@ -118,9 +118,11 @@ export type PlannedGenerationSlot = {
 export type GenerateCaseResultItem =
   | {
       index: number;
-      status: 'created';
-      caseId: string;
+      status: 'draft_created';
+      draftId: string;
       answer: string;
+      reviewStatus: string;
+      validationStatus: string;
     }
   | {
       index: number;
@@ -141,11 +143,73 @@ export type GenerateCasesResult = {
   accepted: number;
   rejected: number;
   created: number;
+  draftCreated: number;
   skipped: number;
   failed: number;
   averageQualityScore: number | null;
   plannerDiagnostics: PlannedGenerationSlot[];
   results: GenerateCaseResultItem[];
+};
+
+export type ClinicalCaseDraftReviewDecision =
+  | 'ACCEPT'
+  | 'REJECT'
+  | 'REQUEST_CHANGES';
+
+export type ClinicalCaseDraftReviewStatus =
+  | 'PENDING_REVIEW'
+  | 'CHANGES_REQUESTED'
+  | 'ACCEPTED'
+  | 'REJECTED'
+  | 'SUPERSEDED'
+  | 'APPLIED';
+
+export type ClinicalCaseDraft = {
+  id: string;
+  diagnosisRegistryId: string;
+  diagnosis?: {
+    id: string;
+    displayLabel: string;
+    canonicalName: string;
+    specialty?: string | null;
+    bodySystem?: string | null;
+    category?: string | null;
+  } | null;
+  generationPurpose: string;
+  generationMethod: string;
+  selectionSource?: string | null;
+  sourceIssue?: unknown;
+  generatedContent: unknown;
+  generationContext: unknown;
+  generationContextHash: string;
+  validation: {
+    status: string;
+    summary: string | null;
+    findings: unknown;
+    blockingFindings: unknown;
+    warningFindings: unknown;
+  };
+  reviewStatus: ClinicalCaseDraftReviewStatus;
+  latestReviewDecision?: unknown;
+  reviewDecisions?: unknown[];
+  applicationAllowed: boolean;
+  resultingCaseId?: string | null;
+  resultingCaseRevisionId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ReviewClinicalCaseDraftPayload = {
+  decision: ClinicalCaseDraftReviewDecision;
+  rationale?: string | null;
+};
+
+export type ClinicalCaseDraftApplicationResult = {
+  status: 'applied';
+  draftId: string;
+  caseId: string;
+  caseRevisionId: string;
+  idempotencyKey?: string;
 };
 
 export type TargetedCaseDifficulty = 'EASY' | 'MEDIUM' | 'HARD';

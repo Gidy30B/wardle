@@ -5,7 +5,6 @@ import {
   useState,
   type FormEvent,
 } from 'react';
-import { Link } from 'react-router-dom';
 import {
   generateCases,
   searchDiagnosisRegistry,
@@ -24,20 +23,23 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import { canonicalizeSpecialtyLabel } from '../specialties/specialty-icon-registry';
 import { useActionFeedback } from '../../hooks/useActionFeedback';
 
-type CreatedResult = Extract<GenerateCaseResultItem, { status: 'created' }>;
+type DraftCreatedResult = Extract<
+  GenerateCaseResultItem,
+  { status: 'draft_created' }
+>;
 type SkippedResult = Extract<GenerateCaseResultItem, { status: 'skipped' }>;
 type FailedResult = Extract<GenerateCaseResultItem, { status: 'failed' }>;
 
 type ResultSummary = {
   all: GenerateCaseResultItem[];
-  created: CreatedResult[];
+  draftCreated: DraftCreatedResult[];
   skipped: SkippedResult[];
   failed: FailedResult[];
 };
 
 const resultTabs: Array<{ value: GenerationResultTab; label: string }> = [
   { value: 'all', label: 'All' },
-  { value: 'created', label: 'Created' },
+  { value: 'created', label: 'Drafts' },
   { value: 'skipped', label: 'Skipped' },
   { value: 'failed', label: 'Failed' },
   { value: 'planner', label: 'Planner' },
@@ -74,8 +76,8 @@ const skipReasonLabels: Record<GenerateCaseSkipReason, string> = {
 function summarizeResults(result: GenerateCasesResult): ResultSummary {
   return {
     all: result.results,
-    created: result.results.filter(
-      (item): item is CreatedResult => item.status === 'created',
+    draftCreated: result.results.filter(
+      (item): item is DraftCreatedResult => item.status === 'draft_created',
     ),
     skipped: result.results.filter(
       (item): item is SkippedResult => item.status === 'skipped',
@@ -301,7 +303,7 @@ export default function GeneratePage() {
       setResult(response);
       setActiveTab('all');
       feedback.showSuccess(
-        `Batch complete: ${response.created} created, ${response.skipped} skipped, ${response.failed} failed.`,
+        `Batch complete: ${response.draftCreated} drafts created, ${response.skipped} skipped, ${response.failed} failed.`,
       );
     } catch (generateError) {
       const message =
@@ -814,7 +816,7 @@ function BatchResultsConsole({
 }) {
   const tabCounts: Record<GenerationResultTab, number> = {
     all: summary.all.length,
-    created: summary.created.length,
+    created: summary.draftCreated.length,
     skipped: summary.skipped.length,
     failed: summary.failed.length,
     planner: result.plannerDiagnostics.length,
@@ -829,7 +831,7 @@ function BatchResultsConsole({
           description="Inspect generated cases, skipped outcomes, failures, and planner diagnostics."
         />
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          Per-case quality is available in editorial detail after generation.
+          Draft review and application happen after generation.
         </div>
       </div>
 
@@ -838,7 +840,7 @@ function BatchResultsConsole({
         <MetricCard label="Generated" value={result.generated} />
         <MetricCard label="Accepted" value={result.accepted} />
         <MetricCard label="Rejected" value={result.rejected} tone="amber" />
-        <MetricCard label="Created" value={result.created} tone="teal" />
+        <MetricCard label="Drafts" value={result.draftCreated} tone="teal" />
         <MetricCard label="Skipped" value={result.skipped} tone="amber" />
         <MetricCard label="Failed" value={result.failed} tone="red" />
         <MetricCard
@@ -889,7 +891,7 @@ function BatchResultsConsole({
       {activeTab === 'all' ? (
         <ResultList items={summary.all} />
       ) : activeTab === 'created' ? (
-        <CreatedList items={summary.created} />
+        <CreatedList items={summary.draftCreated} />
       ) : activeTab === 'skipped' ? (
         <SkippedList items={summary.skipped} />
       ) : activeTab === 'failed' ? (
@@ -916,7 +918,7 @@ function ResultList({ items }: { items: GenerateCaseResultItem[] }) {
 }
 
 function ResultCard({ item }: { item: GenerateCaseResultItem }) {
-  if (item.status === 'created') {
+  if (item.status === 'draft_created') {
     return <CreatedCard item={item} />;
   }
 
@@ -927,36 +929,33 @@ function ResultCard({ item }: { item: GenerateCaseResultItem }) {
   return <FailedCard item={item} />;
 }
 
-function CreatedList({ items }: { items: CreatedResult[] }) {
+function CreatedList({ items }: { items: DraftCreatedResult[] }) {
   if (items.length === 0) {
-    return <EmptyPanel message="No cases were created in this batch." />;
+    return <EmptyPanel message="No drafts were created in this batch." />;
   }
 
   return (
     <div className="grid gap-3 xl:grid-cols-2">
       {items.map((item) => (
-        <CreatedCard key={item.caseId} item={item} />
+        <CreatedCard key={item.draftId} item={item} />
       ))}
     </div>
   );
 }
 
-function CreatedCard({ item }: { item: CreatedResult }) {
+function CreatedCard({ item }: { item: DraftCreatedResult }) {
   return (
     <article className="rounded-xl border border-teal-200 bg-teal-50 p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">
-        Created slot {item.index + 1}
+        Draft slot {item.index + 1}
       </p>
       <h3 className="mt-2 text-base font-semibold text-slate-900">
         {item.answer}
       </h3>
-      <p className="mt-1 text-xs text-slate-600">Case ID: {item.caseId}</p>
-      <Link
-        className="mt-3 inline-flex rounded-lg bg-white px-3 py-2 text-sm font-semibold text-teal-700 ring-1 ring-teal-200 transition hover:bg-teal-100"
-        to={`/cases/${item.caseId}`}
-      >
-        Open in editorial
-      </Link>
+      <p className="mt-1 text-xs text-slate-600">Draft ID: {item.draftId}</p>
+      <p className="mt-2 text-xs text-slate-600">
+        Review: {item.reviewStatus} / Validation: {item.validationStatus}
+      </p>
     </article>
   );
 }

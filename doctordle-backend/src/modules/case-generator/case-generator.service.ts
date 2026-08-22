@@ -15,7 +15,6 @@ import { PrismaService } from '../../core/db/prisma.service.js';
 import { CaseValidationOrchestrator } from '../case-validation/case-validation.orchestrator.js';
 import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
 import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service.js';
-import { buildMatchedDiagnosisMappingFields } from '../diagnosis-registry/diagnosis-mapping-fields.js';
 import { DifferentialMappingService } from '../diagnosis-graph/differential-mapping.service.js';
 import { GenerationContextBuilder } from '../editorial/generation-context-builder.service.js';
 import type {
@@ -36,6 +35,7 @@ import {
   CaseTeachingAlignmentService,
   type CaseTeachingAlignmentReport,
 } from './case-teaching-alignment.service.js';
+import { ClinicalCaseDraftService } from './clinical-case-draft.service.js';
 import { GenerationPlannerService } from './generation-planner.service.js';
 
 const clueTypeSchema = z.enum([
@@ -337,7 +337,6 @@ export class CaseGeneratorService {
   private readonly model =
     this.normalizeOptionalString(process.env.OPENAI_CASE_GENERATOR_MODEL) ??
     'gpt-4o-mini';
-  private caseDateCursor = 0;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -349,6 +348,8 @@ export class CaseGeneratorService {
     private readonly differentialMappingService?: DifferentialMappingService,
     @Optional()
     private readonly lifecyclePolicy?: DiagnosisRegistryLifecyclePolicyService,
+    @Optional()
+    private readonly clinicalCaseDraftService?: ClinicalCaseDraftService,
   ) {
     if (this.env.OPENAI_API_KEY) {
       this.openaiClient = new OpenAI({
@@ -1117,49 +1118,46 @@ export class CaseGeneratorService {
         }
       }
 
-      const history =
-        normalizedCase.clues.find((clue) => clue.type === 'history')?.value ??
-        normalizedCase.clues[0]?.value ??
-        target.displayLabel;
-      const symptoms = normalizedCase.clues
-        .filter((clue) => clue.type === 'symptom')
-        .map((clue) => clue.value);
+      if (!this.clinicalCaseDraftService) {
+        throw new ServiceUnavailableException(
+          'Clinical Case Draft persistence is not configured',
+        );
+      }
 
-      const createdCase = await this.persistGeneratedClinicalCase({
+      const draft = await this.clinicalCaseDraftService.persistGeneratedDraft({
         generatedCase: normalizedCase,
         target,
-        options,
-        scenarioKey,
-        history,
-        symptoms,
+        difficulty: this.normalizeDifficulty(options.difficulty),
+        generationContext: options.generationContext ?? null,
+        generationPurpose:
+          options.generationPurpose ?? 'AI_CLINICAL_CASE_GENERATION',
+        selectionSource: options.selectionSource ?? null,
+        sourceIssue: options.sourceIssue,
+        createdByUserId: options.createdByUserId ?? null,
       });
 
-      if (!createdCase) {
+      if (!draft) {
         return null;
       }
 
       this.logger.log(
         JSON.stringify({
-          event: 'case.generate.persisted_and_validated',
-          caseId: createdCase.id,
+          event: 'case.generate.draft_persisted',
+          draftId: draft.id,
           answer: target.displayLabel,
           diagnosisRegistryId: target.diagnosisRegistryId,
+          validationStatus: draft.validationStatus,
+          reviewStatus: draft.reviewStatus,
           saveDiagnosisSource: 'registry',
         }),
       );
 
-      await this.differentialMappingService?.mapCase(createdCase.id).catch((error) => {
-        this.logger.error(
-          JSON.stringify({
-            event: 'differential_mapping.case_generation.failed',
-            caseId: createdCase.id,
-            error: error instanceof Error ? error.message : String(error),
-          }),
-          error instanceof Error ? error.stack : undefined,
-        );
-      });
-
-      return createdCase;
+      return {
+        id: draft.id,
+        diagnosisRegistryId: draft.diagnosisRegistryId,
+        reviewStatus: draft.reviewStatus,
+        validationStatus: draft.validationStatus,
+      };
     } catch (error) {
       if (!this.isDuplicatePrismaError(error)) {
         seenAnswers?.delete(scenarioKey);
@@ -1167,78 +1165,6 @@ export class CaseGeneratorService {
 
       throw error;
     }
-  }
-
-  private async persistGeneratedClinicalCase(input: {
-    generatedCase: GeneratedCase;
-    target: NonNullable<PlannedGenerationSlot['diagnosis']>;
-    options: SaveGeneratedCaseOptions;
-    scenarioKey: string;
-    history: string;
-    symptoms: string[];
-  }): Promise<SavedGeneratedCase | null> {
-    // CLOSE-004 replaces this temporary direct Case persistence boundary with
-    // candidate-first AI Clinical Case Draft persistence and controlled application.
-    return this.withSerializableRetry(() =>
-      this.prisma.$transaction(
-        async (tx) => {
-          if (!input.options.skipExistingAnswerCheck) {
-            const existing = await this.findExistingCaseIdByRegistryScenario(
-              input.target.diagnosisRegistryId,
-              input.scenarioKey,
-              tx,
-            );
-            if (existing) {
-              return null;
-            }
-          }
-
-          const diagnosisMappingFields = buildMatchedDiagnosisMappingFields({
-            diagnosisName: input.target.displayLabel,
-            proposedDiagnosisText: input.target.displayLabel,
-            method: 'EDITOR_SELECTED',
-          });
-
-          const persistedCase = await tx.case.create({
-            data: {
-              publicNumber: await this.getNextCasePublicNumber(tx),
-              title: input.target.displayLabel,
-              date: this.nextCaseDate(),
-              difficulty: this.normalizeDifficulty(input.options.difficulty),
-              history: input.history,
-              symptoms: input.symptoms,
-              clues: input.generatedCase.clues as Prisma.InputJsonValue,
-              explanation: this.toPersistedExplanation(
-                input.generatedCase,
-              ) as Prisma.InputJsonValue,
-              differentials: input.generatedCase.differentials,
-              diagnosisId: input.target.legacyDiagnosisId,
-              diagnosisRegistryId: input.target.diagnosisRegistryId,
-              ...diagnosisMappingFields,
-            },
-            select: {
-              id: true,
-              title: true,
-              difficulty: true,
-              date: true,
-            },
-          });
-
-          await this.caseValidationOrchestrator.runShadowForGeneratedCaseInTransaction(
-            tx,
-            {
-              caseId: persistedCase.id,
-              startedAt: new Date(),
-            },
-          );
-
-          return persistedCase;
-        },
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        },
-      ),
-    );
   }
 
   async generateBatch(
@@ -1335,8 +1261,8 @@ export class CaseGeneratorService {
 
     await Promise.all(workers);
 
-    const created = results.filter(
-      (result) => result.status === 'created',
+    const draftCreated = results.filter(
+      (result) => result.status === 'draft_created',
     ).length;
     const skipped = results.filter(
       (result) => result.status === 'skipped',
@@ -1356,9 +1282,10 @@ export class CaseGeneratorService {
       batchId,
       requested: count,
       generated: qualityState.generated,
-      accepted: created,
+      accepted: draftCreated,
       rejected,
-      created,
+      created: 0,
+      draftCreated,
       skipped,
       failed,
       averageQualityScore,
@@ -1376,6 +1303,7 @@ export class CaseGeneratorService {
         accepted: summary.accepted,
         rejected: summary.rejected,
         created: summary.created,
+        draftCreated: summary.draftCreated,
         skipped: summary.skipped,
         failed: summary.failed,
         averageQualityScore: summary.averageQualityScore,
@@ -1520,6 +1448,14 @@ export class CaseGeneratorService {
             track: input.options.track,
             difficulty,
             seenAnswers: undefined,
+            generationContext,
+            generationPurpose: input.options.targetedCase?.discriminatorTarget
+              ? 'TARGETED_DISCRIMINATOR_CASE_DRAFT'
+              : 'AI_CLINICAL_CASE_GENERATION',
+            selectionSource: input.options.diagnosisRegistryIds?.length
+              ? 'explicit_diagnosis_registry_ids'
+              : 'generation_planner',
+            sourceIssue: input.options.targetedCase?.discriminatorTarget ?? null,
           },
         );
 
@@ -1570,12 +1506,12 @@ export class CaseGeneratorService {
 
         this.logger.log(
           JSON.stringify({
-            event: 'case.generate.success',
+            event: 'case.generate.draft_success',
             batchId: input.batchId,
             index: input.index,
-            caseId: savedCase.id,
+            draftId: savedCase.id,
             answer: normalizedCase.answer,
-            outcome: 'created',
+            outcome: 'draft_created',
             qualityScore,
             specialty: quality?.specialty ?? null,
             estimatedDifficulty: quality?.estimatedDifficulty ?? null,
@@ -1588,9 +1524,11 @@ export class CaseGeneratorService {
 
         return {
           index: input.index,
-          status: 'created',
-          caseId: savedCase.id,
+          status: 'draft_created',
+          draftId: savedCase.id,
           answer: normalizedCase.answer,
+          reviewStatus: savedCase.reviewStatus,
+          validationStatus: savedCase.validationStatus,
         };
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
@@ -3364,50 +3302,12 @@ export class CaseGeneratorService {
     return deduped;
   }
 
-  private nextCaseDate(): Date {
-    const nextTimestamp = Math.max(Date.now(), this.caseDateCursor + 1);
-    this.caseDateCursor = nextTimestamp;
-    return new Date(nextTimestamp);
-  }
-
-  private toPersistedExplanation(
-    generatedCase: GeneratedCase,
-  ): PersistedGeneratedExplanation {
-    const generationQuality = this.getGenerationQuality(generatedCase);
-
-    return {
-      ...generatedCase.explanation,
-      differentials: generatedCase.differentials,
-      ...(generationQuality ? { generationQuality } : {}),
-    };
-  }
-
   private getGenerationQuality(
     generatedCase: GeneratedCase,
   ): PersistedGeneratedExplanation['generationQuality'] | undefined {
     const explanation =
       generatedCase.explanation as GeneratedCaseExplanationWithQuality;
     return explanation.generationQuality;
-  }
-
-  private async getNextCasePublicNumber(
-    client: Prisma.TransactionClient,
-  ): Promise<number> {
-    const latest = await client.case.findFirst({
-      where: {
-        publicNumber: {
-          not: null,
-        },
-      },
-      orderBy: {
-        publicNumber: 'desc',
-      },
-      select: {
-        publicNumber: true,
-      },
-    });
-
-    return (latest?.publicNumber ?? 0) + 1;
   }
 
   private isDuplicatePrismaError(error: unknown): boolean {

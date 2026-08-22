@@ -29,20 +29,24 @@ describe('TargetedCaseGenerationService', () => {
         results: [
           {
             index: 0,
-            status: 'created',
-            caseId: '33333333-3333-4333-8333-333333333333',
+            status: 'draft_created',
+            draftId: '33333333-3333-4333-8333-333333333333',
             answer: 'Appendicitis',
+            reviewStatus: 'PENDING_REVIEW',
+            validationStatus: 'PASSED',
           },
         ],
       }),
     };
-    const caseReviewService = {
-      getCaseDetail: jest.fn().mockResolvedValue({
+    const clinicalCaseDraftService = {
+      getDraft: jest.fn().mockResolvedValue({
         id: '33333333-3333-4333-8333-333333333333',
-        title: 'Appendicitis',
-        editorialStatus: 'DRAFT',
-        validationRuns: [{ id: 'validation-1', outcome: 'PASSED' }],
-        qualityProjection: { dimensions: {}, warnings: [], blockers: [] },
+        diagnosis: { displayLabel: 'Appendicitis' },
+        generatedContent: {
+          generatedCase: { title: 'Appendicitis' },
+        },
+        reviewStatus: 'PENDING_REVIEW',
+        validation: { status: 'PASSED' },
       }),
     };
     const teachingRulesAdminService = {
@@ -51,11 +55,17 @@ describe('TargetedCaseGenerationService', () => {
     const service = new TargetedCaseGenerationService(
       prisma as never,
       caseGenerator as never,
-      caseReviewService as never,
+      clinicalCaseDraftService as never,
       teachingRulesAdminService as never,
     );
 
-    return { caseGenerator, caseReviewService, prisma, service, teachingRulesAdminService };
+    return {
+      caseGenerator,
+      clinicalCaseDraftService,
+      prisma,
+      service,
+      teachingRulesAdminService,
+    };
   }
 
   it('generates a case with selected teaching units and mimics', async () => {
@@ -88,9 +98,10 @@ describe('TargetedCaseGenerationService', () => {
         }),
       }),
     );
-    expect(result.generatedCase?.editorialStatus).toBe('DRAFT');
-    expect(result.validation?.outcome).toBe('PASSED');
-    expect(result.qualityProjection).toBeTruthy();
+    expect(result.generatedDraft?.reviewStatus).toBe('PENDING_REVIEW');
+    expect(result.generatedCase).toBeNull();
+    expect(result.validation?.status).toBe('PASSED');
+    expect(result.qualityProjection).toBeNull();
   });
 
   it('rejects invalid teachingUnitIds for the target diagnosis', async () => {
@@ -177,6 +188,8 @@ describe('TargetedCaseGenerationService', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           actionType: 'generate_targeted_discriminator_case',
+          caseId: target.caseId,
+          affectedArtifactId: '33333333-3333-4333-8333-333333333333',
           reviewStatus: 'PENDING_REVIEW',
           createdByUserId: 'user-1',
         }),

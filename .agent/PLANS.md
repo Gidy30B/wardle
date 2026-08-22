@@ -179,3 +179,106 @@ Changes are code-only and can be reverted commit/file-wise. Since no schema or d
 ## Remaining Risks
 
 Generated cases will still persist as `Case` rows before candidate review; this remains intentionally open for CLOSE-004.
+
+---
+
+# ExecPlan: WEOS CLOSE-004 AI Clinical Case Draft and Controlled Application
+
+## Purpose
+
+Replace AI Clinical Case generation direct persistence with an independently identifiable Clinical Case Draft lifecycle. Generation creates candidate knowledge only; human review and controlled application are separate. Controlled application creates the first governed `Case` and exact initial `CaseRevision`.
+
+## Approved Authority
+
+Implementation package: user-provided `WEOS CLOSE-004 - AI Clinical Case Draft and Controlled Application`.
+Branch/worktree: `C:\Users\user\DxLab-workspace-closure`, `weos/workspace-closure`.
+Required baseline: `6b6c8ff3904d1160ee25b0d082270797e9309c38`.
+
+This package authorizes only the AI Clinical Case Draft lifecycle, review decisions, and controlled application into initial Case/CaseRevision. It does not authorize CLOSE-005 workspace review UX, publication, scheduling, learner exposure, manual `POST /cases` redesign, seed/repair changes, or APP-008 behavior changes.
+
+## Current Behavior
+
+CLOSE-003 consolidated generation to registry-targeted AI generation, but `saveCaseForRegistryTarget` still persists generated candidate knowledge as `Case` plus generated `CaseRevision`. Targeted discriminator generation then writes `AiDraftRevisionAudit` after the real Case exists.
+
+## Required Invariant
+
+AI Clinical Case generation must not create `Case`, `CaseRevision`, `DailyCase`, publication authority, scheduling state, or learner exposure. It must create an independently identifiable draft preserving diagnosis identity, generated content, provenance/context, validation outcome, and review/application state.
+
+## Audit Findings
+
+`AiDraftRevisionAudit` is an audit/provenance row with optional `caseId` and affected-artifact strings. It is not a standalone candidate artifact and should not be repurposed as the Clinical Case Draft.
+
+`CaseClueRevisionDraft` is specific to clue edits against an existing `Case` and is not appropriate for whole generated case candidate knowledge.
+
+`ReasoningDraftValidationRun` is reasoning/teaching-rule oriented. It can remain related contextual validation evidence, but it is not the Clinical Case Draft artifact.
+
+`CaseValidationService.validateSnapshot` and APP-007 material hash helpers can be reused against draft material before a Case exists. APP-007 `CREATE_CASE_REVISION` command itself assumes an existing current revision, so controlled application must reuse lower-level material hashing, deterministic material representation, idempotency, and serializable transaction patterns rather than forcing that command.
+
+## Scope
+
+Included: additive Prisma schema/migration; backend draft service, review operations, controlled application and read API; generator persistence refactor; targeted discriminator fix; admin/CLI/dashboard contract updates; focused unit and gated integration-style tests where feasible; WEOS docs.
+
+Excluded: full dashboard review packet UI, queue redesign, learner-facing changes, publication/readiness/scheduling behavior, seed/repair scripts, and manual case authoring redesign.
+
+## Files Expected To Change
+
+- `doctordle-backend/prisma/schema.prisma`
+- a new additive migration under `doctordle-backend/prisma/migrations/`
+- `doctordle-backend/src/modules/case-generator/*`
+- focused backend service/controller/API specs
+- `doctordle-backend/src/modules/admin/*` for service registration and admin routes
+- `doctordle-backend/src/scripts/generate-cases.ts`
+- `analytics-dashboard/src/api/*` and minimal caller handling where generation assumes a Case
+- `docs/weos/gaps/IMPLEMENTATION-GAPS.md`
+
+## Prohibited Changes
+
+No destructive migration or backfill. No fabricated historical draft rows. No APP-006/APP-008A/APP-008B semantic changes. No `DailyCase` or learner exposure changes. No seed/repair edits. No original dirty `DxLab` worktree edits.
+
+## Data Model Plan
+
+Introduce focused models for Clinical Case Draft, review decisions, and application commands. Preserve generated content and provenance as JSON, exact diagnosis registry ID, validation outcome/findings, state, nullable resulting `caseId` and `caseRevisionId`, and idempotency fingerprints for controlled application.
+
+## API Plan
+
+Generation endpoints return draft semantics. Review endpoints support accept/reject/request changes without creating Cases. A separate apply endpoint applies only accepted drafts with an idempotency key. A read endpoint returns the draft packet needed by CLOSE-005.
+
+## Testing Strategy
+
+Add focused tests for generation creating drafts only, review decisions, application idempotency/conflict, no approval/publication/scheduling side effects, targeted discriminator candidate-first behavior, CLI summary output, and existing CLOSE-003 registry-target regressions. Add gated integration/concurrency coverage if the repository test environment supports it.
+
+## Rollback/Recovery
+
+Schema changes are additive and can be rolled back by reverting the migration before deployment. Runtime rollback is restoring the previous generator/direct persistence files before applying migrations.
+
+## Progress
+
+- [x] Audit existing draft/governance/validation infrastructure.
+- [x] Add Clinical Case Draft schema and migration.
+- [x] Implement draft persistence, review, and controlled application service.
+- [x] Refactor generator and targeted discriminator callers.
+- [x] Update admin, CLI, dashboard contracts.
+- [x] Update docs.
+- [x] Run verification.
+
+## Discoveries
+
+Prisma 7 nullable JSON writes require `Prisma.DbNull`/nullable JSON sentinels
+rather than raw `null` for nullable JSON columns in create inputs.
+
+## Decisions
+
+`GenerateBatchResult.created` remains as the real Case count and is now `0` for
+AI generation batches; `draftCreated` is the candidate artifact count. This
+preserves the distinction between draft generation and controlled application.
+
+Admin review/application routes are editor-access runtime routes for the
+authorized package. They do not claim to resolve broad canonical runtime
+role-to-authority assignment outside this CLOSE-004 scope.
+
+## Remaining Risks
+
+Full Clinical Case Draft review UX and workspace queue integration remain
+CLOSE-005. Manual `POST /cases` remains a direct authoring path outside this
+package. Generic cross-artifact controlled-application authority remains
+partially mitigated, not fully resolved.

@@ -516,6 +516,14 @@ describe('CaseGeneratorService', () => {
         },
       }),
     };
+    const clinicalCaseDraftService = {
+      persistGeneratedDraft: jest.fn().mockResolvedValue({
+        id: 'draft-1',
+        diagnosisRegistryId: 'registry-1',
+        reviewStatus: 'PENDING_REVIEW',
+        validationStatus: 'PASSED',
+      }),
+    };
 
     const service = new CaseGeneratorService(
       prisma as never,
@@ -523,6 +531,10 @@ describe('CaseGeneratorService', () => {
       diagnosisRegistryLinkService as never,
       generationPlannerService as never,
       generationContextBuilder as never,
+      undefined,
+      undefined,
+      undefined,
+      clinicalCaseDraftService as never,
     );
 
     return {
@@ -532,6 +544,7 @@ describe('CaseGeneratorService', () => {
       diagnosisRegistryLinkService,
       generationPlannerService,
       generationContextBuilder,
+      clinicalCaseDraftService,
       service,
     };
   };
@@ -593,8 +606,9 @@ describe('CaseGeneratorService', () => {
     );
   });
 
-  it('persists a generated case through a fixed registry target', async () => {
-    const { tx, diagnosisRegistryLinkService, service } = buildService();
+  it('persists a generated case draft through a fixed registry target', async () => {
+    const { clinicalCaseDraftService, diagnosisRegistryLinkService, service, tx } =
+      buildService();
 
     await service.saveCaseForRegistryTarget(
       buildGeneratedCase(),
@@ -602,24 +616,24 @@ describe('CaseGeneratorService', () => {
     );
 
     expect(diagnosisRegistryLinkService.resolveForWrite).not.toHaveBeenCalled();
-    expect(tx.case.create).toHaveBeenCalledWith(
+    expect(tx.case.create).not.toHaveBeenCalled();
+    expect(clinicalCaseDraftService.persistGeneratedDraft).toHaveBeenCalledWith(
       expect.objectContaining({
-        // Jest asymmetric matchers are typed as any in this nested object.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        data: expect.objectContaining({
-          diagnosisId: 'diagnosis-1',
-          diagnosisRegistryId: 'registry-1',
-          proposedDiagnosisText: 'Asthma',
-          diagnosisMappingStatus: 'MATCHED',
-          diagnosisMappingMethod: 'EDITOR_SELECTED',
-          diagnosisMappingConfidence: 1,
+        generatedCase: expect.objectContaining({
+          answer: 'asthma',
         }),
+        target: expect.objectContaining({
+          legacyDiagnosisId: 'diagnosis-1',
+          diagnosisRegistryId: 'registry-1',
+          displayLabel: 'Asthma',
+        }),
+        generationPurpose: 'AI_CLINICAL_CASE_GENERATION',
       }),
     );
   });
 
-  it('assigns the next public number when persisting a generated case', async () => {
-    const { tx, service } = buildService();
+  it('does not assign a case public number while persisting a generated draft', async () => {
+    const { clinicalCaseDraftService, tx, service } = buildService();
     tx.case.findFirst.mockResolvedValueOnce({ publicNumber: 237 });
 
     await service.saveCaseForRegistryTarget(
@@ -627,13 +641,9 @@ describe('CaseGeneratorService', () => {
       buildPlannedDiagnosis(),
     );
 
-    expect(tx.case.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          publicNumber: 238,
-        }),
-      }),
-    );
+    expect(tx.case.findFirst).not.toHaveBeenCalled();
+    expect(tx.case.create).not.toHaveBeenCalled();
+    expect(clinicalCaseDraftService.persistGeneratedDraft).toHaveBeenCalled();
   });
 
   it('rejects generated cases that do not include exactly 6 clues', () => {
@@ -1095,8 +1105,8 @@ describe('CaseGeneratorService', () => {
     ).rejects.toThrow('leaks the final diagnosis before the confirmatory clue');
   });
 
-  it('persists generation quality metadata in the explanation JSON', async () => {
-    const { tx, service } = buildService();
+  it('persists generation quality metadata in the draft generated content', async () => {
+    const { clinicalCaseDraftService, service } = buildService();
 
     await service.saveCaseForRegistryTarget(
       {
@@ -1131,14 +1141,10 @@ describe('CaseGeneratorService', () => {
       buildPlannedDiagnosis(),
     );
 
-    expect(tx.case.create).toHaveBeenCalledWith(
+    expect(clinicalCaseDraftService.persistGeneratedDraft).toHaveBeenCalledWith(
       expect.objectContaining({
-        // Jest asymmetric matchers are typed as any in this nested object.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        data: expect.objectContaining({
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        generatedCase: expect.objectContaining({
           explanation: expect.objectContaining({
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             differentialAnalysis: expect.arrayContaining([
               expect.objectContaining({
                 diagnosis: 'Chronic obstructive pulmonary disease',
@@ -1146,10 +1152,9 @@ describe('CaseGeneratorService', () => {
                   expect.objectContaining({
                     clueOrder: 5,
                   }),
-                ]) as unknown,
+                ]),
               }),
             ]),
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             generationQuality: expect.objectContaining({
               critiqueScore: 94,
               critiquePassed: true,
@@ -1174,23 +1179,24 @@ describe('CaseGeneratorService', () => {
     );
   });
 
-  it('saves registry-first cases against the planned diagnosis label and registry link', async () => {
-    const { diagnosisRegistryLinkService, tx, service } = buildService();
+  it('saves registry-first drafts against the planned diagnosis label and registry link', async () => {
+    const { clinicalCaseDraftService, diagnosisRegistryLinkService, tx, service } =
+      buildService();
     const target = buildPlannedDiagnosis();
 
     await service.saveCaseForRegistryTarget(buildGeneratedCase(), target);
 
     expect(diagnosisRegistryLinkService.resolveForWrite).not.toHaveBeenCalled();
-    expect(tx.case.create).toHaveBeenCalledWith(
+    expect(tx.case.create).not.toHaveBeenCalled();
+    expect(clinicalCaseDraftService.persistGeneratedDraft).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          title: 'Asthma',
-          diagnosisId: 'diagnosis-1',
+        generatedCase: expect.objectContaining({
+          answer: 'asthma',
+        }),
+        target: expect.objectContaining({
+          legacyDiagnosisId: 'diagnosis-1',
           diagnosisRegistryId: 'registry-1',
-          proposedDiagnosisText: 'Asthma',
-          diagnosisMappingStatus: 'MATCHED',
-          diagnosisMappingMethod: 'EDITOR_SELECTED',
-          diagnosisMappingConfidence: 1,
+          displayLabel: 'Asthma',
         }),
       }),
     );
@@ -1224,10 +1230,10 @@ describe('CaseGeneratorService', () => {
       service.saveCaseForRegistryTarget(buildGeneratedCase(), target),
     ).resolves.toEqual(
       expect.objectContaining({
-        id: 'case-1',
+        id: 'draft-1',
       }),
     );
-    expect(tx.case.create).toHaveBeenCalled();
+    expect(tx.case.create).not.toHaveBeenCalled();
   });
 
   it('rejects registry-first cases for the same diagnosis and same scenario', async () => {
@@ -1964,7 +1970,8 @@ describe('CaseGeneratorService', () => {
       concurrency: 1,
     });
 
-    expect(result.created).toBe(1);
+    expect(result.created).toBe(0);
+    expect(result.draftCreated).toBe(1);
     expect(result.failureSummary?.byCategory.differential_preflight).toBe(1);
     expect(result.failureSummary?.samples).toEqual([
       expect.objectContaining({
@@ -2836,7 +2843,8 @@ describe('CaseGeneratorService', () => {
     );
     expect(registrySaveSpy).toHaveBeenCalledTimes(1);
     expect(saveCaseSpy).not.toHaveBeenCalled();
-    expect(result.created).toBe(1);
+    expect(result.created).toBe(0);
+    expect(result.draftCreated).toBe(1);
     expect(result.plannerDiagnostics[0].diagnosis?.displayLabel).toBe(
       'Asthma',
     );
@@ -2876,7 +2884,8 @@ describe('CaseGeneratorService', () => {
     });
     expect(saveCaseSpy).toHaveBeenCalledTimes(1);
     expect(legacySaveSpy).not.toHaveBeenCalled();
-    expect(result.created).toBe(1);
+    expect(result.created).toBe(0);
+    expect(result.draftCreated).toBe(1);
     expect(result.plannerDiagnostics[0].diagnosis?.diagnosisRegistryId).toBe(
       '11111111-1111-4111-8111-111111111111',
     );
@@ -2907,7 +2916,8 @@ describe('CaseGeneratorService', () => {
       ],
     });
 
-    expect(result.created).toBe(2);
+    expect(result.created).toBe(0);
+    expect(result.draftCreated).toBe(2);
     expect(
       result.plannerDiagnostics.map(
         (slot) => slot.diagnosis?.diagnosisRegistryId,
@@ -2991,7 +3001,8 @@ describe('CaseGeneratorService', () => {
 
     expect(registrySaveSpy).toHaveBeenCalledTimes(1);
     expect(saveCaseSpy).not.toHaveBeenCalled();
-    expect(result.created).toBe(1);
+    expect(result.created).toBe(0);
+    expect(result.draftCreated).toBe(1);
   });
 
   it('returns batch quality summary counts and average quality score', async () => {
@@ -3021,16 +3032,16 @@ describe('CaseGeneratorService', () => {
     jest
       .spyOn(service, 'saveCaseForRegistryTarget')
       .mockResolvedValueOnce({
-        id: 'case-1',
-        title: 'asthma',
-        difficulty: 'medium',
-        date: new Date('2026-04-20T00:00:00.000Z'),
+        id: 'draft-1',
+        diagnosisRegistryId: 'registry-1',
+        reviewStatus: 'PENDING_REVIEW',
+        validationStatus: 'PASSED',
       })
       .mockResolvedValueOnce({
-        id: 'case-2',
-        title: 'appendicitis',
-        difficulty: 'medium',
-        date: new Date('2026-04-21T00:00:00.000Z'),
+        id: 'draft-2',
+        diagnosisRegistryId: 'registry-2',
+        reviewStatus: 'PENDING_REVIEW',
+        validationStatus: 'PASSED',
       });
 
     const result = await service.generateBatch({
@@ -3042,7 +3053,8 @@ describe('CaseGeneratorService', () => {
     expect(result.generated).toBe(2);
     expect(result.accepted).toBe(2);
     expect(result.rejected).toBe(0);
-    expect(result.created).toBe(2);
+    expect(result.created).toBe(0);
+    expect(result.draftCreated).toBe(2);
     expect(result.skipped).toBe(0);
     expect(result.failed).toBe(0);
     expect(result.averageQualityScore).toBe(92);
@@ -3116,16 +3128,16 @@ describe('CaseGeneratorService', () => {
     const saveCaseSpy = jest
       .spyOn(service, 'saveCaseForRegistryTarget')
       .mockResolvedValueOnce({
-        id: 'case-1',
-        title: 'asthma',
-        difficulty: 'medium',
-        date: new Date('2026-04-20T00:00:00.000Z'),
+        id: 'draft-1',
+        diagnosisRegistryId: 'registry-1',
+        reviewStatus: 'PENDING_REVIEW',
+        validationStatus: 'PASSED',
       })
       .mockResolvedValueOnce({
-        id: 'case-2',
-        title: 'asthma',
-        difficulty: 'medium',
-        date: new Date('2026-04-21T00:00:00.000Z'),
+        id: 'draft-2',
+        diagnosisRegistryId: 'registry-1',
+        reviewStatus: 'PENDING_REVIEW',
+        validationStatus: 'PASSED',
       });
 
     const result = await service.generateBatch({
@@ -3137,7 +3149,8 @@ describe('CaseGeneratorService', () => {
     expect(result.generated).toBe(4);
     expect(result.accepted).toBe(2);
     expect(result.rejected).toBe(2);
-    expect(result.created).toBe(2);
+    expect(result.created).toBe(0);
+    expect(result.draftCreated).toBe(2);
     expect(result.failed).toBe(0);
     expect(result.averageQualityScore).toBe(90);
     expect(result.failureSummary?.byCategory.duplicate_scenario).toBe(1);
