@@ -11,7 +11,6 @@ import { EditorialAuthorityAssignmentRepository } from '../admin/editorial-autho
 import { CaseAssignmentService } from './case-assignment.service';
 import { DailyCaseSchedulerService } from './daily-case-scheduler.service';
 import { DailyCasesService } from './daily-cases.service';
-import { DailyLimitService } from './daily-limit.service';
 import { InternalDailyCasesController } from './internal-daily-cases.controller';
 
 @Module({
@@ -23,7 +22,6 @@ import { InternalDailyCasesController } from './internal-daily-cases.controller'
     CasePublicationGovernanceService,
     DailyCasesService,
     DailyCaseSchedulerService,
-    DailyLimitService,
     EditorialAuthorityAssignmentRepository,
     DiagnosisRegistryLifecyclePolicyService,
     DevOnlyGuard,

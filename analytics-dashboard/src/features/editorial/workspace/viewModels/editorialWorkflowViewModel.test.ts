@@ -21,7 +21,7 @@ describe('buildEditorialWorkflowViewModel', () => {
       'content',
       'publish',
     ]);
-    assert.equal(viewModel.reviewQueue.question, 'What is waiting on me?');
+    assert.equal(viewModel.reviewQueue.question, 'Editorial review queue');
     assert.equal(viewModel.overview.boards[0]?.id, 'diagnosisHealth');
     assert.equal(viewModel.teaching.boards.length, 2);
     assert.equal(viewModel.reasoning.boards.length, 4);
