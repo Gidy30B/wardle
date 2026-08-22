@@ -168,7 +168,6 @@ export default function GeneratePage() {
   const [track, setTrack] = useState('');
   const [bodySystem, setBodySystem] = useState('');
   const [difficulty, setDifficulty] = useState('');
-  const [registryFirst, setRegistryFirst] = useState(true);
   const [registryQuery, setRegistryQuery] = useState('');
   const [registrySpecialtyFilter, setRegistrySpecialtyFilter] = useState('');
   const [registryBodySystemFilter, setRegistryBodySystemFilter] = useState('');
@@ -229,9 +228,7 @@ export default function GeneratePage() {
   const targetedGenerationSupported = false;
   const canGenerate =
     !loading && (mode === 'registry_balanced' || targetedGenerationSupported);
-  const generationStatusCopy = registryFirst
-    ? 'Generating registry-planned batch...'
-    : 'Generating legacy unplanned batch...';
+  const generationStatusCopy = 'Generating registry-targeted batch...';
 
   useEffect(() => {
     let cancelled = false;
@@ -300,7 +297,6 @@ export default function GeneratePage() {
         track: compactValue(track),
         bodySystem: compactValue(bodySystem),
         difficulty: compactValue(difficulty),
-        registryFirst,
       });
       setResult(response);
       setActiveTab('all');
@@ -419,24 +415,6 @@ export default function GeneratePage() {
             </label>
           </div>
 
-          <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <input
-              className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900"
-              type="checkbox"
-              checked={registryFirst}
-              disabled={loading || mode === 'diagnosis_targeted'}
-              onChange={(event) => setRegistryFirst(event.target.checked)}
-            />
-            <span>
-              <span className="block text-sm font-semibold text-slate-900">
-                Registry-first planning
-              </span>
-              <span className="mt-1 block text-sm text-slate-500">
-                Registry-first planning selects balanced diagnosis targets before
-                case synthesis.
-              </span>
-            </span>
-          </label>
 
           <div>
             <button
@@ -549,7 +527,6 @@ export default function GeneratePage() {
             track={track}
             bodySystem={bodySystem}
             difficulty={difficulty}
-            registryFirst={registryFirst}
             selectedTargets={selectedTargets}
           />
         </section>
@@ -760,14 +737,12 @@ function PlannerPreview({
   bodySystem,
   difficulty,
   mode,
-  registryFirst,
   selectedTargets,
   track,
 }: {
   bodySystem: string;
   difficulty: string;
   mode: GenerationMode;
-  registryFirst: boolean;
   selectedTargets: DiagnosisRegistrySearchItem[];
   track: string;
 }) {
@@ -778,7 +753,7 @@ function PlannerPreview({
         <div className="mt-3 space-y-2 text-sm text-slate-600">
           <p>
             Planner will select diagnoses using generatable/playable registry
-            rows{registryFirst ? '.' : ', unless registry-first planning is off.'}
+            rows.
           </p>
           <PreviewLine label="Specialty" value={compactValue(track) ?? 'Any'} />
           <PreviewLine

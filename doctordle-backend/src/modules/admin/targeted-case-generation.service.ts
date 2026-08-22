@@ -71,7 +71,6 @@ export class TargetedCaseGenerationService {
     const result = await this.caseGenerator.generateBatch({
       count: 1,
       difficulty: input.payload.difficulty.toLowerCase(),
-      registryFirst: true,
       diagnosisRegistryIds: [input.diagnosisRegistryId],
       targetedCase: {
         teachingUnitIds,

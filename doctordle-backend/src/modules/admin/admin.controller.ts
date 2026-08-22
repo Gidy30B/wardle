@@ -1757,6 +1757,11 @@ export class AdminController {
 
   @Post('generate-cases')
   async generateCases(@Body() body: GenerateCasesBody = {}) {
+    if (body.registryFirst === false) {
+      throw new BadRequestException(
+        'registryFirst=false is no longer supported; case generation is always registry-targeted',
+      );
+    }
     const diagnosisRegistryIds = this.validateDiagnosisRegistryIds(
       body.diagnosisRegistryIds,
     );
@@ -1770,7 +1775,6 @@ export class AdminController {
       track: body.track,
       bodySystem: body.bodySystem,
       difficulty: body.difficulty,
-      registryFirst: body.registryFirst !== false,
       diagnosisRegistryIds,
     });
   }

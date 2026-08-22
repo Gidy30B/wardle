@@ -55,6 +55,25 @@ Severity values:
 - `Useful`: maintainability or usability improves, but safe human-controlled
   operation is not currently blocked.
 
+## CLOSE-003 Implementation Note
+
+On 2026-08-22, the local `weos/workspace-closure` work package
+`WEOS CLOSE-003` consolidated AI Clinical Case generation to a single
+registry-target path. Runtime generation now selects or resolves a governed
+`DiagnosisRegistry` row before provider invocation; planner-selected and
+explicit targets use the same generation eligibility predicate
+(`active`, `ACTIVE`, `isPlayable`, `isGeneratable`).
+
+The retired `registryFirst:false` path no longer invokes model generation.
+Compatibility callers that send `registryFirst: true` or `--registry-first=true`
+are accepted as no-ops; `false` is rejected deterministically. The dashboard
+Generate page no longer exposes a generator-mode toggle.
+
+Generated Clinical Case persistence remains a named temporary direct
+`Case`/revision boundary pending `WEOS CLOSE-004` candidate-first AI Clinical
+Case Draft lifecycle work. This note does not approve candidate lifecycle
+semantics, controlled application authority or governed publication changes.
+
 ## Gap Register
 
 | Gap ID         | Gap                                              | Related capabilities                                           | Gap status            | Runtime and interpretation evidence                                                                                                                                                                                                                                                                                                                       | Current implementation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Canonical expectation                                                                                                                                                                                            | Risk                                                                                                               | Severity  | Blocks safe automation                                                                     | Related decision                                                                                                                                   | Recommended next decision or task                                                                                                                                                                           |

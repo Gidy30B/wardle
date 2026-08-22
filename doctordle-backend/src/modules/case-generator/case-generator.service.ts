@@ -3,6 +3,7 @@ import {
   BadRequestException,
   Injectable,
   Logger,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { DiagnosisRegistryStatus, Prisma } from '@prisma/client';
@@ -13,6 +14,7 @@ import { getEnv } from '../../core/config/env.validation.js';
 import { PrismaService } from '../../core/db/prisma.service.js';
 import { CaseValidationOrchestrator } from '../case-validation/case-validation.orchestrator.js';
 import { DiagnosisRegistryLinkService } from '../diagnosis-registry/diagnosis-registry-link.service.js';
+import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service.js';
 import { buildMatchedDiagnosisMappingFields } from '../diagnosis-registry/diagnosis-mapping-fields.js';
 import { DifferentialMappingService } from '../diagnosis-graph/differential-mapping.service.js';
 import { GenerationContextBuilder } from '../editorial/generation-context-builder.service.js';
@@ -345,6 +347,8 @@ export class CaseGeneratorService {
     private readonly generationContextBuilder?: GenerationContextBuilder,
     private readonly caseTeachingAlignmentService: CaseTeachingAlignmentService = new CaseTeachingAlignmentService(),
     private readonly differentialMappingService?: DifferentialMappingService,
+    @Optional()
+    private readonly lifecyclePolicy?: DiagnosisRegistryLifecyclePolicyService,
   ) {
     if (this.env.OPENAI_API_KEY) {
       this.openaiClient = new OpenAI({
@@ -357,71 +361,32 @@ export class CaseGeneratorService {
     input: GenerateCaseInput = {},
     failureReporting?: GenerationFailureReportingContext,
   ): Promise<GeneratedCase> {
-    if (!this.openaiClient) {
-      throw new ServiceUnavailableException(
-        'OPENAI_API_KEY is not configured for case generation',
-      );
-    }
+    const batchId = input.batchId ?? randomUUID();
+    const [slot] = await this.generationPlannerService.createShadowPlan({
+      batchId,
+      options: {
+        count: 1,
+        track: input.track,
+        difficulty: input.difficulty,
+      },
+    });
+    const target = this.getRequiredPlannerTarget(slot);
+    const generationContext =
+      input.generationContext ??
+      (await this.buildGenerationContextForSlot({
+        diagnosisRegistryId: target.diagnosisRegistryId,
+      }));
 
-    let lastError: Error | null = null;
-    for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt += 1) {
-      try {
-        const generatedCase = await this.requestGeneratedCase(input, attempt);
-        const normalizedCase = this.normalizeCase(generatedCase);
-        await this.validateCaseWithRegistry(normalizedCase);
-
-        const differentialPreflight = await this.critiqueDifferentials(
-          normalizedCase,
-          null,
-        );
-        try {
-          this.assertPassingDifferentialPreflight(differentialPreflight);
-        } catch (error) {
-          this.logDifferentialPreflightFailed(
-            normalizedCase,
-            differentialPreflight,
-          );
-          throw error;
-        }
-
-        const critique = await this.critiqueGeneratedCase(normalizedCase);
-        if (!this.isPassingCritique(critique)) {
-          throw new BadRequestException(
-            `Generated case failed critique: ${critique.issues.join('; ')}`,
-          );
-        }
-
-        return this.attachGenerationQuality(normalizedCase, critique, input);
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-        const failureCategory = this.classifyGenerationFailure(lastError);
-        if (failureReporting) {
-          this.recordBatchFailure(failureReporting.tracker, {
-            index: failureReporting.index,
-            answer: null,
-            plannerDiagnosis: failureReporting.plannerDiagnosis ?? null,
-            category: failureCategory,
-            message: lastError.message,
-            attempt,
-          });
-        }
-        this.logger.warn(
-          JSON.stringify({
-            event: 'case.generate.retry',
-            attempt,
-            maxAttempts: MAX_GENERATION_ATTEMPTS,
-            failureCategory,
-            failureMessage: lastError.message,
-            error: lastError.message,
-          }),
-        );
-      }
-    }
-
-    throw new BadRequestException(
-      `Failed to generate a valid case after ${MAX_GENERATION_ATTEMPTS} attempts: ${
-        lastError?.message ?? 'unknown generation error'
-      }`,
+    return this.generateCaseForRegistryTarget(
+      {
+        target,
+        generation: {
+          ...input,
+          batchId,
+          generationContext,
+        },
+      },
+      failureReporting,
     );
   }
 
@@ -434,7 +399,7 @@ export class CaseGeneratorService {
   ): Promise<GeneratedCase> {
     if (!input.target) {
       throw new BadRequestException(
-        'Registry-first generation requires a planned diagnosis target',
+        'Registry-target generation requires a planned diagnosis target',
       );
     }
 
@@ -498,12 +463,12 @@ export class CaseGeneratorService {
         }
         this.logger.warn(
           JSON.stringify({
-            event: 'case.generate.registry_first.retry',
+            event: 'case.generate.registry_target.retry',
             attempt,
             maxAttempts: MAX_GENERATION_ATTEMPTS,
             diagnosisRegistryId: input.target.diagnosisRegistryId,
             plannerDiagnosis: input.target.displayLabel,
-            registryFirst: true,
+            generationMode: 'registry_target',
             failureCategory,
             failureMessage: lastError.message,
             error: lastError.message,
@@ -513,7 +478,7 @@ export class CaseGeneratorService {
     }
 
     throw new BadRequestException(
-      `Failed to generate a registry-first case after ${MAX_GENERATION_ATTEMPTS} attempts: ${
+      `Failed to generate a valid case after ${MAX_GENERATION_ATTEMPTS} registry-target attempts: ${
         lastError?.message ?? 'unknown generation error'
       }`,
     );
@@ -1108,21 +1073,12 @@ export class CaseGeneratorService {
   }
 
   async saveCase(
-    generatedCase: GeneratedCase,
-    options: SaveGeneratedCaseOptions = {},
+    _generatedCase: GeneratedCase,
+    _options: SaveGeneratedCaseOptions = {},
   ): Promise<SavedGeneratedCase | null> {
-    const normalizedCase = this.normalizeCase(generatedCase);
-    await this.validateCaseWithRegistry(normalizedCase);
-    const target = await this.findRegistryTargetByGeneratedAnswer(
-      normalizedCase.answer,
+    throw new BadRequestException(
+      'Open diagnosis case persistence has been retired; use registry-target case persistence',
     );
-    if (!target) {
-      throw new BadRequestException(
-        `Generated answer "${normalizedCase.answer}" does not match an active diagnosis registry entry`,
-      );
-    }
-
-    return this.saveCaseForRegistryTarget(normalizedCase, target, options);
   }
 
   async saveCaseForRegistryTarget(
@@ -1169,66 +1125,14 @@ export class CaseGeneratorService {
         .filter((clue) => clue.type === 'symptom')
         .map((clue) => clue.value);
 
-      const createdCase = await this.withSerializableRetry(() =>
-        this.prisma.$transaction(
-          async (tx) => {
-            if (!options.skipExistingAnswerCheck) {
-              const existing = await this.findExistingCaseIdByRegistryScenario(
-                target.diagnosisRegistryId,
-                scenarioKey,
-                tx,
-              );
-              if (existing) {
-                return null;
-              }
-            }
-
-            const diagnosisMappingFields = buildMatchedDiagnosisMappingFields({
-              diagnosisName: target.displayLabel,
-              proposedDiagnosisText: target.displayLabel,
-              method: 'EDITOR_SELECTED',
-            });
-
-            const persistedCase = await tx.case.create({
-              data: {
-                publicNumber: await this.getNextCasePublicNumber(tx),
-                title: target.displayLabel,
-                date: this.nextCaseDate(),
-                difficulty: this.normalizeDifficulty(options.difficulty),
-                history,
-                symptoms,
-                clues: normalizedCase.clues as Prisma.InputJsonValue,
-                explanation: this.toPersistedExplanation(
-                  normalizedCase,
-                ) as Prisma.InputJsonValue,
-                differentials: normalizedCase.differentials,
-                diagnosisId: target.legacyDiagnosisId,
-                diagnosisRegistryId: target.diagnosisRegistryId,
-                ...diagnosisMappingFields,
-              },
-              select: {
-                id: true,
-                title: true,
-                difficulty: true,
-                date: true,
-              },
-            });
-
-            await this.caseValidationOrchestrator.runShadowForGeneratedCaseInTransaction(
-              tx,
-              {
-                caseId: persistedCase.id,
-                startedAt: new Date(),
-              },
-            );
-
-            return persistedCase;
-          },
-          {
-            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-          },
-        ),
-      );
+      const createdCase = await this.persistGeneratedClinicalCase({
+        generatedCase: normalizedCase,
+        target,
+        options,
+        scenarioKey,
+        history,
+        symptoms,
+      });
 
       if (!createdCase) {
         return null;
@@ -1265,9 +1169,89 @@ export class CaseGeneratorService {
     }
   }
 
+  private async persistGeneratedClinicalCase(input: {
+    generatedCase: GeneratedCase;
+    target: NonNullable<PlannedGenerationSlot['diagnosis']>;
+    options: SaveGeneratedCaseOptions;
+    scenarioKey: string;
+    history: string;
+    symptoms: string[];
+  }): Promise<SavedGeneratedCase | null> {
+    // CLOSE-004 replaces this temporary direct Case persistence boundary with
+    // candidate-first AI Clinical Case Draft persistence and controlled application.
+    return this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        async (tx) => {
+          if (!input.options.skipExistingAnswerCheck) {
+            const existing = await this.findExistingCaseIdByRegistryScenario(
+              input.target.diagnosisRegistryId,
+              input.scenarioKey,
+              tx,
+            );
+            if (existing) {
+              return null;
+            }
+          }
+
+          const diagnosisMappingFields = buildMatchedDiagnosisMappingFields({
+            diagnosisName: input.target.displayLabel,
+            proposedDiagnosisText: input.target.displayLabel,
+            method: 'EDITOR_SELECTED',
+          });
+
+          const persistedCase = await tx.case.create({
+            data: {
+              publicNumber: await this.getNextCasePublicNumber(tx),
+              title: input.target.displayLabel,
+              date: this.nextCaseDate(),
+              difficulty: this.normalizeDifficulty(input.options.difficulty),
+              history: input.history,
+              symptoms: input.symptoms,
+              clues: input.generatedCase.clues as Prisma.InputJsonValue,
+              explanation: this.toPersistedExplanation(
+                input.generatedCase,
+              ) as Prisma.InputJsonValue,
+              differentials: input.generatedCase.differentials,
+              diagnosisId: input.target.legacyDiagnosisId,
+              diagnosisRegistryId: input.target.diagnosisRegistryId,
+              ...diagnosisMappingFields,
+            },
+            select: {
+              id: true,
+              title: true,
+              difficulty: true,
+              date: true,
+            },
+          });
+
+          await this.caseValidationOrchestrator.runShadowForGeneratedCaseInTransaction(
+            tx,
+            {
+              caseId: persistedCase.id,
+              startedAt: new Date(),
+            },
+          );
+
+          return persistedCase;
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      ),
+    );
+  }
+
   async generateBatch(
     options: GenerateBatchOptions,
   ): Promise<GenerateBatchResult> {
+    const legacyRegistryFirst = (options as { registryFirst?: unknown })
+      .registryFirst;
+    if (legacyRegistryFirst === false) {
+      throw new BadRequestException(
+        'registryFirst=false is no longer supported; case generation is always registry-targeted',
+      );
+    }
+
     const count = Math.trunc(options.count);
     if (!Number.isFinite(count) || count < 1) {
       throw new BadRequestException('Batch count must be a positive integer');
@@ -1279,7 +1263,6 @@ export class CaseGeneratorService {
       options.diagnosisRegistryIds ?? [],
     );
     const targetedGeneration = requestedDiagnosisRegistryIds.length > 0;
-    const registryFirst = targetedGeneration || options.registryFirst !== false;
     const qualityState: BatchQualityState = {
       generated: 0,
       accepted: 0,
@@ -1315,7 +1298,7 @@ export class CaseGeneratorService {
         track: this.normalizeOptionalString(options.track),
         difficulty: this.normalizeDifficulty(options.difficulty),
         concurrency,
-        registryFirst,
+        generationMode: 'registry_target',
         targetedGeneration,
         requestedDiagnosisRegistryIds,
         selectedDiagnosisRegistryIds,
@@ -1338,7 +1321,6 @@ export class CaseGeneratorService {
             index: currentIndex,
             requestedCount: count,
             options,
-            registryFirst,
             seenAnswers,
             qualityState,
             failureTracker,
@@ -1412,7 +1394,6 @@ export class CaseGeneratorService {
     index: number;
     requestedCount: number;
     options: GenerateBatchOptions;
-    registryFirst: boolean;
     seenAnswers: Set<string>;
     qualityState: BatchQualityState;
     failureTracker: BatchFailureTracker;
@@ -1435,7 +1416,6 @@ export class CaseGeneratorService {
         const generationContext = await this.buildGenerationContextForSlot({
           diagnosisRegistryId:
             input.plannerSlot?.diagnosis?.diagnosisRegistryId ?? null,
-          registryFirst: input.registryFirst,
         });
         generationContextBuilt = Boolean(generationContext);
         const generationInput = {
@@ -1451,23 +1431,18 @@ export class CaseGeneratorService {
           clueRevealStrategy: input.options.targetedCase?.clueRevealStrategy,
           discriminatorTarget: input.options.targetedCase?.discriminatorTarget,
         };
-        const generatedCase =
-          input.registryFirst
-            ? await this.generateCaseForRegistryTarget({
-                target: input.plannerSlot?.diagnosis ?? null,
-                generation: generationInput,
-              }, {
-                tracker: input.failureTracker,
-                index: input.index,
-                plannerDiagnosis:
-                  input.plannerSlot?.diagnosis?.displayLabel ?? null,
-              })
-            : await this.generateCase(generationInput, {
-                tracker: input.failureTracker,
-                index: input.index,
-                plannerDiagnosis:
-                  input.plannerSlot?.diagnosis?.displayLabel ?? null,
-              });
+        const generatedCase = await this.generateCaseForRegistryTarget(
+          {
+            target: input.plannerSlot?.diagnosis ?? null,
+            generation: generationInput,
+          },
+          {
+            tracker: input.failureTracker,
+            index: input.index,
+            plannerDiagnosis:
+              input.plannerSlot?.diagnosis?.displayLabel ?? null,
+          },
+        );
         input.qualityState.generated += 1;
 
         if (input.plannerSlot) {
@@ -1490,7 +1465,6 @@ export class CaseGeneratorService {
           quality,
           requestedCount: input.requestedCount,
           options: input.options,
-          registryFirst: input.registryFirst,
           qualityState: input.qualityState,
           plannerTarget: input.plannerSlot?.diagnosis ?? null,
         });
@@ -1524,7 +1498,7 @@ export class CaseGeneratorService {
             qualityScore,
             specialty: quality?.specialty ?? null,
             estimatedDifficulty: quality?.estimatedDifficulty ?? null,
-            registryFirst: input.registryFirst,
+            generationMode: 'registry_target',
             plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
             generationContextBuilt,
           });
@@ -1533,45 +1507,33 @@ export class CaseGeneratorService {
 
         const acceptedKey = this.getBatchAcceptedKey({
           generatedCase: normalizedCase,
-          registryFirst: input.registryFirst,
           plannerTarget: input.plannerSlot?.diagnosis ?? null,
         });
         this.recordAcceptedBatchKey({
           state: input.qualityState,
-          registryFirst: input.registryFirst,
           key: acceptedKey,
         });
-        const savedCase =
-          input.registryFirst
-            ? await this.saveCaseForRegistryTarget(
-                normalizedCase,
-                this.getRequiredPlannerTarget(input.plannerSlot),
-                {
-                  track: input.options.track,
-                  difficulty,
-                  seenAnswers: undefined,
-                },
-              )
-            : await this.saveCase(normalizedCase, {
-                track: input.options.track,
-                difficulty,
-                seenAnswers: undefined,
-              });
+        const savedCase = await this.saveCaseForRegistryTarget(
+          normalizedCase,
+          this.getRequiredPlannerTarget(input.plannerSlot),
+          {
+            track: input.options.track,
+            difficulty,
+            seenAnswers: undefined,
+          },
+        );
 
         if (!savedCase) {
           const failureCategory: CaseGenerationFailureCategory =
-            input.registryFirst ? 'duplicate_scenario' : 'duplicate_answer';
+            'duplicate_scenario';
           input.qualityState.rejected += 1;
           this.deleteAcceptedBatchKey({
             state: input.qualityState,
-            registryFirst: input.registryFirst,
             key: acceptedKey,
           });
           lastRejected = {
             answer: normalizedCase.answer,
-            reason: input.registryFirst
-              ? 'duplicate_scenario'
-              : 'duplicate_answer',
+            reason: 'duplicate_scenario',
             failureCategory,
           };
           this.recordBatchFailure(input.failureTracker, {
@@ -1587,15 +1549,13 @@ export class CaseGeneratorService {
             index: input.index,
             attempt,
             answer: normalizedCase.answer,
-            reason: input.registryFirst
-              ? 'duplicate_scenario'
-              : 'duplicate_answer',
+            reason: 'duplicate_scenario',
             failureCategory,
             failureMessage: failureCategory,
             qualityScore,
             specialty: quality?.specialty ?? null,
             estimatedDifficulty: quality?.estimatedDifficulty ?? null,
-            registryFirst: input.registryFirst,
+            generationMode: 'registry_target',
             plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
             generationContextBuilt,
           });
@@ -1619,11 +1579,10 @@ export class CaseGeneratorService {
             qualityScore,
             specialty: quality?.specialty ?? null,
             estimatedDifficulty: quality?.estimatedDifficulty ?? null,
-            registryFirst: input.registryFirst,
+            generationMode: 'registry_target',
             plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
             generationContextBuilt,
-            saveDiagnosisSource:
-              input.registryFirst ? 'registry' : 'legacy',
+            saveDiagnosisSource: 'registry',
           }),
         );
 
@@ -1656,11 +1615,11 @@ export class CaseGeneratorService {
             error: lastError.message,
             failureCategory,
             failureMessage: lastError.message,
-            registryFirst: input.registryFirst,
+            generationMode: 'registry_target',
             plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
             generationContextBuilt,
             rejectionReason: lastError.message,
-            saveDiagnosisSource: input.registryFirst ? 'registry' : 'legacy',
+            saveDiagnosisSource: 'registry',
           }),
           lastError.stack,
         );
@@ -1698,10 +1657,8 @@ export class CaseGeneratorService {
 
   private async buildGenerationContextForSlot(input: {
     diagnosisRegistryId: string | null;
-    registryFirst: boolean;
   }): Promise<GenerateCaseInput['generationContext'] | undefined> {
     if (
-      !input.registryFirst ||
       !input.diagnosisRegistryId ||
       !this.generationContextBuilder
     ) {
@@ -1857,9 +1814,8 @@ export class CaseGeneratorService {
 
     const rows = await this.prisma.diagnosisRegistry.findMany({
       where: {
+        ...this.getGeneratableRegistryWhere(),
         id: { in: diagnosisRegistryIds },
-        active: true,
-        status: DiagnosisRegistryStatus.ACTIVE,
       },
       select: {
         id: true,
@@ -1894,7 +1850,7 @@ export class CaseGeneratorService {
     const missingIds = diagnosisRegistryIds.filter((id) => !byId.has(id));
     if (missingIds.length) {
       throw new BadRequestException(
-        `Diagnosis registry IDs are not active or do not exist: ${missingIds.join(', ')}`,
+        `Diagnosis registry IDs are not generation-eligible or do not exist: ${missingIds.join(', ')}`,
       );
     }
 
@@ -1922,32 +1878,15 @@ export class CaseGeneratorService {
     });
   }
 
-  private async requestGeneratedCase(
-    input: GenerateCaseInput,
-    attempt: number,
-  ): Promise<GeneratedCase> {
-    const prompt = this.buildPrompt(input, attempt);
-    const completion = await this.openaiClient!.chat.completions.create({
-      model: this.model,
-      messages: [
-        {
-          role: 'system',
-          content: this.buildSystemPrompt(),
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      response_format: zodResponseFormat(generatedCaseSchema, 'generated_case'),
-    });
-
-    const content = completion.choices[0]?.message?.content;
-    if (typeof content !== 'string' || content.trim().length === 0) {
-      throw new BadRequestException('OpenAI returned an empty case payload');
-    }
-
-    return this.parseGeneratedCase(content);
+  private getGeneratableRegistryWhere(): Prisma.DiagnosisRegistryWhereInput {
+    return (
+      this.lifecyclePolicy?.getGeneratableRegistryWhere() ?? {
+        active: true,
+        status: DiagnosisRegistryStatus.ACTIVE,
+        isPlayable: true,
+        isGeneratable: true,
+      }
+    );
   }
 
   private async requestGeneratedCaseForRegistryTarget(input: {
@@ -1984,107 +1923,6 @@ export class CaseGeneratorService {
     }
 
     return this.parseGeneratedCaseForRegistryTarget(content, input.target);
-  }
-
-  private buildPrompt(input: GenerateCaseInput, attempt = 1): string {
-    const track = this.normalizeOptionalString(input.track);
-    const difficulty = this.normalizeDifficulty(input.difficulty);
-    const sequenceLabel =
-      typeof input.sequence === 'number'
-        ? `Case ${input.sequence}.`
-        : undefined;
-    const teachingSection = this.buildConceptGuidedCaseSection(input);
-    const reasoningPathSection = this.buildReasoningPathCaseSection(input);
-
-    return [
-      sequenceLabel,
-      attempt > 1
-        ? `Regeneration attempt ${attempt}: correct prior quality failures by producing a fresh case. Previous attempt likely failed because differentials were not true competing diagnoses; replace mechanisms/subtypes with realistic competing diagnoses.`
-        : undefined,
-      'Generate one clinically consistent USMLE-style diagnostic case using differential-first reasoning.',
-      '',
-      'Required reasoning plan before writing JSON:',
-      'Step 1: define the correct diagnosis.',
-      'Step 2: define 3-5 plausible differentials that are true competing diagnoses from clues 0-2.',
-      'Step 3: generate exactly 6 clues that progressively eliminate differentials.',
-      'Step 4: generate an explanation that includes why the correct diagnosis fits and why the differentials are less likely.',
-      '',
-      'Clue ladder:',
-      '0 = broad presentation',
-      '1 = directional clue',
-      '2 = discriminator',
-      '3 = narrowing clue',
-      '4 = near-diagnostic clue',
-      '5 = confirmatory clue',
-      teachingSection,
-      reasoningPathSection,
-      '',
-      'Return JSON ONLY with this exact shape:',
-      '{',
-      '"clues": [',
-      '{"type": "history|symptom|vital|lab|exam|imaging", "value": "...", "order": 0}',
-      '],',
-      '"answer": "...",',
-      '"differentials": [...],',
-      '"explanation": {',
-      '"diagnosis": "...",',
-      '"summary": "...",',
-      '"reasoning": [...],',
-      '"keyFindings": [...],',
-      '"differentialAnalysis": [',
-      '{"diagnosis": "...", "whyPlausibleEarly": "...", "ruledOutByClues": [{"clueOrder": 2, "evidence": "...", "reason": "..."}], "finalReasonLessLikely": "..."}',
-      ']',
-      '}',
-      '}',
-      '',
-      'Constraints:',
-      '',
-      '* clinically accurate',
-      `* ${difficulty} difficulty`,
-      '* exactly 6 clues with orders 0 through 5',
-      '* 3-5 plausible differentials',
-      '* a valid differential is a true competing diagnosis a clinician would consider from clues 0-2',
-      '* each differential must fit age, sex, timeline, acuity, and setting',
-      '* do not include sex-specific differentials unless compatible with the patient sex and anatomy',
-      '* do not include ovarian, uterine, pregnancy-related, or gynecologic diagnoses for male patients',
-      '* do not include prostate or testicular diagnoses for female patients',
-      '* if sex is unspecified or relevant anatomy is unclear, avoid sex-specific differentials unless the case explicitly supports them',
-      '* age-specific differentials must be plausible for the stated age group',
-      '* each differential must share early features with the final diagnosis and be separable by later clues',
-      '* differentials must not be a subtype, cause/mechanism, complication, severity label, synonym, accepted alias, or broad semantic neighbor',
-      '* differentials must not be ruled out immediately by demographics or by clue 0 unless intentionally used as a weak distractor',
-      '* differentials must teach a useful distinction and remain meaningful until later clues',
-      '* invalid differential example: Acute Kidney Injury with Prerenal Azotemia as a competing differential',
-      '* invalid differential example: Asthma with Asthma Exacerbation',
-      '* invalid differential example: pediatric asthma with COPD unless strong rare-context evidence exists',
-      '* invalid differential example: male appendicitis with ovarian torsion or ectopic pregnancy',
-      '* valid differential example: pneumonia with pulmonary embolism when early dyspnea/hypoxia/tachycardia exists and later consolidation separates them',
-      '* valid differential example: asthma with vocal cord dysfunction when early exercise-related dyspnea/wheeze exists and spirometry/bronchodilator response separates them',
-      '* appendicitis competitors: gastroenteritis, renal colic, mesenteric adenitis, right-sided diverticulitis, Crohn disease; ovarian torsion only if female; ectopic pregnancy only if reproductive-age female; testicular torsion only if male with scrotal/groin symptoms',
-      '* heart failure competitors: pneumonia, COPD exacerbation, pulmonary embolism, acute coronary syndrome, renal failure/fluid overload',
-      '* type 2 diabetes mellitus competitors: type 1 diabetes mellitus, Cushing syndrome, steroid-induced hyperglycemia, metabolic syndrome; hyperthyroidism only if weight loss/tachycardia prominent; diabetes insipidus only if polyuria/polydipsia dominate without hyperglycemia',
-      '* pneumonia competitors: acute bronchitis, pulmonary embolism, heart failure, COPD exacerbation; tuberculosis only when chronicity supports it; lung abscess only if cavitation, foul sputum, or aspiration risk supports it',
-      '* for broad syndrome diagnoses, choose competing diagnoses that mimic the syndrome, not etiologic subtypes of that syndrome',
-      '* if etiologic discrimination is desired, the final answer should be the etiologic subtype, e.g. Prerenal AKI, not generic Acute Kidney Injury',
-      '* each clue introduces new information',
-      '* clues become stronger from broad to confirmatory',
-      '* clues 0-4 must not name or abbreviate the final diagnosis or its common aliases',
-      '* every lab clue must include at least one realistic numeric value with units or a clearly interpretable objective result; write BNP is 1,250 pg/mL, not BNP is elevated',
-      '* every vital clue must include realistic vital sign values; write BP is 88/54 mmHg, HR 124/min, RR 28/min, not vitals are unstable',
-      '* every imaging clue must include a specific objective finding; write chest X-ray shows bilateral perihilar opacities and small pleural effusions, not chest X-ray is abnormal',
-      '* maintain age, sex, timeline, vitals, labs, and imaging consistency',
-      '* no duplicate clues',
-      '* no fluff',
-      '* differentialAnalysis is for Wardle future clinical knowledge graph',
-      '* differentialAnalysis must encode differential-vs-evidence relationships',
-      '* for each differential, explain why it was plausible from early clues, which exact clue evidence weakened or ruled it out, and why the final diagnosis fits better',
-      '* every rule-out must be grounded in a specific clue and quote or tightly paraphrase that clue evidence',
-      track ? `* specialty focus: ${track}` : undefined,
-      '',
-      'Use concise, concrete clinical details. Do not include extra JSON keys.',
-    ]
-      .filter((value): value is string => Boolean(value))
-      .join('\n');
   }
 
   private buildRegistryTargetPrompt(
@@ -2426,22 +2264,6 @@ export class CaseGeneratorService {
     return report;
   }
 
-  private buildSystemPrompt(): string {
-    return [
-      'You generate clinically accurate USMLE-style diagnostic training cases.',
-      'Use differential-first reasoning internally, then return valid JSON only.',
-      'The JSON must match the requested schema exactly and must not include markdown or extra keys.',
-      'Every case must have exactly 6 clues ordered 0 through 5 as a progressive diagnostic ladder: broad, directional, discriminator, narrowing, near-diagnostic, confirmatory.',
-      'Define 3-5 plausible differentials before choosing clue details.',
-      'Each clue must add new clinical information and progressively reduce the differential.',
-      'Do not name or abbreviate the final diagnosis in clues 0 through 4.',
-      'Use realistic labs, imaging, vitals, exam findings, timelines, and units where appropriate.',
-      'Keep the case internally consistent and make the explanation address why the final diagnosis fits and why differentials are less likely.',
-      'Do not only list differentials; explain why each differential loses against the final diagnosis using specific clue evidence.',
-      'Rule-out reasoning must use specific clue evidence and avoid generic teaching prose.',
-    ].join('\n');
-  }
-
   private buildRegistryTargetSystemPrompt(): string {
     return [
       'You generate clinically accurate USMLE-style diagnostic training cases for a fixed final diagnosis.',
@@ -2501,27 +2323,6 @@ export class CaseGeneratorService {
       'Fail generic, invented, or unsupported rule-out reasoning.',
       'List concrete issues and recommendations. Use empty arrays when none.',
     ].join('\n');
-  }
-
-  private parseGeneratedCase(rawContent: string): GeneratedCase {
-    const sanitized = rawContent
-      .trim()
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/\s*```$/i, '');
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(sanitized);
-    } catch (error) {
-      throw new BadRequestException(
-        `Failed to parse generated case JSON: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-
-    return generatedCaseSchema.parse(parsed);
   }
 
   private parseGeneratedCaseForRegistryTarget(
@@ -3119,21 +2920,15 @@ export class CaseGeneratorService {
     quality: PersistedGeneratedExplanation['generationQuality'] | undefined;
     requestedCount: number;
     options: GenerateBatchOptions;
-    registryFirst: boolean;
     qualityState: BatchQualityState;
     plannerTarget: PlannedGenerationSlot['diagnosis'] | null | undefined;
   }): BatchRejectionReason | null {
     const batchDedupeKey = this.getBatchAcceptedKey({
       generatedCase: input.generatedCase,
-      registryFirst: input.registryFirst,
       plannerTarget: input.plannerTarget ?? null,
     });
-    if (input.registryFirst) {
-      if (input.qualityState.acceptedScenarioKeys.has(batchDedupeKey)) {
-        return 'duplicate_scenario';
-      }
-    } else if (input.qualityState.acceptedAnswers.has(batchDedupeKey)) {
-      return 'duplicate_answer';
+    if (input.qualityState.acceptedScenarioKeys.has(batchDedupeKey)) {
+      return 'duplicate_scenario';
     }
 
     const qualityScore =
@@ -3217,40 +3012,29 @@ export class CaseGeneratorService {
 
   private getBatchAcceptedKey(input: {
     generatedCase: GeneratedCase;
-    registryFirst: boolean;
     plannerTarget: PlannedGenerationSlot['diagnosis'] | null;
   }): string {
-    if (input.registryFirst && input.plannerTarget) {
-      return this.getCaseScenarioKey(input.generatedCase, input.plannerTarget);
+    if (!input.plannerTarget) {
+      throw new BadRequestException(
+        'Registry-target generation requires a planned diagnosis target',
+      );
     }
 
-    return input.generatedCase.answer;
+    return this.getCaseScenarioKey(input.generatedCase, input.plannerTarget);
   }
 
   private recordAcceptedBatchKey(input: {
     state: BatchQualityState;
-    registryFirst: boolean;
     key: string;
   }): void {
-    if (input.registryFirst) {
-      input.state.acceptedScenarioKeys.add(input.key);
-      return;
-    }
-
-    input.state.acceptedAnswers.add(input.key);
+    input.state.acceptedScenarioKeys.add(input.key);
   }
 
   private deleteAcceptedBatchKey(input: {
     state: BatchQualityState;
-    registryFirst: boolean;
     key: string;
   }): void {
-    if (input.registryFirst) {
-      input.state.acceptedScenarioKeys.delete(input.key);
-      return;
-    }
-
-    input.state.acceptedAnswers.delete(input.key);
+    input.state.acceptedScenarioKeys.delete(input.key);
   }
 
   private logBatchRejectedAttempt(input: {
@@ -3264,7 +3048,7 @@ export class CaseGeneratorService {
     qualityScore: number | null;
     specialty: string | null;
     estimatedDifficulty: string | null;
-    registryFirst?: boolean;
+    generationMode?: string;
     plannerDiagnosis?: string | null;
     generationContextBuilt?: boolean;
   }): void {
@@ -3281,7 +3065,7 @@ export class CaseGeneratorService {
         qualityScore: input.qualityScore,
         specialty: input.specialty,
         estimatedDifficulty: input.estimatedDifficulty,
-        registryFirst: input.registryFirst === true,
+        generationMode: input.generationMode ?? 'registry_target',
         plannerDiagnosis: input.plannerDiagnosis ?? null,
         generationContextBuilt: input.generationContextBuilt === true,
       }),
@@ -3465,94 +3249,12 @@ export class CaseGeneratorService {
     );
   }
 
-  private async findRegistryTargetByGeneratedAnswer(
-    answer: string,
-  ): Promise<NonNullable<PlannedGenerationSlot['diagnosis']> | null> {
-    const normalizedAnswer = this.normalizeClinicalText(answer);
-    if (!normalizedAnswer) {
-      return null;
-    }
-
-    const registry = await this.prisma.diagnosisRegistry.findFirst({
-      where: {
-        active: true,
-        status: 'ACTIVE',
-        isPlayable: true,
-        OR: [
-          {
-            canonicalNormalized: normalizedAnswer,
-          },
-          {
-            displayLabel: {
-              equals: answer,
-              mode: 'insensitive',
-            },
-          },
-          {
-            canonicalName: {
-              equals: answer,
-              mode: 'insensitive',
-            },
-          },
-          {
-            aliases: {
-              some: {
-                normalizedTerm: normalizedAnswer,
-                active: true,
-                acceptedForMatch: true,
-              },
-            },
-          },
-        ],
-      },
-      select: {
-        id: true,
-        legacyDiagnosisId: true,
-        displayLabel: true,
-        canonicalName: true,
-        specialty: true,
-        category: true,
-        bodySystem: true,
-        difficultyBand: true,
-        aliases: {
-          where: {
-            active: true,
-            acceptedForMatch: true,
-          },
-          select: {
-            term: true,
-          },
-          orderBy: [{ rank: 'asc' }, { term: 'asc' }],
-        },
-      },
-    });
-
-    if (!registry) {
-      return null;
-    }
-
-    return {
-      diagnosisRegistryId: registry.id,
-      legacyDiagnosisId: registry.legacyDiagnosisId,
-      displayLabel: registry.displayLabel,
-      canonicalName: registry.canonicalName,
-      acceptedAliases: registry.aliases.map((alias) => alias.term),
-      specialty: registry.specialty,
-      category: registry.category,
-      bodySystem: registry.bodySystem,
-      difficultyBand: registry.difficultyBand,
-      existingCaseCount: 0,
-      lastGeneratedAt: null,
-      recentUsePenaltyApplied: false,
-    };
-  }
-
   private getRequiredPlannerTarget(
     slot: PlannedGenerationSlot | undefined,
   ): NonNullable<PlannedGenerationSlot['diagnosis']> {
     if (!slot?.diagnosis) {
       throw new BadRequestException(
-        'Registry-first generation requires a planned diagnosis target',
+        'Registry-target generation requires a planned diagnosis target',
       );
     }
 

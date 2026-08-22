@@ -169,7 +169,6 @@ export type GenerateBatchOptions = {
   bodySystem?: string;
   difficulty?: string;
   concurrency?: number;
-  registryFirst?: boolean;
   diagnosisRegistryIds?: string[];
   targetedCase?: {
     teachingUnitIds?: string[];

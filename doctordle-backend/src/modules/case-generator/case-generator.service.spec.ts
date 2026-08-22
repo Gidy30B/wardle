@@ -307,12 +307,21 @@ describe('CaseGeneratorService', () => {
       },
     }) as GeneratedCase;
 
+  const registryTargetAliases = [
+    'Reactive airway disease',
+    'pneumonia',
+    'Prerenal Acute Kidney Injury',
+    'Acute Kidney Injury',
+    'Pulmonary Embolism',
+    'Appendicitis',
+  ];
+
   const buildPlannedDiagnosis = () => ({
     diagnosisRegistryId: 'registry-1',
     legacyDiagnosisId: 'diagnosis-1',
     displayLabel: 'Asthma',
     canonicalName: 'asthma',
-    acceptedAliases: ['Reactive airway disease'],
+    acceptedAliases: registryTargetAliases,
     specialty: 'Pulmonology',
     category: 'Obstructive',
     bodySystem: 'Respiratory',
@@ -421,8 +430,7 @@ describe('CaseGeneratorService', () => {
               legacyDiagnosisId: `diagnosis-${index + 1}`,
               displayLabel: index === 0 ? 'Asthma' : 'Appendicitis',
               canonicalName: index === 0 ? 'asthma' : 'appendicitis',
-              acceptedAliases:
-                index === 0 ? ['Reactive airway disease'] : [],
+              acceptedAliases: index === 0 ? registryTargetAliases : [],
               specialty: index === 0 ? 'Pulmonology' : 'General Surgery',
               category: index === 0 ? 'Obstructive' : 'Inflammatory',
               bodySystem: index === 0 ? 'Respiratory' : 'Gastrointestinal',
@@ -464,6 +472,10 @@ describe('CaseGeneratorService', () => {
           const normalizedAiAnswer = aiAnswer.toLowerCase();
           const normalizedPlannerDiagnosis =
             slot.diagnosis?.displayLabel.toLowerCase() ?? '';
+          const normalizedAliases =
+            slot.diagnosis?.acceptedAliases.map((alias) =>
+              alias.toLowerCase(),
+            ) ?? [];
 
           return {
             ...slot,
@@ -472,7 +484,8 @@ describe('CaseGeneratorService', () => {
               normalizedAiAnswer,
               normalizedPlannerDiagnosis,
               matchesPlanner:
-                normalizedAiAnswer === normalizedPlannerDiagnosis,
+                normalizedAiAnswer === normalizedPlannerDiagnosis ||
+                normalizedAliases.includes(normalizedAiAnswer),
             },
           };
         },
@@ -580,10 +593,13 @@ describe('CaseGeneratorService', () => {
     );
   });
 
-  it('persists a generated case through an existing registry target', async () => {
+  it('persists a generated case through a fixed registry target', async () => {
     const { tx, diagnosisRegistryLinkService, service } = buildService();
 
-    await service.saveCase(buildGeneratedCase());
+    await service.saveCaseForRegistryTarget(
+      buildGeneratedCase(),
+      buildPlannedDiagnosis(),
+    );
 
     expect(diagnosisRegistryLinkService.resolveForWrite).not.toHaveBeenCalled();
     expect(tx.case.create).toHaveBeenCalledWith(
@@ -606,7 +622,10 @@ describe('CaseGeneratorService', () => {
     const { tx, service } = buildService();
     tx.case.findFirst.mockResolvedValueOnce({ publicNumber: 237 });
 
-    await service.saveCase(buildGeneratedCase());
+    await service.saveCaseForRegistryTarget(
+      buildGeneratedCase(),
+      buildPlannedDiagnosis(),
+    );
 
     expect(tx.case.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1050,15 +1069,10 @@ describe('CaseGeneratorService', () => {
   });
 
   it('rejects registry alias leakage before the confirmatory clue', async () => {
-    const { prisma, service } = buildService();
-    prisma.diagnosisRegistry.findFirst.mockResolvedValue({
-      canonicalName: 'Pulmonary Embolism',
-      displayLabel: 'Pulmonary Embolism',
-      aliases: [{ term: 'PE' }],
-    });
+    const { service } = buildService();
 
     await expect(
-      service.saveCase(
+      service.saveCaseForRegistryTarget(
         buildGeneratedCase({
           answer: 'Pulmonary Embolism',
           clues: buildGeneratedCase().clues.map((clue) =>
@@ -1071,6 +1085,12 @@ describe('CaseGeneratorService', () => {
             diagnosis: 'Pulmonary Embolism',
           },
         }),
+        {
+          ...buildPlannedDiagnosis(),
+          displayLabel: 'Pulmonary Embolism',
+          canonicalName: 'Pulmonary Embolism',
+          acceptedAliases: ['PE'],
+        },
       ),
     ).rejects.toThrow('leaks the final diagnosis before the confirmatory clue');
   });
@@ -1078,35 +1098,38 @@ describe('CaseGeneratorService', () => {
   it('persists generation quality metadata in the explanation JSON', async () => {
     const { tx, service } = buildService();
 
-    await service.saveCase({
-      ...buildGeneratedCase(),
-      explanation: {
-        ...buildGeneratedCase().explanation,
-        generationQuality: {
-          version: 'case-generator:v2',
-          critiqueScore: 94,
-          critiquePassed: true,
-          critiqueIssues: [],
-          critiqueRecommendations: [],
-          differentialRuleOutScore: 88,
-          differentialPlausibilityScore: 89,
-          differentialDiscriminationScore: 87,
-          clinicalEdgeValidityScore: 90,
-          invalidReasoningEdges: [],
-          educationalValueScore: 86,
-          graphConsistencyScore: 84,
-          estimatedDifficulty: 'medium',
-          estimatedSolveClue: 5,
-          specialty: null,
-          acuity: 'low',
-          hasLabs: true,
-          hasImaging: false,
-          hasVitals: true,
-          differentialCount: 3,
-          qualityScore: 94,
+    await service.saveCaseForRegistryTarget(
+      {
+        ...buildGeneratedCase(),
+        explanation: {
+          ...buildGeneratedCase().explanation,
+          generationQuality: {
+            version: 'case-generator:v2',
+            critiqueScore: 94,
+            critiquePassed: true,
+            critiqueIssues: [],
+            critiqueRecommendations: [],
+            differentialRuleOutScore: 88,
+            differentialPlausibilityScore: 89,
+            differentialDiscriminationScore: 87,
+            clinicalEdgeValidityScore: 90,
+            invalidReasoningEdges: [],
+            educationalValueScore: 86,
+            graphConsistencyScore: 84,
+            estimatedDifficulty: 'medium',
+            estimatedSolveClue: 5,
+            specialty: null,
+            acuity: 'low',
+            hasLabs: true,
+            hasImaging: false,
+            hasVitals: true,
+            differentialCount: 3,
+            qualityScore: 94,
+          },
         },
       },
-    } as GeneratedCase);
+      buildPlannedDiagnosis(),
+    );
 
     expect(tx.case.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1316,7 +1339,7 @@ describe('CaseGeneratorService', () => {
   it('retries failed generations and attaches passing critique metadata', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
     resetEnvCacheForTests();
-    const { prisma, service } = buildService();
+    const { generationPlannerService, service } = buildService();
     const generatedCase = buildGeneratedCase();
     const create = jest
       .fn()
@@ -1371,7 +1394,7 @@ describe('CaseGeneratorService', () => {
     };
 
     expect(create).toHaveBeenCalledTimes(4);
-    expect(prisma.diagnosisRegistry.findFirst).toHaveBeenCalled();
+    expect(generationPlannerService.createShadowPlan).toHaveBeenCalled();
     expect(explanation.generationQuality).toEqual(
       expect.objectContaining({
         critiqueScore: 92,
@@ -1939,7 +1962,6 @@ describe('CaseGeneratorService', () => {
     const result = await service.generateBatch({
       count: 1,
       concurrency: 1,
-      registryFirst: false,
     });
 
     expect(result.created).toBe(1);
@@ -1983,7 +2005,6 @@ describe('CaseGeneratorService', () => {
     const result = await service.generateBatch({
       count: 1,
       concurrency: 1,
-      registryFirst: false,
     });
 
     expect(result.failed).toBe(1);
@@ -2251,7 +2272,68 @@ describe('CaseGeneratorService', () => {
   it('allows pneumonia cases that use lobar consolidation to weaken pulmonary embolism', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
     resetEnvCacheForTests();
-    const { service } = buildService();
+    const { generationContextBuilder, generationPlannerService, service } =
+      buildService();
+    generationPlannerService.createShadowPlan.mockResolvedValueOnce([
+      {
+        batchId: 'batch-pneumonia',
+        index: 0,
+        diagnosis: {
+          diagnosisRegistryId: 'registry-pneumonia',
+          legacyDiagnosisId: 'diagnosis-pneumonia',
+          displayLabel: 'Pneumonia',
+          canonicalName: 'pneumonia',
+          acceptedAliases: ['Lobar pneumonia'],
+          specialty: 'Pulmonology',
+          category: 'Infectious',
+          bodySystem: 'Respiratory',
+          difficultyBand: 'INTERMEDIATE',
+          existingCaseCount: 0,
+          lastGeneratedAt: null,
+          recentUsePenaltyApplied: false,
+        },
+        duplicatePrevented: false,
+        selectionStatus: 'selected',
+        repeatReason: null,
+        existingCaseCount: 0,
+        recentUsePenaltyApplied: false,
+        diagnostics: {
+          candidateCount: 1,
+          unusedCandidateCount: 1,
+          repeatedCandidateCount: 0,
+          selectedUnusedCount: 1,
+          selectedRepeatCount: 0,
+          repeatReason: null,
+          existingCaseCountByDiagnosis: {
+            'registry-pneumonia': 0,
+          },
+          recentUsePenaltyApplied: false,
+        },
+      },
+    ]);
+    generationContextBuilder.build.mockResolvedValueOnce({
+      diagnosis: {
+        id: 'registry-pneumonia',
+        displayLabel: 'Pneumonia',
+        canonicalName: 'pneumonia',
+        aliases: ['Lobar pneumonia'],
+      },
+      requiredTeachingUnits: [],
+      suggestedManifestations: [],
+      difficultyStrategy: {
+        targetDifficulty: 'medium',
+        revealCoreUnitByClue: 3,
+        avoidTooEarly: [],
+        allowAlternativeManifestations: true,
+      },
+      difficultyGuidance: {
+        baselineDifficulty: 'INTERMEDIATE',
+        targetDifficulty: 'medium',
+        targetSolveClue: null,
+        forbiddenEarlyClues: [],
+        keepAliveDifferentials: [],
+      },
+    });
     const generatedCase = buildGeneratedCase({
       answer: 'Pneumonia',
       differentials: [
@@ -2691,7 +2773,7 @@ describe('CaseGeneratorService', () => {
     expect(prompt).toContain('type 2 diabetes mellitus competitors');
   });
 
-  it('uses fixed diagnosis prompt and registry save path when registryFirst is enabled', async () => {
+  it('uses fixed diagnosis prompt and registry save path', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
     resetEnvCacheForTests();
     const { service } = buildService();
@@ -2719,7 +2801,6 @@ describe('CaseGeneratorService', () => {
     const result = await service.generateBatch({
       count: 1,
       concurrency: 1,
-      registryFirst: true,
     });
 
     const generationCall = create.mock.calls[0][0] as {
@@ -2837,8 +2918,8 @@ describe('CaseGeneratorService', () => {
     ]);
   });
 
-  it('rejects inactive or nonexistent targeted diagnosisRegistryIds', async () => {
-    const { prisma, service } = buildService();
+  it('rejects non-generatable or nonexistent targeted diagnosisRegistryIds', async () => {
+    const { generationPlannerService, prisma, service } = buildService();
     prisma.diagnosisRegistry.findMany.mockResolvedValueOnce([]);
 
     await expect(
@@ -2847,32 +2928,36 @@ describe('CaseGeneratorService', () => {
         concurrency: 1,
         diagnosisRegistryIds: ['11111111-1111-4111-8111-111111111111'],
       }),
-    ).rejects.toThrow('Diagnosis registry IDs are not active or do not exist');
+    ).rejects.toThrow(
+      'Diagnosis registry IDs are not generation-eligible or do not exist',
+    );
+    expect(prisma.diagnosisRegistry.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          active: true,
+          status: 'ACTIVE',
+          isPlayable: true,
+          isGeneratable: true,
+        }),
+      }),
+    );
   });
 
-  it('keeps the legacy generator and save path when registryFirst is false', async () => {
+  it('rejects retired legacy generation mode before provider invocation', async () => {
     const { service } = buildService();
-    const saveCaseSpy = jest.spyOn(service, 'saveCase').mockResolvedValue({
-      id: 'case-1',
-      title: 'asthma',
-      difficulty: 'medium',
-      date: new Date('2026-04-20T00:00:00.000Z'),
-    });
+    const generateTargetSpy = jest.spyOn(service, 'generateCaseForRegistryTarget');
     const registrySaveSpy = jest.spyOn(service, 'saveCaseForRegistryTarget');
 
-    jest
-      .spyOn(service, 'generateCase')
-      .mockResolvedValueOnce(withGenerationQuality(buildGeneratedCase()));
+    await expect(
+      service.generateBatch({
+        count: 1,
+        concurrency: 1,
+        registryFirst: false,
+      } as never),
+    ).rejects.toThrow('registryFirst=false is no longer supported');
 
-    const result = await service.generateBatch({
-      count: 1,
-      concurrency: 1,
-      registryFirst: false,
-    });
-
-    expect(saveCaseSpy).toHaveBeenCalledTimes(1);
+    expect(generateTargetSpy).not.toHaveBeenCalled();
     expect(registrySaveSpy).not.toHaveBeenCalled();
-    expect(result.created).toBe(1);
   });
 
   it('uses registry-first generation by default', async () => {
@@ -2930,11 +3015,11 @@ describe('CaseGeneratorService', () => {
     );
 
     jest
-      .spyOn(service, 'generateCase')
+      .spyOn(service, 'generateCaseForRegistryTarget')
       .mockResolvedValueOnce(firstCase)
       .mockResolvedValueOnce(secondCase);
     jest
-      .spyOn(service, 'saveCase')
+      .spyOn(service, 'saveCaseForRegistryTarget')
       .mockResolvedValueOnce({
         id: 'case-1',
         title: 'asthma',
@@ -2951,7 +3036,6 @@ describe('CaseGeneratorService', () => {
     const result = await service.generateBatch({
       count: 2,
       concurrency: 1,
-      registryFirst: false,
     });
 
     expect(result.requested).toBe(2);
@@ -2997,11 +3081,14 @@ describe('CaseGeneratorService', () => {
     });
     const lowQualityCase = withGenerationQuality(
       buildGeneratedCase({
-        answer: 'Appendicitis',
-        explanation: {
-          ...buildGeneratedCase().explanation,
-          diagnosis: 'Appendicitis',
-        },
+        clues: buildGeneratedCase().clues.map((clue) =>
+          clue.order === 0
+            ? {
+                ...clue,
+                value: 'Teenager with intermittent wheeze after dusty exercise',
+              }
+            : clue,
+        ),
       }),
       {
         qualityScore: 72,
@@ -3009,11 +3096,11 @@ describe('CaseGeneratorService', () => {
     );
     const retryCase = withGenerationQuality(
       buildGeneratedCase({
-        answer: 'Pulmonary Embolism',
-        explanation: {
-          ...buildGeneratedCase().explanation,
-          diagnosis: 'Pulmonary Embolism',
-        },
+        clues: buildGeneratedCase().clues.map((clue) =>
+          clue.order === 0
+            ? { ...clue, value: 'Teenager with intermittent cough after pollen exposure' }
+            : clue,
+        ),
       }),
       {
         qualityScore: 89,
@@ -3021,13 +3108,13 @@ describe('CaseGeneratorService', () => {
     );
 
     jest
-      .spyOn(service, 'generateCase')
+      .spyOn(service, 'generateCaseForRegistryTarget')
       .mockResolvedValueOnce(acceptedCase)
       .mockResolvedValueOnce(duplicateCase)
       .mockResolvedValueOnce(lowQualityCase)
       .mockResolvedValueOnce(retryCase);
     const saveCaseSpy = jest
-      .spyOn(service, 'saveCase')
+      .spyOn(service, 'saveCaseForRegistryTarget')
       .mockResolvedValueOnce({
         id: 'case-1',
         title: 'asthma',
@@ -3036,7 +3123,7 @@ describe('CaseGeneratorService', () => {
       })
       .mockResolvedValueOnce({
         id: 'case-2',
-        title: 'pulmonary embolism',
+        title: 'asthma',
         difficulty: 'medium',
         date: new Date('2026-04-21T00:00:00.000Z'),
       });
@@ -3044,7 +3131,7 @@ describe('CaseGeneratorService', () => {
     const result = await service.generateBatch({
       count: 2,
       concurrency: 1,
-      registryFirst: false,
+      diagnosisRegistryIds: ['11111111-1111-4111-8111-111111111111'],
     });
 
     expect(result.generated).toBe(4);
@@ -3053,17 +3140,17 @@ describe('CaseGeneratorService', () => {
     expect(result.created).toBe(2);
     expect(result.failed).toBe(0);
     expect(result.averageQualityScore).toBe(90);
-    expect(result.failureSummary?.byCategory.duplicate_answer).toBe(1);
+    expect(result.failureSummary?.byCategory.duplicate_scenario).toBe(1);
     expect(result.failureSummary?.byCategory.low_quality).toBe(1);
     expect(result.failureSummary?.samples).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          category: 'duplicate_answer',
+          category: 'duplicate_scenario',
           answer: 'asthma',
         }),
         expect.objectContaining({
           category: 'low_quality',
-          answer: 'appendicitis',
+          answer: 'asthma',
         }),
       ]),
     );

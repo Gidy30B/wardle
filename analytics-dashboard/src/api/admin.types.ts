@@ -50,7 +50,6 @@ export type GenerateCasesPayload = {
   track?: string;
   bodySystem?: string;
   difficulty?: string;
-  registryFirst?: boolean;
   diagnosisRegistryIds?: string[];
 };
 

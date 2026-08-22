@@ -264,7 +264,6 @@ describe('AdminController generateCases', () => {
     expect(caseGenerator.generateBatch).toHaveBeenCalledWith(
       expect.objectContaining({
         count: 1,
-        registryFirst: true,
         diagnosisRegistryIds: ['11111111-1111-4111-8111-111111111111'],
       }),
     );
@@ -809,17 +808,13 @@ describe('AdminController generateCases', () => {
     expect(diagnosisEditorialBriefService.updateBrief).toHaveBeenCalled();
   });
 
-  it('preserves old behavior when diagnosisRegistryIds is omitted', async () => {
+  it('rejects retired legacy case generation mode', async () => {
     const { caseGenerator, controller } = buildController();
 
-    await controller.generateCases({ count: 3, registryFirst: false });
+    await expect(
+      controller.generateCases({ count: 3, registryFirst: false }),
+    ).rejects.toThrow('registryFirst=false is no longer supported');
 
-    expect(caseGenerator.generateBatch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        count: 3,
-        registryFirst: false,
-        diagnosisRegistryIds: undefined,
-      }),
-    );
+    expect(caseGenerator.generateBatch).not.toHaveBeenCalled();
   });
 });

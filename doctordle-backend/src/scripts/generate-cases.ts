@@ -1,5 +1,4 @@
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from '../app.module.js';
 import { CaseGeneratorService } from '../modules/case-generator/case-generator.service.js';
 import type { GenerateBatchResult } from '../modules/case-generator/case-generator.types.js';
 
@@ -8,10 +7,10 @@ type CliOptions = {
   track?: string;
   bodySystem?: string;
   difficulty?: string;
-  registryFirst?: boolean;
 };
 
 async function bootstrap(): Promise<void> {
+  const { AppModule } = await import('../app.module.js');
   const options = parseArgs(process.argv.slice(2));
   writeJsonLine({
     event: 'generate_cases.started',
@@ -34,7 +33,6 @@ async function bootstrap(): Promise<void> {
 export function parseArgs(args: string[]): CliOptions {
   const parsed: CliOptions = {
     count: 20,
-    registryFirst: true,
   };
 
   for (const arg of args) {
@@ -69,21 +67,17 @@ export function parseArgs(args: string[]): CliOptions {
     }
 
     if (arg.startsWith('--registryFirst=')) {
-      parsed.registryFirst = parseBooleanArg(
-        arg.slice('--registryFirst='.length),
-      );
+      rejectRetiredRegistryFirstFalse(arg.slice('--registryFirst='.length));
       continue;
     }
 
     if (arg.startsWith('--registry-first=')) {
-      parsed.registryFirst = parseBooleanArg(
-        arg.slice('--registry-first='.length),
-      );
+      rejectRetiredRegistryFirstFalse(arg.slice('--registry-first='.length));
       continue;
     }
 
     if (arg === '--registry-first') {
-      parsed.registryFirst = true;
+      continue;
     }
   }
 
@@ -91,7 +85,7 @@ export function parseArgs(args: string[]): CliOptions {
 }
 
 export function buildGenerationSummary(
-  options: CliOptions,
+  _options: CliOptions,
   result: GenerateBatchResult,
 ) {
   return {
@@ -100,7 +94,7 @@ export function buildGenerationSummary(
     created: result.created,
     failed: result.failed,
     skipped: result.skipped,
-    registryFirst: options.registryFirst !== false,
+    generationMode: 'registry_target',
     plannerDiagnostics: result.plannerDiagnostics,
     createdCases: result.results
       .filter((item) => item.status === 'created')
@@ -125,8 +119,12 @@ export function buildGenerationSummary(
   };
 }
 
-function parseBooleanArg(value: string): boolean {
-  return value.trim().toLowerCase() === 'true';
+function rejectRetiredRegistryFirstFalse(value: string): void {
+  if (value.trim().toLowerCase() === 'false') {
+    throw new Error(
+      '--registry-first=false is no longer supported; case generation is always registry-targeted',
+    );
+  }
 }
 
 function writeJsonLine(payload: unknown): void {

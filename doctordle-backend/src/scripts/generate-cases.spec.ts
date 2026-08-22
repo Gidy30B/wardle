@@ -2,7 +2,7 @@ import { buildGenerationSummary, parseArgs } from './generate-cases';
 import type { GenerateBatchResult } from '../modules/case-generator/case-generator.types';
 
 describe('generate-cases CLI helpers', () => {
-  it('parses supported registry-first and filter flags', () => {
+  it('parses supported filter flags and ignores retired true registry-first flags', () => {
     expect(
       parseArgs([
         '--registryFirst=true',
@@ -12,7 +12,6 @@ describe('generate-cases CLI helpers', () => {
       ]),
     ).toEqual({
       count: 3,
-      registryFirst: true,
       bodySystem: 'Respiratory',
       track: 'Pulmonology',
     });
@@ -26,19 +25,16 @@ describe('generate-cases CLI helpers', () => {
       ]),
     ).toEqual({
       count: 5,
-      registryFirst: true,
       bodySystem: 'Cardiovascular',
       track: 'Cardiology',
     });
 
-    expect(parseArgs(['--registry-first=false'])).toEqual({
-      count: 20,
-      registryFirst: false,
-    });
+    expect(() => parseArgs(['--registry-first=false'])).toThrow(
+      '--registry-first=false is no longer supported',
+    );
 
     expect(parseArgs(['--count=2'])).toEqual({
       count: 2,
-      registryFirst: true,
     });
   });
 
@@ -97,14 +93,14 @@ describe('generate-cases CLI helpers', () => {
     };
 
     expect(
-      buildGenerationSummary({ count: 3, registryFirst: true }, result),
+      buildGenerationSummary({ count: 3 }, result),
     ).toEqual({
       event: 'generate_cases.completed',
       requested: 3,
       created: 1,
       failed: 1,
       skipped: 1,
-      registryFirst: true,
+      generationMode: 'registry_target',
       plannerDiagnostics: result.plannerDiagnostics,
       createdCases: [
         {

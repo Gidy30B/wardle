@@ -75,7 +75,6 @@ describe('TargetedCaseGenerationService', () => {
       expect.objectContaining({
         count: 1,
         difficulty: 'medium',
-        registryFirst: true,
         diagnosisRegistryIds: [diagnosisRegistryId],
         targetedCase: expect.objectContaining({
           teachingUnitIds: ['migratory_rlq_pain'],
