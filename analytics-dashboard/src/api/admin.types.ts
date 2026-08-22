@@ -287,6 +287,114 @@ export type ClinicalCaseDraftApplicationResult = {
   idempotencyKey?: string;
 };
 
+export type WorkspaceCaseRevisionGovernance = {
+  currentRevision: {
+    id: string;
+    revisionNumber: number;
+    source: CaseSource | null;
+    createdAt: string;
+  } | null;
+  review: {
+    activeReviewId: string | null;
+    latestReviewId: string | null;
+    latestDecision: ReviewDecision | string | null;
+    materialContextHash: string | null;
+    reviewContextIdentity: string | null;
+    startedAt: string | null;
+    decidedAt: string | null;
+  };
+  app006Approval: {
+    approved: boolean;
+    decisionId: string | null;
+    reviewId: string | null;
+    outcome: string | null;
+    effectiveAction: string | null;
+    occurredAt: string | null;
+    history: Array<{
+      id: string;
+      reviewId: string;
+      status: string;
+      outcome: string;
+      effectiveAction: string;
+      occurredAt: string;
+    }>;
+  };
+  publication: {
+    readiness: {
+      result: 'READY' | 'BLOCKED' | string;
+      blockers: Array<{ code: string; type: string; message: string }>;
+      warnings: Array<{ code: string; type: string; message: string }>;
+      publicationAuthorized: boolean;
+      currentPublicationStanding: string | null;
+      activePublicationDecisionId: string | null;
+      materialContextHash: string | null;
+      validationRunId: string | null;
+      approvalDecisionId: string | null;
+    } | null;
+    authorized: boolean;
+    activePublicationDecisionId: string | null;
+    standing: string | null;
+    occurredAt: string | null;
+    history: Array<{
+      id: string;
+      approvalDecisionId: string;
+      materialContextHash: string;
+      validationRunId: string | null;
+      standing: string;
+      readinessResult: string;
+      outcome: string;
+      effectiveAction: string;
+      occurredAt: string;
+      effectiveAt: string;
+    }>;
+  };
+  scheduling: {
+    scheduled: boolean;
+    dailyCases: Array<{
+      id: string;
+      date: string;
+      track: PublishTrack | string;
+      sequenceIndex: number;
+      caseRevisionId: string | null;
+      publicationDecisionId: string | null;
+      exactBinding: boolean;
+      createdAt: string;
+    }>;
+  };
+};
+
+export type AuthorizeCaseRevisionPublicationPayload = {
+  expectedRevisionId: string;
+  expectedApprovalDecisionId: string;
+  expectedMaterialContextHash: string;
+  expectedValidationRunId?: string;
+  expectedActivePublicationDecisionId?: string | null;
+  commandIdempotencyKey: string;
+  authorityAssignmentReferences?: string[];
+  rationale?: string;
+};
+
+export type CaseRevisionPublicationDecision = {
+  id: string;
+  caseId: string;
+  caseRevisionId: string;
+  expectedRevisionId: string;
+  approvalDecisionId: string;
+  expectedApprovalDecisionId: string;
+  materialContextHash: string;
+  expectedMaterialContextHash: string;
+  validationRunId: string | null;
+  expectedValidationRunId: string | null;
+  standing: string;
+  readinessResult: string;
+  outcome: string;
+  effectiveAction: string;
+  rationale: string;
+  occurredAt: string;
+  effectiveAt: string;
+  createdAt: string;
+};
+
 export type TargetedCaseDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
 
 export type ClueRevealStrategy =
@@ -2205,6 +2313,7 @@ export type DiagnosisEditorialWorkspace = {
       difficulty: string;
       updatedAt: string;
       qualityProjection: AdminCaseQualityProjection;
+      revisionGovernance?: WorkspaceCaseRevisionGovernance;
       clueProgression?: CaseClueProgressionAnalysis;
       clueDiscriminatorAnnotations?: CaseClueDiscriminatorAnnotation[];
       clueRevisionDrafts?: CaseClueRevisionDraft[];

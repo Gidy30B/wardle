@@ -94,9 +94,11 @@ import type {
   AiDraftDecisionAction,
   AiDraftRevisionAudit,
   ApplyCaseClueRevisionDraftResult,
+  AuthorizeCaseRevisionPublicationPayload,
   CaseEscalationAnnotationPayload,
   CaseClueDiscriminatorAnnotation,
   CaseClueRevisionDraft,
+  CaseRevisionPublicationDecision,
   CaseClueRevisionDraftPayload,
   CreateCaseClueDiscriminatorAnnotationPayload,
   CaseLearningGoalCoveragePayload,
@@ -1360,5 +1362,17 @@ export function restoreCaseRevision(
 export function markCaseReadyToPublish(client: ApiClient, caseId: string) {
   return client.post<MarkCaseReadyToPublishResult>(
     `/admin/cases/${caseId}/ready-to-publish`,
+  );
+}
+
+export function authorizeCaseRevisionPublication(
+  client: ApiClient,
+  caseId: string,
+  revisionId: string,
+  payload: AuthorizeCaseRevisionPublicationPayload,
+) {
+  return client.post<CaseRevisionPublicationDecision>(
+    `/admin/cases/${caseId}/revisions/${revisionId}/publication`,
+    payload,
   );
 }

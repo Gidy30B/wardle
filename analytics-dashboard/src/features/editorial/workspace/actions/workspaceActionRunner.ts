@@ -1,4 +1,5 @@
 import { runCaseDraftAction } from './caseDraftActions.ts';
+import { runCaseRevisionAction } from './caseRevisionActions.ts';
 import { runClueRevisionAction } from './clueRevisionActions.ts';
 import { runEducationAction } from './educationActions.ts';
 import { runEvidenceAction } from './evidenceActions.ts';
@@ -26,6 +27,7 @@ import type {
 export const DEFAULT_WORKSPACE_ACTION_EXECUTORS: WorkspaceActionExecutorMap = {
   caseAnnotation: runCaseAnnotationAction,
   caseDraft: runCaseDraftAction,
+  caseRevision: runCaseRevisionAction,
   caseCoverage: runCaseCoverageAction,
   claimRepair: runEducationAction,
   clueRevision: runClueRevisionAction,

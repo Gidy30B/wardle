@@ -2,11 +2,23 @@ import StatusBadge from '../../../../components/ui/StatusBadge';
 import { BoardEmptyState } from '../components/BoardEmptyState.tsx';
 import { BoardVerdict } from '../components/BoardVerdict.tsx';
 import { PublicationBlockerChecklist } from '../components/PublicationBlockerChecklist.tsx';
+import { ReviewQueueItem } from '../components/ReviewQueueItem.tsx';
 import { CompactPanel } from '../EditorialPrimitives.tsx';
 import type { WorkspaceWorkflowComponentProps } from '../WorkspaceWorkflowRegistry.ts';
 
-export function PublishWorkflow({ viewModel }: WorkspaceWorkflowComponentProps) {
+export function PublishWorkflow({
+  viewModel,
+  actionAccess,
+  pendingAction,
+  onRunAction,
+  onNavigate,
+}: WorkspaceWorkflowComponentProps) {
   const workflow = viewModel.publish;
+  const publicationGovernanceItems = viewModel.reviewQueue.items.filter(
+    (item) =>
+      item.kind === 'publication_authorization' ||
+      item.kind === 'case_revision',
+  );
 
   return (
     <div className="space-y-4">
@@ -21,7 +33,7 @@ export function PublishWorkflow({ viewModel }: WorkspaceWorkflowComponentProps) 
 
       <CompactPanel
         title="Publication readiness checklist"
-        subtitle="Read-only publication readiness assessment."
+        subtitle="Canonical blockers and warnings for governed publication."
         action={
           <StatusBadge
             status={`${workflow.blocked.length} blocked`}
@@ -30,6 +42,31 @@ export function PublishWorkflow({ viewModel }: WorkspaceWorkflowComponentProps) 
         }
       >
         <PublicationBlockerChecklist items={workflow.checklist} />
+      </CompactPanel>
+
+      <CompactPanel
+        title="Governed publication path"
+        subtitle="APP-006 approval, APP-008A authorization, and APP-008B binding state."
+      >
+        {publicationGovernanceItems.length ? (
+          <div className="space-y-2">
+            {publicationGovernanceItems.map((item) => (
+              <ReviewQueueItem
+                key={item.id}
+                item={item}
+                actionAccess={actionAccess}
+                pendingAction={pendingAction}
+                onRunAction={onRunAction}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </div>
+        ) : (
+          <BoardEmptyState
+            title="No publication governance items"
+            detail="Exact revision approval, publication authorization, and schedule binding are complete or not yet applicable."
+          />
+        )}
       </CompactPanel>
 
       <CompactPanel

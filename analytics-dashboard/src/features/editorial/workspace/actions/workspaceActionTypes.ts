@@ -26,6 +26,7 @@ export type WorkspaceActionDomain =
   | 'lifecycle'
   | 'caseCoverage'
   | 'caseAnnotation'
+  | 'caseRevision'
   | 'caseDraft';
 
 export type WorkspaceActionIntent =
@@ -38,6 +39,7 @@ export type WorkspaceActionIntent =
   | 'repair'
   | 'normalize'
   | 'markReady'
+  | 'authorize'
   | 'review'
   | 'create'
   | 'update'
@@ -69,6 +71,9 @@ export type WorkspaceActionId =
   | 'publication.normalizeLifecycle'
   | 'publication.performLifecycleAction'
   | 'publication.markCaseReady'
+  | 'publication.authorizeRevision'
+  | 'caseRevision.startReview'
+  | 'caseRevision.approve'
   | 'caseCoverage.create'
   | 'caseCoverage.update'
   | 'caseCoverage.delete'
@@ -166,6 +171,27 @@ export type CaseReadyActionPayload = BaseActionPayload & {
   caseId?: string;
 };
 
+export type CaseRevisionActionPayload = BaseActionPayload & {
+  caseId?: string;
+  revisionId?: string;
+  reviewId?: string | null;
+  commandIdempotencyKey?: string;
+  notes?: string;
+  authorityAssignmentReferences?: string[];
+};
+
+export type PublicationAuthorizationActionPayload = BaseActionPayload & {
+  caseId?: string;
+  revisionId?: string;
+  expectedApprovalDecisionId?: string | null;
+  expectedMaterialContextHash?: string | null;
+  expectedValidationRunId?: string | null;
+  expectedActivePublicationDecisionId?: string | null;
+  commandIdempotencyKey?: string;
+  authorityAssignmentReferences?: string[];
+  rationale?: string;
+};
+
 export type CaseCoverageActionPayload = BaseActionPayload & {
   coverageId?: string;
   payload?: CaseLearningGoalCoveragePayload;
@@ -191,6 +217,8 @@ export type WorkspaceActionPayload =
   | EducationActionPayload
   | LifecycleActionPayload
   | CaseReadyActionPayload
+  | CaseRevisionActionPayload
+  | PublicationAuthorizationActionPayload
   | CaseCoverageActionPayload
   | CaseAnnotationActionPayload;
 

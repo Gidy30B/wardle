@@ -46,6 +46,12 @@ export function ReviewQueueItem({
   const deferredActionIds = actionSubject
     ? getDeferredReviewItemActions(actionSubject)
     : [];
+  const includeConfirmationActions =
+    actionSubject?.kind === 'caseRevision' ||
+    actionSubject?.kind === 'publicationAuthorization';
+  const visibleActionIds = includeConfirmationActions
+    ? [...actionIds, ...deferredActionIds]
+    : actionIds;
   const sourceId = item.sourceId;
 
   return (
@@ -103,18 +109,19 @@ export function ReviewQueueItem({
         </button>
       ) : null}
 
-      {actionIds.length && sourceId && actionAccess && onRunAction ? (
+      {visibleActionIds.length && sourceId && actionAccess && onRunAction ? (
         <WorkspaceReviewActionButtons
-          actionIds={actionIds}
+          actionIds={visibleActionIds}
           access={actionAccess}
-          payload={getReviewActionPayload(actionIds[0], sourceId)}
+          payload={getReviewActionPayload(visibleActionIds[0], sourceId, item)}
           pendingAction={pendingAction ?? null}
           subjectId={sourceId}
           subjectLabel={item.title}
+          includeConfirmationActions={includeConfirmationActions}
           onRunAction={(actionId, _payload, subjectId) =>
             onRunAction(
               actionId,
-              getReviewActionPayload(actionId, subjectId),
+              getReviewActionPayload(actionId, subjectId, item),
               subjectId,
             )
           }

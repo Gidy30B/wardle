@@ -106,6 +106,65 @@ test('clinical case drafts expose review decisions and defer controlled apply', 
   });
 });
 
+test('case revisions expose start review and confirmation-gated APP-006 approval', () => {
+  assert.deepEqual(
+    getReviewItemActions({
+      kind: 'caseRevision',
+      sourceId: 'case-1',
+      status: 'NEEDS_REVIEW',
+      raw: { caseId: 'case-1', revisionId: 'revision-1' },
+    }),
+    ['caseRevision.startReview'],
+  );
+  assert.deepEqual(
+    getDeferredReviewItemActions({
+      kind: 'caseRevision',
+      sourceId: 'case-1',
+      status: 'IN_REVIEW',
+      raw: { caseId: 'case-1', revisionId: 'revision-1', reviewId: 'review-1' },
+    }),
+    ['caseRevision.approve'],
+  );
+  assert.deepEqual(
+    getReviewActionPayload('caseRevision.approve', 'case-1', {
+      raw: { caseId: 'case-1', revisionId: 'revision-1', reviewId: 'review-1' },
+    }),
+    { caseId: 'case-1', revisionId: 'revision-1', reviewId: 'review-1' },
+  );
+});
+
+test('publication authorization requires READY projection and keeps confirmation external', () => {
+  const subject = {
+    kind: 'publicationAuthorization' as const,
+    sourceId: 'case-1',
+    status: 'READY',
+    raw: {
+      ready: true,
+      caseId: 'case-1',
+      revisionId: 'revision-1',
+      expectedApprovalDecisionId: 'approval-1',
+      expectedMaterialContextHash: 'hash-1',
+      expectedValidationRunId: 'validation-1',
+      expectedActivePublicationDecisionId: null,
+    },
+  };
+  assert.deepEqual(getDeferredReviewItemActions(subject), [
+    'publication.authorizeRevision',
+  ]);
+  assert.deepEqual(
+    getReviewActionPayload('publication.authorizeRevision', 'case-1', subject),
+    {
+      caseId: 'case-1',
+      revisionId: 'revision-1',
+      expectedApprovalDecisionId: 'approval-1',
+      expectedMaterialContextHash: 'hash-1',
+      expectedValidationRunId: 'validation-1',
+      expectedActivePublicationDecisionId: undefined,
+    },
+  );
+  assert.equal(requiresConfirmation('publication.authorizeRevision'), true);
+});
+
 test('repairable unsupported claims expose repair', () => {
   assert.deepEqual(
     getReviewItemActions({

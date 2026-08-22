@@ -30,6 +30,8 @@ export type KnowledgeReviewItemKind =
   | 'reasoning_path'
   | 'discriminator_draft'
   | 'clinical_case_draft'
+  | 'case_revision'
+  | 'publication_authorization'
   | 'clue_revision_draft'
   | 'case_quality';
 

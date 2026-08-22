@@ -46,6 +46,10 @@ import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/d
 import { EvidenceCoverageService } from './evidence-coverage.service';
 import { ReasoningPathService } from './reasoning-path.service';
 import { EditorialTriageProjectionService } from './editorial-triage-projection.service';
+import {
+  CasePublicationGovernanceService,
+  type PublicationReadiness,
+} from './case-publication-governance.service';
 
 type LifecycleState = 'complete' | 'warning' | 'blocked' | 'not_started';
 type ReadinessSeverity = 'info' | 'warning' | 'blocker';
@@ -178,9 +182,73 @@ type CaseRow = {
   differentials: string[];
   explanation: Prisma.JsonValue | null;
   validationRuns: Array<{
+    id: string;
+    revisionId: string | null;
     outcome: ValidationOutcome | null;
     summary: Prisma.JsonValue | null;
     findings: Prisma.JsonValue | null;
+    startedAt: Date;
+    completedAt: Date | null;
+  }>;
+  currentRevisionId: string | null;
+  currentRevision: {
+    id: string;
+    revisionNumber: number;
+    source: CaseSource | null;
+    createdAt: Date;
+  } | null;
+  reviews: Array<{
+    id: string;
+    revisionId: string | null;
+    reviewerUserId: string | null;
+    decision: string | null;
+    notes: string | null;
+    materialContextHash: string | null;
+    reviewContextIdentity: string | null;
+    createdAt: Date;
+    decidedAt: Date | null;
+  }>;
+  governedApprovalDecisions: Array<{
+    id: string;
+    targetRevisionId: string;
+    reviewId: string;
+    status: string;
+    outcome: string;
+    effectiveAction: string;
+    materialContextHash?: string | null;
+    occurredAt: Date;
+    createdAt: Date;
+  }>;
+  publicationDecisions: Array<{
+    id: string;
+    caseRevisionId: string;
+    approvalDecisionId: string;
+    materialContextHash: string;
+    validationRunId: string | null;
+    standing: string;
+    readinessResult: string;
+    outcome: string;
+    effectiveAction: string;
+    occurredAt: Date;
+    effectiveAt: Date;
+    dailyCases: Array<{
+      id: string;
+      date: Date;
+      track: string;
+      sequenceIndex: number;
+      caseRevisionId: string | null;
+      publicationDecisionId: string | null;
+      createdAt: Date;
+    }>;
+  }>;
+  dailyCases: Array<{
+    id: string;
+    date: Date;
+    track: string;
+    sequenceIndex: number;
+    caseRevisionId: string | null;
+    publicationDecisionId: string | null;
+    createdAt: Date;
   }>;
   clueProgressionAnalyses?: Array<{
     diagnosticStates: Prisma.JsonValue;
@@ -377,6 +445,8 @@ export class DiagnosisEditorialWorkspaceService {
     private readonly editorialTriageProjectionService?: EditorialTriageProjectionService,
     @Optional()
     private readonly clueProgressionAnalysisService?: ClueProgressionAnalysisService,
+    @Optional()
+    private readonly casePublicationGovernanceService?: CasePublicationGovernanceService,
   ) {}
 
   async getFullWorkspace(diagnosisRegistryId: string) {
@@ -494,11 +564,15 @@ export class DiagnosisEditorialWorkspaceService {
         aiDraftAuditTrail,
         clueRevisionDraftsByAuditId,
       );
+    const caseGovernanceSnapshots = await this.getCaseGovernanceSnapshots(
+      registry.cases,
+    );
     const cases = this.buildCases(registry.cases, {
       diagnosisRegistryId: registry.id,
       diagnosisName: this.diagnosisName(registry),
       linkedDifferentials,
       teachingRelationships,
+      governanceSnapshots: caseGovernanceSnapshots,
     });
     const clinicalCaseDrafts = this.buildClinicalCaseDraftInventory(
       registry.clinicalCaseDrafts,
@@ -1325,16 +1399,101 @@ export class DiagnosisEditorialWorkspaceService {
             difficulty: true,
             editorialStatus: true,
             date: true,
+            currentRevisionId: true,
             clues: true,
             differentials: true,
             explanation: true,
+            currentRevision: {
+              select: {
+                id: true,
+                revisionNumber: true,
+                source: true,
+                createdAt: true,
+              },
+            },
             validationRuns: {
               orderBy: [{ startedAt: 'desc' }],
               take: 1,
               select: {
+                id: true,
+                revisionId: true,
                 outcome: true,
                 summary: true,
                 findings: true,
+                startedAt: true,
+                completedAt: true,
+              },
+            },
+            reviews: {
+              orderBy: [{ createdAt: 'desc' }],
+              take: 5,
+              select: {
+                id: true,
+                revisionId: true,
+                reviewerUserId: true,
+                decision: true,
+                notes: true,
+                materialContextHash: true,
+                reviewContextIdentity: true,
+                createdAt: true,
+                decidedAt: true,
+              },
+            },
+            governedApprovalDecisions: {
+              orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+              take: 5,
+              select: {
+                id: true,
+                targetRevisionId: true,
+                reviewId: true,
+                status: true,
+                outcome: true,
+                effectiveAction: true,
+                occurredAt: true,
+                createdAt: true,
+              },
+            },
+            publicationDecisions: {
+              orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+              take: 5,
+              select: {
+                id: true,
+                caseRevisionId: true,
+                approvalDecisionId: true,
+                materialContextHash: true,
+                validationRunId: true,
+                standing: true,
+                readinessResult: true,
+                outcome: true,
+                effectiveAction: true,
+                occurredAt: true,
+                effectiveAt: true,
+                dailyCases: {
+                  orderBy: [{ date: 'asc' }, { sequenceIndex: 'asc' }],
+                  take: 10,
+                  select: {
+                    id: true,
+                    date: true,
+                    track: true,
+                    sequenceIndex: true,
+                    caseRevisionId: true,
+                    publicationDecisionId: true,
+                    createdAt: true,
+                  },
+                },
+              },
+            },
+            dailyCases: {
+              orderBy: [{ date: 'asc' }, { sequenceIndex: 'asc' }],
+              take: 10,
+              select: {
+                id: true,
+                date: true,
+                track: true,
+                sequenceIndex: true,
+                caseRevisionId: true,
+                publicationDecisionId: true,
+                createdAt: true,
               },
             },
             clueProgressionAnalyses: {
@@ -3537,6 +3696,7 @@ export class DiagnosisEditorialWorkspaceService {
     context: {
       diagnosisRegistryId: string;
       diagnosisName: string;
+      governanceSnapshots: Map<string, PublicationReadiness | null>;
       linkedDifferentials: Array<{
         diagnosisRegistryId?: string | null;
         displayLabel?: string | null;
@@ -3593,6 +3753,10 @@ export class DiagnosisEditorialWorkspaceService {
         difficulty: caseRecord.difficulty,
         updatedAt: this.toIso(caseRecord.date),
         qualityProjection,
+        revisionGovernance: this.caseRevisionGovernanceDto(
+          caseRecord,
+          context.governanceSnapshots.get(caseRecord.id) ?? null,
+        ),
         clueProgression,
         clueDiscriminatorAnnotations:
           this.caseClueDiscriminatorAnnotationDtos(
@@ -3643,6 +3807,181 @@ export class DiagnosisEditorialWorkspaceService {
           : null,
       },
       items,
+    };
+  }
+
+  private async getCaseGovernanceSnapshots(cases: CaseRow[]) {
+    const snapshots = new Map<string, PublicationReadiness | null>();
+    await Promise.all(
+      cases.map(async (caseRecord) => {
+        if (!caseRecord.currentRevisionId) {
+          snapshots.set(caseRecord.id, null);
+          return;
+        }
+
+        if (!this.casePublicationGovernanceService) {
+          snapshots.set(caseRecord.id, null);
+          return;
+        }
+
+        try {
+          const readiness =
+            await this.casePublicationGovernanceService.getRevisionPublicationReadiness(
+              caseRecord.id,
+              caseRecord.currentRevisionId,
+            );
+          snapshots.set(caseRecord.id, readiness);
+        } catch {
+          snapshots.set(caseRecord.id, null);
+        }
+      }),
+    );
+    return snapshots;
+  }
+
+  private caseRevisionGovernanceDto(
+    caseRecord: CaseRow,
+    publicationReadiness: PublicationReadiness | null,
+  ) {
+    const currentRevisionId = caseRecord.currentRevisionId;
+    const currentRevisionApprovals = caseRecord.governedApprovalDecisions.filter(
+      (decision) =>
+        Boolean(currentRevisionId) &&
+        decision.targetRevisionId === currentRevisionId,
+    );
+    const activeApproval =
+      currentRevisionApprovals.find(
+        (decision) =>
+          decision.outcome === 'APPROVED' &&
+          decision.effectiveAction === 'APPROVE_CASE_REVISION',
+      ) ?? null;
+    const openReview =
+      caseRecord.reviews.find(
+        (review) =>
+          Boolean(currentRevisionId) &&
+          review.revisionId === currentRevisionId &&
+          review.decision === null,
+      ) ?? null;
+    const latestReview =
+      caseRecord.reviews.find(
+        (review) =>
+          Boolean(currentRevisionId) &&
+          review.revisionId === currentRevisionId,
+      ) ?? null;
+    const currentRevisionPublications = caseRecord.publicationDecisions.filter(
+      (decision) =>
+        Boolean(currentRevisionId) &&
+        decision.caseRevisionId === currentRevisionId,
+    );
+    const activePublication =
+      currentRevisionPublications.find(
+        (decision) => decision.standing === 'AUTHORIZED',
+      ) ?? null;
+    const dailyBindings = [
+      ...caseRecord.dailyCases,
+      ...currentRevisionPublications.flatMap((decision) => decision.dailyCases),
+    ].filter(
+      (dailyCase, index, collection) =>
+        collection.findIndex((candidate) => candidate.id === dailyCase.id) ===
+        index,
+    );
+
+    return {
+      currentRevision: caseRecord.currentRevision
+        ? {
+            id: caseRecord.currentRevision.id,
+            revisionNumber: caseRecord.currentRevision.revisionNumber,
+            source: caseRecord.currentRevision.source,
+            createdAt: this.toIso(caseRecord.currentRevision.createdAt),
+          }
+        : null,
+      review: {
+        activeReviewId: openReview?.id ?? null,
+        latestReviewId: latestReview?.id ?? null,
+        latestDecision: latestReview?.decision ?? null,
+        materialContextHash:
+          openReview?.materialContextHash ??
+          latestReview?.materialContextHash ??
+          null,
+        reviewContextIdentity:
+          openReview?.reviewContextIdentity ??
+          latestReview?.reviewContextIdentity ??
+          null,
+        startedAt: openReview?.createdAt ? this.toIso(openReview.createdAt) : null,
+        decidedAt: latestReview?.decidedAt
+          ? this.toIso(latestReview.decidedAt)
+          : null,
+      },
+      app006Approval: {
+        approved: Boolean(activeApproval),
+        decisionId: activeApproval?.id ?? null,
+        reviewId: activeApproval?.reviewId ?? null,
+        outcome: activeApproval?.outcome ?? null,
+        effectiveAction: activeApproval?.effectiveAction ?? null,
+        occurredAt: activeApproval?.occurredAt
+          ? this.toIso(activeApproval.occurredAt)
+          : null,
+        history: currentRevisionApprovals.map((decision) => ({
+          id: decision.id,
+          reviewId: decision.reviewId,
+          status: decision.status,
+          outcome: decision.outcome,
+          effectiveAction: decision.effectiveAction,
+          occurredAt: this.toIso(decision.occurredAt),
+        })),
+      },
+      publication: {
+        readiness: publicationReadiness
+          ? {
+              result: publicationReadiness.result,
+              blockers: publicationReadiness.blockers,
+              warnings: publicationReadiness.warnings,
+              publicationAuthorized:
+                publicationReadiness.publicationAuthorized,
+              currentPublicationStanding:
+                publicationReadiness.currentPublicationStanding,
+              activePublicationDecisionId:
+                publicationReadiness.activePublicationDecisionId,
+              materialContextHash: publicationReadiness.materialContextHash,
+              validationRunId: publicationReadiness.validationRunId,
+              approvalDecisionId: publicationReadiness.approvalDecisionId,
+            }
+          : null,
+        authorized: Boolean(activePublication),
+        activePublicationDecisionId: activePublication?.id ?? null,
+        standing: activePublication?.standing ?? null,
+        occurredAt: activePublication?.occurredAt
+          ? this.toIso(activePublication.occurredAt)
+          : null,
+        history: currentRevisionPublications.map((decision) => ({
+          id: decision.id,
+          approvalDecisionId: decision.approvalDecisionId,
+          materialContextHash: decision.materialContextHash,
+          validationRunId: decision.validationRunId,
+          standing: decision.standing,
+          readinessResult: decision.readinessResult,
+          outcome: decision.outcome,
+          effectiveAction: decision.effectiveAction,
+          occurredAt: this.toIso(decision.occurredAt),
+          effectiveAt: this.toIso(decision.effectiveAt),
+        })),
+      },
+      scheduling: {
+        scheduled: dailyBindings.length > 0,
+        dailyCases: dailyBindings.map((dailyCase) => ({
+          id: dailyCase.id,
+          date: this.toIso(dailyCase.date),
+          track: dailyCase.track,
+          sequenceIndex: dailyCase.sequenceIndex,
+          caseRevisionId: dailyCase.caseRevisionId,
+          publicationDecisionId: dailyCase.publicationDecisionId,
+          exactBinding:
+            Boolean(currentRevisionId) &&
+            dailyCase.caseRevisionId === currentRevisionId &&
+            Boolean(dailyCase.publicationDecisionId),
+          createdAt: this.toIso(dailyCase.createdAt),
+        })),
+      },
     };
   }
 

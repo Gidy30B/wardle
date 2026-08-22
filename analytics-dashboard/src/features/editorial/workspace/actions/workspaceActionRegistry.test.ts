@@ -45,6 +45,13 @@ test('senior and destructive actions are marked explicitly', () => {
   assert.equal(requiresConfirmation('publication.normalizeLifecycle'), true);
   assert.equal(requiresConfirmation('clueRevision.apply'), true);
   assert.equal(requiresConfirmation('caseDraft.apply'), true);
+  assert.equal(
+    getWorkspaceActionDescriptor('publication.authorizeRevision').requiredAccess,
+    'seniorEditorial',
+  );
+  assert.equal(requiresConfirmation('publication.authorizeRevision'), true);
+  assert.equal(requiresConfirmation('caseRevision.approve'), true);
+  assert.equal(requiresConfirmation('caseRevision.startReview'), false);
   assert.equal(requiresConfirmation('caseDraft.accept'), false);
   assert.equal(getWorkspaceActionDescriptor('caseCoverage.delete').destructive, true);
   assert.equal(requiresConfirmation('caseCoverage.delete'), true);

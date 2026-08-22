@@ -337,6 +337,7 @@ export function buildEditorialWorkflowViewModel(
     knowledge.reviewItems,
     diagnosticReasoning,
     caseReasoning.reviewItems,
+    caseReasoning.cases,
     contentCoverage.reviewItems,
     workspace.clinicalCaseDrafts?.items ?? [],
   );
@@ -1173,6 +1174,7 @@ function buildReviewQueueItems(
   reviewItems: KnowledgeReviewItem[],
   diagnosticReasoning: DiagnosticReasoningViewModel,
   caseReviewItems: KnowledgeReviewItem[] = [],
+  caseGovernanceItems: CaseReasoningCardViewModel[] = [],
   contentReviewItems: KnowledgeReviewItem[] = [],
   clinicalCaseDrafts: WorkspaceClinicalCaseDraft[] = [],
 ): ReviewQueueItemViewModel[] {
@@ -1207,6 +1209,7 @@ function buildReviewQueueItems(
       editorialReason: editorialReasonForReviewItem(item),
       metadata: metadataForReviewItem(item),
     })),
+    ...caseGovernanceItems.flatMap(mapCaseGovernanceQueueItem),
     ...contentReviewItems.map((item) => ({
       ...item,
       groupId: groupForReviewItem(item),
@@ -1254,6 +1257,122 @@ function mapClinicalCaseDraftQueueItem(
   };
 
   return [item];
+}
+
+function mapCaseGovernanceQueueItem(
+  caseItem: CaseReasoningCardViewModel,
+): ReviewQueueItemViewModel[] {
+  const governance = caseItem.revisionGovernance;
+  const revisionId = governance?.currentRevision?.id;
+  if (!governance || !revisionId) return [];
+
+  if (!governance.app006Approval.approved) {
+    const hasActiveReview = Boolean(governance.review.activeReviewId);
+    return [
+      {
+        id: hasActiveReview
+          ? `case-revision-approval:${caseItem.id}:${revisionId}`
+          : `case-revision-review:${caseItem.id}:${revisionId}`,
+        kind: 'case_revision',
+        severity: hasActiveReview ? 'warning' : 'blocker',
+        title: hasActiveReview
+          ? 'Approve exact CaseRevision'
+          : 'Start CaseRevision review',
+        detail: caseItem.title,
+        targetWorkflow: 'cases',
+        targetBoard: 'diagnosticCases',
+        sourceId: caseItem.id,
+        reviewStatus: hasActiveReview ? 'IN_REVIEW' : 'NEEDS_REVIEW',
+        raw: {
+          caseId: caseItem.id,
+          revisionId,
+          reviewId: governance.review.activeReviewId,
+        },
+        groupId: 'governance',
+        editorialReason: hasActiveReview
+          ? 'The current CaseRevision has an active review and needs APP-006 governed approval.'
+          : 'The applied case has a current CaseRevision but no active revision review.',
+        metadata: [
+          `Case: ${caseItem.id}`,
+          `Revision: ${revisionId}`,
+          `Status: ${caseItem.status}`,
+        ],
+      },
+    ];
+  }
+
+  const readiness = governance.publication.readiness;
+  if (!governance.publication.authorized) {
+    return [
+      {
+        id: `publication-authorization:${caseItem.id}:${revisionId}`,
+        kind: 'publication_authorization',
+        severity: readiness?.result === 'READY' ? 'warning' : 'blocker',
+        title: 'Authorize exact revision publication',
+        detail: readiness
+          ? `${readiness.result}; ${readiness.blockers.length} blocker(s), ${readiness.warnings.length} warning(s).`
+          : 'Publication readiness has not been projected for this revision.',
+        targetWorkflow: 'publish',
+        targetBoard: 'publicationReadiness',
+        sourceId: caseItem.id,
+        reviewStatus: readiness?.result ?? 'BLOCKED',
+        raw: {
+          caseId: caseItem.id,
+          revisionId,
+          expectedApprovalDecisionId: readiness?.approvalDecisionId ?? null,
+          expectedMaterialContextHash: readiness?.materialContextHash ?? null,
+          expectedValidationRunId: readiness?.validationRunId ?? null,
+          expectedActivePublicationDecisionId:
+            readiness?.activePublicationDecisionId ?? null,
+          ready: readiness?.result === 'READY',
+        },
+        groupId: 'governance',
+        editorialReason:
+          readiness?.result === 'READY'
+            ? 'APP-006 approval and validation are ready for APP-008A publication authorization.'
+            : 'APP-008A publication authorization is blocked until readiness passes.',
+        metadata: [
+          `Case: ${caseItem.id}`,
+          `Revision: ${revisionId}`,
+          `APP-006: ${governance.app006Approval.decisionId ?? 'missing'}`,
+        ],
+      },
+    ];
+  }
+
+  if (!governance.scheduling.scheduled) {
+    return [
+      {
+        id: `publication-scheduler:${caseItem.id}:${revisionId}`,
+        kind: 'publication_authorization',
+        severity: 'info',
+        title: 'Awaiting exact DailyCase binding',
+        detail: 'APP-008A is authorized; scheduler has not bound a DailyCase yet.',
+        targetWorkflow: 'publish',
+        targetBoard: 'publicationReadiness',
+        sourceId: caseItem.id,
+        reviewStatus: 'AUTHORIZED_UNSCHEDULED',
+        raw: {
+          caseId: caseItem.id,
+          revisionId,
+          publicationDecisionId:
+            governance.publication.activePublicationDecisionId,
+        },
+        groupId: 'governance',
+        editorialReason:
+          'The publication decision is authorized and waiting for APP-008B exact scheduled binding.',
+        metadata: [
+          `Case: ${caseItem.id}`,
+          `Revision: ${revisionId}`,
+          `Publication: ${
+            governance.publication.activePublicationDecisionId ?? 'authorized'
+          }`,
+        ],
+      },
+    ];
+  }
+
+  return [];
 }
 
 function buildReviewQueueGroups(

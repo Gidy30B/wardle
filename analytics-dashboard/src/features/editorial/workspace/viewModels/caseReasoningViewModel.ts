@@ -4,6 +4,7 @@ import type {
   CaseLearningGoalCoverageRow,
   DiagnosisEditorialWorkspace,
   LearningGoalCoverageRow,
+  WorkspaceCaseRevisionGovernance,
 } from '../../../../api/admin.types.ts';
 import type {
   DiagnosticComparison,
@@ -51,6 +52,7 @@ export type CaseReasoningCardViewModel = {
   linkedLearningGoals: string[];
   linkedDiscriminators: string[];
   linkedComparisonIds: string[];
+  revisionGovernance?: WorkspaceCaseRevisionGovernance | null;
   reasoningConfidence: 'strong' | 'watch' | 'weak';
   teachingRisks: CaseTeachingRiskViewModel[];
   blockerCount: number;
@@ -205,6 +207,7 @@ function buildDiagnosticCases(params: {
       linkedLearningGoals: learningGoals.map((goal) => goal.learningGoal),
       linkedDiscriminators,
       linkedComparisonIds,
+      revisionGovernance: caseItem.raw.revisionGovernance ?? null,
       reasoningConfidence: confidenceFromCaseVerdict(
         check?.verdict ?? qualityFromCase(caseItem),
       ),

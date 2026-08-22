@@ -4,6 +4,24 @@ Inspection date: 2026-08-15
 
 This matrix is evidence, not approval.
 
+## Workspace Operational Closure Addendum
+
+| Field | Value |
+| --- | --- |
+| Closure package | `WEOS CLOSE-006` |
+| Implementation status | `IMPLEMENTED_FOR_ROUTINE_AI_CLINICAL_CASE_PATH` |
+| Branch | `weos/workspace-closure` |
+| Baseline commit SHA | `48e5fc5eff01cd26ed9eb991fc8943e51f5d832c` |
+| Detailed evidence | `docs/weos/implementation/WEOS-WORKSPACE-CLOSURE.md` |
+
+The WEOS workspace now exposes the routine governed AI Clinical Case path from
+Clinical Case Draft review/application through exact `CaseRevision` review,
+APP-006 governed approval, APP-008A revision-targeted publication
+authorization, and APP-008B exact `DailyCase` binding visibility. This addendum
+does not close APP-008C/D gameplay/session/attempt provenance and does not
+approve terminal, Prisma, seed, repair, or raw-admin workflows as normal
+editorial paths.
+
 ## APP-006 Closure Status
 
 | Field | Value |

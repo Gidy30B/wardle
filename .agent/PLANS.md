@@ -88,6 +88,112 @@ Record unresolved authority, technical, data, or verification risks.
 
 ---
 
+# ExecPlan: WEOS CLOSE-006 Workspace Operational Closure
+
+## Purpose
+
+Make the WEOS workspace the normal operational surface for governed AI Clinical Case production from editorial need through diagnosis-targeted draft generation, draft review, controlled application, exact CaseRevision review/APP-006 approval, APP-008A publication authorization, APP-008B scheduler binding visibility, and learner-exposure traceability.
+
+## Approved Authority
+
+Implementation package: user-provided `WEOS CLOSE-006 - Workspace Operational Closure`.
+Branch/worktree: `C:\Users\user\DxLab-workspace-closure`, `weos/workspace-closure`.
+Required baseline verified before implementation: `48e5fc5eff01cd26ed9eb991fc8943e51f5d832c`.
+
+This package authorizes workspace operational closure only. It does not authorize schema redesign, migration, generic governance redesign, scheduler architecture redesign, legacy seed/repair promotion, or raw admin/terminal workflows as the normal path.
+
+## Current Behavior
+
+The WEOS workspace exposes diagnosis workspace evidence, generation readiness, Clinical Case Draft inventory, review packets, and draft review/application actions. Backend controlled application creates a `Case` plus exact initial `CaseRevision`.
+
+APP-006 exact CaseRevision approval exists in backend and the older case detail surface, but the workspace does not yet provide a first-class post-application CaseRevision review and governed approval handoff.
+
+APP-008A publication readiness and publication authorization exist in backend routes/services, but workspace publication remains read-oriented and still includes legacy ready-to-publish affordances.
+
+APP-008B scheduler services bind `DailyCase` to exact `caseRevisionId` and `publicationDecisionId`, but the workspace does not yet surface publication eligibility, scheduled exact bindings, or governed learner-exposure state.
+
+## Required Invariant
+
+An editor with appropriate WEOS authority can complete and audit the routine Clinical Case path in the workspace without terminal access, raw Prisma/database access, seed/repair scripts, legacy generator tooling, or standalone admin-only bypasses:
+
+`editorial need -> diagnosis workspace -> generation readiness/action -> ClinicalCaseDraft -> Review Packet -> human review -> accepted draft -> controlled application -> Case + exact CaseRevision -> CaseRevision review -> APP-006 exact revision approval -> APP-008A publication authorization -> APP-008B exact scheduled binding -> governed learner exposure`.
+
+## Scope
+
+Included: workspace read-model additions, dashboard API/types/actions/view models/components for the missing post-application governance steps, APP-008A client wiring, exact DailyCase binding visibility, focused tests, closure documentation, bypass classification, and conformance matrix.
+
+Excluded: schema/migration unless proven unavoidable, seed/repair edits, scheduler redesign, generic authority redesign, APP-006/APP-007/APP-008 architectural rewrites, legacy route removal beyond clearly safe UI de-emphasis, and changes outside the closure worktree.
+
+## Files Expected To Change
+
+- `doctordle-backend/src/modules/admin/diagnosis-editorial-workspace.service.ts`
+- `analytics-dashboard/src/api/admin.ts`
+- `analytics-dashboard/src/api/admin.types.ts`
+- `analytics-dashboard/src/features/editorial/workspace/**`
+- focused backend/dashboard specs adjacent to changed modules
+- `docs/weos/implementation/WEOS-WORKSPACE-CLOSURE.md`
+- `docs/weos/WEOS-IMP-001-divergence-register.md` and/or gap/conformance docs if needed
+
+## Prohibited Changes
+
+No database schema or migration changes unless implementation proves it impossible without one and the authority gap is reported before proceeding. No data-changing repair or seed scripts. No direct work in `C:\Users\user\DxLab`. No learner-exposure semantics change hidden inside dashboard work. No approval inferred from validation, publication readiness, UI visibility, route access, or tests.
+
+## Data Model Implications
+
+None expected. Existing `CaseRevisionPublicationDecision`, `GovernedCaseRevisionApprovalDecision`, `DailyCase.caseRevisionId`, and `DailyCase.publicationDecisionId` should be consumed rather than replaced.
+
+## API Implications
+
+Expected additive client/read-model contracts for revision governance, publication authorization, and scheduled binding visibility. Existing backend APP-006 and APP-008A routes should be reused where possible. No route removal is expected.
+
+## Migration Plan
+
+None expected.
+
+## Compatibility Strategy
+
+Legacy backend routes may remain for compatibility, but the workspace should stop presenting legacy or partial paths as the normal operational route. Scheduler compatibility projections remain read-visible as projections, not as authority.
+
+## Testing Strategy
+
+Add focused deterministic tests for workspace view-model gating and action payloads, APP-008A client/action wiring, and any backend workspace projection helpers changed. Run targeted tests, dashboard build, backend build if feasible, `git diff --check`, and `git status --short`. Investigate Playwright readiness and document any infrastructure blocker with a concrete reason.
+
+## Rollback/Recovery
+
+Changes are expected to be additive/read-model/UI/action wiring only. Roll back by reverting the closure commit; no migration or data recovery should be required.
+
+## Progress
+
+- [x] Verify isolated closure worktree, branch, baseline commit, and clean status.
+- [x] Record baseline trace before modifying code.
+- [x] Inspect exact APP-006, APP-008A, APP-008B, and workspace contracts.
+- [x] Implement workspace closure surfaces and actions.
+- [x] Add focused tests.
+- [x] Document closure state, bypass inventory, and conformance matrix.
+- [x] Run verification and commit.
+
+## Discoveries
+
+- APP-008A backend readiness/authorization routes and service exist and are revision-exact.
+- Scheduler services already create exact `DailyCase.caseRevisionId` and `publicationDecisionId` bindings from active publication decisions.
+- Workspace currently lacks operational APP-006 and APP-008A/008B continuation after draft application.
+- Dashboard review action buttons already implement explicit browser confirmation for confirmation-gated actions; APP-008A authorization must flow through that mechanism rather than pre-confirming generated payloads.
+- `npm test -- <file>` in `analytics-dashboard` does not run the named file directly; focused tests were run with `node --experimental-strip-types`.
+
+## Decisions
+
+- Reuse existing APP-006, APP-008A, and scheduler identity models instead of creating replacement governance semantics.
+- Treat legacy ready-to-publish as a compatibility surface, not the closure path.
+- Keep APP-008B as scheduler-owned; the workspace shows exact binding state rather than adding a manual scheduling mutation.
+
+## Remaining Risks
+
+Playwright local QA previously timed out; this task must investigate whether the issue is infrastructure, routing, auth, or app-state related before final reporting.
+
+Playwright local QA investigation remains blocked: the sandboxed run failed with `EPERM` writing `analytics-dashboard/test-results/.last-run.json`; an escalated rerun moved past that immediate file-permission failure but timed out after 154 seconds without a usable browser result. No Playwright result is claimed.
+
+---
+
 # ExecPlan: WEOS CLOSE-003 Single Registry-First Clinical Case Generator Cutover
 
 ## Purpose

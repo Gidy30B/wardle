@@ -93,6 +93,8 @@ export function WorkspaceReviewActionButtons({
 }
 
 function actionLabel(actionId: WorkspaceActionId): string {
+  if (actionId === 'caseRevision.startReview') return 'Start review';
+  if (actionId === 'publication.authorizeRevision') return 'Authorize';
   const intent = getWorkspaceActionDescriptor(actionId).intent;
   if (intent === 'requestChanges') return 'Request changes';
   if (intent === 'reject') return 'Reject';

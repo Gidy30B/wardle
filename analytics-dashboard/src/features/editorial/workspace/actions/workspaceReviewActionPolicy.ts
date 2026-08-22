@@ -17,8 +17,10 @@ export type SafeReviewSubject = {
     | 'clueRevision'
     | 'unsupportedClaim'
     | 'caseDraft'
+    | 'caseRevision'
     | 'aiDraft'
     | 'publication'
+    | 'publicationAuthorization'
     | 'lifecycle'
     | 'delete'
     | 'bulk'
@@ -26,6 +28,7 @@ export type SafeReviewSubject = {
   sourceId?: string | null;
   status?: string | null;
   repairable?: boolean;
+  raw?: unknown;
 };
 
 export type ReviewItemActionSource = {
@@ -33,6 +36,7 @@ export type ReviewItemActionSource = {
   sourceId: string | null;
   reviewStatus?: string | null;
   repairable?: boolean;
+  raw?: unknown;
 };
 
 export type WorkflowActionPolicyState =
@@ -63,6 +67,9 @@ const WORKFLOW_SAFE_ACTIONS = new Set<WorkspaceActionId>([
   'caseDraft.accept',
   'caseDraft.reject',
   'caseDraft.requestChanges',
+  'caseRevision.startReview',
+  'caseRevision.approve',
+  'publication.authorizeRevision',
   'education.repairUnsupportedClaim',
   'education.regenerateSection',
 ]);
@@ -129,6 +136,7 @@ export function getReviewActionSubject(
   const common = {
     sourceId: item.sourceId,
     status: item.reviewStatus,
+    raw: item.raw,
   };
 
   switch (item.kind) {
@@ -142,6 +150,10 @@ export function getReviewActionSubject(
       return { kind: 'clueRevision', ...common };
     case 'clinical_case_draft':
       return { kind: 'caseDraft', ...common };
+    case 'case_revision':
+      return { kind: 'caseRevision', ...common };
+    case 'publication_authorization':
+      return { kind: 'publicationAuthorization', ...common };
     case 'unsupported_claim':
       return {
         kind: 'unsupportedClaim',
@@ -156,6 +168,7 @@ export function getReviewActionSubject(
 export function getReviewActionPayload(
   actionId: WorkspaceActionId,
   sourceId: string,
+  source?: { raw?: unknown },
 ): WorkspaceActionPayload {
   if (actionId.startsWith('teachingRule.')) return { ruleId: sourceId };
   if (actionId.startsWith('evidence.')) return { relationshipId: sourceId };
@@ -164,6 +177,27 @@ export function getReviewActionPayload(
   }
   if (actionId.startsWith('clueRevision.')) return { draftId: sourceId };
   if (actionId.startsWith('caseDraft.')) return { draftId: sourceId };
+  if (actionId.startsWith('caseRevision.')) {
+    const raw = recordPayload(source);
+    return {
+      caseId: stringValue(raw.caseId) ?? sourceId,
+      revisionId: stringValue(raw.revisionId),
+      reviewId: stringValue(raw.reviewId) ?? null,
+    };
+  }
+  if (actionId === 'publication.authorizeRevision') {
+    const raw = recordPayload(source);
+    return {
+      caseId: stringValue(raw.caseId) ?? sourceId,
+      revisionId: stringValue(raw.revisionId),
+      expectedApprovalDecisionId: stringValue(raw.expectedApprovalDecisionId),
+      expectedMaterialContextHash: stringValue(raw.expectedMaterialContextHash),
+      expectedValidationRunId: stringValue(raw.expectedValidationRunId),
+      expectedActivePublicationDecisionId: stringValue(
+        raw.expectedActivePublicationDecisionId,
+      ),
+    };
+  }
   if (actionId === 'education.repairUnsupportedClaim') {
     return { claimId: sourceId };
   }
@@ -229,6 +263,19 @@ function applicableActions(subject: SafeReviewSubject): WorkspaceActionId[] {
     if (subject.status === 'ACCEPTED') return ['caseDraft.apply'];
   }
 
+  if (subject.kind === 'caseRevision') {
+    if (subject.status === 'NEEDS_REVIEW') return ['caseRevision.startReview'];
+    if (subject.status === 'IN_REVIEW') return ['caseRevision.approve'];
+  }
+
+  if (subject.kind === 'publicationAuthorization') {
+    const raw = recordPayload(subject);
+    if (subject.status === 'READY' && raw.ready === true) {
+      return ['publication.authorizeRevision'];
+    }
+    return [];
+  }
+
   if (subject.kind === 'unsupportedClaim' && subject.repairable) {
     return ['education.repairUnsupportedClaim'];
   }
@@ -268,4 +315,16 @@ function isPendingClueRevisionStatus(status: string | null | undefined) {
     'pending',
     'needs_review',
   ].includes(status ?? '');
+}
+
+function recordPayload(source?: { raw?: unknown }): Record<string, unknown> {
+  return source?.raw &&
+    typeof source.raw === 'object' &&
+    !Array.isArray(source.raw)
+    ? (source.raw as Record<string, unknown>)
+    : {};
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length ? value : undefined;
 }

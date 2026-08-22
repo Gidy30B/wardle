@@ -1,6 +1,7 @@
 import {
   createCaseDiscriminatorAnnotation,
   createCaseEscalationAnnotation,
+  authorizeCaseRevisionPublication,
   createCaseLearningGoalCoverage,
   deleteCaseDiscriminatorAnnotation,
   deleteCaseEscalationAnnotation,
@@ -23,6 +24,7 @@ import type {
   CaseCoverageActionPayload,
   CaseReadyActionPayload,
   LifecycleActionPayload,
+  PublicationAuthorizationActionPayload,
   WorkspaceActionExecutor,
 } from './workspaceActionTypes.ts';
 
@@ -56,10 +58,74 @@ export const runPublicationAction: WorkspaceActionExecutor = (
       }
       return markCaseReadyToPublish(context.client, actionPayload.caseId);
     }
+    case 'publication.authorizeRevision': {
+      const actionPayload = payload as PublicationAuthorizationActionPayload;
+      const caseId = requirePublicationCaseId(actionPayload);
+      const revisionId = requirePublicationRevisionId(actionPayload);
+      const expectedApprovalDecisionId = requireString(
+        actionPayload.expectedApprovalDecisionId,
+        'Publication authorization requires expectedApprovalDecisionId.',
+      );
+      const expectedMaterialContextHash = requireString(
+        actionPayload.expectedMaterialContextHash,
+        'Publication authorization requires expectedMaterialContextHash.',
+      );
+      return authorizeCaseRevisionPublication(context.client, caseId, revisionId, {
+        expectedRevisionId: revisionId,
+        expectedApprovalDecisionId,
+        expectedMaterialContextHash,
+        expectedValidationRunId:
+          actionPayload.expectedValidationRunId ?? undefined,
+        expectedActivePublicationDecisionId:
+          actionPayload.expectedActivePublicationDecisionId ?? null,
+        commandIdempotencyKey:
+          actionPayload.commandIdempotencyKey ??
+          createPublicationIdempotencyKey(caseId, revisionId),
+        authorityAssignmentReferences:
+          actionPayload.authorityAssignmentReferences,
+        rationale: actionPayload.rationale,
+      });
+    }
     default:
       throw new Error(`Unsupported publication action: ${actionId}`);
   }
 };
+
+function requirePublicationCaseId(
+  payload: PublicationAuthorizationActionPayload,
+): string {
+  if (!payload.caseId) {
+    throw new Error('Publication authorization requires caseId.');
+  }
+  return payload.caseId;
+}
+
+function requirePublicationRevisionId(
+  payload: PublicationAuthorizationActionPayload,
+): string {
+  if (!payload.revisionId) {
+    throw new Error('Publication authorization requires revisionId.');
+  }
+  return payload.revisionId;
+}
+
+function requireString(
+  value: string | null | undefined,
+  message: string,
+): string {
+  if (!value) {
+    throw new Error(message);
+  }
+  return value;
+}
+
+function createPublicationIdempotencyKey(caseId: string, revisionId: string) {
+  const randomId =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `authorize-case-revision-publication:${caseId}:${revisionId}:${randomId}`;
+}
 
 export const runCaseCoverageAction: WorkspaceActionExecutor = (
   actionId,
