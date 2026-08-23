@@ -1,4 +1,4 @@
-import { IsIn } from 'class-validator';
+import { IsIn, IsInt, Min } from 'class-validator';
 import type { EducationRegenerableSection } from '../education-section-quality-classifier.service';
 
 export const REGENERABLE_EDUCATION_SECTIONS = [
@@ -11,4 +11,8 @@ export const REGENERABLE_EDUCATION_SECTIONS = [
 export class RegenerateEducationSectionDto {
   @IsIn(REGENERABLE_EDUCATION_SECTIONS)
   section!: EducationRegenerableSection;
+
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
 }

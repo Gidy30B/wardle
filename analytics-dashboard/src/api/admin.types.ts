@@ -1439,6 +1439,7 @@ export type WorkspaceSectionFailureSummary = {
 
 export type RegenerateEducationSectionPayload = {
   section: EducationRegenerableSection;
+  expectedVersion: number;
 };
 
 export type WorkspaceGraphSummary = {
@@ -3375,6 +3376,7 @@ export type DiagnosisEditorialBriefWritePayload = {
 };
 
 export type UpsertDiagnosisEducationPayload = {
+  expectedVersion?: number;
   title?: string;
   summary?: DiagnosisEducationSummary;
   clinicalPattern?: JsonValue;
@@ -3393,6 +3395,7 @@ export type UpsertDiagnosisEducationPayload = {
 
 export type ReviewDiagnosisEducationPayload = {
   status: DiagnosisEducationStatus;
+  expectedVersion: number;
 };
 
 export type EditorialDiagnosisPublishReadiness = {

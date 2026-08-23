@@ -21,6 +21,7 @@ import {
 import { AdminGuard } from '../admin/admin.guard';
 import { WorkspaceProjectionService } from '../editorial/workspace-projection.service';
 import { DiagnosisEducationService } from './diagnosis-education.service';
+import { GenerateDiagnosisEducationDto } from './dto/generate-diagnosis-education.dto';
 import { RegenerateEducationSectionDto } from './dto/regenerate-education-section.dto';
 import { ReviewDiagnosisEducationDto } from './dto/review-diagnosis-education.dto';
 import { UpsertDiagnosisEducationDto } from './dto/upsert-diagnosis-education.dto';
@@ -142,6 +143,7 @@ export class AdminEducationController {
     @Param('diagnosisRegistryId', new ParseUUIDPipe())
     diagnosisRegistryId: string,
     @Req() request: AuthenticatedRequest,
+    @Body() body: GenerateDiagnosisEducationDto = {},
   ) {
     this.logger.log(
       JSON.stringify({
@@ -153,6 +155,7 @@ export class AdminEducationController {
     return this.diagnosisEducationService.generateDraft(
       diagnosisRegistryId,
       request.user.id,
+      body.expectedVersion,
     );
   }
 
@@ -167,6 +170,7 @@ export class AdminEducationController {
     return this.educationSectionRegenerationService.regenerateSection({
       diagnosisRegistryId,
       section: body.section,
+      expectedVersion: body.expectedVersion,
       userId: request.user.id,
     });
   }

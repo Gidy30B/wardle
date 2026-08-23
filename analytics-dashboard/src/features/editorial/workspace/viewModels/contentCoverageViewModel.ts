@@ -37,6 +37,7 @@ export type ContentTeachingRiskViewModel = {
 
 export type EducationCoverageCardViewModel = {
   id: string;
+  educationVersion: number | null;
   section: string;
   label: string;
   status: string;
@@ -211,6 +212,7 @@ function buildEducationSections(params: {
 
     return {
       id: `education-section:${section.section}`,
+      educationVersion: workspace.education.version,
       section: section.section,
       label: labelize(section.section),
       status: hasBlocker ? 'blocked' : hasWarning ? 'needs_review' : 'reviewable',

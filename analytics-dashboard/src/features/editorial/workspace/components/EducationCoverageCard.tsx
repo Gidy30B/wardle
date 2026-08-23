@@ -51,6 +51,9 @@ export function EducationCoverageCard({
     if (!canShowRegenerateSectionAction) {
       return;
     }
+    if (typeof section.educationVersion !== 'number') {
+      return;
+    }
 
     const confirmed = window.confirm(
       `Regenerate ${section.label.toLowerCase()} using current canonical sources?`,
@@ -64,6 +67,7 @@ export function EducationCoverageCard({
       regenerateSectionActionId,
       {
         section: regenerableSection,
+        expectedVersion: section.educationVersion,
         confirmed: true,
       },
       section.section,

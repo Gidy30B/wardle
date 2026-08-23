@@ -1252,9 +1252,11 @@ export function createDiagnosisEducationForAdmin(
 export function generateDiagnosisEducationDraft(
   client: ApiClient,
   diagnosisRegistryId: string,
+  payload?: { expectedVersion?: number },
 ) {
   return client.post(
     `/admin/education/diagnoses/${diagnosisRegistryId}/generate`,
+    payload ?? {},
   );
 }
 

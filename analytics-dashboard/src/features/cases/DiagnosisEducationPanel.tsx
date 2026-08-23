@@ -717,7 +717,11 @@ export default function DiagnosisEducationPanel({
       showSuccess(config.success);
       return true;
     } catch (error) {
-      showError(error instanceof Error ? error.message : 'Action failed.');
+      const message = error instanceof Error ? error.message : 'Action failed.';
+      if (message.includes('Education changed since this view was loaded.')) {
+        await refreshEducation();
+      }
+      showError(message);
       return false;
     } finally {
       setPendingAction(null);
@@ -752,7 +756,12 @@ export default function DiagnosisEducationPanel({
           ? 'Regenerating education draft...'
           : 'Generating education draft...',
         success: 'New education draft version generated for review.',
-        action: () => generateDiagnosisEducationDraft(client, diagnosisRegistryId),
+        action: () =>
+          generateDiagnosisEducationDraft(
+            client,
+            diagnosisRegistryId,
+            education ? { expectedVersion: education.version } : undefined,
+          ),
       });
     } finally {
       generateInFlightRef.current = false;
@@ -935,7 +944,10 @@ export default function DiagnosisEducationPanel({
       success: 'Education content saved.',
       action: () =>
         education
-          ? updateDiagnosisEducationForAdmin(client, education.id, payload)
+          ? updateDiagnosisEducationForAdmin(client, education.id, {
+              ...payload,
+              expectedVersion: education.version,
+            })
           : createDiagnosisEducationForAdmin(client, diagnosisRegistryId, payload),
     });
   }
@@ -953,12 +965,15 @@ export default function DiagnosisEducationPanel({
           ? 'Education published for eligible learners.'
           : 'Education review status updated.',
       action: () =>
-        reviewDiagnosisEducationForAdmin(client, education.id, { status }),
+        reviewDiagnosisEducationForAdmin(client, education.id, {
+          status,
+          expectedVersion: education.version,
+        }),
     });
   }
 
   async function handleRegenerateSection(section: EducationRegenerableSection) {
-    if (!diagnosisRegistryId || pendingAction !== null) {
+    if (!diagnosisRegistryId || pendingAction !== null || !education) {
       return;
     }
 
@@ -976,6 +991,7 @@ export default function DiagnosisEducationPanel({
       action: () =>
         regenerateDiagnosisEducationSection(client, diagnosisRegistryId, {
           section,
+          expectedVersion: education.version,
         }),
     });
   }

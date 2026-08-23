@@ -158,6 +158,7 @@ export type ClaimRepairActionPayload = BaseActionPayload & {
 export type EducationActionPayload = BaseActionPayload & {
   educationId?: string;
   section?: RegenerateEducationSectionPayload['section'];
+  expectedVersion?: number;
   status?: string;
   note?: string;
 };

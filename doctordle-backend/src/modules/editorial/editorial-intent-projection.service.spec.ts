@@ -121,6 +121,32 @@ describe('EditorialIntentProjectionService', () => {
     );
   });
 
+  it('does not import approved but unpublished education into generation intent', async () => {
+    const { service } = buildService(
+      buildRegistry({
+        education: {
+          id: 'education-1',
+          editorialStatus: DiagnosisEducationStatus.APPROVED,
+          source: DiagnosisEducationSource.MANUAL,
+          summary: {
+            highYieldTakeaway: 'Approved but unpublished teaching point.',
+          },
+          keySymptoms: [{ finding: 'Approved symptom only' }],
+          differentials: [{ diagnosis: 'Approved mimic only' }],
+        },
+      }),
+    );
+
+    const projection = await service.build('registry-1');
+
+    expect(projection.completeness.hasEducation).toBe(false);
+    expect(projection.learningGoals).not.toContain(
+      'Approved but unpublished teaching point.',
+    );
+    expect(projection.requiredSymptoms).not.toContain('Approved symptom only');
+    expect(projection.requiredMimics).not.toContain('Approved mimic only');
+  });
+
   it('enriches projection from approved and published cases', async () => {
     const { service } = buildService(
       buildRegistry({

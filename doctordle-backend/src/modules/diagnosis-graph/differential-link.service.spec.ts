@@ -1,4 +1,5 @@
 import {
+  DiagnosisEducationStatus,
   DifferentialLinkRole,
   DifferentialResolutionStatus,
 } from '@prisma/client';
@@ -13,6 +14,16 @@ function buildFixture() {
     educationDifferentialMapping: {
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn(),
+    },
+    diagnosisEducation: {
+      findUnique: jest.fn().mockResolvedValue({
+        editorialStatus: DiagnosisEducationStatus.PUBLISHED,
+      }),
+    },
+    diagnosisEducationRevision: {
+      findUnique: jest.fn().mockResolvedValue({
+        editorialStatus: DiagnosisEducationStatus.PUBLISHED,
+      }),
     },
     caseDifferentialLink: {
       count: jest.fn(),
@@ -86,6 +97,62 @@ describe('DifferentialLinkService', () => {
 
     expect(prisma.educationDifferentialLink.deleteMany).toHaveBeenCalledWith({
       where: { sourceMappingId: 'map-2' },
+    });
+    expect(prisma.educationDifferentialLink.upsert).not.toHaveBeenCalled();
+  });
+
+  it('creates education links only for published education mappings', async () => {
+    const { prisma, service } = buildFixture();
+    prisma.educationDifferentialLink.findUnique.mockResolvedValue(null);
+    prisma.educationDifferentialLink.upsert.mockResolvedValue({ id: 'link-2' });
+
+    await expect(
+      service.syncEducationMappingRow({
+        id: 'map-2',
+        educationId: 'education-1',
+        revisionId: null,
+        rawText: 'Gastroenteritis',
+        confidence: 0.9,
+        status: DifferentialResolutionStatus.RESOLVED,
+        resolvedDiagnosisRegistryId: 'dx-2',
+      } as never),
+    ).resolves.toMatchObject({ action: 'created' });
+
+    expect(prisma.diagnosisEducation.findUnique).toHaveBeenCalledWith({
+      where: { id: 'education-1' },
+      select: { editorialStatus: true },
+    });
+    expect(prisma.educationDifferentialLink.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          educationId: 'education-1',
+          diagnosisRegistryId: 'dx-2',
+          role: DifferentialLinkRole.TEACHING_DIFFERENTIAL,
+        }),
+      }),
+    );
+  });
+
+  it('removes education links from non-published current education mappings', async () => {
+    const { prisma, service } = buildFixture();
+    prisma.diagnosisEducation.findUnique.mockResolvedValue({
+      editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+    });
+
+    await expect(
+      service.syncEducationMappingRow({
+        id: 'map-3',
+        educationId: 'education-1',
+        revisionId: null,
+        rawText: 'Gastroenteritis',
+        confidence: 0.9,
+        status: DifferentialResolutionStatus.RESOLVED,
+        resolvedDiagnosisRegistryId: 'dx-2',
+      } as never),
+    ).resolves.toMatchObject({ action: 'removed_untrusted' });
+
+    expect(prisma.educationDifferentialLink.deleteMany).toHaveBeenCalledWith({
+      where: { sourceMappingId: 'map-3' },
     });
     expect(prisma.educationDifferentialLink.upsert).not.toHaveBeenCalled();
   });

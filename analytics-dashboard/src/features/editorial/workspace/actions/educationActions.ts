@@ -40,6 +40,7 @@ export const runEducationAction: WorkspaceActionExecutor = (
         requireEducationId(actionPayload),
         {
           status: requireEducationStatus(actionPayload),
+          expectedVersion: requireExpectedVersion(actionPayload),
         },
       );
     }
@@ -77,5 +78,16 @@ function requireRegeneratePayload(
   if (!payload.section) {
     throw new Error('Education regeneration action requires section.');
   }
-  return { section: payload.section };
+  return {
+    section: payload.section,
+    expectedVersion: requireExpectedVersion(payload),
+  };
+}
+
+function requireExpectedVersion(payload: EducationActionPayload): number {
+  const expectedVersion = payload.expectedVersion;
+  if (typeof expectedVersion !== 'number' || !Number.isInteger(expectedVersion)) {
+    throw new Error('Education action requires expectedVersion.');
+  }
+  return expectedVersion;
 }

@@ -88,6 +88,103 @@ Record unresolved authority, technical, data, or verification risks.
 
 ---
 
+# ExecPlan: WEOS EDU-001 Diagnosis Education Mutation Safety
+
+## Purpose
+
+Make ordinary Diagnosis Education content mutations and review decisions version-targeted and authority-invalidating so approved or published Education material cannot be changed while retaining that authority.
+
+## Approved Authority
+
+Implementation package: user-provided `WEOS EDU-001 - Diagnosis Education Mutation Safety`.
+Branch/worktree: `C:\Users\user\DxLab-master-live`, `master`.
+Required baseline verified before implementation: `50ab64545f0dca21f898a9641587363b87d869cf`.
+
+This package authorizes only immediate Education mutation safety hardening. It does not authorize candidate-first Education, broad governance architecture, graph redesign, workspace redesign, schema migration, distributed locks, or durable AI failure entities.
+
+## Current Behavior
+
+`DiagnosisEducationService.upsertForDiagnosisRegistry` preserves existing `editorialStatus`, so runtime manual content writes can leave `PUBLISHED` or `APPROVED` content trusted after mutation. `updateByEducationId` demotes `PUBLISHED` but preserves `APPROVED`. `reviewEducation` and `EducationSectionRegenerationService.regenerateSection` do not require the caller's observed version. Current differential mapping refreshes from the current mutable Education row after writes.
+
+## Required Invariant
+
+Material content mutation of `PUBLISHED` or `APPROVED` Diagnosis Education must produce an untrusted editable state, ordinary existing-row mutations and review decisions must reject stale expected versions, learner fallback to the last published revision must remain readable, and case generation must continue to import only published Education into editorial intent.
+
+## Scope
+
+Included: shared backend invalidation/version policy, Education DTO/API expected-version wiring, runtime Education service hardening, section regeneration hardening, focused differential trust test coverage, dashboard expected-version payload wiring, repository-native documentation, and targeted tests/builds.
+
+Excluded: schema/migration, `EducationGenerationCandidate`, section candidate UI, exact publication decision records, graph provenance redesign, distributed locks, durable AI failure entities, semantic diff UI, broad generic governance framework, and learner redesign.
+
+## Files Expected To Change
+
+- `.agent/PLANS.md`
+- `doctordle-backend/src/modules/education/**`
+- focused backend specs in `doctordle-backend/src/modules/education`, `editorial`, `diagnosis-graph`, or `case-generator`
+- `analytics-dashboard/src/api/admin.ts`
+- `analytics-dashboard/src/api/admin.types.ts`
+- `analytics-dashboard/src/features/cases/DiagnosisEducationPanel.tsx`
+- `analytics-dashboard/src/features/editorial/**`
+- `docs/weos/**` documentation/gap files as needed
+
+## Prohibited Changes
+
+No schema or migration unless implementation proves impossible and work stops for user disposition. No seed/repair changes. No candidate-first Education. No learner API redesign. No weakening legacy UI behavior. No direct work in `C:\Users\user\DxLab`.
+
+## Data Model Implications
+
+None expected. Existing `DiagnosisEducation.version` is sufficient for stale-state protection.
+
+## API Implications
+
+Existing mutation DTOs gain `expectedVersion` for existing-row updates, section regeneration, review/publish decisions, and whole draft regeneration over an existing Education row. Stale requests should return `409 Conflict`.
+
+## Migration Plan
+
+None.
+
+## Compatibility Strategy
+
+Existing create flows without an Education row may omit `expectedVersion`. Existing legacy and workspace UI must send the visible Education version for mutation/review/regeneration. Backend remains authoritative.
+
+## Testing Strategy
+
+Add focused backend tests for approved/published invalidation, stale manual edit/regeneration/review/publish rejection, failed AI preservation, learner published-revision fallback, case-generation publication gating, and differential link trust treatment. Add/update dashboard tests where affected and run targeted tests, backend build, dashboard build, `git diff --check`, and final clean status.
+
+## Rollback/Recovery
+
+Code-only rollback by reverting the EDU-001 commit. No migration or data recovery expected.
+
+## Progress
+
+- [x] Verify pinned worktree, branch, baseline commit, and clean status.
+- [x] Re-audit current writers, DTOs, callers, and downstream differential/case paths.
+- [x] Implement shared invalidation/version policy and backend hardening.
+- [x] Wire dashboard expected-version payloads and stale conflict copy.
+- [x] Add focused tests.
+- [x] Update documentation.
+- [x] Run verification and commit.
+
+## Discoveries
+
+- `upsertForDiagnosisRegistry` and `updateByEducationId` are the immediate P0 authority-preservation defects.
+- `EditorialIntentProjectionService` imports Education only when current Education is `PUBLISHED`; learner API falls back to latest published revision when current row is no longer published.
+- Differential mappings/links are editorial projections from current Education rows and need explicit trust treatment rather than deletion.
+- Initial verification required `npm ci` in backend and dashboard because `node_modules` were absent.
+- A full backend `npm test -- --runInBand --silent` without env fails in unrelated suites at environment validation. A rerun with test env values gets past validation but still fails in unrelated broad-suite expectations: stale `DiagnosisEditorialWorkspaceService` fixtures lacking newer fields and diagnostic scoring/golden dataset expectations.
+
+## Decisions
+
+- Content mutation invalidates `APPROVED` and `PUBLISHED` to `NEEDS_REVIEW`, matching existing AI generation/regeneration review convention.
+- `REJECTED` and `ARCHIVED` are not reopened by this package.
+
+## Remaining Risks
+
+Candidate-first Education and exact publication decision records remain deferred to EDU-002.
+Full backend-suite health remains outside this EDU-001 package because of unrelated existing failures noted above. Focused EDU-001 backend tests, backend build, dashboard build, dashboard tests, and diff hygiene passed.
+
+---
+
 # ExecPlan: WEOS CLOSE-006 Workspace Operational Closure
 
 ## Purpose

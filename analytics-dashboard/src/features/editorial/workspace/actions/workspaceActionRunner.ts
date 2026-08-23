@@ -93,10 +93,17 @@ export async function runWorkspaceAction(
     };
   } catch (error) {
     const errorText = toErrorMessage(error);
+    if (isStaleEducationConflict(errorText)) {
+      await context.refreshWorkspace();
+    }
     safeCall(context.showError, `${descriptor.failureMessage} ${errorText}`);
 
     return failure(actionId, descriptor.failureMessage, errorText);
   }
+}
+
+function isStaleEducationConflict(message: string): boolean {
+  return message.includes('Education changed since this view was loaded.');
 }
 
 function failure(

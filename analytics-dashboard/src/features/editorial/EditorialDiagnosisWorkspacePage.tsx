@@ -607,7 +607,11 @@ export default function EditorialDiagnosisWorkspacePage() {
       showSuccess(config.success);
       return true;
     } catch (actionError) {
-      showError(errorMessage(actionError, 'Action failed.'));
+      const message = errorMessage(actionError, 'Action failed.');
+      if (message.includes('Education changed since this view was loaded.')) {
+        await refreshWorkspace();
+      }
+      showError(message);
       return false;
     } finally {
       setPendingAction(null);
@@ -1159,6 +1163,12 @@ export default function EditorialDiagnosisWorkspacePage() {
     if (!diagnosisRegistryId) {
       return;
     }
+    const expectedVersion = workspace?.education.version;
+    if (typeof expectedVersion !== 'number') {
+      showError('Education changed since this view was loaded. Refresh before continuing.');
+      void refreshWorkspace();
+      return;
+    }
 
     const confirmed = window.confirm(
       `Regenerate ${formatLabel(section)} for ${diagnosisName}?`,
@@ -1174,6 +1184,7 @@ export default function EditorialDiagnosisWorkspacePage() {
       action: () =>
         regenerateDiagnosisEducationSection(client, diagnosisRegistryId, {
           section,
+          expectedVersion,
         }),
     });
   }

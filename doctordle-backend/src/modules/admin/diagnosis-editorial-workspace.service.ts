@@ -46,6 +46,7 @@ import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/d
 import { EvidenceCoverageService } from './evidence-coverage.service';
 import { ReasoningPathService } from './reasoning-path.service';
 import { EditorialTriageProjectionService } from './editorial-triage-projection.service';
+import { statusAfterEducationContentMutation } from '../education/education-mutation-policy';
 import {
   CasePublicationGovernanceService,
   type PublicationReadiness,
@@ -2432,7 +2433,9 @@ export class DiagnosisEditorialWorkspaceService {
     await this.prisma.diagnosisEducation.update({
       where: { id: education.id },
       data: {
-        editorialStatus: DiagnosisEducationStatus.DRAFT,
+        editorialStatus: statusAfterEducationContentMutation(
+          education.editorialStatus,
+        ),
         [section]: this.appendDraftRepair(currentValue, repairEntry),
       },
     });

@@ -39,13 +39,14 @@ describe('EducationSectionRegenerationService', () => {
     await service.regenerateSection({
       diagnosisRegistryId: 'registry-1',
       section: 'investigations',
+      expectedVersion: 3,
       userId: 'admin-1',
     });
 
     expect(create).toHaveBeenCalled();
-    expect(tx.diagnosisEducation.update).toHaveBeenCalledWith(
+    expect(tx.diagnosisEducation.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'education-1' },
+        where: { id: 'education-1', version: 3 },
         data: expect.objectContaining({
           investigations: expect.arrayContaining([
             expect.objectContaining({ id: 'ketones-1' }),
@@ -55,7 +56,7 @@ describe('EducationSectionRegenerationService', () => {
         }),
       }),
     );
-    expect(tx.diagnosisEducation.update.mock.calls[0][0].data.management).toBeUndefined();
+    expect(tx.diagnosisEducation.updateMany.mock.calls[0][0].data.management).toBeUndefined();
     expect(tx.diagnosisEducationRevision.create).toHaveBeenCalledTimes(2);
   });
 
@@ -68,13 +69,14 @@ describe('EducationSectionRegenerationService', () => {
     await service.regenerateSection({
       diagnosisRegistryId: 'registry-1',
       section: 'examPearls',
+      expectedVersion: 3,
       userId: 'admin-1',
     });
 
-    expect(tx.diagnosisEducation.update.mock.calls[0][0].data.examPearls).toEqual(
+    expect(tx.diagnosisEducation.updateMany.mock.calls[0][0].data.examPearls).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'rovsing-1' })]),
     );
-    expect(tx.diagnosisEducation.update.mock.calls[0][0].data.management).toBeUndefined();
+    expect(tx.diagnosisEducation.updateMany.mock.calls[0][0].data.management).toBeUndefined();
   });
 
   it('preserves published education by snapshotting before update', async () => {
@@ -89,6 +91,7 @@ describe('EducationSectionRegenerationService', () => {
     await service.regenerateSection({
       diagnosisRegistryId: 'registry-1',
       section: 'management',
+      expectedVersion: 3,
       userId: 'admin-1',
     });
 
@@ -100,8 +103,55 @@ describe('EducationSectionRegenerationService', () => {
         },
       },
     });
-    expect(tx.diagnosisEducation.update.mock.calls[0][0].data.publishedAt).toBeNull();
+    expect(tx.diagnosisEducation.updateMany.mock.calls[0][0].data.publishedAt).toBeNull();
     expect(tx.diagnosisEducationRevision.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('invalidates approved education when regenerating a section', async () => {
+    const education = buildEducation({
+      editorialStatus: DiagnosisEducationStatus.APPROVED,
+      reviewedAt: new Date('2026-05-01T00:00:00.000Z'),
+      reviewedByUserId: 'senior-1',
+    });
+    const { service, tx } = buildService(education, {
+      differentials: buildSection('HIGH_YIELD_DISCRIMINATOR', 'mimic'),
+    });
+
+    await service.regenerateSection({
+      diagnosisRegistryId: 'registry-1',
+      section: 'differentials',
+      expectedVersion: 3,
+      userId: 'admin-1',
+    });
+
+    expect(tx.diagnosisEducation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+          reviewedAt: null,
+          reviewedByUserId: null,
+        }),
+      }),
+    );
+  });
+
+  it('rejects stale section regeneration before calling OpenAI', async () => {
+    const education = buildEducation({ version: 3 });
+    const { service, tx, create } = buildService(education, {
+      investigations: buildSection('INVESTIGATION', 'ketones'),
+    });
+
+    await expect(
+      service.regenerateSection({
+        diagnosisRegistryId: 'registry-1',
+        section: 'investigations',
+        expectedVersion: 2,
+        userId: 'admin-1',
+      }),
+    ).rejects.toThrow('Education changed since this view was loaded');
+
+    expect(create).not.toHaveBeenCalled();
+    expect(tx.diagnosisEducation.updateMany).not.toHaveBeenCalled();
   });
 });
 
@@ -111,12 +161,11 @@ function buildService(
 ) {
   const tx = {
     diagnosisEducation: {
-      update: jest.fn().mockImplementation(async ({ data }) => ({
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      findUnique: jest.fn().mockImplementation(async () => ({
         ...education,
-        ...data,
         version: education.version + 1,
-        editorialStatus: data.editorialStatus,
-        publishedAt: data.publishedAt ?? education.publishedAt,
+        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
       })),
     },
     diagnosisEducationRevision: {

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -30,6 +31,12 @@ import { EducationKnowledgeRulesService } from './education-knowledge-rules.serv
 import { EducationSchemaContractService } from './education-schema-contract.service';
 import type { EducationRegenerableSection } from './education-section-quality-classifier.service';
 import { DiagnosisCurriculumProviderService } from './diagnosis-curriculum-provider.service';
+import {
+  EDUCATION_STALE_CONFLICT_MESSAGE,
+  assertExpectedEducationVersion,
+  publishedAtAfterEducationContentMutation,
+  statusAfterEducationContentMutation,
+} from './education-mutation-policy';
 
 const OPENAI_SECTION_MODEL = 'gpt-4o-mini';
 const OPENAI_SECTION_TIMEOUT_MS = 45_000;
@@ -104,6 +111,7 @@ export class EducationSectionRegenerationService {
   async regenerateSection(input: {
     diagnosisRegistryId: string;
     section: EducationRegenerableSection;
+    expectedVersion: number;
     userId: string;
   }): Promise<SectionRegenerationResult> {
     if (!this.openaiClient) {
@@ -132,6 +140,10 @@ export class EducationSectionRegenerationService {
         'Generate a full education draft before regenerating a section',
       );
     }
+    assertExpectedEducationVersion({
+      expectedVersion: input.expectedVersion,
+      currentVersion: registry.education.version,
+    });
 
     const generationContext = await this.generationContextBuilder.build({
       diagnosisRegistryId: input.diagnosisRegistryId,
@@ -231,24 +243,37 @@ export class EducationSectionRegenerationService {
         input.userId,
       );
 
-      const saved = await tx.diagnosisEducation.update({
-        where: { id: registry.education!.id },
+      const result = await tx.diagnosisEducation.updateMany({
+        where: {
+          id: registry.education!.id,
+          version: registry.education!.version,
+        },
         data: {
           [input.section]: replacement as Prisma.InputJsonValue,
           references: referencesWithMetadata,
-          editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+          editorialStatus: statusAfterEducationContentMutation(
+            registry.education!.editorialStatus,
+          ),
           source: DiagnosisEducationSource.AI_ASSISTED,
           version: { increment: 1 },
           generatedAt: now,
           reviewedAt: null,
           reviewedByUserId: null,
-          publishedAt:
-            registry.education!.editorialStatus ===
-            DiagnosisEducationStatus.PUBLISHED
-              ? null
-              : registry.education!.publishedAt,
+          publishedAt: publishedAtAfterEducationContentMutation({
+            currentStatus: registry.education!.editorialStatus,
+            currentPublishedAt: registry.education!.publishedAt,
+          }),
         },
       });
+      if (result.count !== 1) {
+        throw new ConflictException(EDUCATION_STALE_CONFLICT_MESSAGE);
+      }
+      const saved = await tx.diagnosisEducation.findUnique({
+        where: { id: registry.education!.id },
+      });
+      if (!saved) {
+        throw new NotFoundException('Diagnosis education not found');
+      }
 
       await this.createRevision(tx, saved, input.userId);
       return saved;

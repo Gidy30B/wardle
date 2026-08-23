@@ -569,6 +569,8 @@ function buildService(overrides: { generationContextBuilder?: unknown } = {}) {
   const tx = {
     diagnosisEducation: {
       update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      findUnique: jest.fn().mockResolvedValue(buildEducation({ version: 2 })),
       create: jest.fn(),
     },
     diagnosisEducationRevision: {
@@ -808,7 +810,7 @@ describe('DiagnosisEducationService', () => {
     await expect(
       service.reviewEducation(
         'education-1',
-        { status: DiagnosisEducationStatus.PUBLISHED },
+        { status: DiagnosisEducationStatus.PUBLISHED, expectedVersion: 1 },
         'admin-1',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -827,10 +829,176 @@ describe('DiagnosisEducationService', () => {
     await expect(
       service.reviewEducation(
         'education-1',
-        { status: DiagnosisEducationStatus.PUBLISHED },
+        { status: DiagnosisEducationStatus.PUBLISHED, expectedVersion: 1 },
         'admin-1',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('invalidates published authority on manual material update', async () => {
+    const { prisma, tx, service } = buildService();
+    const existing = buildEducation({
+      editorialStatus: DiagnosisEducationStatus.PUBLISHED,
+      publishedAt: new Date('2026-05-01T00:00:00.000Z'),
+      version: 4,
+    });
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(existing);
+    tx.diagnosisEducation.findUnique.mockResolvedValue(
+      buildEducation({
+        ...existing,
+        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+        publishedAt: null,
+        version: 5,
+      }),
+    );
+
+    await service.updateByEducationId(
+      'education-1',
+      {
+        title: 'Updated appendicitis education',
+        expectedVersion: 4,
+        summary: {
+          definition: 'Updated definition.',
+          highYieldTakeaway: 'Updated takeaway.',
+        },
+      },
+      'admin-1',
+    );
+
+    expect(tx.diagnosisEducation.updateMany).toHaveBeenCalledWith({
+      where: { id: 'education-1', version: 4 },
+      data: expect.objectContaining({
+        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+        publishedAt: null,
+        version: 5,
+      }),
+    });
+  });
+
+  it('invalidates published authority on diagnosis-scoped upsert', async () => {
+    const { prisma, tx, service } = buildService();
+    const existing = buildEducation({
+      editorialStatus: DiagnosisEducationStatus.PUBLISHED,
+      publishedAt: new Date('2026-05-01T00:00:00.000Z'),
+      version: 6,
+    });
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(existing);
+    tx.diagnosisEducation.findUnique.mockResolvedValue(
+      buildEducation({
+        ...existing,
+        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+        publishedAt: null,
+        version: 7,
+      }),
+    );
+
+    await service.upsertForDiagnosisRegistry(
+      'registry-1',
+      {
+        expectedVersion: 6,
+        title: 'Updated education',
+        summary: {
+          definition: 'Updated definition.',
+          highYieldTakeaway: 'Updated takeaway.',
+        },
+      },
+      'admin-1',
+    );
+
+    expect(tx.diagnosisEducation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'education-1', version: 6 },
+        data: expect.objectContaining({
+          editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+          publishedAt: null,
+          version: 7,
+        }),
+      }),
+    );
+  });
+
+  it('invalidates approved authority on manual material update', async () => {
+    const { prisma, tx, service } = buildService();
+    const existing = buildEducation({
+      editorialStatus: DiagnosisEducationStatus.APPROVED,
+      publishedAt: null,
+      version: 2,
+    });
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(existing);
+    tx.diagnosisEducation.findUnique.mockResolvedValue(
+      buildEducation({
+        ...existing,
+        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+        version: 3,
+      }),
+    );
+
+    await service.updateByEducationId(
+      'education-1',
+      {
+        expectedVersion: 2,
+        summary: {
+          definition: 'Updated definition.',
+          highYieldTakeaway: 'Updated takeaway.',
+        },
+      },
+      'admin-1',
+    );
+
+    expect(tx.diagnosisEducation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'education-1', version: 2 },
+        data: expect.objectContaining({
+          editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
+          version: 3,
+        }),
+      }),
+    );
+  });
+
+  it('rejects stale manual edits before mutation', async () => {
+    const { prisma, tx, service } = buildService();
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(
+      buildEducation({ version: 3 }),
+    );
+
+    await expect(
+      service.updateByEducationId(
+        'education-1',
+        {
+          expectedVersion: 2,
+          summary: {
+            definition: 'Stale definition.',
+            highYieldTakeaway: 'Stale takeaway.',
+          },
+        },
+        'admin-1',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(tx.diagnosisEducation.updateMany).not.toHaveBeenCalled();
+    expect(tx.diagnosisEducationRevision.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects stale review decisions before mutation', async () => {
+    const { prisma, tx, service } = buildService();
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(
+      buildEducation({ version: 3 }),
+    );
+
+    await expect(
+      service.reviewEducation(
+        'education-1',
+        {
+          status: DiagnosisEducationStatus.APPROVED,
+          expectedVersion: 2,
+        },
+        'admin-1',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(tx.diagnosisEducation.updateMany).not.toHaveBeenCalled();
+    expect(tx.diagnosisEducationRevision.create).not.toHaveBeenCalled();
   });
 
   it('makes published education visible to players immediately after review publish', async () => {
@@ -844,17 +1012,15 @@ describe('DiagnosisEducationService', () => {
     prisma.diagnosisEducation.findUnique.mockImplementation(
       async () => education,
     );
-    tx.diagnosisEducation.update.mockImplementation(async ({ data }) => {
+    tx.diagnosisEducation.updateMany.mockImplementation(async ({ data }) => {
       education = {
         ...education,
-        editorialStatus: data.editorialStatus,
-        reviewedAt: data.reviewedAt,
-        reviewedByUserId: data.reviewedByUserId,
-        publishedAt: data.publishedAt,
+        ...(data as Record<string, unknown>),
         version: education.version + 1,
       };
-      return education;
+      return { count: 1 };
     });
+    tx.diagnosisEducation.findUnique.mockImplementation(async () => education);
     prisma.diagnosisEducation.findFirst.mockImplementation(async () =>
       education.editorialStatus === DiagnosisEducationStatus.PUBLISHED
         ? {
@@ -875,7 +1041,7 @@ describe('DiagnosisEducationService', () => {
 
     await service.reviewEducation(
       'education-1',
-      { status: DiagnosisEducationStatus.PUBLISHED },
+      { status: DiagnosisEducationStatus.PUBLISHED, expectedVersion: 1 },
       'admin-1',
     );
 
@@ -1921,18 +2087,20 @@ describe('DiagnosisEducationService', () => {
     prisma.diagnosisEducation.findUnique.mockResolvedValue(
       existing,
     );
-    tx.diagnosisEducation.update.mockResolvedValue(saved);
+    tx.diagnosisEducation.updateMany.mockResolvedValue({ count: 1 });
+    tx.diagnosisEducation.findUnique.mockResolvedValue(saved);
     const create = mockOpenAiDraft(
       service,
       JSON.stringify(buildValidGeneratedDraft()),
     );
 
-    const result = await service.generateDraft('registry-1', 'admin-1');
+    const result = await service.generateDraft('registry-1', 'admin-1', 3);
 
     expect(create).toHaveBeenCalled();
     expect(result).toEqual(saved);
-    expect(tx.diagnosisEducation.update).toHaveBeenCalledWith(
+    expect(tx.diagnosisEducation.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
+        where: { id: 'education-1', version: 3 },
         data: expect.objectContaining({
           editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
           source: DiagnosisEducationSource.AI_ASSISTED,

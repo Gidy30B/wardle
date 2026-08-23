@@ -39,6 +39,12 @@ import { EducationEditorialPatternsService } from './education-editorial-pattern
 import { EducationKnowledgeRulesService } from './education-knowledge-rules.service';
 import { EducationSchemaContractService } from './education-schema-contract.service';
 import { DiagnosisCurriculumProviderService } from './diagnosis-curriculum-provider.service';
+import {
+  assertExpectedEducationVersion,
+  publishedAtAfterEducationContentMutation,
+  statusAfterEducationContentMutation,
+  throwStaleEducationConflict,
+} from './education-mutation-policy';
 
 type EducationJsonField =
   | 'summary'
@@ -634,19 +640,30 @@ export class DiagnosisEducationService {
     const existing = await this.prisma.diagnosisEducation.findUnique({
       where: { diagnosisRegistryId },
     });
+    if (existing) {
+      assertExpectedEducationVersion({
+        expectedVersion: input.expectedVersion,
+        currentVersion: existing.version,
+      });
+    }
     const now = new Date();
     const data = this.buildWriteData(this.toInputRecord(input), {
       title: input.title ?? registry.displayLabel,
-      status: existing?.editorialStatus ?? DiagnosisEducationStatus.DRAFT,
+      status: existing
+        ? statusAfterEducationContentMutation(existing.editorialStatus)
+        : DiagnosisEducationStatus.DRAFT,
       source: existing?.source ?? DiagnosisEducationSource.MANUAL,
       version: (existing?.version ?? 0) + 1,
     });
 
     const education = await this.prisma.$transaction(async (tx) => {
       const saved = existing
-        ? await tx.diagnosisEducation.update({
-            where: { id: existing.id },
-            data,
+        ? await this.updateExistingEducationVersioned(tx, existing, {
+            ...data,
+            publishedAt: publishedAtAfterEducationContentMutation({
+              currentStatus: existing.editorialStatus,
+              currentPublishedAt: existing.publishedAt,
+            }),
           })
         : await tx.diagnosisEducation.create({
             data: {
@@ -682,24 +699,22 @@ export class DiagnosisEducationService {
 
     const data = this.buildWriteData(this.toInputRecord(input), {
       title: input.title ?? existing.title,
-      status:
-        existing.editorialStatus === DiagnosisEducationStatus.PUBLISHED
-          ? DiagnosisEducationStatus.NEEDS_REVIEW
-          : existing.editorialStatus,
+      status: statusAfterEducationContentMutation(existing.editorialStatus),
       source: existing.source,
       version: existing.version + 1,
     });
+    assertExpectedEducationVersion({
+      expectedVersion: input.expectedVersion,
+      currentVersion: existing.version,
+    });
 
     const education = await this.prisma.$transaction(async (tx) => {
-      const saved = await tx.diagnosisEducation.update({
-        where: { id: educationId },
-        data: {
-          ...data,
-          publishedAt:
-            existing.editorialStatus === DiagnosisEducationStatus.PUBLISHED
-              ? null
-              : existing.publishedAt,
-        },
+      const saved = await this.updateExistingEducationVersioned(tx, existing, {
+        ...data,
+        publishedAt: publishedAtAfterEducationContentMutation({
+          currentStatus: existing.editorialStatus,
+          currentPublishedAt: existing.publishedAt,
+        }),
       });
       await this.createRevision(tx, saved, userId);
       return saved;
@@ -726,6 +741,10 @@ export class DiagnosisEducationService {
     if (!existing) {
       throw new NotFoundException('Diagnosis education not found');
     }
+    assertExpectedEducationVersion({
+      expectedVersion: input.expectedVersion,
+      currentVersion: existing.version,
+    });
 
     if (input.status === DiagnosisEducationStatus.PUBLISHED) {
       const blockers = this.getPublishBlockers(existing);
@@ -739,26 +758,23 @@ export class DiagnosisEducationService {
 
     const now = new Date();
     const education = await this.prisma.$transaction(async (tx) => {
-      const saved = await tx.diagnosisEducation.update({
-        where: { id: educationId },
-        data: {
-          editorialStatus: input.status,
-          reviewedAt:
-            input.status === DiagnosisEducationStatus.APPROVED ||
-            input.status === DiagnosisEducationStatus.PUBLISHED
-              ? now
-              : existing.reviewedAt,
-          reviewedByUserId:
-            input.status === DiagnosisEducationStatus.APPROVED ||
-            input.status === DiagnosisEducationStatus.PUBLISHED
-              ? userId
-              : existing.reviewedByUserId,
-          publishedAt:
-            input.status === DiagnosisEducationStatus.PUBLISHED
-              ? now
-              : existing.publishedAt,
-          version: { increment: 1 },
-        },
+      const saved = await this.updateExistingEducationVersioned(tx, existing, {
+        editorialStatus: input.status,
+        reviewedAt:
+          input.status === DiagnosisEducationStatus.APPROVED ||
+          input.status === DiagnosisEducationStatus.PUBLISHED
+            ? now
+            : existing.reviewedAt,
+        reviewedByUserId:
+          input.status === DiagnosisEducationStatus.APPROVED ||
+          input.status === DiagnosisEducationStatus.PUBLISHED
+            ? userId
+            : existing.reviewedByUserId,
+        publishedAt:
+          input.status === DiagnosisEducationStatus.PUBLISHED
+            ? now
+            : existing.publishedAt,
+        version: existing.version + 1,
       });
 
       await this.createRevision(tx, saved, userId);
@@ -869,7 +885,11 @@ export class DiagnosisEducationService {
     );
   }
 
-  async generateDraft(diagnosisRegistryId: string, userId: string) {
+  async generateDraft(
+    diagnosisRegistryId: string,
+    userId: string,
+    expectedVersion?: number,
+  ) {
     this.assertAdminEnabled();
     const env = getEnv();
     if (!env.AI_EDUCATION_GENERATION_ENABLED) {
@@ -917,6 +937,12 @@ export class DiagnosisEducationService {
       const existing = await this.prisma.diagnosisEducation.findUnique({
         where: { diagnosisRegistryId },
       });
+      if (existing) {
+        assertExpectedEducationVersion({
+          expectedVersion,
+          currentVersion: existing.version,
+        });
+      }
 
       const knowledgeGuidance =
         this.educationKnowledgeRulesService.getGuidance(registry);
@@ -1161,9 +1187,7 @@ export class DiagnosisEducationService {
         }
 
         const saved = existing
-          ? await tx.diagnosisEducation.update({
-              where: { id: existing.id },
-              data: {
+          ? await this.updateExistingEducationVersioned(tx, existing, {
                 ...this.buildWriteData(validatedDraftWithMetadata, {
                   title: registry.displayLabel,
                   status: DiagnosisEducationStatus.NEEDS_REVIEW,
@@ -1174,8 +1198,7 @@ export class DiagnosisEducationService {
                 reviewedAt: null,
                 reviewedByUserId: null,
                 publishedAt: null,
-              },
-            })
+              })
           : await tx.diagnosisEducation.create({
               data: {
                 ...this.buildWriteData(validatedDraftWithMetadata, {
@@ -2547,6 +2570,32 @@ export class DiagnosisEducationService {
     input: UpsertDiagnosisEducationDto,
   ): Record<string, unknown> {
     return { ...input };
+  }
+
+  private async updateExistingEducationVersioned(
+    tx: Prisma.TransactionClient,
+    existing: DiagnosisEducation,
+    data: Prisma.DiagnosisEducationUncheckedUpdateInput,
+  ): Promise<DiagnosisEducation> {
+    const result = await tx.diagnosisEducation.updateMany({
+      where: {
+        id: existing.id,
+        version: existing.version,
+      },
+      data,
+    });
+
+    if (result.count !== 1) {
+      throwStaleEducationConflict();
+    }
+
+    const saved = await tx.diagnosisEducation.findUnique({
+      where: { id: existing.id },
+    });
+    if (!saved) {
+      throw new NotFoundException('Diagnosis education not found');
+    }
+    return saved;
   }
 
   private buildWriteData(

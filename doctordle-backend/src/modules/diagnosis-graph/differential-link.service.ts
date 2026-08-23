@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  DiagnosisEducationStatus,
   DifferentialLinkRole,
   DifferentialResolutionStatus,
   type CaseDifferentialMapping,
@@ -112,6 +113,14 @@ export class DifferentialLinkService {
         where: { sourceMappingId: mapping.id },
       });
       return { action: 'removed' as const };
+    }
+
+    const trusted = await this.isTrustedEducationMappingSource(mapping);
+    if (!trusted) {
+      await this.prisma.educationDifferentialLink.deleteMany({
+        where: { sourceMappingId: mapping.id },
+      });
+      return { action: 'removed_untrusted' as const };
     }
 
     const dedupeKey = this.educationDedupeKey(mapping);
@@ -357,6 +366,24 @@ export class DifferentialLinkService {
       mapping.revisionId ?? 'current',
       mapping.resolvedDiagnosisRegistryId,
     ].join(':');
+  }
+
+  private async isTrustedEducationMappingSource(
+    mapping: EducationDifferentialMapping,
+  ): Promise<boolean> {
+    if (mapping.revisionId) {
+      const revision = await this.prisma.diagnosisEducationRevision.findUnique({
+        where: { id: mapping.revisionId },
+        select: { editorialStatus: true },
+      });
+      return revision?.editorialStatus === DiagnosisEducationStatus.PUBLISHED;
+    }
+
+    const education = await this.prisma.diagnosisEducation.findUnique({
+      where: { id: mapping.educationId },
+      select: { editorialStatus: true },
+    });
+    return education?.editorialStatus === DiagnosisEducationStatus.PUBLISHED;
   }
 
   private counters(): LinkCounters {
