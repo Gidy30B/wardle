@@ -30,9 +30,9 @@ describe('EducationSectionRegenerationService', () => {
     resetEnvCacheForTests();
   });
 
-  it('regenerates investigations only and creates a new revision', async () => {
+  it('regenerates investigations as a section candidate only', async () => {
     const education = buildEducation();
-    const { service, tx, create } = buildService(education, {
+    const { service, tx, create, candidateService } = buildService(education, {
       investigations: buildSection('INVESTIGATION', 'ketones'),
     });
 
@@ -44,25 +44,24 @@ describe('EducationSectionRegenerationService', () => {
     });
 
     expect(create).toHaveBeenCalled();
-    expect(tx.diagnosisEducation.updateMany).toHaveBeenCalledWith(
+    expect(candidateService.createSectionCandidate).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'education-1', version: 3 },
-        data: expect.objectContaining({
-          investigations: expect.arrayContaining([
+        diagnosisRegistryId: 'registry-1',
+        education,
+        section: 'investigations',
+        proposedSection: expect.arrayContaining([
             expect.objectContaining({ id: 'ketones-1' }),
-          ]),
-          editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
-          version: { increment: 1 },
-        }),
+        ]),
+        createdByUserId: 'admin-1',
       }),
     );
-    expect(tx.diagnosisEducation.updateMany.mock.calls[0][0].data.management).toBeUndefined();
-    expect(tx.diagnosisEducationRevision.create).toHaveBeenCalledTimes(2);
+    expect(tx.diagnosisEducation.updateMany).not.toHaveBeenCalled();
+    expect(tx.diagnosisEducationRevision.create).not.toHaveBeenCalled();
   });
 
   it('regenerates exam pearls without changing management', async () => {
     const education = buildEducation();
-    const { service, tx } = buildService(education, {
+    const { service, tx, candidateService } = buildService(education, {
       examPearls: buildSection('EXAM', 'rovsing'),
     });
 
@@ -73,18 +72,18 @@ describe('EducationSectionRegenerationService', () => {
       userId: 'admin-1',
     });
 
-    expect(tx.diagnosisEducation.updateMany.mock.calls[0][0].data.examPearls).toEqual(
+    expect(candidateService.createSectionCandidate.mock.calls[0][0].proposedSection).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'rovsing-1' })]),
     );
-    expect(tx.diagnosisEducation.updateMany.mock.calls[0][0].data.management).toBeUndefined();
+    expect(tx.diagnosisEducation.updateMany).not.toHaveBeenCalled();
   });
 
-  it('preserves published education by snapshotting before update', async () => {
+  it('stores published education as the exact candidate base version', async () => {
     const education = buildEducation({
       editorialStatus: DiagnosisEducationStatus.PUBLISHED,
       publishedAt: new Date('2026-05-01T00:00:00.000Z'),
     });
-    const { service, tx } = buildService(education, {
+    const { service, tx, candidateService } = buildService(education, {
       management: buildSection('MANAGEMENT', 'consult'),
     });
 
@@ -95,25 +94,23 @@ describe('EducationSectionRegenerationService', () => {
       userId: 'admin-1',
     });
 
-    expect(tx.diagnosisEducationRevision.findUnique).toHaveBeenCalledWith({
-      where: {
-        educationId_version: {
-          educationId: 'education-1',
-          version: 3,
-        },
-      },
-    });
-    expect(tx.diagnosisEducation.updateMany.mock.calls[0][0].data.publishedAt).toBeNull();
-    expect(tx.diagnosisEducationRevision.create).toHaveBeenCalledTimes(2);
+    expect(candidateService.createSectionCandidate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        education,
+        section: 'management',
+      }),
+    );
+    expect(tx.diagnosisEducation.updateMany).not.toHaveBeenCalled();
+    expect(tx.diagnosisEducationRevision.create).not.toHaveBeenCalled();
   });
 
-  it('invalidates approved education when regenerating a section', async () => {
+  it('does not invalidate approved education when creating a candidate', async () => {
     const education = buildEducation({
       editorialStatus: DiagnosisEducationStatus.APPROVED,
       reviewedAt: new Date('2026-05-01T00:00:00.000Z'),
       reviewedByUserId: 'senior-1',
     });
-    const { service, tx } = buildService(education, {
+    const { service, tx, candidateService } = buildService(education, {
       differentials: buildSection('HIGH_YIELD_DISCRIMINATOR', 'mimic'),
     });
 
@@ -124,15 +121,13 @@ describe('EducationSectionRegenerationService', () => {
       userId: 'admin-1',
     });
 
-    expect(tx.diagnosisEducation.updateMany).toHaveBeenCalledWith(
+    expect(candidateService.createSectionCandidate).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
-          reviewedAt: null,
-          reviewedByUserId: null,
-        }),
+        education,
+        section: 'differentials',
       }),
     );
+    expect(tx.diagnosisEducation.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects stale section regeneration before calling OpenAI', async () => {
@@ -192,6 +187,15 @@ function buildService(
         handler(tx),
     ),
   };
+  const candidate = {
+    id: 'candidate-1',
+    diagnosisRegistryId: 'registry-1',
+    educationId: education.id,
+    reviewStatus: 'PENDING_REVIEW',
+  };
+  const candidateService = {
+    createSectionCandidate: jest.fn().mockResolvedValue(candidate),
+  };
   const generationContextBuilder = {
     build: jest.fn().mockResolvedValue({
       diagnosis: { id: 'registry-1', displayLabel: 'Appendicitis' },
@@ -210,6 +214,15 @@ function buildService(
   const service = new EducationSectionRegenerationService(
     prisma as never,
     generationContextBuilder as never,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    candidateService as never,
   );
   const create = jest.fn().mockResolvedValue({
     choices: [{ message: { content: JSON.stringify(response) } }],
@@ -220,7 +233,7 @@ function buildService(
     }
   ).openaiClient = { chat: { completions: { create } } };
 
-  return { service, tx, create };
+  return { service, tx, create, candidateService, candidate };
 }
 
 function buildEducation(overrides: Partial<Record<string, unknown>> = {}) {

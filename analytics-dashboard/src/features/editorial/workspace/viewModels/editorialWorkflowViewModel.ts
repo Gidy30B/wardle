@@ -1,5 +1,6 @@
 import type {
   DiagnosisEditorialWorkspace,
+  DiagnosisEducationCandidate,
   DiagnosisTeachingRule,
   WorkspaceClinicalCaseDraft,
   WorkspaceCoverageGap,
@@ -340,6 +341,7 @@ export function buildEditorialWorkflowViewModel(
     caseReasoning.cases,
     contentCoverage.reviewItems,
     workspace.clinicalCaseDrafts?.items ?? [],
+    workspace.educationCandidates?.items ?? [],
   );
   const reviewQueueGroups = buildReviewQueueGroups(reviewQueueItems);
   const overviewConcerns = buildOverviewConcerns(knowledge, diagnosticReasoning);
@@ -1177,6 +1179,7 @@ function buildReviewQueueItems(
   caseGovernanceItems: CaseReasoningCardViewModel[] = [],
   contentReviewItems: KnowledgeReviewItem[] = [],
   clinicalCaseDrafts: WorkspaceClinicalCaseDraft[] = [],
+  educationCandidates: DiagnosisEducationCandidate[] = [],
 ): ReviewQueueItemViewModel[] {
   const reasoningReviewItems = diagnosticReasoning.teachingRisks.map((risk) => ({
     id: `diagnostic-risk:${risk.id}`,
@@ -1217,8 +1220,55 @@ function buildReviewQueueItems(
       metadata: metadataForReviewItem(item),
     })),
     ...clinicalCaseDrafts.flatMap(mapClinicalCaseDraftQueueItem),
+    ...educationCandidates.flatMap(mapEducationCandidateQueueItem),
     ...reasoningReviewItems,
   ]);
+}
+
+function mapEducationCandidateQueueItem(
+  candidate: DiagnosisEducationCandidate,
+): ReviewQueueItemViewModel[] {
+  if (
+    candidate.reviewStatus !== 'PENDING_REVIEW' &&
+    !candidate.applicationAllowed
+  ) {
+    return [];
+  }
+
+  const apply =
+    candidate.reviewStatus === 'ACCEPTED' && candidate.applicationAllowed;
+  return [
+    {
+      id: apply
+        ? `education-candidate-apply:${candidate.id}`
+        : `education-candidate:${candidate.id}`,
+      kind: 'education_candidate',
+      severity:
+        (candidate.validation?.blockerCount ?? 0) > 0 ? 'blocker' : 'warning',
+      title: apply
+        ? 'Apply accepted Education candidate'
+        : 'Review generated Education candidate',
+      detail:
+        candidate.scope === 'SECTION' && candidate.section
+          ? `Proposed ${candidate.section} section from Education version ${candidate.baseEducationVersion ?? 'new'}.`
+          : `Proposed whole Education from version ${candidate.baseEducationVersion ?? 'new'}.`,
+      targetWorkflow: 'content',
+      targetBoard: 'education',
+      sourceId: candidate.id,
+      reviewStatus: candidate.reviewStatus,
+      raw: candidate,
+      groupId: 'drafts',
+      editorialReason: apply
+        ? 'Accepted Education candidate is awaiting separate controlled application.'
+        : 'AI-generated Education remains candidate knowledge until human review.',
+      metadata: [
+        `Scope: ${candidate.scope}`,
+        candidate.section ? `Section: ${candidate.section}` : null,
+        `Validation: ${candidate.validation?.status ?? candidate.validationStatus}`,
+        `Candidate: ${candidate.id}`,
+      ].filter((item): item is string => Boolean(item)),
+    },
+  ];
 }
 
 function mapClinicalCaseDraftQueueItem(
@@ -1686,6 +1736,7 @@ function groupForReviewItem(item: KnowledgeReviewItem): ReviewQueueGroupId {
   if (
     item.kind === 'discriminator_draft' ||
     item.kind === 'clinical_case_draft' ||
+    item.kind === 'education_candidate' ||
     item.kind === 'clue_revision_draft'
   ) {
     return 'drafts';

@@ -8,6 +8,9 @@ import {
   CaseEditorialStatus,
   ClinicalCaseDraftReviewDecision,
   ClinicalCaseDraftStatus,
+  DiagnosisEducationCandidateApplicationStatus,
+  DiagnosisEducationCandidateScope,
+  DiagnosisEducationCandidateStatus,
   CaseSource,
   DifferentialResolutionStatus,
   DiagnosisRegistryCandidateStatus,
@@ -365,6 +368,71 @@ type ClinicalCaseDraftRow = {
   }>;
 };
 
+type DiagnosisEducationCandidateRow = {
+  id: string;
+  diagnosisRegistryId: string;
+  educationId: string | null;
+  scope: DiagnosisEducationCandidateScope;
+  section: string | null;
+  baseEducationVersion: number | null;
+  baseEducationRevisionId: string | null;
+  originalSection: Prisma.JsonValue | null;
+  proposedEducation: Prisma.JsonValue | null;
+  proposedSection: Prisma.JsonValue | null;
+  proposedReferences: Prisma.JsonValue | null;
+  generationProvider: string;
+  generationModel: string;
+  generatorVersion: string | null;
+  promptVersion: string | null;
+  generatedAt: Date;
+  generationPurpose: string;
+  sourceIssue: Prisma.JsonValue | null;
+  inputContext: Prisma.JsonValue;
+  contextHash: string;
+  sourceArtifactIds: Prisma.JsonValue | null;
+  validationStatus: ValidationOutcome;
+  validationSummary: Prisma.JsonValue;
+  validationBlockers: Prisma.JsonValue | null;
+  validationWarnings: Prisma.JsonValue | null;
+  validationMetadata: Prisma.JsonValue | null;
+  reviewStatus: DiagnosisEducationCandidateStatus;
+  acceptedAt: Date | null;
+  appliedAt: Date | null;
+  resultingEducationId: string | null;
+  resultingEducationVersion: number | null;
+  resultingRevisionId: string | null;
+  applicationStatus: DiagnosisEducationCandidateApplicationStatus;
+  applicationFailureReason: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  latestReviewDecision: {
+    id: string;
+    decision: string;
+    rationale: string;
+    reviewerUserId: string | null;
+    decidedAt: Date;
+  } | null;
+  reviewDecisions: Array<{
+    id: string;
+    decision: string;
+    rationale: string;
+    reviewerUserId: string | null;
+    decidedAt: Date;
+  }>;
+  applicationCommands: Array<{
+    id: string;
+    status: string;
+    commandAction: string;
+    actorUserId: string | null;
+    resultEducationId: string | null;
+    resultEducationVersion: number | null;
+    resultRevisionId: string | null;
+    conflictReason: string | null;
+    createdAt: Date;
+    completedAt: Date | null;
+  }>;
+};
+
 type GraphFactRow = {
   id: string;
   type: DiagnosisGraphCandidateType;
@@ -414,6 +482,7 @@ type RegistryRow = {
   } | null;
   cases: CaseRow[];
   clinicalCaseDrafts: ClinicalCaseDraftRow[];
+  diagnosisEducationCandidates: DiagnosisEducationCandidateRow[];
   graphFacts: GraphFactRow[];
 };
 
@@ -575,6 +644,10 @@ export class DiagnosisEditorialWorkspaceService {
       teachingRelationships,
       governanceSnapshots: caseGovernanceSnapshots,
     });
+    const educationCandidates = this.buildEducationCandidateInventory(
+      registry.diagnosisEducationCandidates,
+      registry.education?.version ?? null,
+    );
     const clinicalCaseDrafts = this.buildClinicalCaseDraftInventory(
       registry.clinicalCaseDrafts,
       this.diagnosisName(registry),
@@ -600,6 +673,7 @@ export class DiagnosisEditorialWorkspaceService {
       summary,
       coverageGaps,
       graphCandidateCount: graphCandidates.length,
+      educationCandidates,
     });
     const availableActions = this.buildAvailableActions({
       registry,
@@ -669,7 +743,8 @@ export class DiagnosisEditorialWorkspaceService {
         evidenceCoverage?.coverageBreakdown?.hallucinationRiskDraftCount ?? 0,
       pendingDraftCount: aiDraftAuditTrail.filter((audit) =>
         ['PENDING_REVIEW', 'REVIEW_REQUIRED'].includes(audit.reviewStatus),
-      ).length + clinicalCaseDrafts.summary.pendingReview,
+      ).length + clinicalCaseDrafts.summary.pendingReview +
+        educationCandidates.summary.pendingReview,
       maturityOverall: maturityGovernance.breakdown.overall,
       lifecyclePlayable: lifecycle.gameplay === 'complete',
       lifecycleActive: lifecycle.curriculum !== 'blocked',
@@ -740,6 +815,7 @@ export class DiagnosisEditorialWorkspaceService {
         briefResponse?.brief ?? registry.editorialBrief,
       ),
       education: this.buildEducation(registry.education, summary, revisions[0]),
+      educationCandidates,
       revisions: {
         latest: revisions[0] ?? null,
         items: revisions,
@@ -1625,6 +1701,82 @@ export class DiagnosisEditorialWorkspaceService {
                 actorUserId: true,
                 resultCaseId: true,
                 resultCaseRevisionId: true,
+                conflictReason: true,
+                createdAt: true,
+                completedAt: true,
+              },
+            },
+          },
+        },
+        diagnosisEducationCandidates: {
+          orderBy: [{ createdAt: 'desc' }],
+          take: 50,
+          select: {
+            id: true,
+            diagnosisRegistryId: true,
+            educationId: true,
+            scope: true,
+            section: true,
+            baseEducationVersion: true,
+            baseEducationRevisionId: true,
+            originalSection: true,
+            proposedEducation: true,
+            proposedSection: true,
+            proposedReferences: true,
+            generationProvider: true,
+            generationModel: true,
+            generatorVersion: true,
+            promptVersion: true,
+            generatedAt: true,
+            generationPurpose: true,
+            sourceIssue: true,
+            inputContext: true,
+            contextHash: true,
+            sourceArtifactIds: true,
+            validationStatus: true,
+            validationSummary: true,
+            validationBlockers: true,
+            validationWarnings: true,
+            validationMetadata: true,
+            reviewStatus: true,
+            acceptedAt: true,
+            appliedAt: true,
+            resultingEducationId: true,
+            resultingEducationVersion: true,
+            resultingRevisionId: true,
+            applicationStatus: true,
+            applicationFailureReason: true,
+            createdAt: true,
+            updatedAt: true,
+            latestReviewDecision: {
+              select: {
+                id: true,
+                decision: true,
+                rationale: true,
+                reviewerUserId: true,
+                decidedAt: true,
+              },
+            },
+            reviewDecisions: {
+              orderBy: [{ decidedAt: 'asc' }],
+              select: {
+                id: true,
+                decision: true,
+                rationale: true,
+                reviewerUserId: true,
+                decidedAt: true,
+              },
+            },
+            applicationCommands: {
+              orderBy: [{ createdAt: 'asc' }],
+              select: {
+                id: true,
+                status: true,
+                commandAction: true,
+                actorUserId: true,
+                resultEducationId: true,
+                resultEducationVersion: true,
+                resultRevisionId: true,
                 conflictReason: true,
                 createdAt: true,
                 completedAt: true,
@@ -4024,6 +4176,142 @@ export class DiagnosisEditorialWorkspaceService {
     };
   }
 
+  private buildEducationCandidateInventory(
+    candidates: DiagnosisEducationCandidateRow[],
+    currentEducationVersion: number | null,
+  ) {
+    const items = candidates.map((candidate) =>
+      this.educationCandidateDto(candidate, currentEducationVersion),
+    );
+    const pendingReview = items.filter(
+      (item) => item.reviewStatus === 'PENDING_REVIEW',
+    ).length;
+    const awaitingApplication = items.filter(
+      (item) => item.reviewStatus === 'ACCEPTED' && item.applicationAllowed,
+    ).length;
+    return {
+      summary: {
+        total: items.length,
+        pendingReview,
+        needsChanges: items.filter(
+          (item) => item.reviewStatus === 'NEEDS_CHANGES',
+        ).length,
+        accepted: items.filter((item) => item.reviewStatus === 'ACCEPTED')
+          .length,
+        awaitingApplication,
+        applied: items.filter((item) => item.reviewStatus === 'APPLIED').length,
+        rejected: items.filter((item) => item.reviewStatus === 'REJECTED')
+          .length,
+        superseded: items.filter((item) => item.reviewStatus === 'SUPERSEDED')
+          .length,
+        actionable: pendingReview + awaitingApplication,
+        blockerCount: items.reduce(
+          (count, item) => count + item.validation.blockerCount,
+          0,
+        ),
+        warningCount: items.reduce(
+          (count, item) => count + item.validation.warningCount,
+          0,
+        ),
+        byStatus: this.countBy(items.map((item) => item.reviewStatus)),
+      },
+      groups: {
+        pendingReview: items.filter(
+          (item) => item.reviewStatus === 'PENDING_REVIEW',
+        ),
+        needsChanges: items.filter(
+          (item) => item.reviewStatus === 'NEEDS_CHANGES',
+        ),
+        acceptedAwaitingApplication: items.filter(
+          (item) => item.reviewStatus === 'ACCEPTED',
+        ),
+        applied: items.filter((item) => item.reviewStatus === 'APPLIED'),
+        rejected: items.filter((item) => item.reviewStatus === 'REJECTED'),
+      },
+      items,
+    };
+  }
+
+  private educationCandidateDto(
+    candidate: DiagnosisEducationCandidateRow,
+    currentEducationVersion: number | null,
+  ) {
+    const blockers = this.issueArray(candidate.validationBlockers);
+    const warnings = this.issueArray(candidate.validationWarnings);
+    const stale =
+      candidate.baseEducationVersion !== null &&
+      currentEducationVersion !== null &&
+      candidate.baseEducationVersion !== currentEducationVersion;
+    return {
+      id: candidate.id,
+      diagnosisRegistryId: candidate.diagnosisRegistryId,
+      educationId: candidate.educationId,
+      scope: candidate.scope,
+      section: candidate.section,
+      baseEducationVersion: candidate.baseEducationVersion,
+      baseEducationRevisionId: candidate.baseEducationRevisionId,
+      currentEducationVersion,
+      stale,
+      reviewStatus: candidate.reviewStatus,
+      applicationStatus: candidate.applicationStatus,
+      applicationAllowed:
+        candidate.reviewStatus === DiagnosisEducationCandidateStatus.ACCEPTED &&
+        candidate.applicationStatus !==
+          DiagnosisEducationCandidateApplicationStatus.SUCCESS &&
+        !stale,
+      generatedAt: this.toIso(candidate.generatedAt),
+      createdAt: this.toIso(candidate.createdAt),
+      updatedAt: this.toIso(candidate.updatedAt),
+      acceptedAt: candidate.acceptedAt ? this.toIso(candidate.acceptedAt) : null,
+      appliedAt: candidate.appliedAt ? this.toIso(candidate.appliedAt) : null,
+      resultingEducationId: candidate.resultingEducationId,
+      resultingEducationVersion: candidate.resultingEducationVersion,
+      resultingRevisionId: candidate.resultingRevisionId,
+      applicationFailureReason: candidate.applicationFailureReason,
+      proposedEducation: candidate.proposedEducation,
+      proposedSection: candidate.proposedSection,
+      proposedReferences: candidate.proposedReferences,
+      originalSection: candidate.originalSection,
+      validation: {
+        status: candidate.validationStatus,
+        summary: candidate.validationSummary,
+        blockers,
+        warnings,
+        blockerCount: blockers.length,
+        warningCount: warnings.length,
+        metadata: candidate.validationMetadata,
+        passed: candidate.validationStatus === ValidationOutcome.PASSED,
+      },
+      provenance: {
+        generationProvider: candidate.generationProvider,
+        generationModel: candidate.generationModel,
+        generatorVersion: candidate.generatorVersion,
+        promptVersion: candidate.promptVersion,
+        generationPurpose: candidate.generationPurpose,
+        inputContext: candidate.inputContext,
+        contextHash: candidate.contextHash,
+        sourceArtifactIds: candidate.sourceArtifactIds,
+      },
+      latestReviewDecision: candidate.latestReviewDecision
+        ? {
+            ...candidate.latestReviewDecision,
+            decidedAt: this.toIso(candidate.latestReviewDecision.decidedAt),
+          }
+        : null,
+      reviewDecisions: candidate.reviewDecisions.map((decision) => ({
+        ...decision,
+        decidedAt: this.toIso(decision.decidedAt),
+      })),
+      applicationCommands: candidate.applicationCommands.map((command) => ({
+        ...command,
+        createdAt: this.toIso(command.createdAt),
+        completedAt: command.completedAt
+          ? this.toIso(command.completedAt)
+          : null,
+      })),
+    };
+  }
+
   private clinicalCaseDraftDto(
     draft: ClinicalCaseDraftRow,
     diagnosisName: string,
@@ -4680,11 +4968,47 @@ export class DiagnosisEditorialWorkspaceService {
       DiagnosisEditorialWorkspaceService['buildCoverageGaps']
     >;
     graphCandidateCount: number;
+    educationCandidates: ReturnType<
+      DiagnosisEditorialWorkspaceService['buildEducationCandidateInventory']
+    >;
   }): ActionDescriptor[] {
     const endpointBase = `/api/admin/diagnosis-workspace/${input.registry.id}`;
     const actions: ActionDescriptor[] = [];
+    const pendingEducationCandidate =
+      input.educationCandidates.groups.pendingReview[0];
+    const acceptedEducationCandidate =
+      input.educationCandidates.groups.acceptedAwaitingApplication.find(
+        (candidate) => candidate.applicationAllowed,
+      );
 
-    if (!input.registry.education) {
+    if (pendingEducationCandidate) {
+      actions.push({
+        id: 'review-education-candidate',
+        label: 'Review education candidate',
+        source: 'education_candidate',
+        severity: 'warning',
+        targetTab: 'education',
+        enabled: true,
+        disabledReason: null,
+        targetEndpoint: `/api/admin/education/candidates/${pendingEducationCandidate.id}`,
+      });
+    } else if (acceptedEducationCandidate) {
+      actions.push({
+        id: 'apply-education-candidate',
+        label: 'Apply accepted education candidate',
+        source: 'education_candidate',
+        severity: 'warning',
+        targetTab: 'education',
+        enabled: true,
+        disabledReason: null,
+        targetEndpoint: `/api/admin/education/candidates/${acceptedEducationCandidate.id}/apply`,
+      });
+    }
+
+    if (
+      !input.registry.education &&
+      input.educationCandidates.summary.actionable === 0
+    ) {
       actions.push({
         id: 'generate-education',
         label: 'Generate education draft',

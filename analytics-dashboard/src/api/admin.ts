@@ -110,11 +110,14 @@ import type {
   RestoreCaseRevisionResult,
   RerunCaseValidationResult,
   ReviewClinicalCaseDraftPayload,
+  ApplyDiagnosisEducationCandidatePayload,
   SearchDiagnosisRegistryQuery,
   StartCaseReviewResult,
   SubmitCaseReviewPayload,
   SubmitCaseReviewResult,
   TeachingUnitCoverageMap,
+  DiagnosisEducationCandidate,
+  ReviewDiagnosisEducationCandidatePayload,
   ReviewDiagnosisEducationPayload,
   RegenerateEducationSectionPayload,
   RejectDiagnosisGraphCandidatePayload,
@@ -1267,6 +1270,46 @@ export function regenerateDiagnosisEducationSection(
 ) {
   return client.post(
     `/admin/education/diagnoses/${diagnosisRegistryId}/regenerate-section`,
+    payload,
+  );
+}
+
+export function listDiagnosisEducationCandidates(
+  client: ApiClient,
+  diagnosisRegistryId: string,
+) {
+  return client.get<DiagnosisEducationCandidate[]>(
+    `/admin/education/diagnoses/${diagnosisRegistryId}/candidates`,
+  );
+}
+
+export function getDiagnosisEducationCandidate(
+  client: ApiClient,
+  candidateId: string,
+) {
+  return client.get<DiagnosisEducationCandidate>(
+    `/admin/education/candidates/${candidateId}`,
+  );
+}
+
+export function reviewDiagnosisEducationCandidate(
+  client: ApiClient,
+  candidateId: string,
+  payload: ReviewDiagnosisEducationCandidatePayload,
+) {
+  return client.post<DiagnosisEducationCandidate>(
+    `/admin/education/candidates/${candidateId}/review`,
+    payload,
+  );
+}
+
+export function applyDiagnosisEducationCandidate(
+  client: ApiClient,
+  candidateId: string,
+  payload: ApplyDiagnosisEducationCandidatePayload,
+) {
+  return client.post<DiagnosisEducationCandidate>(
+    `/admin/education/candidates/${candidateId}/apply`,
     payload,
   );
 }

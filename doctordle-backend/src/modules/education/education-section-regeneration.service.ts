@@ -34,9 +34,8 @@ import { DiagnosisCurriculumProviderService } from './diagnosis-curriculum-provi
 import {
   EDUCATION_STALE_CONFLICT_MESSAGE,
   assertExpectedEducationVersion,
-  publishedAtAfterEducationContentMutation,
-  statusAfterEducationContentMutation,
 } from './education-mutation-policy';
+import { DiagnosisEducationCandidateService } from './diagnosis-education-candidate.service';
 
 const OPENAI_SECTION_MODEL = 'gpt-4o-mini';
 const OPENAI_SECTION_TIMEOUT_MS = 45_000;
@@ -77,9 +76,11 @@ const SECTION_MAX_ITEMS: Record<EducationRegenerableSection, number> = {
   management: 4,
 };
 
-type SectionRegenerationResult = DiagnosisEducation & {
+type SectionRegenerationResult = {
   qualityReport: ReturnType<EducationDraftQualityValidator['validate']>;
-};
+} & Awaited<
+  ReturnType<DiagnosisEducationCandidateService['createSectionCandidate']>
+>;
 
 @Injectable()
 export class EducationSectionRegenerationService {
@@ -97,6 +98,7 @@ export class EducationSectionRegenerationService {
     private readonly differentialMappingService?: DifferentialMappingService,
     private readonly reasoningPathService?: ReasoningPathService,
     private readonly reasoningDraftValidationService?: ReasoningDraftValidationService,
+    private readonly diagnosisEducationCandidateService?: DiagnosisEducationCandidateService,
   ) {
     const env = getEnv();
     if (env.OPENAI_API_KEY) {
@@ -214,7 +216,6 @@ export class EducationSectionRegenerationService {
       guidance: this.educationKnowledgeRulesService.getGuidance(metadata),
       teachingRules,
     });
-    const now = new Date();
     const referencesWithMetadata = this.attachSectionGenerationMetadata(
       registry.education.references,
       reasoningContext,
@@ -236,55 +237,49 @@ export class EducationSectionRegenerationService {
       }),
     );
 
-    const education = await this.prisma.$transaction(async (tx) => {
-      await this.createRevisionIfMissing(
-        tx,
-        registry.education!,
-        input.userId,
-      );
+    if (!this.diagnosisEducationCandidateService) {
+      throw new BadRequestException('Education candidate service is unavailable');
+    }
 
-      const result = await tx.diagnosisEducation.updateMany({
-        where: {
-          id: registry.education!.id,
-          version: registry.education!.version,
+    const candidate =
+      await this.diagnosisEducationCandidateService.createSectionCandidate({
+        diagnosisRegistryId: input.diagnosisRegistryId,
+        education: registry.education,
+        section: input.section,
+        proposedSection: replacement as Prisma.InputJsonValue,
+        proposedReferences: referencesWithMetadata,
+        inputContext: {
+          compactGenerationContext,
+          reasoningContext: this.promptReasoningContext(reasoningContext),
+          currentEducationVersion: registry.education.version,
+          section: input.section,
+          promptModel: OPENAI_SECTION_MODEL,
+          promptVersion: 'diagnosis_education_section_regeneration.v2',
         },
-        data: {
-          [input.section]: replacement as Prisma.InputJsonValue,
-          references: referencesWithMetadata,
-          editorialStatus: statusAfterEducationContentMutation(
-            registry.education!.editorialStatus,
-          ),
-          source: DiagnosisEducationSource.AI_ASSISTED,
-          version: { increment: 1 },
-          generatedAt: now,
-          reviewedAt: null,
-          reviewedByUserId: null,
-          publishedAt: publishedAtAfterEducationContentMutation({
-            currentStatus: registry.education!.editorialStatus,
-            currentPublishedAt: registry.education!.publishedAt,
-          }),
+        sourceArtifactIds: {
+          reasoningPathId: reasoningContext?.reasoningPathId ?? null,
+          sourceTeachingRelationshipIds:
+            reasoningContext?.sourceTeachingRelationshipIds ?? [],
+          sourceEvidenceRelationshipIds:
+            reasoningContext?.sourceEvidenceRelationshipIds ?? [],
         },
+        validation: {
+          blockers: qualityReport.blockers,
+          warnings: qualityReport.warnings,
+          scores: qualityReport.scores,
+          metadata: {
+            constrained: reasoningContext?.constrained ?? false,
+            reasoningPathId: reasoningContext?.reasoningPathId ?? null,
+          },
+        },
+        generationProvider: 'openai',
+        generationModel: OPENAI_SECTION_MODEL,
+        generatorVersion: 'EducationSectionRegenerationService.regenerateSection',
+        promptVersion: 'diagnosis_education_section_regeneration.v2',
+        createdByUserId: input.userId,
       });
-      if (result.count !== 1) {
-        throw new ConflictException(EDUCATION_STALE_CONFLICT_MESSAGE);
-      }
-      const saved = await tx.diagnosisEducation.findUnique({
-        where: { id: registry.education!.id },
-      });
-      if (!saved) {
-        throw new NotFoundException('Diagnosis education not found');
-      }
 
-      await this.createRevision(tx, saved, input.userId);
-      return saved;
-    });
-
-    await this.refreshDifferentialMappings(education.id);
-    await this.reasoningDraftValidationService?.runAfterGeneration({
-      artifactType: 'EDUCATION_SECTION',
-      artifactId: education.id,
-    });
-    return { ...education, qualityReport };
+    return { ...candidate, qualityReport };
   }
 
   private buildRequest(input: {

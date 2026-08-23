@@ -22,9 +22,12 @@ import { AdminGuard } from '../admin/admin.guard';
 import { WorkspaceProjectionService } from '../editorial/workspace-projection.service';
 import { DiagnosisEducationService } from './diagnosis-education.service';
 import { GenerateDiagnosisEducationDto } from './dto/generate-diagnosis-education.dto';
+import { ApplyDiagnosisEducationCandidateDto } from './dto/apply-diagnosis-education-candidate.dto';
 import { RegenerateEducationSectionDto } from './dto/regenerate-education-section.dto';
+import { ReviewDiagnosisEducationCandidateDto } from './dto/review-diagnosis-education-candidate.dto';
 import { ReviewDiagnosisEducationDto } from './dto/review-diagnosis-education.dto';
 import { UpsertDiagnosisEducationDto } from './dto/upsert-diagnosis-education.dto';
+import { DiagnosisEducationCandidateService } from './diagnosis-education-candidate.service';
 import { EducationRevisionQualityAnalyzer } from './education-revision-quality-analyzer.service';
 import { EducationSectionRegenerationService } from './education-section-regeneration.service';
 import { EditorialLearningEngineService } from './editorial-learning-engine.service';
@@ -40,6 +43,7 @@ export class AdminEducationController {
     private readonly educationSectionRegenerationService: EducationSectionRegenerationService,
     private readonly educationRevisionQualityAnalyzer: EducationRevisionQualityAnalyzer,
     private readonly editorialLearningEngineService: EditorialLearningEngineService,
+    private readonly diagnosisEducationCandidateService: DiagnosisEducationCandidateService,
   ) {}
 
   @Get('diagnoses/:diagnosisRegistryId')
@@ -159,6 +163,25 @@ export class AdminEducationController {
     );
   }
 
+  @Get('diagnoses/:diagnosisRegistryId/candidates')
+  @EditorialAccess()
+  async listDiagnosisEducationCandidates(
+    @Param('diagnosisRegistryId', new ParseUUIDPipe())
+    diagnosisRegistryId: string,
+  ) {
+    return this.diagnosisEducationCandidateService.listForDiagnosis(
+      diagnosisRegistryId,
+    );
+  }
+
+  @Get('candidates/:candidateId')
+  @EditorialAccess()
+  async getDiagnosisEducationCandidate(
+    @Param('candidateId', new ParseUUIDPipe()) candidateId: string,
+  ) {
+    return this.diagnosisEducationCandidateService.getCandidate(candidateId);
+  }
+
   @Post('diagnoses/:diagnosisRegistryId/regenerate-section')
   @EditorialAccess()
   async regenerateDiagnosisEducationSection(
@@ -172,6 +195,37 @@ export class AdminEducationController {
       section: body.section,
       expectedVersion: body.expectedVersion,
       userId: request.user.id,
+    });
+  }
+
+  @Post('candidates/:candidateId/review')
+  @EditorialAccess()
+  async reviewDiagnosisEducationCandidate(
+    @Param('candidateId', new ParseUUIDPipe()) candidateId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: ReviewDiagnosisEducationCandidateDto,
+  ) {
+    return this.diagnosisEducationCandidateService.reviewCandidate({
+      candidateId,
+      decision: body.decision,
+      rationale: body.rationale,
+      reviewerUserId: request.user.id,
+    });
+  }
+
+  @Post('candidates/:candidateId/apply')
+  @EditorialAccess()
+  async applyDiagnosisEducationCandidate(
+    @Param('candidateId', new ParseUUIDPipe()) candidateId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: ApplyDiagnosisEducationCandidateDto,
+  ) {
+    return this.diagnosisEducationCandidateService.applyCandidate({
+      candidateId,
+      idempotencyKey: body.idempotencyKey,
+      rationale: body.rationale,
+      authorityReferences: body.authorityReferences,
+      actorUserId: request.user.id,
     });
   }
 

@@ -566,6 +566,15 @@ function deferred<T>() {
 }
 
 function buildService(overrides: { generationContextBuilder?: unknown } = {}) {
+  const candidate = {
+    id: 'candidate-1',
+    diagnosisRegistryId: 'registry-1',
+    educationId: null,
+    reviewStatus: 'PENDING_REVIEW',
+  };
+  const candidateService = {
+    createWholeCandidate: jest.fn().mockResolvedValue(candidate),
+  };
   const tx = {
     diagnosisEducation: {
       update: jest.fn(),
@@ -618,7 +627,15 @@ function buildService(overrides: { generationContextBuilder?: unknown } = {}) {
       undefined,
       undefined,
       overrides.generationContextBuilder as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      candidateService as never,
     ),
+    candidateService,
+    candidate,
   };
 }
 
@@ -836,7 +853,7 @@ describe('DiagnosisEducationService', () => {
   });
 
   it('invalidates published authority on manual material update', async () => {
-    const { prisma, tx, service } = buildService();
+    const { prisma, tx, service, candidateService } = buildService();
     const existing = buildEducation({
       editorialStatus: DiagnosisEducationStatus.PUBLISHED,
       publishedAt: new Date('2026-05-01T00:00:00.000Z'),
@@ -876,7 +893,7 @@ describe('DiagnosisEducationService', () => {
   });
 
   it('invalidates published authority on diagnosis-scoped upsert', async () => {
-    const { prisma, tx, service } = buildService();
+    const { prisma, tx, service, candidateService } = buildService();
     const existing = buildEducation({
       editorialStatus: DiagnosisEducationStatus.PUBLISHED,
       publishedAt: new Date('2026-05-01T00:00:00.000Z'),
@@ -1171,15 +1188,6 @@ describe('DiagnosisEducationService', () => {
       deferred<ReturnType<typeof buildRegistryForGeneration>>();
     prisma.diagnosisRegistry.findUnique.mockReturnValue(registryLookup.promise);
     prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
-    tx.diagnosisEducation.create.mockResolvedValue(
-      buildEducation({
-        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
-        source: DiagnosisEducationSource.AI_ASSISTED,
-        reviewedAt: null,
-        reviewedByUserId: null,
-        publishedAt: null,
-      }),
-    );
     mockOpenAiDraft(service, JSON.stringify(buildValidGeneratedDraft()));
 
     const firstGeneration = service.generateDraft('registry-1', 'admin-1');
@@ -1195,20 +1203,11 @@ describe('DiagnosisEducationService', () => {
     process.env.OPENAI_API_KEY = 'test-key';
     process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
     resetEnvCacheForTests();
-    const { prisma, tx, service } = buildService();
+    const { prisma, service } = buildService();
     prisma.diagnosisRegistry.findUnique.mockResolvedValue(
       buildRegistryForGeneration(),
     );
     prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
-    tx.diagnosisEducation.create.mockResolvedValue(
-      buildEducation({
-        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
-        source: DiagnosisEducationSource.AI_ASSISTED,
-        reviewedAt: null,
-        reviewedByUserId: null,
-        publishedAt: null,
-      }),
-    );
     const create = mockOpenAiDraft(
       service,
       JSON.stringify(buildValidGeneratedDraft()),
@@ -1224,20 +1223,11 @@ describe('DiagnosisEducationService', () => {
     process.env.OPENAI_API_KEY = 'test-key';
     process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
     resetEnvCacheForTests();
-    const { prisma, tx, service } = buildService();
+    const { prisma, service } = buildService();
     prisma.diagnosisRegistry.findUnique.mockResolvedValue(
       buildRegistryForGeneration(),
     );
     prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
-    tx.diagnosisEducation.create.mockResolvedValue(
-      buildEducation({
-        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
-        source: DiagnosisEducationSource.AI_ASSISTED,
-        reviewedAt: null,
-        reviewedByUserId: null,
-        publishedAt: null,
-      }),
-    );
     const create = jest
       .fn()
       .mockResolvedValueOnce({
@@ -1262,19 +1252,11 @@ describe('DiagnosisEducationService', () => {
     process.env.OPENAI_API_KEY = 'test-key';
     process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
     resetEnvCacheForTests();
-    const { prisma, tx, service } = buildService();
-    const savedEducation = buildEducation({
-      editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
-      source: DiagnosisEducationSource.AI_ASSISTED,
-      reviewedAt: null,
-      reviewedByUserId: null,
-      publishedAt: null,
-    });
+    const { prisma, service, candidate } = buildService();
     prisma.diagnosisRegistry.findUnique.mockResolvedValue(
       buildRegistryForGeneration(),
     );
     prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
-    tx.diagnosisEducation.create.mockResolvedValue(savedEducation);
     const create = jest
       .fn()
       .mockRejectedValueOnce(mockOpenAiError())
@@ -1288,7 +1270,7 @@ describe('DiagnosisEducationService', () => {
 
     const result = await service.generateDraft('registry-1', 'admin-1');
 
-    expect(result).toEqual(savedEducation);
+    expect(result).toEqual(candidate);
     expect(create).toHaveBeenCalledTimes(2);
     expect(retryDelay).toHaveBeenCalledWith(500);
   });
@@ -1346,76 +1328,59 @@ describe('DiagnosisEducationService', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('creates a validated AI draft as needs-review content', async () => {
+  it('creates a validated AI draft candidate without mutating Education', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
     process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
     resetEnvCacheForTests();
-    const { prisma, tx, service } = buildService();
-    const savedEducation = buildEducation({
-      editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
-      source: DiagnosisEducationSource.AI_ASSISTED,
-      reviewedAt: null,
-      reviewedByUserId: null,
-      publishedAt: null,
-    });
+    const { prisma, tx, service, candidateService, candidate } = buildService();
     prisma.diagnosisRegistry.findUnique.mockResolvedValue(
       buildRegistryForGeneration(),
     );
     prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
-    tx.diagnosisEducation.create.mockResolvedValue(savedEducation);
     mockOpenAiDraft(service, JSON.stringify(buildValidGeneratedDraft()));
 
     const result = await service.generateDraft('registry-1', 'admin-1');
 
-    expect(tx.diagnosisEducation.create).toHaveBeenCalledWith(
+    expect(candidateService.createWholeCandidate).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          diagnosisRegistryId: 'registry-1',
-          editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
-          source: DiagnosisEducationSource.AI_ASSISTED,
-          reviewedAt: null,
-          reviewedByUserId: null,
-          publishedAt: null,
-          summary: {
+        diagnosisRegistryId: 'registry-1',
+        education: null,
+        proposedEducation: expect.objectContaining({
+          summary: expect.objectContaining({
             definition: 'Inflammation of the appendix.',
             highYieldTakeaway:
               'Migratory right lower quadrant pain is high-yield.',
-          },
-          examPearls: [
-            {
+          }),
+          examPearls: expect.arrayContaining([
+            expect.objectContaining({
               id: 'rovsing-sign',
               label: 'Rovsing sign',
               explanation:
                 'Right lower quadrant pain with left lower quadrant palpation.',
               whyItMatters:
                 'It supports peritoneal irritation and helps distinguish appendicitis from diffuse gastroenteritis.',
-            },
-          ],
+            }),
+          ]),
         }),
+        createdByUserId: 'admin-1',
       }),
     );
-    expect(result).toEqual(savedEducation);
+    expect(tx.diagnosisEducation.create).not.toHaveBeenCalled();
+    expect(tx.diagnosisEducation.updateMany).not.toHaveBeenCalled();
+    expect(tx.diagnosisEducationRevision.create).not.toHaveBeenCalled();
+    expect(result).toEqual(candidate);
   });
 
   it('normalizes typed generated pearls with critique metadata', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
     process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
     resetEnvCacheForTests();
-    const { prisma, tx, service } = buildService();
+    const { prisma, tx, service, candidateService } = buildService();
     const typedPearl = buildTypedPearl();
     prisma.diagnosisRegistry.findUnique.mockResolvedValue(
       buildRegistryForGeneration(),
     );
     prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
-    tx.diagnosisEducation.create.mockResolvedValue(
-      buildEducation({
-        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
-        source: DiagnosisEducationSource.AI_ASSISTED,
-        reviewedAt: null,
-        reviewedByUserId: null,
-        publishedAt: null,
-      }),
-    );
     mockOpenAiDraft(
       service,
       JSON.stringify(
@@ -1427,9 +1392,9 @@ describe('DiagnosisEducationService', () => {
 
     await service.generateDraft('registry-1', 'admin-1');
 
-    expect(tx.diagnosisEducation.create).toHaveBeenCalledWith(
+    expect(candidateService.createWholeCandidate).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
+        proposedEducation: expect.objectContaining({
           examPearls: [
             expect.objectContaining({
               id: 'dka-kussmaul-respirations',
@@ -1446,26 +1411,18 @@ describe('DiagnosisEducationService', () => {
         }),
       }),
     );
+    expect(tx.diagnosisEducation.create).not.toHaveBeenCalled();
   });
 
   it('requests the exact diagnosis education JSON schema from AI', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
     process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
     resetEnvCacheForTests();
-    const { prisma, tx, service } = buildService();
+    const { prisma, service } = buildService();
     prisma.diagnosisRegistry.findUnique.mockResolvedValue(
       buildRegistryForGeneration(),
     );
     prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
-    tx.diagnosisEducation.create.mockResolvedValue(
-      buildEducation({
-        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
-        source: DiagnosisEducationSource.AI_ASSISTED,
-        reviewedAt: null,
-        reviewedByUserId: null,
-        publishedAt: null,
-      }),
-    );
     const create = mockOpenAiDraft(
       service,
       JSON.stringify(buildValidGeneratedDraft()),
@@ -1635,15 +1592,6 @@ describe('DiagnosisEducationService', () => {
       buildRegistryForGeneration(),
     );
     prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
-    tx.diagnosisEducation.create.mockResolvedValue(
-      buildEducation({
-        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
-        source: DiagnosisEducationSource.AI_ASSISTED,
-        reviewedAt: null,
-        reviewedByUserId: null,
-        publishedAt: null,
-      }),
-    );
     const create = mockOpenAiDraft(
       service,
       JSON.stringify(buildValidGeneratedDraft()),
@@ -1676,15 +1624,6 @@ describe('DiagnosisEducationService', () => {
       buildRegistryForGeneration(),
     );
     prisma.diagnosisEducation.findUnique.mockResolvedValue(null);
-    tx.diagnosisEducation.create.mockResolvedValue(
-      buildEducation({
-        editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
-        source: DiagnosisEducationSource.AI_ASSISTED,
-        reviewedAt: null,
-        reviewedByUserId: null,
-        publishedAt: null,
-      }),
-    );
     mockOpenAiDraft(service, JSON.stringify(buildValidGeneratedDraft()));
     const log = jest
       .spyOn(
@@ -1922,7 +1861,7 @@ describe('DiagnosisEducationService', () => {
     process.env.OPENAI_API_KEY = 'test-key';
     process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
     resetEnvCacheForTests();
-    const { prisma, tx, service } = buildService();
+    const { prisma, tx, service, candidateService } = buildService();
     prisma.diagnosisRegistry.findUnique.mockResolvedValue(
       buildRegistryForGeneration(),
     );
@@ -1959,9 +1898,9 @@ describe('DiagnosisEducationService', () => {
 
     await service.generateDraft('registry-1', 'admin-1');
 
-    expect(tx.diagnosisEducation.create).toHaveBeenCalledWith(
+    expect(candidateService.createWholeCandidate).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
+        proposedEducation: expect.objectContaining({
           summary: {
             definition: 'Inflammation of the appendix.',
           },
@@ -1978,6 +1917,7 @@ describe('DiagnosisEducationService', () => {
         }),
       }),
     );
+    expect(tx.diagnosisEducation.create).not.toHaveBeenCalled();
   });
 
   it('does not expose generated needs-review content to players', async () => {
@@ -2063,11 +2003,11 @@ describe('DiagnosisEducationService', () => {
     );
   });
 
-  it('regenerates published education as a new needs-review revision', async () => {
+  it('regenerates published education as a candidate against the current version', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
     process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
     resetEnvCacheForTests();
-    const { prisma, tx, service } = buildService();
+    const { prisma, tx, service, candidateService, candidate } = buildService();
     prisma.diagnosisRegistry.findUnique.mockResolvedValue(
       buildRegistryForGeneration(),
     );
@@ -2075,20 +2015,9 @@ describe('DiagnosisEducationService', () => {
       editorialStatus: DiagnosisEducationStatus.PUBLISHED,
       version: 3,
     });
-    const saved = buildEducation({
-      editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
-      source: DiagnosisEducationSource.AI_ASSISTED,
-      version: 4,
-      reviewedAt: null,
-      reviewedByUserId: null,
-      publishedAt: null,
-      generatedAt: new Date('2026-05-02T00:00:00.000Z'),
-    });
     prisma.diagnosisEducation.findUnique.mockResolvedValue(
       existing,
     );
-    tx.diagnosisEducation.updateMany.mockResolvedValue({ count: 1 });
-    tx.diagnosisEducation.findUnique.mockResolvedValue(saved);
     const create = mockOpenAiDraft(
       service,
       JSON.stringify(buildValidGeneratedDraft()),
@@ -2097,28 +2026,14 @@ describe('DiagnosisEducationService', () => {
     const result = await service.generateDraft('registry-1', 'admin-1', 3);
 
     expect(create).toHaveBeenCalled();
-    expect(result).toEqual(saved);
-    expect(tx.diagnosisEducation.updateMany).toHaveBeenCalledWith(
+    expect(result).toEqual(candidate);
+    expect(candidateService.createWholeCandidate).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'education-1', version: 3 },
-        data: expect.objectContaining({
-          editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
-          source: DiagnosisEducationSource.AI_ASSISTED,
-          version: 4,
-          reviewedAt: null,
-          reviewedByUserId: null,
-          publishedAt: null,
-        }),
+        diagnosisRegistryId: 'registry-1',
+        education: existing,
       }),
     );
-    expect(tx.diagnosisEducationRevision.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          educationId: 'education-1',
-          version: 4,
-          editorialStatus: DiagnosisEducationStatus.NEEDS_REVIEW,
-        }),
-      }),
-    );
+    expect(tx.diagnosisEducation.updateMany).not.toHaveBeenCalled();
+    expect(tx.diagnosisEducationRevision.create).not.toHaveBeenCalled();
   });
 });

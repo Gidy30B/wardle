@@ -21,7 +21,7 @@ EDU-001 keeps the current direct-write model temporarily:
 
 `AI output -> current DiagnosisEducation row -> NEEDS_REVIEW -> revision snapshot`
 
-Candidate-first Education generation and section candidate application are deferred to EDU-002. This package does not introduce `EducationGenerationCandidate`, publication decision records, graph provenance redesign, distributed locks, durable AI failure records, or a new review UI.
+Candidate-first Education generation and section candidate application were deferred from EDU-001 and implemented by EDU-002. This package did not introduce those structures; see `docs/weos/implementation/WEOS-EDU-002-candidate-first-diagnosis-education.md` for the current AI generation/regeneration boundary.
 
 ## Differential Trust Treatment
 

@@ -1,6 +1,7 @@
 import { runCaseDraftAction } from './caseDraftActions.ts';
 import { runCaseRevisionAction } from './caseRevisionActions.ts';
 import { runClueRevisionAction } from './clueRevisionActions.ts';
+import { runEducationCandidateAction } from './educationCandidateActions.ts';
 import { runEducationAction } from './educationActions.ts';
 import { runEvidenceAction } from './evidenceActions.ts';
 import {
@@ -32,6 +33,7 @@ export const DEFAULT_WORKSPACE_ACTION_EXECUTORS: WorkspaceActionExecutorMap = {
   claimRepair: runEducationAction,
   clueRevision: runClueRevisionAction,
   education: runEducationAction,
+  educationCandidate: runEducationCandidateAction,
   evidence: runEvidenceAction,
   lifecycle: runPublicationAction,
   publication: runPublicationAction,
@@ -103,7 +105,10 @@ export async function runWorkspaceAction(
 }
 
 function isStaleEducationConflict(message: string): boolean {
-  return message.includes('Education changed since this view was loaded.');
+  return (
+    message.includes('Education changed since this view was loaded.') ||
+    message.includes('Education candidate base version is stale.')
+  );
 }
 
 function failure(

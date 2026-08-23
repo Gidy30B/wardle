@@ -88,6 +88,116 @@ Record unresolved authority, technical, data, or verification risks.
 
 ---
 
+# ExecPlan: WEOS EDU-002 Candidate-First Diagnosis Education Generation
+
+## Purpose
+
+Make AI Diagnosis Education whole generation and section regeneration candidate-first, with human review separated from controlled application, and controlled application separated from Education approval/publication.
+
+## Approved Authority
+
+Implementation package: user-provided `WEOS EDU-002 - Candidate-First Diagnosis Education Generation and Section Regeneration`.
+Branch/worktree: `C:\Users\user\DxLab-master-live`, `master`.
+Required baseline verified before implementation: `a3ca9934aca5c4286039773db8ed180bcdd3a8bb`.
+
+User-stated canonical constraint: conform to `WEOS-CANON-004` Diagnosis Education Standards, `WEOS-CANON-006` AI Draft Standards, and `WEOS-CANON-007` Governance Record Standards. Where implementation convenience conflicts with source/resulting Education revision identity, responsible authority/rationale, controlled application records, candidate supersession, or separation of acceptance/application/artifact approval/publication, the Canon distinction controls within this package scope.
+
+This package authorizes only the narrow Education candidate lifecycle, additive persistence, review/application operations, workspace integration, and verification. It does not authorize exact Education revision approval/publication decisions, graph provenance redesign, generic governance-kernel rollout, learner redesign, distributed orchestration, or durable AI failure analytics.
+
+## Current Behavior
+
+At baseline, `DiagnosisEducationService.generateDraft` and `EducationSectionRegenerationService.regenerateSection` invoke AI and then directly create/update `DiagnosisEducation`. EDU-001 added expected-version checks and invalidation to `NEEDS_REVIEW`, but AI still mutates the governed Education row before human candidate review.
+
+## Required Invariant
+
+AI Education output must first persist as an independently identifiable candidate with provenance, validation, exact base Education version, source/result revision linkage fields, review state, supersession state, and controlled-application state. Accept/Reject/Request Changes must not mutate `DiagnosisEducation`. Apply must be a separate transactional, idempotent, stale-safe command that creates or increments exactly one `DiagnosisEducation` version and one corresponding `DiagnosisEducationRevision`, with the resulting Education in `NEEDS_REVIEW` and no approval, publication, learner exposure, trusted differential link, or graph authority conferred by candidate existence, acceptance, or application.
+
+## Scope
+
+Included: additive Prisma model/migration, candidate service and DTOs, refactor whole/section AI generation to candidate creation, review and controlled application endpoints, dashboard API/types/action wiring, workspace candidate inventory/review packet/queue integration, legacy Education panel bypass removal for AI generation/regeneration, focused backend/dashboard tests, and WEOS implementation documentation.
+
+Excluded: exact revision-targeted Education approval/publication decisions, generic governance records for all artifacts, graph staleness/provenance redesign, distributed locks/queues, collaborative section editing, semantic AI diff engine, learner redesign, Case workflow changes, historical backfill, seed/repair edits, and destructive migration.
+
+## Files Expected To Change
+
+- `.agent/PLANS.md`
+- `doctordle-backend/prisma/schema.prisma`
+- an additive migration under `doctordle-backend/prisma/migrations/`
+- `doctordle-backend/src/modules/education/**`
+- `doctordle-backend/src/modules/admin/diagnosis-editorial-workspace.service.ts`
+- focused backend specs in Education, diagnosis graph, editorial intent, learner Education fallback, or workspace modules
+- `analytics-dashboard/src/api/admin.ts`
+- `analytics-dashboard/src/api/admin.types.ts`
+- `analytics-dashboard/src/features/cases/DiagnosisEducationPanel.tsx`
+- `analytics-dashboard/src/features/editorial/**`
+- focused dashboard tests adjacent to changed workspace action/view model files
+- `docs/weos/implementation/**` and/or `docs/weos/gaps/IMPLEMENTATION-GAPS.md`
+
+## Prohibited Changes
+
+No destructive migration. No historical candidate backfill. No schema changes outside candidate/application persistence unless proven necessary for referential links. No publication/learner exposure semantic change. No graph fact promotion or trusted graph authority from candidates. No direct work in `C:\Users\user\DxLab`. No seed/repair edits. Do not silently fix unrelated broad-suite stale fixtures unless they block EDU-002 verification.
+
+## Data Model Implications
+
+Additive candidate/application persistence is expected. Existing `DiagnosisEducation` and `DiagnosisEducationRevision` remain valid. No existing rows are rewritten or backfilled.
+
+## API Implications
+
+AI generation/regeneration routes should return candidate records instead of live Education mutation results. Add candidate list/read/review/apply routes. Existing manual Education edit/review DTO expected-version safety remains authoritative.
+
+## Migration Plan
+
+Add candidate enums/model and generate a Prisma migration. Migration must be additive and reversible by dropping new candidate-only structures before rollout; no data backfill.
+
+## Compatibility Strategy
+
+Manual Education edits keep EDU-001 behavior. Existing AI UI affordances remain available but now route through candidate APIs and candidate review/application UX. Existing learner fallback, case generation published-Education gating, and published-only trusted differential links remain unchanged.
+
+## Testing Strategy
+
+Add focused tests for whole candidate creation, initial candidate creation without Education, section candidate creation, Education unchanged on AI generation/failure, validation persistence, candidate Accept/Reject/Request Changes, Apply preconditions, stale-base failure, idempotent repeated/concurrent application, resulting `NEEDS_REVIEW` version/revision, no approval/publication, no trusted differential/graph/case-generation side effects, workspace action visibility/queue behavior, legacy AI bypass closure, and EDU-001 regressions. Run Prisma format/validate/generate, targeted backend tests, backend build, dashboard tests/build, and `git diff --check`.
+
+## Rollback/Recovery
+
+Code and additive migration can be reverted as one EDU-002 commit before deployment. Since no historical data is backfilled or rewritten, rollback is expected to be schema/code rollback only.
+
+## Progress
+
+- [x] Verify baseline SHA, branch, and clean worktree.
+- [x] Read WEOS repository/backend instructions and Canon constraints.
+- [x] Re-audit Education generation/regeneration/review, schema, differential, case-generation, learner, workspace, legacy UI, and existing draft models.
+- [x] Implement additive candidate/application schema and Prisma migration.
+- [x] Refactor backend generation/regeneration to candidate creation.
+- [x] Add candidate review and controlled application operations.
+- [x] Integrate workspace/legacy UI candidate flow.
+- [x] Add focused tests and documentation.
+- [x] Run final verification and commit.
+
+## Discoveries
+
+- `WEOS-OD-024` remains open as a generic architecture decision, but this user package authorizes a bounded Education-candidate controlled-application implementation without claiming generic governance-kernel closure.
+- `WEOS-CANON-004` requires section regeneration to preserve target section, source revision, original section, reason/input context, proposed replacement, review decision, and resulting artifact revision.
+- `WEOS-CANON-006` requires AI-generated Education to remain candidate knowledge until human review and controlled application; acceptance approves the proposal for controlled application but not the resulting Education revision.
+- `WEOS-CANON-007` requires material AI contribution provenance, responsible authority/rationale, distinction between acceptance and controlled application, and target pre-application plus resulting version identity.
+- Existing `DiagnosisEducationService.generateDraft` and `EducationSectionRegenerationService.regenerateSection` were the direct AI mutation boundaries. Refactoring them is sufficient to close the legacy backend AI bypass while leaving manual EDU-001 mutation safety unchanged.
+- Trusted differential link refresh remains gated inside the differential link service by published Education status. Candidate creation performs no trusted mapping side effects.
+- Learner Education and Case generation already select only `PUBLISHED` Education; candidate existence and applied `NEEDS_REVIEW` Education do not enter those contexts.
+
+## Decisions
+
+- Use one `DiagnosisEducationCandidate` model for whole and section proposals, plus a separate `DiagnosisEducationCandidateApplicationCommand` controlled-application record for idempotency, actor, rationale, authority references, conflicts, and resulting Education/revision identity.
+- Store exact source version through `baseEducationVersion` and `baseEducationRevisionId`; store exact result through `resultingEducationVersion` and `resultingRevisionId`.
+- Supersede pending/needs-changes candidates in the same diagnosis/scope/section when a new candidate is created; do not supersede accepted/applied/rejected history.
+- Keep Education candidate acceptance at editorial access level and require explicit rationale; keep application as a separate command with explicit idempotency key and authority rationale. Exact role-to-authority semantics remain an EDU-003 governance gap.
+
+## Remaining Risks
+
+- EDU-003 still needs exact revision-targeted Diagnosis Education approval/publication authority and any richer authority-assignment checks beyond runtime access guards.
+- Candidate review packets expose validation/provenance/history through workspace inventory and queue records; a richer section-by-section diff UI remains future enhancement.
+- Application idempotency is persisted through a unique command key and candidate application state; full distributed orchestration/queue locking remains out of scope.
+
+---
+
 # ExecPlan: WEOS EDU-001 Diagnosis Education Mutation Safety
 
 ## Purpose

@@ -1442,6 +1442,148 @@ export type RegenerateEducationSectionPayload = {
   expectedVersion: number;
 };
 
+export type DiagnosisEducationCandidateScope = 'WHOLE' | 'SECTION';
+
+export type DiagnosisEducationCandidateStatus =
+  | 'PENDING_REVIEW'
+  | 'ACCEPTED'
+  | 'REJECTED'
+  | 'NEEDS_CHANGES'
+  | 'SUPERSEDED'
+  | 'APPLIED';
+
+export type DiagnosisEducationCandidateReviewDecision =
+  | 'ACCEPT'
+  | 'REJECT'
+  | 'REQUEST_CHANGES';
+
+export type DiagnosisEducationCandidateApplicationStatus =
+  | 'NOT_REQUESTED'
+  | 'PENDING'
+  | 'SUCCESS'
+  | 'CONFLICT';
+
+export type DiagnosisEducationCandidate = {
+  id: string;
+  diagnosisRegistryId: string;
+  educationId: string | null;
+  scope: DiagnosisEducationCandidateScope;
+  section: EducationRegenerableSection | null;
+  baseEducationVersion: number | null;
+  baseEducationRevisionId: string | null;
+  currentEducationVersion?: number | null;
+  stale?: boolean;
+  proposedEducation: JsonValue | null;
+  proposedSection: JsonValue | null;
+  proposedReferences: JsonValue | null;
+  originalSection: JsonValue | null;
+  reviewStatus: DiagnosisEducationCandidateStatus;
+  applicationStatus: DiagnosisEducationCandidateApplicationStatus;
+  applicationAllowed?: boolean;
+  validationStatus: string;
+  validationSummary: JsonValue;
+  validationBlockers: JsonValue | null;
+  validationWarnings: JsonValue | null;
+  validationMetadata: JsonValue | null;
+  generationProvider: string;
+  generationModel: string;
+  generatorVersion: string | null;
+  promptVersion: string | null;
+  generatedAt: string;
+  generationPurpose: string;
+  inputContext: JsonValue;
+  contextHash: string;
+  sourceArtifactIds: JsonValue | null;
+  acceptedAt: string | null;
+  appliedAt: string | null;
+  resultingEducationId: string | null;
+  resultingEducationVersion: number | null;
+  resultingRevisionId: string | null;
+  applicationFailureReason: string | null;
+  latestReviewDecision?: {
+    id: string;
+    decision: DiagnosisEducationCandidateReviewDecision;
+    rationale: string;
+    reviewerUserId: string | null;
+    decidedAt: string;
+  } | null;
+  reviewDecisions?: Array<{
+    id: string;
+    decision: DiagnosisEducationCandidateReviewDecision;
+    rationale: string;
+    reviewerUserId: string | null;
+    decidedAt: string;
+  }>;
+  applicationCommands?: Array<{
+    id: string;
+    status: DiagnosisEducationCandidateApplicationStatus;
+    commandAction: string;
+    actorUserId: string | null;
+    resultEducationId: string | null;
+    resultEducationVersion: number | null;
+    resultRevisionId: string | null;
+    conflictReason: string | null;
+    createdAt: string;
+    completedAt: string | null;
+  }>;
+  validation?: {
+    status: string;
+    summary: JsonValue;
+    blockers: unknown[];
+    warnings: unknown[];
+    blockerCount: number;
+    warningCount: number;
+    metadata: JsonValue | null;
+    passed: boolean;
+  };
+  provenance?: {
+    generationProvider: string;
+    generationModel: string;
+    generatorVersion: string | null;
+    promptVersion: string | null;
+    generationPurpose: string;
+    inputContext: JsonValue;
+    contextHash: string;
+    sourceArtifactIds: JsonValue | null;
+  };
+};
+
+export type WorkspaceDiagnosisEducationCandidateInventory = {
+  summary: {
+    total: number;
+    pendingReview: number;
+    needsChanges: number;
+    accepted: number;
+    awaitingApplication: number;
+    applied: number;
+    rejected: number;
+    superseded: number;
+    actionable: number;
+    blockerCount: number;
+    warningCount: number;
+    byStatus: Record<string, number>;
+  };
+  groups: {
+    pendingReview: DiagnosisEducationCandidate[];
+    needsChanges: DiagnosisEducationCandidate[];
+    acceptedAwaitingApplication: DiagnosisEducationCandidate[];
+    applied: DiagnosisEducationCandidate[];
+    rejected: DiagnosisEducationCandidate[];
+  };
+  items: DiagnosisEducationCandidate[];
+};
+
+export type ReviewDiagnosisEducationCandidatePayload = {
+  decision: DiagnosisEducationCandidateReviewDecision;
+  rationale: string;
+};
+
+export type ApplyDiagnosisEducationCandidatePayload = {
+  idempotencyKey: string;
+  rationale: string;
+  authorityReferences?: string[];
+};
+
 export type WorkspaceGraphSummary = {
   candidates: {
     total: number;
@@ -2214,6 +2356,7 @@ export type DiagnosisEditorialWorkspace = {
   discriminatorDraftReviews?: DiscriminatorDraftReview[];
   materializedClueRevisionDrafts?: CaseClueRevisionDraft[];
   clinicalCaseDrafts?: WorkspaceClinicalCaseDraftInventory;
+  educationCandidates?: WorkspaceDiagnosisEducationCandidateInventory;
   workspaceSummary: {
     status: DiagnosisWorkspaceOverallStatus | 'ready' | 'needs_review' | string;
     overallScore: number | null;

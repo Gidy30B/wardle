@@ -372,6 +372,40 @@ enum ClinicalCaseDraftApplicationStatus {
   CONFLICT
 }
 
+enum DiagnosisEducationCandidateScope {
+  WHOLE
+  SECTION
+}
+
+enum DiagnosisEducationCandidateSection {
+  differentials
+  investigations
+  examPearls
+  management
+}
+
+enum DiagnosisEducationCandidateStatus {
+  PENDING_REVIEW
+  ACCEPTED
+  REJECTED
+  NEEDS_CHANGES
+  SUPERSEDED
+  APPLIED
+}
+
+enum DiagnosisEducationCandidateReviewDecision {
+  ACCEPT
+  REJECT
+  REQUEST_CHANGES
+}
+
+enum DiagnosisEducationCandidateApplicationStatus {
+  NOT_REQUESTED
+  PENDING
+  SUCCESS
+  CONFLICT
+}
+
 model Diagnosis {
   id            String               @id @default(uuid())
   name          String               @unique
@@ -498,6 +532,7 @@ model DiagnosisRegistry {
   caseClueProgressionAnalyses           CaseClueProgressionAnalysis[]
   aiDraftRevisionAudits                 AiDraftRevisionAudit[]
   clinicalCaseDrafts                    ClinicalCaseDraft[]
+  diagnosisEducationCandidates          DiagnosisEducationCandidate[]
 
   @@index([status])
   @@index([onboardingStatus])
@@ -662,6 +697,7 @@ model DiagnosisEducation {
   revisions            DiagnosisEducationRevision[]
   differentialMappings EducationDifferentialMapping[]
   differentialLinks    EducationDifferentialLink[]
+  candidates           DiagnosisEducationCandidate[]
 
   @@index([editorialStatus])
   @@index([source])
@@ -682,6 +718,8 @@ model DiagnosisEducationRevision {
   createdBy            User?                          @relation("DiagnosisEducationRevisionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
   differentialMappings EducationDifferentialMapping[]
   differentialLinks    EducationDifferentialLink[]
+  sourceCandidates     DiagnosisEducationCandidate[]  @relation("DiagnosisEducationCandidateBaseRevision")
+  resultingCandidates  DiagnosisEducationCandidate[]  @relation("DiagnosisEducationCandidateResultingRevision")
 
   @@unique([educationId, version])
   @@index([educationId])
@@ -1151,6 +1189,118 @@ model ClinicalCaseDraftApplicationCommand {
   @@index([draftId])
   @@index([resultCaseId])
   @@index([resultCaseRevisionId])
+  @@index([actorUserId])
+  @@index([status])
+}
+
+model DiagnosisEducationCandidate {
+  id                        String                                            @id @default(uuid())
+  diagnosisRegistryId       String
+  educationId               String?
+  scope                     DiagnosisEducationCandidateScope
+  section                   DiagnosisEducationCandidateSection?
+  baseEducationVersion      Int?
+  baseEducationRevisionId   String?
+  originalSection           Json?
+  proposedEducation         Json?
+  proposedSection           Json?
+  proposedReferences        Json?
+  generationProvider        String
+  generationModel           String
+  generatorVersion          String?
+  promptVersion             String?
+  generatedAt               DateTime                                          @default(now())
+  generationPurpose         String
+  sourceIssue               Json?
+  inputContext              Json
+  contextHash               String
+  sourceArtifactIds         Json?
+  validationStatus          ValidationOutcome
+  validationSummary         Json
+  validationBlockers        Json?
+  validationWarnings        Json?
+  validationMetadata        Json?
+  reviewStatus              DiagnosisEducationCandidateStatus                 @default(PENDING_REVIEW)
+  latestReviewDecisionId    String?                                           @unique
+  acceptedAt                DateTime?
+  acceptedByUserId          String?
+  supersededByCandidateId   String?
+  applicationStatus         DiagnosisEducationCandidateApplicationStatus      @default(NOT_REQUESTED)
+  appliedAt                 DateTime?
+  appliedByUserId           String?
+  resultingEducationId      String?
+  resultingEducationVersion Int?
+  resultingRevisionId       String?
+  applicationFailureReason  String?
+  createdByUserId           String?
+  createdAt                 DateTime                                          @default(now())
+  updatedAt                 DateTime                                          @updatedAt
+  diagnosisRegistry         DiagnosisRegistry                                 @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  education                 DiagnosisEducation?                               @relation(fields: [educationId], references: [id], onDelete: SetNull)
+  baseEducationRevision     DiagnosisEducationRevision?                       @relation("DiagnosisEducationCandidateBaseRevision", fields: [baseEducationRevisionId], references: [id], onDelete: SetNull)
+  resultingRevision         DiagnosisEducationRevision?                       @relation("DiagnosisEducationCandidateResultingRevision", fields: [resultingRevisionId], references: [id], onDelete: SetNull)
+  latestReviewDecision      DiagnosisEducationCandidateReviewDecisionRecord?  @relation("DiagnosisEducationCandidateLatestDecision", fields: [latestReviewDecisionId], references: [id], onDelete: SetNull)
+  acceptedByUser            User?                                             @relation("DiagnosisEducationCandidateAcceptedByUser", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+  appliedByUser             User?                                             @relation("DiagnosisEducationCandidateAppliedByUser", fields: [appliedByUserId], references: [id], onDelete: SetNull)
+  createdByUser             User?                                             @relation("DiagnosisEducationCandidateCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  supersededByCandidate     DiagnosisEducationCandidate?                      @relation("DiagnosisEducationCandidateSupersession", fields: [supersededByCandidateId], references: [id], onDelete: SetNull)
+  supersededCandidates      DiagnosisEducationCandidate[]                     @relation("DiagnosisEducationCandidateSupersession")
+  reviewDecisions           DiagnosisEducationCandidateReviewDecisionRecord[] @relation("DiagnosisEducationCandidateReviewDecisionCandidate")
+  applicationCommands       DiagnosisEducationCandidateApplicationCommand[]
+
+  @@index([diagnosisRegistryId, createdAt])
+  @@index([educationId])
+  @@index([scope, section])
+  @@index([reviewStatus])
+  @@index([applicationStatus])
+  @@index([baseEducationVersion])
+  @@index([baseEducationRevisionId])
+  @@index([resultingEducationId])
+  @@index([resultingRevisionId])
+  @@index([createdByUserId])
+  @@index([acceptedByUserId])
+  @@index([appliedByUserId])
+}
+
+model DiagnosisEducationCandidateReviewDecisionRecord {
+  id                  String                                    @id @default(uuid())
+  candidateId         String
+  decision            DiagnosisEducationCandidateReviewDecision
+  reviewerUserId      String?
+  rationale           String
+  decidedAt           DateTime                                  @default(now())
+  createdAt           DateTime                                  @default(now())
+  candidate           DiagnosisEducationCandidate               @relation("DiagnosisEducationCandidateReviewDecisionCandidate", fields: [candidateId], references: [id], onDelete: Cascade)
+  latestForCandidates DiagnosisEducationCandidate[]             @relation("DiagnosisEducationCandidateLatestDecision")
+  reviewerUser        User?                                     @relation("DiagnosisEducationCandidateReviewDecisionReviewer", fields: [reviewerUserId], references: [id], onDelete: SetNull)
+
+  @@index([candidateId, decidedAt])
+  @@index([reviewerUserId])
+  @@index([decision])
+}
+
+model DiagnosisEducationCandidateApplicationCommand {
+  id                     String                                       @id @default(uuid())
+  candidateId            String
+  commandAction          String
+  commandIdempotencyKey  String                                       @unique
+  commandFingerprint     String
+  actorUserId            String?
+  authorityRationale     String
+  authorityReferences    Json?
+  status                 DiagnosisEducationCandidateApplicationStatus
+  resultEducationId      String?
+  resultEducationVersion Int?
+  resultRevisionId       String?
+  conflictReason         String?
+  createdAt              DateTime                                     @default(now())
+  completedAt            DateTime?
+  candidate              DiagnosisEducationCandidate                  @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  actorUser              User?                                        @relation("DiagnosisEducationCandidateApplicationActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([candidateId])
+  @@index([resultEducationId])
+  @@index([resultRevisionId])
   @@index([actorUserId])
   @@index([status])
 }
@@ -1736,58 +1886,63 @@ model Attempt {
 }
 
 model User {
-  id                                     String                                  @id
-  clerkId                                String?                                 @unique
-  email                                  String?
-  username                               String?
-  normalizedUsername                     String?                                 @unique
-  trainingLevel                          String?
-  country                                String?
-  individualMode                         Boolean                                 @default(true)
-  onboardingStatus                       UserOnboardingStatus                    @default(PROFILE_REQUIRED)
-  onboardingCompletedAt                  DateTime?
-  primaryOrganizationId                  String?
-  role                                   String                                  @default("user")
-  subscriptionTier                       String                                  @default("free")
-  lastPlayedAt                           DateTime?
-  createdAt                              DateTime                                @default(now())
-  updatedAt                              DateTime                                @updatedAt
-  sessions                               GameSession[]
-  attempts                               Attempt[]
-  stats                                  UserStats?
-  progress                               UserProgress?
-  settings                               UserSettings?
-  notifications                          Notification[]
-  notificationPreferences                NotificationPreference[]
-  pushDeviceTokens                       PushDeviceToken[]
-  leaderboard                            LeaderboardEntry[]
-  approvedCases                          Case[]                                  @relation("CaseApprovedByUser")
-  createdCaseRevisions                   CaseRevision[]                          @relation("CaseRevisionCreatedByUser")
-  triggeredCaseValidations               CaseValidationRun[]                     @relation("CaseValidationRunTriggeredByUser")
-  caseReviews                            CaseReview[]                            @relation("CaseReviewReviewerUser")
-  governedCaseRevisionApprovalDecisions  GovernedCaseRevisionApprovalDecision[]  @relation("GovernedCaseRevisionApprovalActor")
-  caseRevisionPublicationDecisions       CaseRevisionPublicationDecision[]       @relation("CaseRevisionPublicationActor")
-  editorialAuthorityAssignments          EditorialAuthorityAssignment[]          @relation("EditorialAuthorityAssignmentSubjectUser")
-  reviewedDiagnosisEducation             DiagnosisEducation[]                    @relation("DiagnosisEducationReviewedByUser")
-  createdDiagnosisEducationRevisions     DiagnosisEducationRevision[]            @relation("DiagnosisEducationRevisionCreatedByUser")
-  reviewedDiagnosisGraphCandidates       DiagnosisGraphCandidate[]               @relation("DiagnosisGraphCandidateReviewedByUser")
-  reviewedDiagnosisTeachingRelationships DiagnosisTeachingRelationship[]         @relation("DiagnosisTeachingRelationshipReviewedByUser")
-  reviewedDiagnosisEvidenceRelationships DiagnosisEvidenceRelationship[]         @relation("DiagnosisEvidenceRelationshipReviewedByUser")
-  reviewedCaseDifferentialMappings       CaseDifferentialMapping[]               @relation("CaseDifferentialMappingReviewedByUser")
-  reviewedEducationDifferentialMappings  EducationDifferentialMapping[]          @relation("EducationDifferentialMappingReviewedByUser")
-  reviewedDiagnosisRegistryCandidates    DiagnosisRegistryCandidate[]            @relation("DiagnosisRegistryCandidateReviewer")
-  approvedDiagnosisRegistryCandidates    DiagnosisRegistryCandidate[]            @relation("DiagnosisRegistryCandidateApprovedByUser")
-  activationReviewedDiagnoses            DiagnosisRegistry[]                     @relation("DiagnosisRegistryActivationReviewedByUser")
-  reviewedReasoningPaths                 ReasoningPath[]                         @relation("ReasoningPathReviewedByUser")
-  aiDraftRevisionAudits                  AiDraftRevisionAudit[]                  @relation("AiDraftRevisionAuditCreatedByUser")
-  reviewedAiDraftRevisionAudits          AiDraftRevisionAudit[]                  @relation("AiDraftRevisionAuditReviewerUser")
-  createdClinicalCaseDrafts              ClinicalCaseDraft[]                     @relation("ClinicalCaseDraftCreatedByUser")
-  acceptedClinicalCaseDrafts             ClinicalCaseDraft[]                     @relation("ClinicalCaseDraftAcceptedByUser")
-  appliedClinicalCaseDrafts              ClinicalCaseDraft[]                     @relation("ClinicalCaseDraftAppliedByUser")
-  reviewedClinicalCaseDrafts             ClinicalCaseDraftReviewDecisionRecord[] @relation("ClinicalCaseDraftReviewDecisionReviewer")
-  appliedClinicalCaseDraftCommands       ClinicalCaseDraftApplicationCommand[]   @relation("ClinicalCaseDraftApplicationActor")
-  primaryOrganization                    Organization?                           @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
-  organizations                          UserOrganization[]
+  id                                         String                                            @id
+  clerkId                                    String?                                           @unique
+  email                                      String?
+  username                                   String?
+  normalizedUsername                         String?                                           @unique
+  trainingLevel                              String?
+  country                                    String?
+  individualMode                             Boolean                                           @default(true)
+  onboardingStatus                           UserOnboardingStatus                              @default(PROFILE_REQUIRED)
+  onboardingCompletedAt                      DateTime?
+  primaryOrganizationId                      String?
+  role                                       String                                            @default("user")
+  subscriptionTier                           String                                            @default("free")
+  lastPlayedAt                               DateTime?
+  createdAt                                  DateTime                                          @default(now())
+  updatedAt                                  DateTime                                          @updatedAt
+  sessions                                   GameSession[]
+  attempts                                   Attempt[]
+  stats                                      UserStats?
+  progress                                   UserProgress?
+  settings                                   UserSettings?
+  notifications                              Notification[]
+  notificationPreferences                    NotificationPreference[]
+  pushDeviceTokens                           PushDeviceToken[]
+  leaderboard                                LeaderboardEntry[]
+  approvedCases                              Case[]                                            @relation("CaseApprovedByUser")
+  createdCaseRevisions                       CaseRevision[]                                    @relation("CaseRevisionCreatedByUser")
+  triggeredCaseValidations                   CaseValidationRun[]                               @relation("CaseValidationRunTriggeredByUser")
+  caseReviews                                CaseReview[]                                      @relation("CaseReviewReviewerUser")
+  governedCaseRevisionApprovalDecisions      GovernedCaseRevisionApprovalDecision[]            @relation("GovernedCaseRevisionApprovalActor")
+  caseRevisionPublicationDecisions           CaseRevisionPublicationDecision[]                 @relation("CaseRevisionPublicationActor")
+  editorialAuthorityAssignments              EditorialAuthorityAssignment[]                    @relation("EditorialAuthorityAssignmentSubjectUser")
+  reviewedDiagnosisEducation                 DiagnosisEducation[]                              @relation("DiagnosisEducationReviewedByUser")
+  createdDiagnosisEducationRevisions         DiagnosisEducationRevision[]                      @relation("DiagnosisEducationRevisionCreatedByUser")
+  reviewedDiagnosisGraphCandidates           DiagnosisGraphCandidate[]                         @relation("DiagnosisGraphCandidateReviewedByUser")
+  reviewedDiagnosisTeachingRelationships     DiagnosisTeachingRelationship[]                   @relation("DiagnosisTeachingRelationshipReviewedByUser")
+  reviewedDiagnosisEvidenceRelationships     DiagnosisEvidenceRelationship[]                   @relation("DiagnosisEvidenceRelationshipReviewedByUser")
+  reviewedCaseDifferentialMappings           CaseDifferentialMapping[]                         @relation("CaseDifferentialMappingReviewedByUser")
+  reviewedEducationDifferentialMappings      EducationDifferentialMapping[]                    @relation("EducationDifferentialMappingReviewedByUser")
+  reviewedDiagnosisRegistryCandidates        DiagnosisRegistryCandidate[]                      @relation("DiagnosisRegistryCandidateReviewer")
+  approvedDiagnosisRegistryCandidates        DiagnosisRegistryCandidate[]                      @relation("DiagnosisRegistryCandidateApprovedByUser")
+  activationReviewedDiagnoses                DiagnosisRegistry[]                               @relation("DiagnosisRegistryActivationReviewedByUser")
+  reviewedReasoningPaths                     ReasoningPath[]                                   @relation("ReasoningPathReviewedByUser")
+  aiDraftRevisionAudits                      AiDraftRevisionAudit[]                            @relation("AiDraftRevisionAuditCreatedByUser")
+  reviewedAiDraftRevisionAudits              AiDraftRevisionAudit[]                            @relation("AiDraftRevisionAuditReviewerUser")
+  createdClinicalCaseDrafts                  ClinicalCaseDraft[]                               @relation("ClinicalCaseDraftCreatedByUser")
+  acceptedClinicalCaseDrafts                 ClinicalCaseDraft[]                               @relation("ClinicalCaseDraftAcceptedByUser")
+  appliedClinicalCaseDrafts                  ClinicalCaseDraft[]                               @relation("ClinicalCaseDraftAppliedByUser")
+  reviewedClinicalCaseDrafts                 ClinicalCaseDraftReviewDecisionRecord[]           @relation("ClinicalCaseDraftReviewDecisionReviewer")
+  appliedClinicalCaseDraftCommands           ClinicalCaseDraftApplicationCommand[]             @relation("ClinicalCaseDraftApplicationActor")
+  createdDiagnosisEducationCandidates        DiagnosisEducationCandidate[]                     @relation("DiagnosisEducationCandidateCreatedByUser")
+  acceptedDiagnosisEducationCandidates       DiagnosisEducationCandidate[]                     @relation("DiagnosisEducationCandidateAcceptedByUser")
+  appliedDiagnosisEducationCandidates        DiagnosisEducationCandidate[]                     @relation("DiagnosisEducationCandidateAppliedByUser")
+  reviewedDiagnosisEducationCandidates       DiagnosisEducationCandidateReviewDecisionRecord[] @relation("DiagnosisEducationCandidateReviewDecisionReviewer")
+  appliedDiagnosisEducationCandidateCommands DiagnosisEducationCandidateApplicationCommand[]   @relation("DiagnosisEducationCandidateApplicationActor")
+  primaryOrganization                        Organization?                                     @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
+  organizations                              UserOrganization[]
 
   @@index([role])
   @@index([subscriptionTier])

@@ -1171,7 +1171,7 @@ export default function EditorialDiagnosisWorkspacePage() {
     }
 
     const confirmed = window.confirm(
-      `Regenerate ${formatLabel(section)} for ${diagnosisName}?`,
+      `Regenerate ${formatLabel(section)} for ${diagnosisName}? This creates a review candidate and leaves current education unchanged until applied.`,
     );
     if (!confirmed) {
       return;
@@ -1180,7 +1180,7 @@ export default function EditorialDiagnosisWorkspacePage() {
     void runWorkspaceAction({
       id: `regenerate-${section}`,
       pending: `Regenerating ${formatLabel(section)}...`,
-      success: `${formatLabel(section)} regenerated.`,
+      success: `${formatLabel(section)} candidate created for review.`,
       action: () =>
         regenerateDiagnosisEducationSection(client, diagnosisRegistryId, {
           section,

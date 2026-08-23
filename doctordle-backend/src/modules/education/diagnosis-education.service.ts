@@ -45,6 +45,7 @@ import {
   statusAfterEducationContentMutation,
   throwStaleEducationConflict,
 } from './education-mutation-policy';
+import { DiagnosisEducationCandidateService } from './diagnosis-education-candidate.service';
 
 type EducationJsonField =
   | 'summary'
@@ -448,6 +449,7 @@ export class DiagnosisEducationService {
     private readonly differentialMappingService?: DifferentialMappingService,
     private readonly reasoningPathService?: ReasoningPathService,
     private readonly reasoningDraftValidationService?: ReasoningDraftValidationService,
+    private readonly diagnosisEducationCandidateService?: DiagnosisEducationCandidateService,
   ) {
     const env = getEnv();
     if (env.OPENAI_API_KEY) {
@@ -1181,51 +1183,45 @@ export class DiagnosisEducationService {
         }),
       );
 
-      const education = await this.prisma.$transaction(async (tx) => {
-        if (existing?.editorialStatus === DiagnosisEducationStatus.PUBLISHED) {
-          await this.createRevisionIfMissing(tx, existing, userId);
-        }
+      if (!this.diagnosisEducationCandidateService) {
+        throw new ServiceUnavailableException(
+          'Education candidate service is unavailable',
+        );
+      }
 
-        const saved = existing
-          ? await this.updateExistingEducationVersioned(tx, existing, {
-                ...this.buildWriteData(validatedDraftWithMetadata, {
-                  title: registry.displayLabel,
-                  status: DiagnosisEducationStatus.NEEDS_REVIEW,
-                  source: DiagnosisEducationSource.AI_ASSISTED,
-                  version: existing.version + 1,
-                }),
-                generatedAt: new Date(),
-                reviewedAt: null,
-                reviewedByUserId: null,
-                publishedAt: null,
-              })
-          : await tx.diagnosisEducation.create({
-              data: {
-                ...this.buildWriteData(validatedDraftWithMetadata, {
-                  title: registry.displayLabel,
-                  status: DiagnosisEducationStatus.NEEDS_REVIEW,
-                  source: DiagnosisEducationSource.AI_ASSISTED,
-                  version: 1,
-                }),
-                diagnosisRegistryId,
-                summary: validatedDraftWithMetadata.summary,
-                generatedAt: new Date(),
-                reviewedAt: null,
-                reviewedByUserId: null,
-                publishedAt: null,
-              },
-            });
-
-        await this.createRevision(tx, saved, userId);
-        return saved;
+      return this.diagnosisEducationCandidateService.createWholeCandidate({
+        diagnosisRegistryId,
+        education: existing,
+        proposedEducation: validatedDraftWithMetadata,
+        inputContext: {
+          generationContext,
+          compactGenerationContext,
+          reasoningContext: this.promptReasoningContext(reasoningContext),
+          promptModel: OPENAI_EDUCATION_MODEL,
+          promptVersion: 'diagnosis_education_draft.v2',
+        },
+        sourceArtifactIds: {
+          reasoningPathId: reasoningContext?.reasoningPathId ?? null,
+          sourceTeachingRelationshipIds:
+            reasoningContext?.sourceTeachingRelationshipIds ?? [],
+          sourceEvidenceRelationshipIds:
+            reasoningContext?.sourceEvidenceRelationshipIds ?? [],
+        },
+        validation: {
+          blockers: draftQuality.blockers,
+          warnings: qualityWarnings,
+          scores: draftQuality.scores,
+          metadata: {
+            constrained: reasoningContext?.constrained ?? false,
+            reasoningPathId: reasoningContext?.reasoningPathId ?? null,
+          },
+        },
+        generationProvider: 'openai',
+        generationModel: OPENAI_EDUCATION_MODEL,
+        generatorVersion: 'DiagnosisEducationService.generateDraft',
+        promptVersion: 'diagnosis_education_draft.v2',
+        createdByUserId: userId,
       });
-
-      await this.refreshDifferentialMappings(education.id);
-      await this.reasoningDraftValidationService?.runAfterGeneration({
-        artifactType: 'EDUCATION',
-        artifactId: education.id,
-      });
-      return education;
     } finally {
       this.educationGenerationLocks.delete(diagnosisRegistryId);
     }

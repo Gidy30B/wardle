@@ -8,6 +8,7 @@ import type {
   EvidenceGraphReviewAction,
   ReasoningPathReviewAction,
   RegenerateEducationSectionPayload,
+  ReviewDiagnosisEducationCandidatePayload,
   ReviewClinicalCaseDraftPayload,
   UpdateCaseClueDiscriminatorAnnotationPayload,
 } from '../../../../api/admin.types.ts';
@@ -21,6 +22,7 @@ export type WorkspaceActionDomain =
   | 'reasoningPath'
   | 'clueRevision'
   | 'education'
+  | 'educationCandidate'
   | 'publication'
   | 'claimRepair'
   | 'lifecycle'
@@ -68,6 +70,10 @@ export type WorkspaceActionId =
   | 'education.repairUnsupportedClaim'
   | 'education.regenerateSection'
   | 'education.review'
+  | 'educationCandidate.accept'
+  | 'educationCandidate.reject'
+  | 'educationCandidate.requestChanges'
+  | 'educationCandidate.apply'
   | 'publication.normalizeLifecycle'
   | 'publication.performLifecycleAction'
   | 'publication.markCaseReady'
@@ -163,6 +169,13 @@ export type EducationActionPayload = BaseActionPayload & {
   note?: string;
 };
 
+export type EducationCandidateActionPayload = BaseActionPayload & {
+  candidateId?: string;
+  note?: string;
+  decision?: ReviewDiagnosisEducationCandidatePayload['decision'];
+  idempotencyKey?: string;
+};
+
 export type LifecycleActionPayload = BaseActionPayload & {
   action?: DiagnosisRegistryLifecycleAction;
   isGeneratable?: boolean;
@@ -216,6 +229,7 @@ export type WorkspaceActionPayload =
   | CaseDraftActionPayload
   | ClaimRepairActionPayload
   | EducationActionPayload
+  | EducationCandidateActionPayload
   | LifecycleActionPayload
   | CaseReadyActionPayload
   | CaseRevisionActionPayload

@@ -753,9 +753,9 @@ export default function DiagnosisEducationPanel({
       await runAction({
         id: 'generate',
         pending: education
-          ? 'Regenerating education draft...'
-          : 'Generating education draft...',
-        success: 'New education draft version generated for review.',
+          ? 'Generating education candidate...'
+          : 'Generating initial education candidate...',
+        success: 'Education candidate created for review.',
         action: () =>
           generateDiagnosisEducationDraft(
             client,
@@ -978,7 +978,7 @@ export default function DiagnosisEducationPanel({
     }
 
     const confirmed = window.confirm(
-      `Regenerate only ${formatSectionActionLabel(section)} for ${diagnosisLabel}? All other education sections will be preserved and a new draft version will be created.`,
+      `Regenerate only ${formatSectionActionLabel(section)} for ${diagnosisLabel}? This will create a review candidate and leave current education unchanged until applied.`,
     );
     if (!confirmed) {
       return;
@@ -987,7 +987,7 @@ export default function DiagnosisEducationPanel({
     await runAction({
       id: `regenerate-${section}`,
       pending: `Regenerating ${formatSectionActionLabel(section)}...`,
-      success: `${formatSectionActionLabel(section)} regenerated for review.`,
+      success: `${formatSectionActionLabel(section)} candidate created for review.`,
       action: () =>
         regenerateDiagnosisEducationSection(client, diagnosisRegistryId, {
           section,

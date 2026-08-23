@@ -16,6 +16,7 @@ export type SafeReviewSubject = {
     | 'reasoningPath'
     | 'clueRevision'
     | 'unsupportedClaim'
+    | 'educationCandidate'
     | 'caseDraft'
     | 'caseRevision'
     | 'aiDraft'
@@ -67,6 +68,9 @@ const WORKFLOW_SAFE_ACTIONS = new Set<WorkspaceActionId>([
   'caseDraft.accept',
   'caseDraft.reject',
   'caseDraft.requestChanges',
+  'educationCandidate.accept',
+  'educationCandidate.reject',
+  'educationCandidate.requestChanges',
   'caseRevision.startReview',
   'caseRevision.approve',
   'publication.authorizeRevision',
@@ -150,6 +154,8 @@ export function getReviewActionSubject(
       return { kind: 'clueRevision', ...common };
     case 'clinical_case_draft':
       return { kind: 'caseDraft', ...common };
+    case 'education_candidate':
+      return { kind: 'educationCandidate', ...common };
     case 'case_revision':
       return { kind: 'caseRevision', ...common };
     case 'publication_authorization':
@@ -177,6 +183,12 @@ export function getReviewActionPayload(
   }
   if (actionId.startsWith('clueRevision.')) return { draftId: sourceId };
   if (actionId.startsWith('caseDraft.')) return { draftId: sourceId };
+  if (actionId.startsWith('educationCandidate.')) {
+    return {
+      candidateId: sourceId,
+      note: 'Workspace review decision.',
+    };
+  }
   if (actionId.startsWith('caseRevision.')) {
     const raw = recordPayload(source);
     return {
@@ -261,6 +273,17 @@ function applicableActions(subject: SafeReviewSubject): WorkspaceActionId[] {
       ];
     }
     if (subject.status === 'ACCEPTED') return ['caseDraft.apply'];
+  }
+
+  if (subject.kind === 'educationCandidate') {
+    if (subject.status === 'PENDING_REVIEW') {
+      return [
+        'educationCandidate.accept',
+        'educationCandidate.requestChanges',
+        'educationCandidate.reject',
+      ];
+    }
+    if (subject.status === 'ACCEPTED') return ['educationCandidate.apply'];
   }
 
   if (subject.kind === 'caseRevision') {
