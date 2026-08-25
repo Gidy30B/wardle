@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   CaseEditorialStatus,
+  DiagnosisEducationPublicationStanding,
   DiagnosisEducationStatus,
   DiagnosisGraphCandidateType,
   DiagnosisGraphSourceType,
@@ -203,6 +204,25 @@ export class DiagnosisGraphExtractionService {
   async extractFromPublishedEducation(
     educationId: string,
   ): Promise<DiagnosisGraphExtractionSummary> {
+    const publicationDecisionDelegate = (this.prisma as any)
+      .diagnosisEducationPublicationDecision;
+    const standingPublication = publicationDecisionDelegate
+      ? await publicationDecisionDelegate.findFirst({
+          where: {
+            educationId,
+            publicationChannel: 'LEARNER',
+            standing: DiagnosisEducationPublicationStanding.AUTHORIZED,
+          },
+          orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+          select: { educationRevisionId: true },
+        })
+      : null;
+    if (standingPublication) {
+      return this.extractFromPublishedEducationRevision(
+        standingPublication.educationRevisionId,
+      );
+    }
+
     const education = await this.prisma.diagnosisEducation.findFirst({
       where: {
         id: educationId,
@@ -308,6 +328,147 @@ export class DiagnosisGraphExtractionService {
       );
     });
 
+    pushEducationArray('investigations', DiagnosisGraphCandidateType.INVESTIGATION, [
+      'test',
+      'content',
+      'title',
+      'significance',
+      'interpretation',
+    ]);
+    pushEducationArray('differentials', DiagnosisGraphCandidateType.MIMIC, [
+      'diagnosis',
+      'title',
+      'content',
+      'distinguishingPoint',
+      'keySeparator',
+    ]);
+    pushEducationArray('management', DiagnosisGraphCandidateType.MANAGEMENT, [
+      'step',
+      'content',
+      'title',
+      'rationale',
+    ]);
+    pushEducationArray('complications', DiagnosisGraphCandidateType.COMPLICATION, [
+      'complication',
+      'content',
+      'title',
+      'label',
+    ]);
+    pushEducationArray('pitfalls', DiagnosisGraphCandidateType.PITFALL, [
+      'pitfall',
+      'content',
+      'title',
+      'trapAvoided',
+      'saferHeuristic',
+    ]);
+    pushEducationArray('recallPrompts', DiagnosisGraphCandidateType.RECALL_PROMPT, [
+      'prompt',
+      'linkedConcept',
+      'answer',
+    ]);
+
+    return this.persistCandidates({
+      sourceType: DiagnosisGraphSourceType.DIAGNOSIS_EDUCATION,
+      sourceId: education.id,
+      diagnosisRegistryId: education.diagnosisRegistryId,
+      candidates: await this.resolveMimicTargets(candidates),
+    });
+  }
+
+  async extractFromPublishedEducationRevision(
+    educationRevisionId: string,
+  ): Promise<DiagnosisGraphExtractionSummary> {
+    const publicationDecisionDelegate = (this.prisma as any)
+      .diagnosisEducationPublicationDecision;
+    const publication = publicationDecisionDelegate
+      ? await publicationDecisionDelegate.findFirst({
+          where: {
+            educationRevisionId,
+            publicationChannel: 'LEARNER',
+            standing: DiagnosisEducationPublicationStanding.AUTHORIZED,
+          },
+          include: {
+            educationRevision: true,
+            education: { select: { id: true, diagnosisRegistryId: true } },
+          },
+        })
+      : null;
+    if (!publication) {
+      return this.emptySummary(
+        DiagnosisGraphSourceType.DIAGNOSIS_EDUCATION,
+        educationRevisionId,
+      );
+    }
+
+    const snapshot = this.asObject(publication.educationRevision.snapshot);
+    const education = {
+      id: publication.education.id,
+      diagnosisRegistryId: publication.education.diagnosisRegistryId,
+      version: publication.educationRevision.version,
+      keySymptoms: snapshot.keySymptoms,
+      keySigns: snapshot.keySigns,
+      examPearls: snapshot.examPearls,
+      investigations: snapshot.investigations,
+      differentials: snapshot.differentials,
+      management: snapshot.management,
+      complications: snapshot.complications,
+      pitfalls: snapshot.pitfalls,
+      recallPrompts: snapshot.recallPrompts,
+    };
+
+    const candidates: CandidateDraft[] = [];
+    const pushEducationArray = (
+      field: keyof typeof education,
+      type: DiagnosisGraphCandidateType,
+      textKeys: string[],
+    ) => {
+      this.asArray(education[field]).forEach((item, index) => {
+        const rawText = this.extractText(item, textKeys);
+        if (!rawText) return;
+        candidates.push(
+          this.buildCandidate({
+            diagnosisRegistryId: education.diagnosisRegistryId,
+            type,
+            sourceType: DiagnosisGraphSourceType.DIAGNOSIS_EDUCATION,
+            sourceId: education.id,
+            sourceVersion: education.version,
+            sourcePath: `revision.${educationRevisionId}.${field}.${index}`,
+            rawText,
+            payload: this.toPayload({
+              item,
+              educationRevisionId,
+              publicationDecisionId: publication.id,
+            }),
+            unresolvedTargetText:
+              type === DiagnosisGraphCandidateType.MIMIC
+                ? this.extractText(item, ['diagnosis', 'title', 'label']) ??
+                  rawText
+                : null,
+          }),
+        );
+      });
+    };
+
+    pushEducationArray('keySymptoms', DiagnosisGraphCandidateType.FINDING, [
+      'finding',
+      'content',
+      'label',
+      'title',
+    ]);
+    pushEducationArray('keySigns', DiagnosisGraphCandidateType.FINDING, [
+      'finding',
+      'content',
+      'label',
+      'title',
+    ]);
+    pushEducationArray('examPearls', DiagnosisGraphCandidateType.FINDING, [
+      'content',
+      'finding',
+      'label',
+      'title',
+      'explanation',
+      'pitfall',
+    ]);
     pushEducationArray('investigations', DiagnosisGraphCandidateType.INVESTIGATION, [
       'test',
       'content',

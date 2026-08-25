@@ -16,7 +16,9 @@ export type SafeReviewSubject = {
     | 'reasoningPath'
     | 'clueRevision'
     | 'unsupportedClaim'
+    | 'educationRevision'
     | 'educationCandidate'
+    | 'educationPublication'
     | 'caseDraft'
     | 'caseRevision'
     | 'aiDraft'
@@ -71,6 +73,10 @@ const WORKFLOW_SAFE_ACTIONS = new Set<WorkspaceActionId>([
   'educationCandidate.accept',
   'educationCandidate.reject',
   'educationCandidate.requestChanges',
+  'educationRevision.approve',
+  'educationRevision.reject',
+  'educationRevision.requestChanges',
+  'educationPublication.authorizeRevision',
   'caseRevision.startReview',
   'caseRevision.approve',
   'publication.authorizeRevision',
@@ -156,6 +162,10 @@ export function getReviewActionSubject(
       return { kind: 'caseDraft', ...common };
     case 'education_candidate':
       return { kind: 'educationCandidate', ...common };
+    case 'education_revision':
+      return { kind: 'educationRevision', ...common };
+    case 'education_publication':
+      return { kind: 'educationPublication', ...common };
     case 'case_revision':
       return { kind: 'caseRevision', ...common };
     case 'publication_authorization':
@@ -187,6 +197,29 @@ export function getReviewActionPayload(
     return {
       candidateId: sourceId,
       note: 'Workspace review decision.',
+    };
+  }
+  if (actionId.startsWith('educationRevision.')) {
+    const raw = recordPayload(source);
+    return {
+      educationId: stringValue(raw.educationId),
+      revisionId: stringValue(raw.revisionId) ?? sourceId,
+      expectedVersion: numberValue(raw.expectedVersion),
+      note: 'Workspace Education revision decision.',
+    };
+  }
+  if (actionId.startsWith('educationPublication.')) {
+    const raw = recordPayload(source);
+    return {
+      educationId: stringValue(raw.educationId),
+      revisionId: stringValue(raw.revisionId) ?? sourceId,
+      expectedVersion: numberValue(raw.expectedVersion),
+      expectedApprovalDecisionId: stringValue(raw.expectedApprovalDecisionId),
+      expectedActivePublicationDecisionId: stringValue(
+        raw.expectedActivePublicationDecisionId,
+      ),
+      publicationDecisionId: stringValue(raw.publicationDecisionId),
+      note: 'Workspace Education publication decision.',
     };
   }
   if (actionId.startsWith('caseRevision.')) {
@@ -286,6 +319,23 @@ function applicableActions(subject: SafeReviewSubject): WorkspaceActionId[] {
     if (subject.status === 'ACCEPTED') return ['educationCandidate.apply'];
   }
 
+  if (subject.kind === 'educationRevision') {
+    if (subject.status === 'NEEDS_REVIEW') {
+      return [
+        'educationRevision.approve',
+        'educationRevision.requestChanges',
+        'educationRevision.reject',
+      ];
+    }
+  }
+
+  if (subject.kind === 'educationPublication') {
+    const raw = recordPayload(subject);
+    if (subject.status === 'READY' && raw.ready === true) {
+      return ['educationPublication.authorizeRevision'];
+    }
+  }
+
   if (subject.kind === 'caseRevision') {
     if (subject.status === 'NEEDS_REVIEW') return ['caseRevision.startReview'];
     if (subject.status === 'IN_REVIEW') return ['caseRevision.approve'];
@@ -350,4 +400,10 @@ function recordPayload(source?: { raw?: unknown }): Record<string, unknown> {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.length ? value : undefined;
+}
+
+function numberValue(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
 }

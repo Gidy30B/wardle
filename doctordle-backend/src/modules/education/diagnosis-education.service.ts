@@ -7,6 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import {
+  DiagnosisEducationRevisionApprovalOutcome,
   DiagnosisEducationSource,
   DiagnosisEducationStatus,
   GenerationPurpose,
@@ -46,6 +47,7 @@ import {
   throwStaleEducationConflict,
 } from './education-mutation-policy';
 import { DiagnosisEducationCandidateService } from './diagnosis-education-candidate.service';
+import { DiagnosisEducationGovernanceService } from './diagnosis-education-governance.service';
 
 type EducationJsonField =
   | 'summary'
@@ -450,6 +452,7 @@ export class DiagnosisEducationService {
     private readonly reasoningPathService?: ReasoningPathService,
     private readonly reasoningDraftValidationService?: ReasoningDraftValidationService,
     private readonly diagnosisEducationCandidateService?: DiagnosisEducationCandidateService,
+    private readonly diagnosisEducationGovernanceService?: DiagnosisEducationGovernanceService,
   ) {
     const env = getEnv();
     if (env.OPENAI_API_KEY) {
@@ -502,6 +505,17 @@ export class DiagnosisEducationService {
         selectedRowId: null,
       });
       throw new NotFoundException('Diagnosis education not found');
+    }
+
+    const standingPublication =
+      await this.diagnosisEducationGovernanceService?.getStandingPublishedRevisionForDiagnosis(
+        input.diagnosisRegistryId,
+      );
+    if (standingPublication) {
+      return this.toPlayerDtoFromPublishedRevision(
+        standingPublication.education,
+        standingPublication.revision,
+      );
     }
 
     const education = await this.prisma.diagnosisEducation.findFirst({
@@ -732,6 +746,81 @@ export class DiagnosisEducationService {
     userId: string,
   ) {
     this.assertAdminEnabled();
+    if (this.diagnosisEducationGovernanceService) {
+      const target =
+        await this.diagnosisEducationGovernanceService.getCurrentRevisionTarget(
+          educationId,
+          input.expectedVersion,
+        );
+      const rationale =
+        input.note?.trim() ||
+        `Legacy Education review service requested ${input.status}.`;
+
+      if (input.status === DiagnosisEducationStatus.APPROVED) {
+        return this.diagnosisEducationGovernanceService.decideRevision({
+          educationId,
+          revisionId: target.revisionId,
+          expectedVersion: input.expectedVersion,
+          outcome: DiagnosisEducationRevisionApprovalOutcome.APPROVED,
+          idempotencyKey: `legacy-education-service-review:${educationId}:${target.revisionId}:approve:${input.expectedVersion}:${userId}`,
+          rationale,
+          actorUserId: userId,
+        });
+      }
+
+      if (input.status === DiagnosisEducationStatus.NEEDS_EDIT) {
+        return this.diagnosisEducationGovernanceService.decideRevision({
+          educationId,
+          revisionId: target.revisionId,
+          expectedVersion: input.expectedVersion,
+          outcome: DiagnosisEducationRevisionApprovalOutcome.CHANGES_REQUIRED,
+          idempotencyKey: `legacy-education-service-review:${educationId}:${target.revisionId}:changes-required:${input.expectedVersion}:${userId}`,
+          rationale,
+          actorUserId: userId,
+        });
+      }
+
+      if (input.status === DiagnosisEducationStatus.REJECTED) {
+        return this.diagnosisEducationGovernanceService.decideRevision({
+          educationId,
+          revisionId: target.revisionId,
+          expectedVersion: input.expectedVersion,
+          outcome: DiagnosisEducationRevisionApprovalOutcome.REJECTED,
+          idempotencyKey: `legacy-education-service-review:${educationId}:${target.revisionId}:reject:${input.expectedVersion}:${userId}`,
+          rationale,
+          actorUserId: userId,
+        });
+      }
+
+      if (input.status === DiagnosisEducationStatus.PUBLISHED) {
+        const approval =
+          await this.diagnosisEducationGovernanceService.decideRevision({
+            educationId,
+            revisionId: target.revisionId,
+            expectedVersion: input.expectedVersion,
+            outcome: DiagnosisEducationRevisionApprovalOutcome.APPROVED,
+            idempotencyKey: `legacy-education-service-review:${educationId}:${target.revisionId}:approve-before-publish:${input.expectedVersion}:${userId}`,
+            rationale: `${rationale} Approval recorded before separate publication authorization.`,
+            actorUserId: userId,
+          });
+        const readiness =
+          await this.diagnosisEducationGovernanceService.getPublicationReadiness(
+            educationId,
+            target.revisionId,
+          );
+        return this.diagnosisEducationGovernanceService.authorizePublication({
+          educationId,
+          revisionId: target.revisionId,
+          expectedVersion: input.expectedVersion,
+          expectedApprovalDecisionId: approval.id,
+          expectedActivePublicationDecisionId:
+            readiness.activePublicationDecisionId,
+          idempotencyKey: `legacy-education-service-review:${educationId}:${target.revisionId}:publish:${input.expectedVersion}:${userId}`,
+          rationale: `${rationale} Publication authorized as a separate canonical decision.`,
+          actorUserId: userId,
+        });
+      }
+    }
     if (!PUBLISHABLE_REVIEW_STATUSES.has(input.status)) {
       throw new BadRequestException('Unsupported education review status');
     }

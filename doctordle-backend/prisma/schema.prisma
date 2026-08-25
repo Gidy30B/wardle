@@ -406,6 +406,24 @@ enum DiagnosisEducationCandidateApplicationStatus {
   CONFLICT
 }
 
+enum DiagnosisEducationRevisionApprovalOutcome {
+  APPROVED
+  REJECTED
+  CHANGES_REQUIRED
+}
+
+enum DiagnosisEducationRevisionApprovalStanding {
+  STANDING
+  SUPERSEDED
+  NON_STANDING
+}
+
+enum DiagnosisEducationPublicationStanding {
+  AUTHORIZED
+  SUPERSEDED
+  WITHDRAWN
+}
+
 model Diagnosis {
   id            String               @id @default(uuid())
   name          String               @unique
@@ -439,21 +457,21 @@ model Synonym {
 }
 
 model DiagnosisRegistry {
-  id                                    String                              @id @default(uuid())
-  legacyDiagnosisId                     String?                             @unique
+  id                                    String                                       @id @default(uuid())
+  legacyDiagnosisId                     String?                                      @unique
   canonicalName                         String
-  canonicalNormalized                   String                              @unique
+  canonicalNormalized                   String                                       @unique
   displayLabel                          String
-  status                                DiagnosisRegistryStatus             @default(ACTIVE)
-  active                                Boolean                             @default(true)
+  status                                DiagnosisRegistryStatus                      @default(ACTIVE)
+  active                                Boolean                                      @default(true)
   onboardingStatus                      DiagnosisEditorialOnboardingStatus?
   onboardingStartedAt                   DateTime?
   onboardingCompletedAt                 DateTime?
   activationReviewedByUserId            String?
   activationReviewedAt                  DateTime?
-  isDescriptive                         Boolean                             @default(false)
-  isCompositional                       Boolean                             @default(false)
-  searchPriority                        Int                                 @default(0)
+  isDescriptive                         Boolean                                      @default(false)
+  isCompositional                       Boolean                                      @default(false)
+  searchPriority                        Int                                          @default(0)
   icd10Code                             String?
   icd11Code                             String?
   /// Educational or disease grouping.
@@ -488,10 +506,10 @@ model DiagnosisRegistry {
   urgencyLevel                          DiagnosisUrgencyLevel?
   /// Whether this diagnosis can appear as a playable answer.
   /// Some registry rows may exist only for aliases, mappings, or future use.
-  isPlayable                            Boolean                             @default(true)
+  isPlayable                            Boolean                                      @default(true)
   /// Whether the generator is allowed to create new cases for this diagnosis.
   /// Some diagnoses may be playable manually but not suitable for automated generation.
-  isGeneratable                         Boolean                             @default(true)
+  isGeneratable                         Boolean                                      @default(true)
   /// Optional clue-type guidance for generation.
   /// Example: ["history", "exam", "labs", "imaging"].
   preferredClueTypes                    Json?
@@ -499,32 +517,34 @@ model DiagnosisRegistry {
   /// Example: ["imaging"] for diagnoses where imaging is not central.
   excludedClueTypes                     Json?
   notes                                 String?
-  createdAt                             DateTime                            @default(now())
-  updatedAt                             DateTime                            @updatedAt
-  legacyDiagnosis                       Diagnosis?                          @relation("LegacyDiagnosisRegistry", fields: [legacyDiagnosisId], references: [id], onDelete: SetNull)
-  activationReviewedByUser              User?                               @relation("DiagnosisRegistryActivationReviewedByUser", fields: [activationReviewedByUserId], references: [id], onDelete: SetNull)
+  createdAt                             DateTime                                     @default(now())
+  updatedAt                             DateTime                                     @updatedAt
+  legacyDiagnosis                       Diagnosis?                                   @relation("LegacyDiagnosisRegistry", fields: [legacyDiagnosisId], references: [id], onDelete: SetNull)
+  activationReviewedByUser              User?                                        @relation("DiagnosisRegistryActivationReviewedByUser", fields: [activationReviewedByUserId], references: [id], onDelete: SetNull)
   aliases                               DiagnosisAlias[]
-  cases                                 Case[]                              @relation("CaseDiagnosisRegistry")
-  caseRevisions                         CaseRevision[]                      @relation("CaseRevisionDiagnosisRegistry")
+  cases                                 Case[]                                       @relation("CaseDiagnosisRegistry")
+  caseRevisions                         CaseRevision[]                               @relation("CaseRevisionDiagnosisRegistry")
   education                             DiagnosisEducation?
-  graphCandidates                       DiagnosisGraphCandidate[]           @relation("DiagnosisGraphCandidateDiagnosis")
-  targetedGraphCandidates               DiagnosisGraphCandidate[]           @relation("DiagnosisGraphCandidateTargetDiagnosis")
-  graphFacts                            DiagnosisGraphFact[]                @relation("DiagnosisGraphFactDiagnosis")
-  targetedGraphFacts                    DiagnosisGraphFact[]                @relation("DiagnosisGraphFactTargetDiagnosis")
-  sourceTeachingRelationships           DiagnosisTeachingRelationship[]     @relation("DiagnosisTeachingRelationshipSource")
-  targetTeachingRelationships           DiagnosisTeachingRelationship[]     @relation("DiagnosisTeachingRelationshipTarget")
+  educationApprovalDecisions            DiagnosisEducationRevisionApprovalDecision[]
+  educationPublicationDecisions         DiagnosisEducationPublicationDecision[]
+  graphCandidates                       DiagnosisGraphCandidate[]                    @relation("DiagnosisGraphCandidateDiagnosis")
+  targetedGraphCandidates               DiagnosisGraphCandidate[]                    @relation("DiagnosisGraphCandidateTargetDiagnosis")
+  graphFacts                            DiagnosisGraphFact[]                         @relation("DiagnosisGraphFactDiagnosis")
+  targetedGraphFacts                    DiagnosisGraphFact[]                         @relation("DiagnosisGraphFactTargetDiagnosis")
+  sourceTeachingRelationships           DiagnosisTeachingRelationship[]              @relation("DiagnosisTeachingRelationshipSource")
+  targetTeachingRelationships           DiagnosisTeachingRelationship[]              @relation("DiagnosisTeachingRelationshipTarget")
   evidenceRelationships                 DiagnosisEvidenceRelationship[]
-  resolvedCaseDifferentialMappings      CaseDifferentialMapping[]           @relation("CaseDifferentialMappingResolvedDiagnosis")
-  educationDifferentialMappings         EducationDifferentialMapping[]      @relation("EducationDifferentialMappingDiagnosis")
-  resolvedEducationDifferentialMappings EducationDifferentialMapping[]      @relation("EducationDifferentialMappingResolvedDiagnosis")
-  contextualRegistryCandidates          DiagnosisRegistryCandidate[]        @relation("DiagnosisRegistryCandidateContextDiagnosis")
-  createdRegistryCandidates             DiagnosisRegistryCandidate[]        @relation("DiagnosisRegistryCandidateCreatedDiagnosis")
+  resolvedCaseDifferentialMappings      CaseDifferentialMapping[]                    @relation("CaseDifferentialMappingResolvedDiagnosis")
+  educationDifferentialMappings         EducationDifferentialMapping[]               @relation("EducationDifferentialMappingDiagnosis")
+  resolvedEducationDifferentialMappings EducationDifferentialMapping[]               @relation("EducationDifferentialMappingResolvedDiagnosis")
+  contextualRegistryCandidates          DiagnosisRegistryCandidate[]                 @relation("DiagnosisRegistryCandidateContextDiagnosis")
+  createdRegistryCandidates             DiagnosisRegistryCandidate[]                 @relation("DiagnosisRegistryCandidateCreatedDiagnosis")
   caseDifferentialLinks                 CaseDifferentialLink[]
   educationDifferentialLinks            EducationDifferentialLink[]
   teachingRules                         DiagnosisTeachingRule[]
   editorialBrief                        DiagnosisEditorialBrief?
-  selectedAttempts                      Attempt[]                           @relation("AttemptSelectedDiagnosisRegistry")
-  strictMatchedAttempts                 Attempt[]                           @relation("AttemptStrictMatchedDiagnosisRegistry")
+  selectedAttempts                      Attempt[]                                    @relation("AttemptSelectedDiagnosisRegistry")
+  strictMatchedAttempts                 Attempt[]                                    @relation("AttemptStrictMatchedDiagnosisRegistry")
   reasoningPaths                        ReasoningPath[]
   reasoningDraftValidationRuns          ReasoningDraftValidationRun[]
   caseLearningGoalCoverage              CaseLearningGoalCoverage[]
@@ -667,8 +687,8 @@ model DiagnosisEditorialBrief {
 }
 
 model DiagnosisEducation {
-  id                   String                         @id @default(uuid())
-  diagnosisRegistryId  String                         @unique
+  id                   String                                       @id @default(uuid())
+  diagnosisRegistryId  String                                       @unique
   title                String
   summary              Json
   clinicalPattern      Json?
@@ -683,21 +703,23 @@ model DiagnosisEducation {
   pitfalls             Json?
   recallPrompts        Json?
   references           Json?
-  editorialStatus      DiagnosisEducationStatus       @default(DRAFT)
-  source               DiagnosisEducationSource       @default(MANUAL)
-  version              Int                            @default(1)
+  editorialStatus      DiagnosisEducationStatus                     @default(DRAFT)
+  source               DiagnosisEducationSource                     @default(MANUAL)
+  version              Int                                          @default(1)
   generatedAt          DateTime?
   reviewedAt           DateTime?
   reviewedByUserId     String?
   publishedAt          DateTime?
-  createdAt            DateTime                       @default(now())
-  updatedAt            DateTime                       @updatedAt
-  diagnosisRegistry    DiagnosisRegistry              @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
-  reviewedBy           User?                          @relation("DiagnosisEducationReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  createdAt            DateTime                                     @default(now())
+  updatedAt            DateTime                                     @updatedAt
+  diagnosisRegistry    DiagnosisRegistry                            @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  reviewedBy           User?                                        @relation("DiagnosisEducationReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
   revisions            DiagnosisEducationRevision[]
   differentialMappings EducationDifferentialMapping[]
   differentialLinks    EducationDifferentialLink[]
   candidates           DiagnosisEducationCandidate[]
+  approvalDecisions    DiagnosisEducationRevisionApprovalDecision[]
+  publicationDecisions DiagnosisEducationPublicationDecision[]
 
   @@index([editorialStatus])
   @@index([source])
@@ -706,25 +728,117 @@ model DiagnosisEducation {
 }
 
 model DiagnosisEducationRevision {
-  id                   String                         @id @default(uuid())
+  id                   String                                       @id @default(uuid())
   educationId          String
   version              Int
   snapshot             Json
   editorialStatus      DiagnosisEducationStatus
   source               DiagnosisEducationSource
   createdByUserId      String?
-  createdAt            DateTime                       @default(now())
-  education            DiagnosisEducation             @relation(fields: [educationId], references: [id], onDelete: Cascade)
-  createdBy            User?                          @relation("DiagnosisEducationRevisionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt            DateTime                                     @default(now())
+  education            DiagnosisEducation                           @relation(fields: [educationId], references: [id], onDelete: Cascade)
+  createdBy            User?                                        @relation("DiagnosisEducationRevisionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
   differentialMappings EducationDifferentialMapping[]
   differentialLinks    EducationDifferentialLink[]
-  sourceCandidates     DiagnosisEducationCandidate[]  @relation("DiagnosisEducationCandidateBaseRevision")
-  resultingCandidates  DiagnosisEducationCandidate[]  @relation("DiagnosisEducationCandidateResultingRevision")
+  sourceCandidates     DiagnosisEducationCandidate[]                @relation("DiagnosisEducationCandidateBaseRevision")
+  resultingCandidates  DiagnosisEducationCandidate[]                @relation("DiagnosisEducationCandidateResultingRevision")
+  approvalDecisions    DiagnosisEducationRevisionApprovalDecision[]
+  publicationDecisions DiagnosisEducationPublicationDecision[]
 
   @@unique([educationId, version])
   @@index([educationId])
   @@index([createdByUserId])
   @@index([createdAt])
+}
+
+model DiagnosisEducationRevisionApprovalDecision {
+  id                        String                                       @id @default(uuid())
+  commandAction             String
+  commandIdempotencyKey     String                                       @unique
+  commandFingerprint        String
+  educationId               String
+  diagnosisRegistryId       String
+  educationRevisionId       String
+  version                   Int
+  outcome                   DiagnosisEducationRevisionApprovalOutcome
+  standing                  DiagnosisEducationRevisionApprovalStanding   @default(NON_STANDING)
+  standingReason            String?
+  actorUserId               String?
+  authorityRationale        String
+  authorityReferences       Json?
+  materialContextHash       String
+  materialContextSnapshot   Json
+  validationContextSnapshot Json?
+  assessmentContextSnapshot Json?
+  compatibilityProjection   Json?
+  supersedesDecisionId      String?
+  supersededAt              DateTime?
+  occurredAt                DateTime                                     @default(now())
+  createdAt                 DateTime                                     @default(now())
+  education                 DiagnosisEducation                           @relation(fields: [educationId], references: [id], onDelete: Cascade)
+  diagnosisRegistry         DiagnosisRegistry                            @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  educationRevision         DiagnosisEducationRevision                   @relation(fields: [educationRevisionId], references: [id], onDelete: Restrict)
+  actorUser                 User?                                        @relation("DiagnosisEducationRevisionApprovalActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  supersedesDecision        DiagnosisEducationRevisionApprovalDecision?  @relation("DiagnosisEducationRevisionApprovalSupersession", fields: [supersedesDecisionId], references: [id], onDelete: SetNull)
+  supersededByDecisions     DiagnosisEducationRevisionApprovalDecision[] @relation("DiagnosisEducationRevisionApprovalSupersession")
+  publicationDecisions      DiagnosisEducationPublicationDecision[]
+
+  @@index([educationId])
+  @@index([diagnosisRegistryId])
+  @@index([educationRevisionId])
+  @@index([actorUserId])
+  @@index([outcome])
+  @@index([standing])
+  @@index([occurredAt])
+}
+
+model DiagnosisEducationPublicationDecision {
+  id                          String                                     @id @default(uuid())
+  commandAction               String
+  commandIdempotencyKey       String                                     @unique
+  commandFingerprint          String
+  educationId                 String
+  diagnosisRegistryId         String
+  educationRevisionId         String
+  version                     Int
+  approvalDecisionId          String
+  expectedApprovalDecisionId  String
+  expectedActivePublicationId String?
+  actorUserId                 String?
+  authorityRationale          String
+  authorityReferences         Json?
+  publicationChannel          String                                     @default("LEARNER")
+  readinessResult             String
+  readinessSnapshot           Json
+  materialContextHash         String
+  materialContextSnapshot     Json
+  standing                    DiagnosisEducationPublicationStanding      @default(AUTHORIZED)
+  standingReason              String?
+  supersedesPublicationId     String?
+  withdrawnAt                 DateTime?
+  withdrawnByUserId           String?
+  withdrawalRationale         String?
+  compatibilityProjection     Json?
+  occurredAt                  DateTime                                   @default(now())
+  effectiveAt                 DateTime                                   @default(now())
+  createdAt                   DateTime                                   @default(now())
+  education                   DiagnosisEducation                         @relation(fields: [educationId], references: [id], onDelete: Cascade)
+  diagnosisRegistry           DiagnosisRegistry                          @relation(fields: [diagnosisRegistryId], references: [id], onDelete: Cascade)
+  educationRevision           DiagnosisEducationRevision                 @relation(fields: [educationRevisionId], references: [id], onDelete: Restrict)
+  approvalDecision            DiagnosisEducationRevisionApprovalDecision @relation(fields: [approvalDecisionId], references: [id], onDelete: Restrict)
+  actorUser                   User?                                      @relation("DiagnosisEducationPublicationActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  withdrawnByUser             User?                                      @relation("DiagnosisEducationPublicationWithdrawnByUser", fields: [withdrawnByUserId], references: [id], onDelete: SetNull)
+  supersedesPublication       DiagnosisEducationPublicationDecision?     @relation("DiagnosisEducationPublicationSupersession", fields: [supersedesPublicationId], references: [id], onDelete: SetNull)
+  supersededByPublications    DiagnosisEducationPublicationDecision[]    @relation("DiagnosisEducationPublicationSupersession")
+
+  @@index([educationId])
+  @@index([diagnosisRegistryId])
+  @@index([educationRevisionId])
+  @@index([approvalDecisionId])
+  @@index([actorUserId])
+  @@index([standing])
+  @@index([publicationChannel])
+  @@index([occurredAt])
 }
 
 model DiagnosisGraphCandidate {
@@ -1941,6 +2055,9 @@ model User {
   appliedDiagnosisEducationCandidates        DiagnosisEducationCandidate[]                     @relation("DiagnosisEducationCandidateAppliedByUser")
   reviewedDiagnosisEducationCandidates       DiagnosisEducationCandidateReviewDecisionRecord[] @relation("DiagnosisEducationCandidateReviewDecisionReviewer")
   appliedDiagnosisEducationCandidateCommands DiagnosisEducationCandidateApplicationCommand[]   @relation("DiagnosisEducationCandidateApplicationActor")
+  diagnosisEducationRevisionApprovals        DiagnosisEducationRevisionApprovalDecision[]      @relation("DiagnosisEducationRevisionApprovalActor")
+  diagnosisEducationPublicationDecisions     DiagnosisEducationPublicationDecision[]           @relation("DiagnosisEducationPublicationActor")
+  withdrawnDiagnosisEducationPublications    DiagnosisEducationPublicationDecision[]           @relation("DiagnosisEducationPublicationWithdrawnByUser")
   primaryOrganization                        Organization?                                     @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
   organizations                              UserOrganization[]
 

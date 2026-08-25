@@ -111,6 +111,9 @@ import type {
   RerunCaseValidationResult,
   ReviewClinicalCaseDraftPayload,
   ApplyDiagnosisEducationCandidatePayload,
+  AuthorizeDiagnosisEducationPublicationPayload,
+  DecideDiagnosisEducationRevisionPayload,
+  EducationPublicationReadiness,
   SearchDiagnosisRegistryQuery,
   StartCaseReviewResult,
   SubmitCaseReviewPayload,
@@ -131,6 +134,7 @@ import type {
   UpdateDiagnosisRegistryMetadataPayload,
   UpsertDiagnosisEducationPayload,
   ValidationOutcomeSummary,
+  WithdrawDiagnosisEducationPublicationPayload,
 } from './admin.types';
 export type * from './admin.types';
 
@@ -1310,6 +1314,51 @@ export function applyDiagnosisEducationCandidate(
 ) {
   return client.post<DiagnosisEducationCandidate>(
     `/admin/education/candidates/${candidateId}/apply`,
+    payload,
+  );
+}
+
+export function getDiagnosisEducationPublicationReadiness(
+  client: ApiClient,
+  educationId: string,
+  revisionId: string,
+) {
+  return client.get<EducationPublicationReadiness>(
+    `/admin/education/${educationId}/revisions/${revisionId}/publication-readiness`,
+  );
+}
+
+export function decideDiagnosisEducationRevision(
+  client: ApiClient,
+  educationId: string,
+  revisionId: string,
+  payload: DecideDiagnosisEducationRevisionPayload,
+) {
+  return client.post(
+    `/admin/education/${educationId}/revisions/${revisionId}/decision`,
+    payload,
+  );
+}
+
+export function authorizeDiagnosisEducationPublication(
+  client: ApiClient,
+  educationId: string,
+  revisionId: string,
+  payload: AuthorizeDiagnosisEducationPublicationPayload,
+) {
+  return client.post(
+    `/admin/education/${educationId}/revisions/${revisionId}/publication`,
+    payload,
+  );
+}
+
+export function withdrawDiagnosisEducationPublication(
+  client: ApiClient,
+  publicationDecisionId: string,
+  payload: WithdrawDiagnosisEducationPublicationPayload,
+) {
+  return client.post(
+    `/admin/education/publications/${publicationDecisionId}/withdraw`,
     payload,
   );
 }

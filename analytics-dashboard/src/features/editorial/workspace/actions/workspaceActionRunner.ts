@@ -2,6 +2,10 @@ import { runCaseDraftAction } from './caseDraftActions.ts';
 import { runCaseRevisionAction } from './caseRevisionActions.ts';
 import { runClueRevisionAction } from './clueRevisionActions.ts';
 import { runEducationCandidateAction } from './educationCandidateActions.ts';
+import {
+  runEducationPublicationAction,
+  runEducationRevisionAction,
+} from './educationGovernanceActions.ts';
 import { runEducationAction } from './educationActions.ts';
 import { runEvidenceAction } from './evidenceActions.ts';
 import {
@@ -34,6 +38,8 @@ export const DEFAULT_WORKSPACE_ACTION_EXECUTORS: WorkspaceActionExecutorMap = {
   clueRevision: runClueRevisionAction,
   education: runEducationAction,
   educationCandidate: runEducationCandidateAction,
+  educationPublication: runEducationPublicationAction,
+  educationRevision: runEducationRevisionAction,
   evidence: runEvidenceAction,
   lifecycle: runPublicationAction,
   publication: runPublicationAction,

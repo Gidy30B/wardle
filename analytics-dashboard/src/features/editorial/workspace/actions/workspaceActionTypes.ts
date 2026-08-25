@@ -22,7 +22,9 @@ export type WorkspaceActionDomain =
   | 'reasoningPath'
   | 'clueRevision'
   | 'education'
+  | 'educationRevision'
   | 'educationCandidate'
+  | 'educationPublication'
   | 'publication'
   | 'claimRepair'
   | 'lifecycle'
@@ -70,10 +72,15 @@ export type WorkspaceActionId =
   | 'education.repairUnsupportedClaim'
   | 'education.regenerateSection'
   | 'education.review'
+  | 'educationRevision.approve'
+  | 'educationRevision.reject'
+  | 'educationRevision.requestChanges'
   | 'educationCandidate.accept'
   | 'educationCandidate.reject'
   | 'educationCandidate.requestChanges'
   | 'educationCandidate.apply'
+  | 'educationPublication.authorizeRevision'
+  | 'educationPublication.withdraw'
   | 'publication.normalizeLifecycle'
   | 'publication.performLifecycleAction'
   | 'publication.markCaseReady'
@@ -176,6 +183,25 @@ export type EducationCandidateActionPayload = BaseActionPayload & {
   idempotencyKey?: string;
 };
 
+export type EducationRevisionActionPayload = BaseActionPayload & {
+  educationId?: string;
+  revisionId?: string;
+  expectedVersion?: number;
+  note?: string;
+  idempotencyKey?: string;
+};
+
+export type EducationPublicationActionPayload = BaseActionPayload & {
+  educationId?: string;
+  revisionId?: string;
+  expectedVersion?: number;
+  expectedApprovalDecisionId?: string | null;
+  expectedActivePublicationDecisionId?: string | null;
+  publicationDecisionId?: string;
+  note?: string;
+  idempotencyKey?: string;
+};
+
 export type LifecycleActionPayload = BaseActionPayload & {
   action?: DiagnosisRegistryLifecycleAction;
   isGeneratable?: boolean;
@@ -229,7 +255,9 @@ export type WorkspaceActionPayload =
   | CaseDraftActionPayload
   | ClaimRepairActionPayload
   | EducationActionPayload
+  | EducationRevisionActionPayload
   | EducationCandidateActionPayload
+  | EducationPublicationActionPayload
   | LifecycleActionPayload
   | CaseReadyActionPayload
   | CaseRevisionActionPayload

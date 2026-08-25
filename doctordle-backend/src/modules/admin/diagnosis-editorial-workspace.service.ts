@@ -28,6 +28,10 @@ import {
   EducationRevisionQualityAnalyzer,
   type EducationRevisionAnalysis,
 } from '../education/education-revision-quality-analyzer.service';
+import {
+  DiagnosisEducationGovernanceService,
+  type EducationPublicationReadiness,
+} from '../education/diagnosis-education-governance.service';
 import { CaseQualityProjectionService } from './case-quality-projection.service';
 import {
   ClueProgressionAnalysisService,
@@ -517,6 +521,8 @@ export class DiagnosisEditorialWorkspaceService {
     private readonly clueProgressionAnalysisService?: ClueProgressionAnalysisService,
     @Optional()
     private readonly casePublicationGovernanceService?: CasePublicationGovernanceService,
+    @Optional()
+    private readonly diagnosisEducationGovernanceService?: DiagnosisEducationGovernanceService,
   ) {}
 
   async getFullWorkspace(diagnosisRegistryId: string) {
@@ -648,6 +654,10 @@ export class DiagnosisEditorialWorkspaceService {
       registry.diagnosisEducationCandidates,
       registry.education?.version ?? null,
     );
+    const educationGovernance = await this.buildEducationGovernanceSummary(
+      registry,
+      revisions[0],
+    );
     const clinicalCaseDrafts = this.buildClinicalCaseDraftInventory(
       registry.clinicalCaseDrafts,
       this.diagnosisName(registry),
@@ -674,6 +684,7 @@ export class DiagnosisEditorialWorkspaceService {
       coverageGaps,
       graphCandidateCount: graphCandidates.length,
       educationCandidates,
+      educationGovernance,
     });
     const availableActions = this.buildAvailableActions({
       registry,
@@ -815,6 +826,7 @@ export class DiagnosisEditorialWorkspaceService {
         briefResponse?.brief ?? registry.editorialBrief,
       ),
       education: this.buildEducation(registry.education, summary, revisions[0]),
+      educationGovernance,
       educationCandidates,
       revisions: {
         latest: revisions[0] ?? null,
@@ -3999,7 +4011,11 @@ export class DiagnosisEditorialWorkspaceService {
     publicationReadiness: PublicationReadiness | null,
   ) {
     const currentRevisionId = caseRecord.currentRevisionId;
-    const currentRevisionApprovals = caseRecord.governedApprovalDecisions.filter(
+    const governedApprovalDecisions = caseRecord.governedApprovalDecisions ?? [];
+    const publicationDecisions = caseRecord.publicationDecisions ?? [];
+    const reviews = caseRecord.reviews ?? [];
+    const dailyCases = caseRecord.dailyCases ?? [];
+    const currentRevisionApprovals = governedApprovalDecisions.filter(
       (decision) =>
         Boolean(currentRevisionId) &&
         decision.targetRevisionId === currentRevisionId,
@@ -4011,19 +4027,19 @@ export class DiagnosisEditorialWorkspaceService {
           decision.effectiveAction === 'APPROVE_CASE_REVISION',
       ) ?? null;
     const openReview =
-      caseRecord.reviews.find(
+      reviews.find(
         (review) =>
           Boolean(currentRevisionId) &&
           review.revisionId === currentRevisionId &&
           review.decision === null,
       ) ?? null;
     const latestReview =
-      caseRecord.reviews.find(
+      reviews.find(
         (review) =>
           Boolean(currentRevisionId) &&
           review.revisionId === currentRevisionId,
       ) ?? null;
-    const currentRevisionPublications = caseRecord.publicationDecisions.filter(
+    const currentRevisionPublications = publicationDecisions.filter(
       (decision) =>
         Boolean(currentRevisionId) &&
         decision.caseRevisionId === currentRevisionId,
@@ -4033,7 +4049,7 @@ export class DiagnosisEditorialWorkspaceService {
         (decision) => decision.standing === 'AUTHORIZED',
       ) ?? null;
     const dailyBindings = [
-      ...caseRecord.dailyCases,
+      ...dailyCases,
       ...currentRevisionPublications.flatMap((decision) => decision.dailyCases),
     ].filter(
       (dailyCase, index, collection) =>
@@ -4144,7 +4160,7 @@ export class DiagnosisEditorialWorkspaceService {
     drafts: ClinicalCaseDraftRow[],
     diagnosisName: string,
   ) {
-    const items = drafts.map((draft) =>
+    const items = (drafts ?? []).map((draft) =>
       this.clinicalCaseDraftDto(draft, diagnosisName),
     );
     return {
@@ -4180,7 +4196,7 @@ export class DiagnosisEditorialWorkspaceService {
     candidates: DiagnosisEducationCandidateRow[],
     currentEducationVersion: number | null,
   ) {
-    const items = candidates.map((candidate) =>
+    const items = (candidates ?? []).map((candidate) =>
       this.educationCandidateDto(candidate, currentEducationVersion),
     );
     const pendingReview = items.filter(
@@ -4971,6 +4987,11 @@ export class DiagnosisEditorialWorkspaceService {
     educationCandidates: ReturnType<
       DiagnosisEditorialWorkspaceService['buildEducationCandidateInventory']
     >;
+    educationGovernance: Awaited<
+      ReturnType<
+        DiagnosisEditorialWorkspaceService['buildEducationGovernanceSummary']
+      >
+    >;
   }): ActionDescriptor[] {
     const endpointBase = `/api/admin/diagnosis-workspace/${input.registry.id}`;
     const actions: ActionDescriptor[] = [];
@@ -5003,6 +5024,13 @@ export class DiagnosisEditorialWorkspaceService {
         disabledReason: null,
         targetEndpoint: `/api/admin/education/candidates/${acceptedEducationCandidate.id}/apply`,
       });
+    }
+
+    if (input.educationGovernance?.reviewAction) {
+      actions.push(input.educationGovernance.reviewAction);
+    }
+    if (input.educationGovernance?.publicationAction) {
+      actions.push(input.educationGovernance.publicationAction);
     }
 
     if (
@@ -5167,6 +5195,71 @@ export class DiagnosisEditorialWorkspaceService {
       warnings: latestRevision?.quality.warnings ?? [],
       acceptedRepairs: this.acceptedEducationRepairs(education),
       updatedAt: education ? this.toIso(education.updatedAt) : null,
+    };
+  }
+
+  private async buildEducationGovernanceSummary(
+    registry: RegistryRow,
+    latestRevision: EducationRevisionAnalysis | null,
+  ): Promise<{
+    currentRevisionId: string | null;
+    currentVersion: number | null;
+    publicationReadiness: EducationPublicationReadiness | null;
+    reviewAction: ActionDescriptor | null;
+    publicationAction: ActionDescriptor | null;
+  } | null> {
+    if (!registry.education || !latestRevision) {
+      return null;
+    }
+
+    const currentRevisionId = latestRevision.id;
+    let publicationReadiness: EducationPublicationReadiness | null = null;
+    if (this.diagnosisEducationGovernanceService) {
+      try {
+        publicationReadiness =
+          await this.diagnosisEducationGovernanceService.getPublicationReadiness(
+            registry.education.id,
+            currentRevisionId,
+          );
+      } catch {
+        publicationReadiness = null;
+      }
+    }
+
+    const reviewAction =
+      registry.education.editorialStatus === DiagnosisEducationStatus.NEEDS_REVIEW
+        ? {
+            id: 'review-education-revision',
+            label: 'Review Education revision',
+            source: 'education_revision',
+            severity: 'warning' as const,
+            targetTab: 'education' as const,
+            enabled: true,
+            disabledReason: null,
+            targetEndpoint: `/api/admin/education/${registry.education.id}/revisions/${currentRevisionId}/decision`,
+          }
+        : null;
+
+    const publicationAction =
+      publicationReadiness?.result === 'READY'
+        ? {
+            id: 'authorize-education-publication',
+            label: 'Authorize Education publication',
+            source: 'education_publication',
+            severity: 'warning' as const,
+            targetTab: 'education' as const,
+            enabled: true,
+            disabledReason: null,
+            targetEndpoint: `/api/admin/education/${registry.education.id}/revisions/${currentRevisionId}/publication`,
+          }
+        : null;
+
+    return {
+      currentRevisionId,
+      currentVersion: registry.education.version,
+      publicationReadiness,
+      reviewAction,
+      publicationAction,
     };
   }
 

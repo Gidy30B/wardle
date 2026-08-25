@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   CaseEditorialStatus,
+  DiagnosisEducationPublicationStanding,
   DiagnosisEducationStatus,
   DiagnosisGraphCandidateStatus,
   DiagnosisGraphCandidateType,
@@ -173,8 +174,29 @@ export class EditorialIntentProjectionService {
     const cases = registry.cases ?? [];
     const graphFacts = registry.graphFacts ?? [];
     const graphCandidates = registry.graphCandidates ?? [];
+    const publicationDecisionDelegate = (this.prisma as any)
+      .diagnosisEducationPublicationDecision;
+    const standingPublication = publicationDecisionDelegate
+      ? await publicationDecisionDelegate.findFirst({
+          where: {
+            diagnosisRegistryId,
+            publicationChannel: 'LEARNER',
+            standing: DiagnosisEducationPublicationStanding.AUTHORIZED,
+          },
+          orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+          include: { educationRevision: true },
+        })
+      : null;
     const hasPublishedEducation =
+      Boolean(standingPublication) ||
       registry.education?.editorialStatus === DiagnosisEducationStatus.PUBLISHED;
+    const educationForProjection =
+      standingPublication && registry.education
+        ? this.educationFromRevisionSnapshot(
+            registry.education,
+            standingPublication.educationRevision,
+          )
+        : registry.education;
     const hasCases = cases.length > 0;
     const hasGraphFacts = graphFacts.length > 0 || graphCandidates.length > 0;
 
@@ -221,8 +243,8 @@ export class EditorialIntentProjectionService {
     };
 
     this.addRegistryMetadata(projection, registry);
-    if (hasPublishedEducation && registry.education) {
-      this.addEducation(projection, registry.education);
+    if (hasPublishedEducation && educationForProjection) {
+      this.addEducation(projection, educationForProjection);
     }
     this.addCases(projection, cases);
     if (rules) {
@@ -334,6 +356,55 @@ export class EditorialIntentProjectionService {
         label: guidance,
       });
     }
+  }
+
+  private educationFromRevisionSnapshot(
+    education: {
+      id: string;
+      summary: Prisma.JsonValue;
+      clinicalPattern?: Prisma.JsonValue | null;
+      keySymptoms?: Prisma.JsonValue | null;
+      keySigns?: Prisma.JsonValue | null;
+      examPearls?: Prisma.JsonValue | null;
+      scoringSystems?: Prisma.JsonValue | null;
+      investigations?: Prisma.JsonValue | null;
+      differentials?: Prisma.JsonValue | null;
+      management?: Prisma.JsonValue | null;
+      pitfalls?: Prisma.JsonValue | null;
+      recallPrompts?: Prisma.JsonValue | null;
+    },
+    revision: { id: string; snapshot: Prisma.JsonValue },
+  ) {
+    const snapshot = this.asObject(revision.snapshot);
+    return {
+      id: revision.id,
+      summary: this.snapshotValue(snapshot.summary, education.summary),
+      clinicalPattern: this.snapshotValue(
+        snapshot.clinicalPattern,
+        education.clinicalPattern,
+      ),
+      keySymptoms: this.snapshotValue(snapshot.keySymptoms, education.keySymptoms),
+      keySigns: this.snapshotValue(snapshot.keySigns, education.keySigns),
+      examPearls: this.snapshotValue(snapshot.examPearls, education.examPearls),
+      scoringSystems: this.snapshotValue(
+        snapshot.scoringSystems,
+        education.scoringSystems,
+      ),
+      investigations: this.snapshotValue(
+        snapshot.investigations,
+        education.investigations,
+      ),
+      differentials: this.snapshotValue(
+        snapshot.differentials,
+        education.differentials,
+      ),
+      management: this.snapshotValue(snapshot.management, education.management),
+      pitfalls: this.snapshotValue(snapshot.pitfalls, education.pitfalls),
+      recallPrompts: this.snapshotValue(
+        snapshot.recallPrompts,
+        education.recallPrompts,
+      ),
+    };
   }
 
   private addEducation(
@@ -780,6 +851,19 @@ export class EditorialIntentProjectionService {
     return this.asArray(value)
       .map((item) => this.cleanString(item))
       .filter((item): item is string => Boolean(item));
+  }
+
+  private asObject(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  }
+
+  private snapshotValue(
+    value: unknown,
+    fallback: Prisma.JsonValue | null | undefined,
+  ): Prisma.JsonValue | null {
+    return value === undefined ? fallback ?? null : (value as Prisma.JsonValue);
   }
 
   private getMissingSources(

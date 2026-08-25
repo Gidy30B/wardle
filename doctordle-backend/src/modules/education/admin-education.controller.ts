@@ -13,21 +13,26 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import type { AuthenticatedRequest } from '../../auth/authenticated-request.interface';
 import {
-  EditorialAccess,
-  SeniorEditorialAccess,
-} from '../../auth/editorial-permission.decorator';
+  DiagnosisEducationRevisionApprovalOutcome,
+  DiagnosisEducationStatus,
+} from '@prisma/client';
+import type { AuthenticatedRequest } from '../../auth/authenticated-request.interface';
+import { EditorialAccess, SeniorEditorialAccess } from '../../auth/editorial-permission.decorator';
 import { AdminGuard } from '../admin/admin.guard';
 import { WorkspaceProjectionService } from '../editorial/workspace-projection.service';
 import { DiagnosisEducationService } from './diagnosis-education.service';
 import { GenerateDiagnosisEducationDto } from './dto/generate-diagnosis-education.dto';
 import { ApplyDiagnosisEducationCandidateDto } from './dto/apply-diagnosis-education-candidate.dto';
+import { AuthorizeDiagnosisEducationPublicationDto } from './dto/authorize-diagnosis-education-publication.dto';
+import { DecideDiagnosisEducationRevisionDto } from './dto/decide-diagnosis-education-revision.dto';
 import { RegenerateEducationSectionDto } from './dto/regenerate-education-section.dto';
 import { ReviewDiagnosisEducationCandidateDto } from './dto/review-diagnosis-education-candidate.dto';
 import { ReviewDiagnosisEducationDto } from './dto/review-diagnosis-education.dto';
 import { UpsertDiagnosisEducationDto } from './dto/upsert-diagnosis-education.dto';
+import { WithdrawDiagnosisEducationPublicationDto } from './dto/withdraw-diagnosis-education-publication.dto';
 import { DiagnosisEducationCandidateService } from './diagnosis-education-candidate.service';
+import { DiagnosisEducationGovernanceService } from './diagnosis-education-governance.service';
 import { EducationRevisionQualityAnalyzer } from './education-revision-quality-analyzer.service';
 import { EducationSectionRegenerationService } from './education-section-regeneration.service';
 import { EditorialLearningEngineService } from './editorial-learning-engine.service';
@@ -44,6 +49,7 @@ export class AdminEducationController {
     private readonly educationRevisionQualityAnalyzer: EducationRevisionQualityAnalyzer,
     private readonly editorialLearningEngineService: EditorialLearningEngineService,
     private readonly diagnosisEducationCandidateService: DiagnosisEducationCandidateService,
+    private readonly diagnosisEducationGovernanceService: DiagnosisEducationGovernanceService,
   ) {}
 
   @Get('diagnoses/:diagnosisRegistryId')
@@ -124,6 +130,75 @@ export class AdminEducationController {
       diagnosisRegistryId,
       version,
     );
+  }
+
+  @Get(':educationId/revisions/:revisionId/publication-readiness')
+  @EditorialAccess()
+  async getDiagnosisEducationPublicationReadiness(
+    @Param('educationId', new ParseUUIDPipe()) educationId: string,
+    @Param('revisionId', new ParseUUIDPipe()) revisionId: string,
+  ) {
+    return this.diagnosisEducationGovernanceService.getPublicationReadiness(
+      educationId,
+      revisionId,
+    );
+  }
+
+  @Post(':educationId/revisions/:revisionId/decision')
+  @SeniorEditorialAccess()
+  async decideDiagnosisEducationRevision(
+    @Param('educationId', new ParseUUIDPipe()) educationId: string,
+    @Param('revisionId', new ParseUUIDPipe()) revisionId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: DecideDiagnosisEducationRevisionDto,
+  ) {
+    return this.diagnosisEducationGovernanceService.decideRevision({
+      educationId,
+      revisionId,
+      expectedVersion: body.expectedVersion,
+      outcome: body.outcome,
+      idempotencyKey: body.idempotencyKey,
+      rationale: body.rationale,
+      authorityReferences: body.authorityReferences,
+      actorUserId: request.user.id,
+    });
+  }
+
+  @Post(':educationId/revisions/:revisionId/publication')
+  @SeniorEditorialAccess()
+  async authorizeDiagnosisEducationPublication(
+    @Param('educationId', new ParseUUIDPipe()) educationId: string,
+    @Param('revisionId', new ParseUUIDPipe()) revisionId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: AuthorizeDiagnosisEducationPublicationDto,
+  ) {
+    return this.diagnosisEducationGovernanceService.authorizePublication({
+      educationId,
+      revisionId,
+      expectedVersion: body.expectedVersion,
+      expectedApprovalDecisionId: body.expectedApprovalDecisionId,
+      expectedActivePublicationDecisionId:
+        body.expectedActivePublicationDecisionId ?? null,
+      idempotencyKey: body.idempotencyKey,
+      rationale: body.rationale,
+      authorityReferences: body.authorityReferences,
+      actorUserId: request.user.id,
+    });
+  }
+
+  @Post('publications/:publicationDecisionId/withdraw')
+  @SeniorEditorialAccess()
+  async withdrawDiagnosisEducationPublication(
+    @Param('publicationDecisionId', new ParseUUIDPipe())
+    publicationDecisionId: string,
+    @Req() request: AuthenticatedRequest,
+    @Body() body: WithdrawDiagnosisEducationPublicationDto,
+  ) {
+    return this.diagnosisEducationGovernanceService.withdrawPublication({
+      publicationDecisionId,
+      rationale: body.rationale,
+      actorUserId: request.user.id,
+    });
   }
 
   @Post('diagnoses/:diagnosisRegistryId')
@@ -250,10 +325,82 @@ export class AdminEducationController {
     @Req() request: AuthenticatedRequest,
     @Body() body: ReviewDiagnosisEducationDto,
   ) {
-    return this.diagnosisEducationService.reviewEducation(
-      educationId,
-      body,
-      request.user.id,
+    const target =
+      await this.diagnosisEducationGovernanceService.getCurrentRevisionTarget(
+        educationId,
+        body.expectedVersion,
+      );
+    const rationale =
+      body.note?.trim() ||
+      `Legacy Education review endpoint requested ${body.status}.`;
+
+    if (body.status === DiagnosisEducationStatus.APPROVED) {
+      return this.diagnosisEducationGovernanceService.decideRevision({
+        educationId,
+        revisionId: target.revisionId,
+        expectedVersion: body.expectedVersion,
+        outcome: DiagnosisEducationRevisionApprovalOutcome.APPROVED,
+        idempotencyKey: `legacy-education-review:${educationId}:${target.revisionId}:approve:${body.expectedVersion}:${request.user.id}`,
+        rationale,
+        actorUserId: request.user.id,
+      });
+    }
+
+    if (body.status === DiagnosisEducationStatus.NEEDS_EDIT) {
+      return this.diagnosisEducationGovernanceService.decideRevision({
+        educationId,
+        revisionId: target.revisionId,
+        expectedVersion: body.expectedVersion,
+        outcome: DiagnosisEducationRevisionApprovalOutcome.CHANGES_REQUIRED,
+        idempotencyKey: `legacy-education-review:${educationId}:${target.revisionId}:changes-required:${body.expectedVersion}:${request.user.id}`,
+        rationale,
+        actorUserId: request.user.id,
+      });
+    }
+
+    if (body.status === DiagnosisEducationStatus.REJECTED) {
+      return this.diagnosisEducationGovernanceService.decideRevision({
+        educationId,
+        revisionId: target.revisionId,
+        expectedVersion: body.expectedVersion,
+        outcome: DiagnosisEducationRevisionApprovalOutcome.REJECTED,
+        idempotencyKey: `legacy-education-review:${educationId}:${target.revisionId}:reject:${body.expectedVersion}:${request.user.id}`,
+        rationale,
+        actorUserId: request.user.id,
+      });
+    }
+
+    if (body.status === DiagnosisEducationStatus.PUBLISHED) {
+      const approval =
+        await this.diagnosisEducationGovernanceService.decideRevision({
+          educationId,
+          revisionId: target.revisionId,
+          expectedVersion: body.expectedVersion,
+          outcome: DiagnosisEducationRevisionApprovalOutcome.APPROVED,
+          idempotencyKey: `legacy-education-review:${educationId}:${target.revisionId}:approve-before-publish:${body.expectedVersion}:${request.user.id}`,
+          rationale: `${rationale} Approval recorded before separate publication authorization.`,
+          actorUserId: request.user.id,
+        });
+      const readiness =
+        await this.diagnosisEducationGovernanceService.getPublicationReadiness(
+          educationId,
+          target.revisionId,
+        );
+      return this.diagnosisEducationGovernanceService.authorizePublication({
+        educationId,
+        revisionId: target.revisionId,
+        expectedVersion: body.expectedVersion,
+        expectedApprovalDecisionId: approval.id,
+        expectedActivePublicationDecisionId:
+          readiness.activePublicationDecisionId,
+        idempotencyKey: `legacy-education-review:${educationId}:${target.revisionId}:publish:${body.expectedVersion}:${request.user.id}`,
+        rationale: `${rationale} Publication authorized as a separate canonical decision.`,
+        actorUserId: request.user.id,
+      });
+    }
+
+    throw new BadRequestException(
+      'Use exact Education revision governance for approval, rejection, changes required, and publication',
     );
   }
 }

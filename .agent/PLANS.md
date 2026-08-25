@@ -88,6 +88,101 @@ Record unresolved authority, technical, data, or verification risks.
 
 ---
 
+# ExecPlan: WEOS EDU-003 Exact Diagnosis Education Revision Governance
+
+## Purpose
+
+Make Diagnosis Education approval and publication target exact `DiagnosisEducationRevision` records, with approval decisions, publication readiness, publication decisions, withdrawal/supersession history, and downstream learner/case/graph/differential trust resolving from canonical revision-specific authority rather than mutable `DiagnosisEducation` row status alone.
+
+## Approved Authority
+
+Implementation package: user-provided `WEOS EDU-003 - Exact Diagnosis Education Revision Approval and Publication Governance`.
+
+Starting branch and commit required by the package: `master` at `4ac7bcce68714aaeb12ea8dfa6aae7fac8f91645`.
+
+Canonical constraints explicitly named by the user: `WEOS-CANON-004` Diagnosis Education Standards, `WEOS-CANON-006` AI Draft Standards, `WEOS-CANON-007` Governance Record Standards, and `WEOS-ARCH-008` Institutional Editorial Governance. The package authorizes this bounded Diagnosis Education runtime slice only; broader generic governance-kernel rollout, exact role-to-authority assignment, graph provenance redesign, and destructive historical backfill remain out of scope.
+
+## Current Behavior
+
+EDU-002 established candidate-first AI whole/section generation and stale-safe controlled application into `DiagnosisEducationRevision`, but left Education approval/publication as legacy status projection behavior. Current runtime audit must reconfirm `DiagnosisEducationService.reviewEducation`, publish blocker evaluation, learner reads, case generation context, graph extraction, trusted differential link sync, workspace actions, and legacy Education UI before edits.
+
+## Required Invariant
+
+Candidate acceptance remains distinct from candidate application. Candidate application creates or updates a `NEEDS_REVIEW` Education revision only. Human approval creates an attributable, rationale-bearing decision for one exact `DiagnosisEducationRevision`. Publication authorization creates a separate attributable, rationale-bearing decision for that exact approved revision. Standing published Education for learners, case generation, graph extraction, and trusted differential links resolves deterministically from standing publication decisions, with legacy compatibility explicitly documented and no new publication authority inferred from mutable row status alone.
+
+## Scope
+
+Included: additive schema/migration for Education revision approval and publication governance; exact revision approval/reject/changes-required operations; publication readiness; publication authorization and withdrawal; compatibility projection synchronization; downstream standing-published-revision resolution; workspace action registry/policy/runner integration; dashboard review packet/action wiring; focused tests and docs.
+
+Excluded: generic governance records for all artifacts, exact institutional authority-assignment enforcement beyond existing access controls and recorded actor/rationale, destructive backfill or fabricated historical decisions, graph staleness engine, knowledge graph provenance redesign, learner redesign, case workflow redesign, distributed queues/locks, collaborative Education review, semantic AI diff engine, and seed/repair data rewrites.
+
+## Files Expected To Change
+
+Expected areas: `doctordle-backend/prisma/schema.prisma`, a new Prisma migration, backend Education services/controllers/DTOs/tests, workspace action registry/policy/runner/read-model services/tests, graph/differential/case/learner Education trust resolution touchpoints, `analytics-dashboard/src/api`, dashboard Education/workspace/review queue components/tests, and `docs/weos/implementation`.
+
+## Prohibited Changes
+
+Do not fabricate historical approval or publication decisions from existing row statuses. Do not weaken EDU-001 expected-version protections or EDU-002 candidate application protections. Do not let validation, UI visibility, route access, runtime roles, application, approval, or mutable projections imply publication. Do not expose candidate, accepted-only, applied-NEEDS_REVIEW, or approved-unpublished material to learners or case generation.
+
+## Data Model Implications
+
+Add narrow Education-specific governance records for revision approval and publication decisions, with exact revision identity, version, responsible actor, rationale, material/readiness context, standing/supersession/withdrawal state, and idempotency identity. Migration is additive and does not rewrite existing Education history.
+
+## API Implications
+
+Add backend/admin contracts for exact revision approval outcomes, publication readiness, publication authorization, and withdrawal. Existing legacy review/publish calls should be routed through canonical exact-revision governance where possible, or constrained so they cannot bypass the new authority model.
+
+## Migration Plan
+
+Create an additive Prisma migration. No historical backfill. Legacy `APPROVED`/`PUBLISHED` rows retain documented compatibility semantics until reauthorized, but new approvals/publications after EDU-003 must create canonical exact-revision decision records.
+
+## Compatibility Strategy
+
+Keep `DiagnosisEducation.editorialStatus`, `reviewedAt`, `reviewedByUserId`, and `publishedAt` as compatibility/workflow projections synchronized from canonical decisions. Reads that must preserve legacy published material may use an explicit legacy fallback only when no canonical standing publication decision exists and the behavior is documented as compatibility, not canonical authority.
+
+## Testing Strategy
+
+Add focused backend tests for exact approval, rejected/changes-required outcomes, stale approval rejection, publication readiness, publication requiring exact approval, publication supersession/withdrawal, idempotency/concurrency behavior where available, no learner/case/graph/differential trust without standing publication, published revision downstream consumption, EDU-001/EDU-002 regressions, workspace actions/policy/runner, and legacy compatibility. Run Prisma format/validate/generate, targeted backend suites, dashboard tests/build, backend build, and `git diff --check`.
+
+## Rollback/Recovery
+
+Rollback is schema/code rollback of the single EDU-003 commit before deployment. Since no historical data is rewritten or fabricated, production recovery should require disabling the new routes/actions and reverting compatibility projection writers if needed.
+
+## Progress
+
+- [x] Verify starting HEAD and clean worktree.
+- [x] Read repository WEOS instructions and precedence.
+- [x] Read relevant canon/institutional governance clauses.
+- [x] Audit current runtime paths.
+- [x] Add schema/migration.
+- [x] Implement backend governance services/routes.
+- [x] Integrate downstream trust resolution.
+- [x] Integrate workspace/dashboard actions.
+- [x] Add tests and docs.
+- [x] Run verification.
+- [ ] Commit and confirm clean worktree.
+
+## Discoveries
+
+- EDU-002 leaves exact Education revision approval and publication authority open by design.
+- `WEOS-CANON-007` requires approval, readiness, publication, audit events, and governance records to remain distinct; mutable status alone is insufficient.
+- `WEOS-ARCH-008` treats Diagnosis Education approval as an elevated editorial decision and publication as a separate institutional decision; software roles alone do not establish authority.
+- Legacy mock clients in older unit tests do not include the additive publication-decision delegate; canonical runtime clients do, so compatibility guards are needed at read-only downstream trust boundaries.
+
+## Decisions
+
+- Use narrow Education-specific governance records for this package instead of introducing a generic governance platform.
+- Preserve compatibility projections while making new canonical decisions revision-specific.
+- Treat legacy `PUBLISHED` row reads as explicit compatibility fallback only when no standing canonical publication decision exists.
+
+## Remaining Risks
+
+- Exact institutional authority-assignment enforcement remains outside this package unless existing runtime utilities provide a bounded reusable check.
+- Legacy `PUBLISHED` rows cannot be converted into canonical publication decisions without fabricating history; compatibility behavior must remain explicitly non-canonical.
+- Isolated tests can still construct `DiagnosisEducationService` without the governance dependency; normal runtime wiring injects the governance bridge for legacy review/publish calls.
+
+---
+
 # ExecPlan: WEOS EDU-002 Candidate-First Diagnosis Education Generation
 
 ## Purpose

@@ -1378,6 +1378,46 @@ export type DiagnosisEducationRevision = {
   createdAt: string;
 };
 
+export type DiagnosisEducationRevisionApprovalOutcome =
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CHANGES_REQUIRED';
+
+export type DecideDiagnosisEducationRevisionPayload = {
+  outcome: DiagnosisEducationRevisionApprovalOutcome;
+  expectedVersion: number;
+  idempotencyKey: string;
+  rationale: string;
+  authorityReferences?: string[];
+};
+
+export type EducationPublicationReadiness = {
+  educationId: string;
+  diagnosisRegistryId: string;
+  educationRevisionId: string;
+  version: number;
+  result: 'READY' | 'BLOCKED' | 'STALE';
+  blockers: Array<{ code: string; message: string }>;
+  warnings: Array<{ code: string; message: string }>;
+  approvalDecisionId: string | null;
+  activePublicationDecisionId: string | null;
+  currentEducationVersion: number;
+  materialContextHash: string;
+};
+
+export type AuthorizeDiagnosisEducationPublicationPayload = {
+  expectedVersion: number;
+  expectedApprovalDecisionId: string;
+  expectedActivePublicationDecisionId?: string | null;
+  idempotencyKey: string;
+  rationale: string;
+  authorityReferences?: string[];
+};
+
+export type WithdrawDiagnosisEducationPublicationPayload = {
+  rationale: string;
+};
+
 export type AdminDiagnosisEducationResponse = {
   diagnosisRegistry: EditorialDiagnosisRegistrySummary;
   education: DiagnosisEducationRecord | null;
@@ -2421,6 +2461,13 @@ export type DiagnosisEditorialWorkspace = {
     warnings: string[];
     updatedAt: string | null;
   };
+  educationGovernance?: {
+    currentRevisionId: string | null;
+    currentVersion: number | null;
+    publicationReadiness: EducationPublicationReadiness | null;
+    reviewAction: WorkspaceRecommendedAction | null;
+    publicationAction: WorkspaceRecommendedAction | null;
+  } | null;
   revisions: {
     latest: DiagnosisEducationRevisionAnalysis | null;
     items: DiagnosisEducationRevisionAnalysis[];

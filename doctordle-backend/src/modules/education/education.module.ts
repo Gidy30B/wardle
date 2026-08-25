@@ -24,6 +24,7 @@ import { DiagnosisCurriculumProviderService } from './diagnosis-curriculum-provi
 import { DiagnosisTeachingRuleSeedService } from './diagnosis-teaching-rule-seed.service';
 import { DiagnosisEditorialBriefService } from './diagnosis-editorial-brief.service';
 import { DiagnosisEducationCandidateService } from './diagnosis-education-candidate.service';
+import { DiagnosisEducationGovernanceService } from './diagnosis-education-governance.service';
 
 @Module({
   imports: [DatabaseModule, DiagnosisGraphModule],
@@ -31,6 +32,7 @@ import { DiagnosisEducationCandidateService } from './diagnosis-education-candid
   providers: [
     DiagnosisEducationService,
     DiagnosisEducationCandidateService,
+    DiagnosisEducationGovernanceService,
     EditorialIntentProjectionService,
     GenerationContextBuilder,
     WorkspaceProjectionService,
@@ -52,6 +54,10 @@ import { DiagnosisEducationCandidateService } from './diagnosis-education-candid
     EditorialGuard,
     SeniorEditorialGuard,
   ],
-  exports: [DiagnosisEducationService, DiagnosisEducationCandidateService],
+  exports: [
+    DiagnosisEducationService,
+    DiagnosisEducationCandidateService,
+    DiagnosisEducationGovernanceService,
+  ],
 })
 export class EducationModule {}

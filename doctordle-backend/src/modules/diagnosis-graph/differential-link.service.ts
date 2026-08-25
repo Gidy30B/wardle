@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  DiagnosisEducationPublicationStanding,
   DiagnosisEducationStatus,
   DifferentialLinkRole,
   DifferentialResolutionStatus,
@@ -371,12 +372,42 @@ export class DifferentialLinkService {
   private async isTrustedEducationMappingSource(
     mapping: EducationDifferentialMapping,
   ): Promise<boolean> {
+    const publicationDecisionDelegate = (this.prisma as any)
+      .diagnosisEducationPublicationDecision;
+
     if (mapping.revisionId) {
-      const revision = await this.prisma.diagnosisEducationRevision.findUnique({
-        where: { id: mapping.revisionId },
+      if (publicationDecisionDelegate) {
+        const publication = await publicationDecisionDelegate.findFirst({
+          where: {
+            educationId: mapping.educationId,
+            educationRevisionId: mapping.revisionId,
+            publicationChannel: 'LEARNER',
+            standing: DiagnosisEducationPublicationStanding.AUTHORIZED,
+          },
+          select: { id: true },
+        });
+        return Boolean(publication);
+      }
+
+      const education = await this.prisma.diagnosisEducation.findUnique({
+        where: { id: mapping.educationId },
         select: { editorialStatus: true },
       });
-      return revision?.editorialStatus === DiagnosisEducationStatus.PUBLISHED;
+      return education?.editorialStatus === DiagnosisEducationStatus.PUBLISHED;
+    }
+
+    const standingPublication = publicationDecisionDelegate
+      ? await publicationDecisionDelegate.findFirst({
+          where: {
+            educationId: mapping.educationId,
+            publicationChannel: 'LEARNER',
+            standing: DiagnosisEducationPublicationStanding.AUTHORIZED,
+          },
+          select: { id: true },
+        })
+      : null;
+    if (standingPublication) {
+      return true;
     }
 
     const education = await this.prisma.diagnosisEducation.findUnique({
