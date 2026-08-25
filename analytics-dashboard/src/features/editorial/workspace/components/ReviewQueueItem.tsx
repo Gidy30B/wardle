@@ -48,7 +48,10 @@ export function ReviewQueueItem({
     : [];
   const includeConfirmationActions =
     actionSubject?.kind === 'caseRevision' ||
-    actionSubject?.kind === 'publicationAuthorization';
+    actionSubject?.kind === 'publicationAuthorization' ||
+    actionSubject?.kind === 'educationCandidate' ||
+    actionSubject?.kind === 'educationRevision' ||
+    actionSubject?.kind === 'educationPublication';
   const visibleActionIds = includeConfirmationActions
     ? [...actionIds, ...deferredActionIds]
     : actionIds;

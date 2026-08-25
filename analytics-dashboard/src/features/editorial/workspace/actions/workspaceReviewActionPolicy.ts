@@ -73,6 +73,7 @@ const WORKFLOW_SAFE_ACTIONS = new Set<WorkspaceActionId>([
   'educationCandidate.accept',
   'educationCandidate.reject',
   'educationCandidate.requestChanges',
+  'educationCandidate.apply',
   'educationRevision.approve',
   'educationRevision.reject',
   'educationRevision.requestChanges',

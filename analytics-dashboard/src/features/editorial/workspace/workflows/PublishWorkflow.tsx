@@ -3,6 +3,7 @@ import { BoardEmptyState } from '../components/BoardEmptyState.tsx';
 import { BoardVerdict } from '../components/BoardVerdict.tsx';
 import { PublicationBlockerChecklist } from '../components/PublicationBlockerChecklist.tsx';
 import { ReviewQueueItem } from '../components/ReviewQueueItem.tsx';
+import { EducationPublicationPacket } from '../components/EducationWorkPackets.tsx';
 import { CompactPanel } from '../EditorialPrimitives.tsx';
 import type { WorkspaceWorkflowComponentProps } from '../WorkspaceWorkflowRegistry.ts';
 
@@ -17,7 +18,8 @@ export function PublishWorkflow({
   const publicationGovernanceItems = viewModel.reviewQueue.items.filter(
     (item) =>
       item.kind === 'publication_authorization' ||
-      item.kind === 'case_revision',
+      item.kind === 'case_revision' ||
+      item.kind === 'education_publication',
   );
 
   return (
@@ -46,8 +48,18 @@ export function PublishWorkflow({
 
       <CompactPanel
         title="Governed publication path"
-        subtitle="APP-006 approval, APP-008A authorization, and APP-008B binding state."
+        subtitle="Case and Education publication work remain exact-revision decisions with artifact-specific authority."
       >
+        {workflow.educationPublicationPacket ? (
+          <div className="mb-3">
+            <EducationPublicationPacket
+              packet={workflow.educationPublicationPacket}
+              actionAccess={actionAccess}
+              pendingAction={pendingAction}
+              onRunAction={onRunAction}
+            />
+          </div>
+        ) : null}
         {publicationGovernanceItems.length ? (
           <div className="space-y-2">
             {publicationGovernanceItems.map((item) => (

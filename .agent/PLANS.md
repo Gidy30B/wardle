@@ -88,6 +88,160 @@ Record unresolved authority, technical, data, or verification risks.
 
 ---
 
+# ExecPlan: WS-CLOSE-001 Canonical Education Work Packets
+
+## Purpose
+
+Make routine Diagnosis Education candidate review, controlled application,
+exact revision review and publication assessment visible as decision-oriented
+workspace packets, without creating new canonical artifact or governance-record
+persistence.
+
+## Approved Authority
+
+Implementation package: user-provided `WEOS WORKSPACE CLOSURE -
+IMPLEMENTATION PLAN`, WS-CLOSE-001 only. Required starting branch and commit:
+`master` at `11fc8880b0ffb02f74e93fbb8daf35e288dfedcb`.
+
+The package explicitly preserves `WEOS-CANON-004` Diagnosis Education
+Standards, `WEOS-CANON-006` AI Draft Standards and `WEOS-CANON-007`
+Governance Record Standards. Work packets are read models only; they do not
+establish authority, approve artifacts, publish artifacts or persist generic
+WorkPacket records.
+
+## Current Behavior
+
+Backend Education candidate and exact revision governance services already
+support candidate-first generation/regeneration, review, separate application,
+exact revision approval decisions, publication readiness and publication
+authorization. The diagnosis workspace read model carries Education candidates,
+current revision identity and publication readiness.
+
+Dashboard action registry, policy and runner already include
+`educationCandidate.*`, `educationRevision.*` and
+`educationPublication.*` actions. The current frontend queue exposes pending
+Education candidates but lacks rich Education candidate/revision/publication
+packets; accepted candidate Apply is hidden behind confirmation-action filtering;
+Education revision governance and Education publication governance are not
+fully represented as packet surfaces.
+
+## Required Invariant
+
+An editor can inspect the exact Education candidate/revision/publication target
+inside the workspace, see provenance, validation, standing/current identity and
+available governed actions, and run only through the workspace action
+registry/policy/runner into canonical backend commands. Accept remains distinct
+from Apply; Apply remains distinct from revision approval; approval remains
+distinct from publication authorization.
+
+## Scope
+
+Included: dashboard view models, packet components, Content/Publish workflow
+rendering, queue action visibility for Education confirmation-gated actions,
+focused tests and non-mutating verification. Backend changes are allowed only if
+the existing read model proves insufficient.
+
+Excluded: schema/migration, backend authority semantics, Knowledge Graph
+redesign, learner exposure changes, case workflow redesign, generic WorkPacket
+persistence, WS-CLOSE-002 queue/legacy convergence beyond what is required to
+operate packet actions.
+
+## Files Expected To Change
+
+- `.agent/PLANS.md`
+- `analytics-dashboard/src/features/editorial/workspace/viewModels/*`
+- `analytics-dashboard/src/features/editorial/workspace/components/*`
+- `analytics-dashboard/src/features/editorial/workspace/boards/EducationBoard.tsx`
+- `analytics-dashboard/src/features/editorial/workspace/workflows/ContentWorkflow.tsx`
+- `analytics-dashboard/src/features/editorial/workspace/workflows/PublishWorkflow.tsx`
+- `analytics-dashboard/src/features/editorial/workspace/components/ReviewQueueItem.tsx`
+- focused dashboard tests for packet/view-model/action behavior
+
+## Prohibited Changes
+
+No Prisma schema or migration. No backend mutation semantic changes unless a
+blocking read-model gap is discovered and recorded. No direct API calls from
+packet components. No candidate acceptance/application/revision
+approval/publication conflation. No learner/case/graph authority changes. No
+legacy broad deletion.
+
+## Data Model Implications
+
+None expected.
+
+## API Implications
+
+None expected. Reuse the diagnosis workspace read model and existing Education
+candidate/revision/publication action APIs.
+
+## Migration Plan
+
+None.
+
+## Compatibility Strategy
+
+Existing workspace and legacy APIs remain intact. New packet surfaces consume
+current workspace projections and execute governed actions through the existing
+workspace action runner.
+
+## Testing Strategy
+
+Add focused dashboard tests for Education candidate packet states/actions,
+revision packet identity/actions, publication packet readiness/action gating,
+queue confirmation-action visibility and view-model mapping. Run focused
+dashboard tests, dashboard build, backend build if backend touched and
+`git diff --check`.
+
+## Rollback/Recovery
+
+Frontend-only changes can be reverted file-wise before deployment. No data is
+modified by the package.
+
+## Progress
+
+- [x] Verify starting HEAD, branch and clean worktree.
+- [x] Read WEOS repository instructions and precedence.
+- [x] Re-trace backend candidate/governance/read-model surfaces.
+- [x] Re-trace dashboard queue/action/workflow/case packet patterns.
+- [x] Add Education packet view models.
+- [x] Add Education packet components.
+- [x] Integrate Content/Publish workflow packet rendering.
+- [x] Fix Education confirmation action visibility in queue/packets.
+- [x] Add focused tests.
+- [x] Run verification.
+- [x] Commit WS-CLOSE-001.
+
+## Discoveries
+
+- The target checkout is clean on `master` at the required EDU-003 commit.
+- Existing backend read models already expose candidate material, provenance,
+  validation, stale/application status and current Education revision identity.
+- Existing frontend action infrastructure already has canonical Education
+  action IDs and executors; packet wiring can reuse it.
+- Publication decision history beyond the current readiness/standing action is
+  not fully projected in the workspace read model and should remain a recorded
+  WS-CLOSE-002/standing-visibility gap unless needed for WS-CLOSE-001.
+- `educationCandidate.apply` was registered and executable but absent from the
+  workflow-safe action set, so accepted Education candidates could render as
+  deferred instead of actionable from the workspace.
+
+## Decisions
+
+- Implement packet composition in frontend view models for WS-CLOSE-001, using
+  backend-projected canonical state and avoiding duplicate mutation authority.
+- Keep the first package focused on packet operability; broader queue lifecycle
+  and legacy convergence stay for WS-CLOSE-002 after commit.
+- Treat Education revision and publication queue items as frontend review-item
+  kinds backed by existing canonical action IDs rather than new aliases.
+
+## Remaining Risks
+
+- Exact Education approval/publication history visibility may need a backend
+  projection in WS-CLOSE-002 to fully satisfy the final closure plan.
+- Browser automation availability is unknown in this checkout.
+
+---
+
 # ExecPlan: WEOS EDU-003 Exact Diagnosis Education Revision Governance
 
 ## Purpose

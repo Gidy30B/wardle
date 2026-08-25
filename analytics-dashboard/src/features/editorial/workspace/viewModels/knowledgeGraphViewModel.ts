@@ -31,6 +31,8 @@ export type KnowledgeReviewItemKind =
   | 'discriminator_draft'
   | 'clinical_case_draft'
   | 'education_candidate'
+  | 'education_revision'
+  | 'education_publication'
   | 'case_revision'
   | 'publication_authorization'
   | 'clue_revision_draft'

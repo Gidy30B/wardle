@@ -106,6 +106,95 @@ test('clinical case drafts expose review decisions and defer controlled apply', 
   });
 });
 
+test('education candidates expose review decisions and confirmation-gated apply', () => {
+  assert.deepEqual(
+    getReviewItemActions({
+      kind: 'educationCandidate',
+      sourceId: 'candidate-1',
+      status: 'PENDING_REVIEW',
+    }),
+    [
+      'educationCandidate.accept',
+      'educationCandidate.requestChanges',
+      'educationCandidate.reject',
+    ],
+  );
+  assert.deepEqual(
+    getDeferredReviewItemActions({
+      kind: 'educationCandidate',
+      sourceId: 'candidate-1',
+      status: 'ACCEPTED',
+    }),
+    ['educationCandidate.apply'],
+  );
+  assert.equal(isActionSafeForWorkflowShell('educationCandidate.apply'), true);
+  assert.equal(requiresConfirmation('educationCandidate.apply'), true);
+});
+
+test('education revision and publication actions carry exact governance payloads', () => {
+  const revisionSubject = {
+    kind: 'educationRevision' as const,
+    sourceId: 'revision-1',
+    status: 'NEEDS_REVIEW',
+    raw: {
+      educationId: 'education-1',
+      revisionId: 'revision-1',
+      expectedVersion: 3,
+    },
+  };
+  const publicationSubject = {
+    kind: 'educationPublication' as const,
+    sourceId: 'revision-1',
+    status: 'READY',
+    raw: {
+      ready: true,
+      educationId: 'education-1',
+      revisionId: 'revision-1',
+      expectedVersion: 3,
+      expectedApprovalDecisionId: 'approval-1',
+      expectedActivePublicationDecisionId: 'publication-1',
+    },
+  };
+
+  assert.deepEqual(getDeferredReviewItemActions(revisionSubject), [
+    'educationRevision.approve',
+    'educationRevision.requestChanges',
+    'educationRevision.reject',
+  ]);
+  assert.deepEqual(
+    getReviewActionPayload(
+      'educationRevision.approve',
+      'revision-1',
+      revisionSubject,
+    ),
+    {
+      educationId: 'education-1',
+      revisionId: 'revision-1',
+      expectedVersion: 3,
+      note: 'Workspace Education revision decision.',
+    },
+  );
+  assert.deepEqual(getDeferredReviewItemActions(publicationSubject), [
+    'educationPublication.authorizeRevision',
+  ]);
+  assert.deepEqual(
+    getReviewActionPayload(
+      'educationPublication.authorizeRevision',
+      'revision-1',
+      publicationSubject,
+    ),
+    {
+      educationId: 'education-1',
+      revisionId: 'revision-1',
+      expectedVersion: 3,
+      expectedApprovalDecisionId: 'approval-1',
+      expectedActivePublicationDecisionId: 'publication-1',
+      publicationDecisionId: undefined,
+      note: 'Workspace Education publication decision.',
+    },
+  );
+});
+
 test('case revisions expose start review and confirmation-gated APP-006 approval', () => {
   assert.deepEqual(
     getReviewItemActions({
@@ -183,7 +272,6 @@ test('unsafe workflow operations are never surfaced', () => {
     'caseCoverage.delete',
     'teachingRule.generateCandidates',
     'clueRevision.apply',
-    'caseDraft.apply',
     'bulk.review',
   ];
 

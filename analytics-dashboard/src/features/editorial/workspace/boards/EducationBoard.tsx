@@ -4,6 +4,10 @@ import { BoardVerdict } from '../components/BoardVerdict.tsx';
 import { ContentCoverageRow } from '../components/ContentCoverageRow.tsx';
 import { ContentTeachingRiskCard } from '../components/ContentTeachingRiskCard.tsx';
 import { EducationCoverageCard } from '../components/EducationCoverageCard.tsx';
+import {
+  EducationCandidatePacketList,
+  EducationRevisionPacket,
+} from '../components/EducationWorkPackets.tsx';
 import type { EducationBoardViewModel } from '../viewModels/editorialWorkflowViewModel.ts';
 import type {
   WorkspaceActionAccess,
@@ -51,6 +55,27 @@ export function EducationBoard({
           />
         )}
       </CompactPanel>
+
+      <EducationCandidatePacketList
+        packets={board.candidatePackets}
+        actionAccess={actionAccess}
+        pendingAction={pendingAction}
+        onRunAction={onRunAction}
+      />
+
+      {board.revisionPacket ? (
+        <CompactPanel
+          title="Education revision work packet"
+          subtitle="Exact revision review is separate from candidate application and publication authorization."
+        >
+          <EducationRevisionPacket
+            packet={board.revisionPacket}
+            actionAccess={actionAccess}
+            pendingAction={pendingAction}
+            onRunAction={onRunAction}
+          />
+        </CompactPanel>
+      ) : null}
 
       <CompactPanel title="Diagnostic reasoning coverage in learner content">
         {board.coverage.length ? (

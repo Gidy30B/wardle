@@ -715,6 +715,167 @@ describe('buildEditorialWorkflowViewModel', () => {
     );
   });
 
+  it('projects Education work packets and exact governance items into Content and Publish', () => {
+    const viewModel = buildEditorialWorkflowViewModel(
+      baseWorkspace({
+        education: {
+          id: 'education-1',
+          status: 'review',
+          version: 2,
+          qualityScore: 0.8,
+          sectionHealth: [],
+          blockers: [],
+          warnings: [],
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        educationGovernance: {
+          currentRevisionId: 'education-revision-2',
+          currentVersion: 2,
+          publicationReadiness: {
+            educationId: 'education-1',
+            diagnosisRegistryId: 'dx-1',
+            educationRevisionId: 'education-revision-2',
+            version: 2,
+            result: 'READY',
+            blockers: [],
+            warnings: [],
+            approvalDecisionId: 'education-approval-1',
+            activePublicationDecisionId: null,
+            currentEducationVersion: 2,
+            materialContextHash: 'hash-education',
+          },
+          reviewAction: {
+            id: 'review-education-revision',
+            label: 'Review Education revision',
+            source: 'education_revision',
+            severity: 'warning',
+            targetTab: 'education',
+            enabled: true,
+            disabledReason: null,
+          },
+          publicationAction: {
+            id: 'authorize-education-publication',
+            label: 'Authorize Education publication',
+            source: 'education_publication',
+            severity: 'warning',
+            targetTab: 'education',
+            enabled: true,
+            disabledReason: null,
+          },
+        },
+        revisions: {
+          latest: {
+            id: 'education-revision-2',
+            educationId: 'education-1',
+            version: 2,
+            editorialStatus: 'NEEDS_REVIEW',
+            source: 'AI_ASSISTED',
+            createdByUserId: 'editor-1',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            changedSections: [],
+            quality: {
+              overallScore: 0.8,
+              graphReadiness: 0.5,
+              sectionScores: {},
+              coverageScores: {},
+              patternComplianceScores: {},
+              warnings: [],
+              blockers: [],
+              sectionHealth: [],
+              warningCount: 0,
+              blockerCount: 0,
+            },
+          },
+          items: [],
+        },
+        educationCandidates: {
+          summary: {
+            total: 1,
+            pendingReview: 1,
+            needsChanges: 0,
+            accepted: 0,
+            awaitingApplication: 0,
+            applied: 0,
+            rejected: 0,
+            superseded: 0,
+            actionable: 1,
+            blockerCount: 0,
+            warningCount: 0,
+            byStatus: { PENDING_REVIEW: 1 },
+          },
+          groups: {
+            pendingReview: [],
+            needsChanges: [],
+            acceptedAwaitingApplication: [],
+            applied: [],
+            rejected: [],
+          },
+          items: [
+            {
+              id: 'education-candidate-1',
+              diagnosisRegistryId: 'dx-1',
+              educationId: 'education-1',
+              scope: 'WHOLE',
+              section: null,
+              baseEducationVersion: 2,
+              baseEducationRevisionId: 'education-revision-2',
+              currentEducationVersion: 2,
+              stale: false,
+              proposedEducation: { summary: { definition: 'Updated.' } },
+              proposedSection: null,
+              proposedReferences: null,
+              originalSection: null,
+              reviewStatus: 'PENDING_REVIEW',
+              applicationStatus: 'NOT_REQUESTED',
+              applicationAllowed: false,
+              validationStatus: 'PASSED',
+              validationSummary: {},
+              validationBlockers: [],
+              validationWarnings: [],
+              validationMetadata: null,
+              generationProvider: 'openai',
+              generationModel: 'gpt-test',
+              generatorVersion: 'generator-v1',
+              promptVersion: 'prompt-v1',
+              generatedAt: '2026-01-01T00:00:00.000Z',
+              generationPurpose: 'AI_DIAGNOSIS_EDUCATION_WHOLE_GENERATION',
+              inputContext: {},
+              contextHash: 'hash-candidate',
+              sourceArtifactIds: null,
+              acceptedAt: null,
+              appliedAt: null,
+              resultingEducationId: null,
+              resultingEducationVersion: null,
+              resultingRevisionId: null,
+              applicationFailureReason: null,
+            },
+          ],
+        },
+      }),
+    );
+
+    assert.equal(viewModel.content.education.candidatePackets.length, 1);
+    assert.equal(viewModel.content.education.revisionPacket?.id, 'education-revision-2');
+    assert.equal(
+      viewModel.publish.educationPublicationPacket?.actionIds[0],
+      'educationPublication.authorizeRevision',
+    );
+    assert.ok(
+      viewModel.reviewQueue.items.some(
+        (item) =>
+          item.kind === 'education_revision' &&
+          item.sourceId === 'education-revision-2',
+      ),
+    );
+    assert.ok(
+      viewModel.reviewQueue.items.some(
+        (item) =>
+          item.kind === 'education_publication' &&
+          item.sourceId === 'education-revision-2',
+      ),
+    );
+  });
+
   it('returns a safe empty Cases model', () => {
     const viewModel = buildEditorialWorkflowViewModel(baseWorkspace());
 

@@ -33,6 +33,12 @@ import {
   type ClinicalCaseDraftReviewPacketViewModel,
 } from './clinicalCaseDraftReviewPacketViewModel.ts';
 import {
+  buildEducationWorkPackets,
+  type EducationCandidatePacketViewModel,
+  type EducationPublicationPacketViewModel,
+  type EducationRevisionPacketViewModel,
+} from './educationWorkPacketViewModel.ts';
+import {
   buildKnowledgeGraphViewModel,
   type KnowledgeGraphViewModel,
   type KnowledgeReviewItem,
@@ -143,6 +149,7 @@ export type PublishWorkflowViewModel = WorkflowSectionViewModel & {
   checklist: PublishChecklistItemViewModel[];
   blocked: PublishChecklistItemViewModel[];
   passing: PublishChecklistItemViewModel[];
+  educationPublicationPacket: EducationPublicationPacketViewModel | null;
 };
 
 export type CurriculumCoverageGoalViewModel = {
@@ -278,6 +285,8 @@ export type EducationBoardViewModel = WorkflowBoardSummary & {
   sections: EducationCoverageCardViewModel[];
   coverage: ContentCoverageRowViewModel[];
   teachingRisks: ContentTeachingRiskViewModel[];
+  candidatePackets: EducationCandidatePacketViewModel[];
+  revisionPacket: EducationRevisionPacketViewModel | null;
 };
 
 export type ScoringSystemsBoardViewModel = WorkflowBoardSummary & {
@@ -334,6 +343,7 @@ export function buildEditorialWorkflowViewModel(
     diagnosticReasoning,
     caseReasoning,
   });
+  const educationWorkPackets = buildEducationWorkPackets(workspace);
   const reviewQueueItems = buildReviewQueueItems(
     knowledge.reviewItems,
     diagnosticReasoning,
@@ -342,6 +352,7 @@ export function buildEditorialWorkflowViewModel(
     contentCoverage.reviewItems,
     workspace.clinicalCaseDrafts?.items ?? [],
     workspace.educationCandidates?.items ?? [],
+    workspace,
   );
   const reviewQueueGroups = buildReviewQueueGroups(reviewQueueItems);
   const overviewConcerns = buildOverviewConcerns(knowledge, diagnosticReasoning);
@@ -387,7 +398,12 @@ export function buildEditorialWorkflowViewModel(
     buildCaseReasoningCoverageBoard(caseReasoning);
   const discriminatorCoverageBoard =
     buildDiscriminatorCoverageBoard(caseReasoning);
-  const educationBoard = buildEducationBoard(contentCoverage, workspace);
+  const educationBoard = buildEducationBoard(
+    contentCoverage,
+    workspace,
+    educationWorkPackets.candidates,
+    educationWorkPackets.revision,
+  );
   const scoringSystemsBoard = buildScoringSystemsBoard(contentCoverage);
   const mnemonicsBoard = buildMnemonicsBoard(contentCoverage);
   const recallPromptsBoard = buildRecallPromptsBoard(contentCoverage);
@@ -563,6 +579,7 @@ export function buildEditorialWorkflowViewModel(
     checklist: publishChecklist,
     blocked: publishChecklist.filter((item) => item.status === 'blocked'),
     passing: publishChecklist.filter((item) => item.status === 'passing'),
+    educationPublicationPacket: educationWorkPackets.publication,
   } satisfies PublishWorkflowViewModel);
 
   return {
@@ -1016,6 +1033,8 @@ function buildDiscriminatorCoverageBoard(
 function buildEducationBoard(
   contentCoverage: ContentCoverageViewModel,
   workspace: DiagnosisEditorialWorkspace,
+  candidatePackets: EducationCandidatePacketViewModel[],
+  revisionPacket: EducationRevisionPacketViewModel | null,
 ): EducationBoardViewModel {
   const blockers = contentCoverage.education.filter(
     (section) => section.tone === 'danger',
@@ -1038,6 +1057,8 @@ function buildEducationBoard(
     teachingRisks: contentCoverage.teachingRisks.filter(
       (risk) => risk.targetBoard === 'education',
     ),
+    candidatePackets,
+    revisionPacket,
   };
 }
 
@@ -1180,6 +1201,7 @@ function buildReviewQueueItems(
   contentReviewItems: KnowledgeReviewItem[] = [],
   clinicalCaseDrafts: WorkspaceClinicalCaseDraft[] = [],
   educationCandidates: DiagnosisEducationCandidate[] = [],
+  workspace?: DiagnosisEditorialWorkspace,
 ): ReviewQueueItemViewModel[] {
   const reasoningReviewItems = diagnosticReasoning.teachingRisks.map((risk) => ({
     id: `diagnostic-risk:${risk.id}`,
@@ -1221,8 +1243,84 @@ function buildReviewQueueItems(
     })),
     ...clinicalCaseDrafts.flatMap(mapClinicalCaseDraftQueueItem),
     ...educationCandidates.flatMap(mapEducationCandidateQueueItem),
+    ...mapEducationGovernanceQueueItems(workspace),
     ...reasoningReviewItems,
   ]);
+}
+
+function mapEducationGovernanceQueueItems(
+  workspace: DiagnosisEditorialWorkspace | undefined,
+): ReviewQueueItemViewModel[] {
+  if (!workspace?.educationGovernance || !workspace.education.id) {
+    return [];
+  }
+
+  const governance = workspace.educationGovernance;
+  const items: ReviewQueueItemViewModel[] = [];
+  if (governance.reviewAction && governance.currentRevisionId) {
+    items.push({
+      id: `education-revision-review:${workspace.education.id}:${governance.currentRevisionId}`,
+      kind: 'education_revision',
+      severity: 'warning',
+      title: 'Review exact Education revision',
+      detail: `Current Education ${versionLabel(governance.currentVersion)} requires an exact revision decision.`,
+      targetWorkflow: 'content',
+      targetBoard: 'education',
+      sourceId: governance.currentRevisionId,
+      reviewStatus: 'NEEDS_REVIEW',
+      raw: {
+        educationId: workspace.education.id,
+        revisionId: governance.currentRevisionId,
+        expectedVersion: governance.currentVersion,
+      },
+      groupId: 'governance',
+      editorialReason:
+        'Applied Education material is awaiting exact revision approval; approval does not publish it.',
+      metadata: [
+        `Education: ${workspace.education.id}`,
+        `Revision: ${governance.currentRevisionId}`,
+        `Version: ${versionLabel(governance.currentVersion)}`,
+      ],
+    });
+  }
+
+  const readiness = governance.publicationReadiness;
+  if (readiness && governance.currentRevisionId) {
+    const ready = readiness.result === 'READY';
+    items.push({
+      id: `education-publication:${readiness.educationId}:${readiness.educationRevisionId}`,
+      kind: 'education_publication',
+      severity: ready ? 'warning' : 'blocker',
+      title: ready
+        ? 'Authorize exact Education publication'
+        : 'Resolve Education publication blockers',
+      detail: `${readiness.result}; ${readiness.blockers.length} blocker(s), ${readiness.warnings.length} warning(s).`,
+      targetWorkflow: 'publish',
+      targetBoard: 'publicationReadiness',
+      sourceId: readiness.educationRevisionId,
+      reviewStatus: readiness.result,
+      raw: {
+        educationId: readiness.educationId,
+        revisionId: readiness.educationRevisionId,
+        expectedVersion: readiness.version,
+        expectedApprovalDecisionId: readiness.approvalDecisionId,
+        expectedActivePublicationDecisionId:
+          readiness.activePublicationDecisionId,
+        ready,
+      },
+      groupId: ready ? 'governance' : 'publicationBlockers',
+      editorialReason: ready
+        ? 'This approved Education revision is ready for separate publication authorization.'
+        : 'Education publication authorization is blocked until readiness passes.',
+      metadata: [
+        `Education: ${readiness.educationId}`,
+        `Revision: ${readiness.educationRevisionId}`,
+        `Version: v${readiness.version}`,
+      ],
+    });
+  }
+
+  return items;
 }
 
 function mapEducationCandidateQueueItem(
@@ -1865,4 +1963,8 @@ function toneFromSupport(
   if (supportLevel === 'strong') return 'success';
   if (supportLevel === 'watch') return 'warning';
   return 'danger';
+}
+
+function versionLabel(version: number | null | undefined): string {
+  return version === null || version === undefined ? 'unknown version' : `v${version}`;
 }
