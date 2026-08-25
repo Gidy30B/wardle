@@ -1200,3 +1200,62 @@ sources where available, and blocks generic-only scaffold output.
 Verification completed: Prisma format, Prisma validate, Prisma generate,
 focused backend scaffold/Education/Teaching Rule/Case generation specs, backend
 build, dashboard tests, dashboard build, and `git diff --check`.
+
+## WEOS SCAFFOLD-GEN-001 - Provider-Backed Editorial Brief Bootstrap
+
+Date: 2026-08-25
+Repository: `C:\Users\user\DxLab-master-live`
+Starting HEAD: `d9722c08a22a285354be63f400d33a21beb92186`
+Scope: implement Package 1 only, then commit and stop before
+SCAFFOLD-GEN-002.
+
+## Objective
+
+Replace successful deterministic generic Editorial Brief bootstrap with a
+provider-backed, diagnosis-specific Brief proposal that remains `NEEDS_REVIEW`,
+captures provenance/validation, rejects generic or wrong-diagnosis output, and
+does not relax downstream scaffold readiness gates.
+
+## Files Expected
+
+- `doctordle-backend/src/modules/education/diagnosis-editorial-brief-generation.service.ts`
+- `doctordle-backend/src/modules/education/editorial-brief-draft-quality-validator.service.ts`
+- `doctordle-backend/src/modules/education/diagnosis-editorial-brief.service.ts`
+- `doctordle-backend/src/modules/education/diagnosis-editorial-brief.service.spec.ts`
+- `doctordle-backend/src/modules/education/education.module.ts`
+- `doctordle-backend/src/modules/admin/admin.module.ts`
+- WEOS documentation notes
+
+## Constraints
+
+No schema migration unless necessary. No automatic approval/activation. No
+external evidence retrieval. No downstream Education/Case scaffold gate changes
+except regression coverage. Provider unit tests must mock model responses.
+
+## Progress
+
+- [x] Verify starting HEAD, branch and clean worktree.
+- [x] Audit current Brief service, provider patterns and audit/provenance models.
+- [x] Add dedicated provider-backed Brief bootstrap generator.
+- [x] Add dedicated Brief draft quality validator.
+- [x] Route Brief generation through provider output and validation.
+- [x] Record provenance through existing narrow AI audit infrastructure.
+- [x] Preserve manual Brief lifecycle and downstream gates.
+- [x] Add focused tests.
+- [x] Update docs.
+- [x] Run verification and commit.
+
+## Discoveries
+
+- `DiagnosisEditorialBrief` is already the review artifact for Brief drafts and
+  carries version/status fields, so no new Brief candidate table is needed for
+  Package 1.
+- `AiDraftRevisionAudit` can record narrow provider provenance for generated
+  Brief bootstrap attempts without creating a generic provenance platform.
+- Provider egress is explicitly limited to the user-approved diagnosis-level
+  registry identity, aliases, taxonomy metadata, non-patient registry notes and
+  active diagnosis-level graph facts.
+
+## Remaining Risks
+
+Live provider smoke testing is optional and must not be required for CI.

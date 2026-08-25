@@ -46,6 +46,8 @@ import { EducationEditorialPatternsService } from '../education/education-editor
 import { EducationSchemaContractService } from '../education/education-schema-contract.service';
 import { DiagnosisTeachingRuleSeedService } from '../education/diagnosis-teaching-rule-seed.service';
 import { DiagnosisEditorialBriefService } from '../education/diagnosis-editorial-brief.service';
+import { DiagnosisEditorialBriefGenerationService } from '../education/diagnosis-editorial-brief-generation.service';
+import { EditorialBriefDraftQualityValidator } from '../education/editorial-brief-draft-quality-validator.service';
 import { AliasValidationService } from '../diagnosis-registry/alias-validation.service';
 import { DiagnosisRegistryCandidateService } from '../diagnosis-registry/diagnosis-registry-candidate.service';
 import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
@@ -99,6 +101,8 @@ import { DiagnosisRegistryMergeExecutionService } from '../diagnosis-registry/di
     DiagnosisCurriculumProviderService,
     DiagnosisTeachingRuleSeedService,
     DiagnosisEditorialBriefService,
+    DiagnosisEditorialBriefGenerationService,
+    EditorialBriefDraftQualityValidator,
     EducationSectionQualityClassifier,
     EducationEditorialPatternsService,
     EducationSchemaContractService,
