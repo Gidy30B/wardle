@@ -14,6 +14,7 @@ import type {
 } from './actions/workspaceActionTypes.ts';
 import type {
   WorkspaceBoardId,
+  WorkspacePacketTarget,
   WorkspaceWorkflowId,
 } from './viewModels/workflowNavigationViewModel.ts';
 
@@ -22,10 +23,13 @@ export type WorkspaceWorkflowComponentProps = {
   actionAccess: WorkspaceActionAccess;
   pendingAction: string | null;
   activeBoardId?: WorkspaceBoardId | null;
+  activePacketTarget?: WorkspacePacketTarget | null;
   onRunAction: WorkspaceActionRequestHandler;
   onNavigate?: (target: {
     workflowId: WorkspaceWorkflowId;
     boardId?: WorkspaceBoardId | null;
+    packetType?: WorkspacePacketTarget['type'] | null;
+    packetId?: string | null;
   }) => void;
 };
 

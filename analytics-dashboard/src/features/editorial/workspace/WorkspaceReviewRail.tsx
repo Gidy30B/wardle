@@ -7,6 +7,7 @@ import type {
 } from './viewModels/editorialWorkflowViewModel.ts';
 import type {
   WorkspaceBoardId,
+  WorkspacePacketTarget,
   WorkspaceWorkflowId,
 } from './viewModels/workflowNavigationViewModel.ts';
 import type {
@@ -30,6 +31,8 @@ export function WorkspaceReviewRail({
   onNavigate?: (target: {
     workflowId: WorkspaceWorkflowId;
     boardId?: WorkspaceBoardId | null;
+    packetType?: WorkspacePacketTarget['type'] | null;
+    packetId?: string | null;
   }) => void;
 }) {
   const activeWorkflow = viewModel.workflows[activeWorkflowId];
@@ -106,6 +109,8 @@ function ReviewItemList({
   onNavigate?: (target: {
     workflowId: WorkspaceWorkflowId;
     boardId?: WorkspaceBoardId | null;
+    packetType?: WorkspacePacketTarget['type'] | null;
+    packetId?: string | null;
   }) => void;
 }) {
   return (

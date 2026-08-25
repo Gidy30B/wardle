@@ -13,16 +13,19 @@ import type {
   WorkspaceActionAccess,
   WorkspaceActionRequestHandler,
 } from '../actions/workspaceActionTypes.ts';
+import type { WorkspacePacketTarget } from '../viewModels/workflowNavigationViewModel.ts';
 
 export function EducationBoard({
   board,
   actionAccess,
   pendingAction,
+  activePacketTarget,
   onRunAction,
 }: {
   board: EducationBoardViewModel;
   actionAccess: WorkspaceActionAccess;
   pendingAction: string | null;
+  activePacketTarget?: WorkspacePacketTarget | null;
   onRunAction: WorkspaceActionRequestHandler;
 }) {
   return (
@@ -34,6 +37,27 @@ export function EducationBoard({
         detail="Learner-facing content should address the diagnostic contest, discriminating features, and unsupported claims."
         tone={board.tone}
       />
+
+      <CompactPanel
+        title="Education revision standing"
+        subtitle={board.standingSummary.detail}
+      >
+        <div className="grid gap-2 md:grid-cols-3">
+          {board.standingSummary.rows.map((row) => (
+            <div
+              key={row.label}
+              className="rounded-md border border-white/10 bg-white/[0.03] p-3"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {row.label}
+              </p>
+              <p className="mt-1 break-words text-sm font-semibold text-slate-100">
+                {row.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      </CompactPanel>
 
       <CompactPanel title="Learner content section coverage">
         {board.sections.length ? (
@@ -60,6 +84,11 @@ export function EducationBoard({
         packets={board.candidatePackets}
         actionAccess={actionAccess}
         pendingAction={pendingAction}
+        activePacketId={
+          activePacketTarget?.type === 'educationCandidate'
+            ? activePacketTarget.id
+            : null
+        }
         onRunAction={onRunAction}
       />
 
@@ -72,6 +101,10 @@ export function EducationBoard({
             packet={board.revisionPacket}
             actionAccess={actionAccess}
             pendingAction={pendingAction}
+            highlighted={
+              activePacketTarget?.type === 'educationRevision' &&
+              activePacketTarget.id === board.revisionPacket.id
+            }
             onRunAction={onRunAction}
           />
         </CompactPanel>

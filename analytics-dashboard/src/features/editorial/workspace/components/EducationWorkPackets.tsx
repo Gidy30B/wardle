@@ -22,11 +22,13 @@ export function EducationCandidatePacket({
   packet,
   actionAccess,
   pendingAction,
+  highlighted = false,
   onRunAction,
 }: {
   packet: EducationCandidatePacketViewModel;
   actionAccess: WorkspaceActionAccess;
   pendingAction: string | null;
+  highlighted?: boolean;
   onRunAction: WorkspaceActionRequestHandler;
 }) {
   return (
@@ -36,6 +38,7 @@ export function EducationCandidatePacket({
       subtitle={packet.purpose.nextStep}
       tone={packet.tone}
       status={packet.statusLabel}
+      highlighted={highlighted}
     >
       <FactGrid items={packet.identity} />
 
@@ -97,11 +100,13 @@ export function EducationRevisionPacket({
   packet,
   actionAccess,
   pendingAction,
+  highlighted = false,
   onRunAction,
 }: {
   packet: EducationRevisionPacketViewModel;
   actionAccess: WorkspaceActionAccess;
   pendingAction: string | null;
+  highlighted?: boolean;
   onRunAction: WorkspaceActionRequestHandler;
 }) {
   return (
@@ -111,6 +116,7 @@ export function EducationRevisionPacket({
       subtitle={packet.question}
       tone={packet.tone}
       status="Exact revision"
+      highlighted={highlighted}
     >
       <FactGrid items={packet.identity} />
       <FactGrid items={packet.standing} />
@@ -156,11 +162,13 @@ export function EducationPublicationPacket({
   packet,
   actionAccess,
   pendingAction,
+  highlighted = false,
   onRunAction,
 }: {
   packet: EducationPublicationPacketViewModel;
   actionAccess: WorkspaceActionAccess;
   pendingAction: string | null;
+  highlighted?: boolean;
   onRunAction: WorkspaceActionRequestHandler;
 }) {
   return (
@@ -170,6 +178,7 @@ export function EducationPublicationPacket({
       subtitle={packet.question}
       tone={packet.tone}
       status={packet.readiness.result}
+      highlighted={highlighted}
     >
       <FactGrid items={packet.identity} />
       <FactGrid items={packet.standing} />
@@ -202,11 +211,13 @@ export function EducationCandidatePacketList({
   packets,
   actionAccess,
   pendingAction,
+  activePacketId,
   onRunAction,
 }: {
   packets: EducationCandidatePacketViewModel[];
   actionAccess: WorkspaceActionAccess;
   pendingAction: string | null;
+  activePacketId?: string | null;
   onRunAction: WorkspaceActionRequestHandler;
 }) {
   if (!packets.length) {
@@ -225,6 +236,7 @@ export function EducationCandidatePacketList({
             packet={packet}
             actionAccess={actionAccess}
             pendingAction={pendingAction}
+            highlighted={activePacketId === packet.id}
             onRunAction={onRunAction}
           />
         ))}
@@ -239,6 +251,7 @@ function PacketShell({
   subtitle,
   status,
   tone,
+  highlighted = false,
   children,
 }: {
   eyebrow: string;
@@ -246,10 +259,18 @@ function PacketShell({
   subtitle: string;
   status: string;
   tone: EducationWorkPacketTone;
+  highlighted?: boolean;
   children: ReactNode;
 }) {
   return (
-    <article className="rounded-lg border border-[var(--color-navy-border)] bg-white/[0.03] p-4">
+    <article
+      className={[
+        'rounded-lg border bg-white/[0.03] p-4',
+        highlighted
+          ? 'border-[var(--color-teal)] shadow-[0_0_0_1px_rgba(45,212,191,0.25)]'
+          : 'border-[var(--color-navy-border)]',
+      ].join(' ')}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--color-teal)]">

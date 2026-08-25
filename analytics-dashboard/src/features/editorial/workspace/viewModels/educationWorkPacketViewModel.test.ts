@@ -6,6 +6,7 @@ import test from 'node:test';
 import type {
   DiagnosisEditorialWorkspace,
   DiagnosisEducationCandidate,
+  EducationGovernanceDecisionSummary,
 } from '../../../../api/admin.types.ts';
 import { buildEducationWorkPackets } from './educationWorkPacketViewModel.ts';
 
@@ -79,6 +80,40 @@ test('accepted candidate exposes Apply and not review decisions', () => {
   );
 });
 
+test('stale accepted candidate remains visible but cannot apply', () => {
+  const packets = buildEducationWorkPackets(
+    workspace({
+      educationCandidates: {
+        summary: candidateSummary(),
+        groups: {
+          pendingReview: [],
+          needsChanges: [],
+          acceptedAwaitingApplication: [
+            sectionCandidate({
+              reviewStatus: 'ACCEPTED',
+              applicationAllowed: false,
+              stale: true,
+            }),
+          ],
+          applied: [],
+          rejected: [],
+        },
+        items: [
+          sectionCandidate({
+            reviewStatus: 'ACCEPTED',
+            applicationAllowed: false,
+            stale: true,
+          }),
+        ],
+      },
+    }),
+  );
+
+  assert.deepEqual(packets.candidates[0]?.actionIds, []);
+  assert.equal(packets.candidates[0]?.tone, 'danger');
+  assert.match(packets.candidates[0]?.purpose.nextStep ?? '', /cannot be applied/i);
+});
+
 test('needs-changes rejected superseded and stale candidates cannot apply', () => {
   for (const reviewStatus of ['NEEDS_CHANGES', 'REJECTED', 'SUPERSEDED'] as const) {
     const packets = buildEducationWorkPackets(
@@ -123,6 +158,57 @@ test('revision packet targets exact current Education revision', () => {
   });
 });
 
+test('standing summary distinguishes current approved and published revisions', () => {
+  const packets = buildEducationWorkPackets(
+    workspace({
+      education: {
+        id: 'education-1',
+        status: 'review',
+        version: 3,
+        qualityScore: 0.8,
+        sectionHealth: [],
+        blockers: [],
+        warnings: [],
+        updatedAt: '2026-01-02T00:00:00.000Z',
+      },
+      educationGovernance: {
+        currentRevisionId: 'revision-3',
+        currentVersion: 3,
+        latestApprovedRevision: decisionSummary({
+          id: 'approval-3',
+          kind: 'approval',
+          version: 3,
+          educationRevisionId: 'revision-3',
+        }),
+        standingPublication: decisionSummary({
+          id: 'publication-2',
+          kind: 'publication',
+          version: 2,
+          educationRevisionId: 'revision-2',
+        }),
+        history: [
+          decisionSummary({
+            id: 'approval-3',
+            kind: 'approval',
+            version: 3,
+            educationRevisionId: 'revision-3',
+          }),
+        ],
+        publicationReadiness: publicationReadiness(),
+        reviewAction: null,
+        publicationAction: null,
+      },
+    }),
+  );
+
+  assert.deepEqual(
+    packets.standingSummary.rows.map((row) => row.value),
+    ['v3', 'v3 (approval-3)', 'v2 (publication-2)'],
+  );
+  assert.match(packets.standingSummary.detail, /learner publication remains v2/i);
+  assert.match(packets.revision?.history[0]?.target ?? '', /revision-3/);
+});
+
 test('publication packet exposes authorization only when readiness is ready', () => {
   const ready = buildEducationWorkPackets(workspace()).publication;
   const blocked = buildEducationWorkPackets(
@@ -144,6 +230,37 @@ test('publication packet exposes authorization only when readiness is ready', ()
   assert.deepEqual(ready?.actionIds, ['educationPublication.authorizeRevision']);
   assert.deepEqual(blocked?.actionIds, []);
   assert.deepEqual(blocked?.blockers, ['Missing summary.']);
+});
+
+test('publication packet offers withdrawal for the standing published revision without false authorization', () => {
+  const packets = buildEducationWorkPackets(
+    workspace({
+      educationGovernance: {
+        currentRevisionId: 'revision-2',
+        currentVersion: 2,
+        latestApprovedRevision: decisionSummary({
+          id: 'approval-1',
+          kind: 'approval',
+        }),
+        standingPublication: decisionSummary({
+          id: 'publication-1',
+          kind: 'publication',
+        }),
+        history: [],
+        publicationReadiness: publicationReadiness(),
+        reviewAction: null,
+        publicationAction: null,
+      },
+    }),
+  );
+
+  assert.deepEqual(packets.publication?.actionIds, [
+    'educationPublication.withdraw',
+  ]);
+  assert.equal(
+    packets.publication?.actionTarget.publicationDecisionId,
+    'publication-1',
+  );
 });
 
 function workspace(
@@ -425,6 +542,25 @@ function publicationReadiness() {
     activePublicationDecisionId: 'publication-1',
     currentEducationVersion: 2,
     materialContextHash: 'material-hash',
+  };
+}
+
+function decisionSummary(
+  overrides: Partial<EducationGovernanceDecisionSummary> = {},
+): EducationGovernanceDecisionSummary {
+  return {
+    id: 'decision-1',
+    kind: 'approval' as const,
+    educationId: 'education-1',
+    diagnosisRegistryId: 'dx-1',
+    educationRevisionId: 'revision-2',
+    version: 2,
+    outcome: 'APPROVED',
+    standing: 'AUTHORIZED',
+    actorUserId: 'editor-1',
+    authorityRationale: 'Test rationale.',
+    occurredAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
   };
 }
 

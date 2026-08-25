@@ -4,6 +4,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildEditorialWorkflowViewModel } from './editorialWorkflowViewModel.ts';
 import type {
+  DiagnosisEducationCandidate,
+  EducationGovernanceDecisionSummary,
   DiagnosisEditorialWorkspace,
   DiagnosisTeachingRule,
 } from '../../../../api/admin.types.ts';
@@ -876,6 +878,120 @@ describe('buildEditorialWorkflowViewModel', () => {
     );
   });
 
+  it('keeps stale accepted Education candidates in the queue without Apply', () => {
+    const candidate = educationCandidate({
+      reviewStatus: 'ACCEPTED',
+      applicationAllowed: false,
+      stale: true,
+      currentEducationVersion: 3,
+    });
+    const viewModel = buildEditorialWorkflowViewModel(
+      baseWorkspace({
+        educationCandidates: {
+          summary: educationCandidateSummary({ accepted: 1, staleAccepted: 1 }),
+          groups: {
+            pendingReview: [],
+            needsChanges: [],
+            acceptedAwaitingApplication: [candidate],
+            applied: [],
+            rejected: [],
+          },
+          items: [candidate],
+        },
+      }),
+    );
+
+    const item = viewModel.reviewQueue.items.find(
+      (item) => item.id === 'education-candidate-stale:education-candidate-1',
+    );
+
+    assert.equal(item?.title, 'Resolve stale Education candidate');
+    assert.equal(item?.reviewStatus, 'STALE_ACCEPTED');
+    assert.equal(item?.severity, 'blocker');
+  });
+
+  it('does not create a false Education publication task for the standing published revision', () => {
+    const viewModel = buildEditorialWorkflowViewModel(
+      baseWorkspace({
+        education: {
+          id: 'education-1',
+          status: 'published',
+          version: 2,
+          qualityScore: 0.8,
+          sectionHealth: [],
+          blockers: [],
+          warnings: [],
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        educationGovernance: {
+          currentRevisionId: 'education-revision-2',
+          currentVersion: 2,
+          latestApprovedRevision: educationDecision({
+            id: 'education-approval-1',
+            kind: 'approval',
+            educationRevisionId: 'education-revision-2',
+          }),
+          standingPublication: educationDecision({
+            id: 'education-publication-1',
+            kind: 'publication',
+            educationRevisionId: 'education-revision-2',
+          }),
+          history: [],
+          publicationReadiness: {
+            educationId: 'education-1',
+            diagnosisRegistryId: 'dx-1',
+            educationRevisionId: 'education-revision-2',
+            version: 2,
+            result: 'READY',
+            blockers: [],
+            warnings: [],
+            approvalDecisionId: 'education-approval-1',
+            activePublicationDecisionId: 'education-publication-1',
+            currentEducationVersion: 2,
+            materialContextHash: 'hash-education',
+          },
+          reviewAction: null,
+          publicationAction: null,
+        },
+        revisions: {
+          latest: {
+            id: 'education-revision-2',
+            educationId: 'education-1',
+            version: 2,
+            editorialStatus: 'PUBLISHED',
+            source: 'AI_ASSISTED',
+            createdByUserId: 'editor-1',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            changedSections: [],
+            quality: {
+              overallScore: 0.8,
+              graphReadiness: 0.5,
+              sectionScores: {},
+              coverageScores: {},
+              patternComplianceScores: {},
+              warnings: [],
+              blockers: [],
+              sectionHealth: [],
+              warningCount: 0,
+              blockerCount: 0,
+            },
+          },
+          items: [],
+        },
+      }),
+    );
+
+    assert.equal(
+      viewModel.reviewQueue.items.some(
+        (item) => item.kind === 'education_publication',
+      ),
+      false,
+    );
+    assert.deepEqual(viewModel.publish.educationPublicationPacket?.actionIds, [
+      'educationPublication.withdraw',
+    ]);
+  });
+
   it('returns a safe empty Cases model', () => {
     const viewModel = buildEditorialWorkflowViewModel(baseWorkspace());
 
@@ -1180,6 +1296,88 @@ function contentRevision(snapshot: Record<string, unknown> = {}) {
       ],
       ...snapshot,
     },
+  };
+}
+
+function educationCandidate(
+  overrides: Partial<DiagnosisEducationCandidate> = {},
+): DiagnosisEducationCandidate {
+  return {
+    id: 'education-candidate-1',
+    diagnosisRegistryId: 'dx-1',
+    educationId: 'education-1',
+    scope: 'WHOLE',
+    section: null,
+    baseEducationVersion: 2,
+    baseEducationRevisionId: 'education-revision-2',
+    currentEducationVersion: 2,
+    stale: false,
+    proposedEducation: { summary: { definition: 'Updated.' } },
+    proposedSection: null,
+    proposedReferences: null,
+    originalSection: null,
+    reviewStatus: 'PENDING_REVIEW',
+    applicationStatus: 'NOT_REQUESTED',
+    applicationAllowed: false,
+    validationStatus: 'PASSED',
+    validationSummary: {},
+    validationBlockers: [],
+    validationWarnings: [],
+    validationMetadata: null,
+    generationProvider: 'openai',
+    generationModel: 'gpt-test',
+    generatorVersion: 'generator-v1',
+    promptVersion: 'prompt-v1',
+    generatedAt: '2026-01-01T00:00:00.000Z',
+    generationPurpose: 'AI_DIAGNOSIS_EDUCATION_WHOLE_GENERATION',
+    inputContext: {},
+    contextHash: 'hash-candidate',
+    sourceArtifactIds: null,
+    acceptedAt: null,
+    appliedAt: null,
+    resultingEducationId: null,
+    resultingEducationVersion: null,
+    resultingRevisionId: null,
+    applicationFailureReason: null,
+    ...overrides,
+  };
+}
+
+function educationCandidateSummary(overrides: Record<string, unknown> = {}) {
+  return {
+    total: 1,
+    pendingReview: 0,
+    needsChanges: 0,
+    accepted: 0,
+    awaitingApplication: 0,
+    staleAccepted: 0,
+    applied: 0,
+    rejected: 0,
+    superseded: 0,
+    actionable: 0,
+    blockerCount: 0,
+    warningCount: 0,
+    byStatus: {},
+    ...overrides,
+  };
+}
+
+function educationDecision(
+  overrides: Partial<EducationGovernanceDecisionSummary> = {},
+): EducationGovernanceDecisionSummary {
+  return {
+    id: 'education-decision-1',
+    kind: 'approval',
+    educationId: 'education-1',
+    diagnosisRegistryId: 'dx-1',
+    educationRevisionId: 'education-revision-2',
+    version: 2,
+    outcome: 'APPROVED',
+    standing: 'AUTHORIZED',
+    actorUserId: 'editor-1',
+    authorityRationale: 'Fixture rationale.',
+    occurredAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
   };
 }
 

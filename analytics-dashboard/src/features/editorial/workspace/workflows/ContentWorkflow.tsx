@@ -12,6 +12,7 @@ export function ContentWorkflow({
   actionAccess,
   pendingAction,
   activeBoardId,
+  activePacketTarget,
   onRunAction,
   onNavigate,
 }: WorkspaceWorkflowComponentProps) {
@@ -48,6 +49,7 @@ export function ContentWorkflow({
           board={workflow.education}
           actionAccess={actionAccess}
           pendingAction={pendingAction}
+          activePacketTarget={activePacketTarget}
           onRunAction={onRunAction}
         />
       )}

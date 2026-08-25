@@ -18,6 +18,7 @@ import type { WorkflowTone } from './viewModels/editorialWorkflowViewModel.ts';
 import type {
   WorkflowNavigationViewModel,
   WorkspaceBoardId,
+  WorkspacePacketTarget,
   WorkspaceWorkflowId,
 } from './viewModels/workflowNavigationViewModel.ts';
 
@@ -51,6 +52,8 @@ export function WorkspacePageShell({
   onWorkflowTargetChange: (target: {
     workflowId: WorkspaceWorkflowId;
     boardId?: WorkspaceBoardId | null;
+    packetType?: WorkspacePacketTarget['type'] | null;
+    packetId?: string | null;
   }) => void;
 }) {
   const viewModel = useMemo(
@@ -127,6 +130,7 @@ export function WorkspacePageShell({
             actionAccess={actionAccess}
             pendingAction={pendingAction}
             activeBoardId={navigation.activeBoardId}
+            activePacketTarget={navigation.activePacketTarget}
             onRunAction={onRunAction}
             onNavigate={onWorkflowTargetChange}
           />

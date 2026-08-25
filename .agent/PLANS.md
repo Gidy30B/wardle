@@ -88,6 +88,150 @@ Record unresolved authority, technical, data, or verification risks.
 
 ---
 
+# ExecPlan: WEOS WS-CLOSE-002 Queue, Action, Publish and Legacy Convergence
+
+## Purpose
+
+Make the routine diagnosis workspace path converge from queue item to exact
+work packet, governed decision, canonical refresh and next task, while
+preserving candidate, application, approval and publication as separate
+governance acts.
+
+## Approved Authority
+
+Implementation package: user-provided `WEOS WS-CLOSE-002 - Queue, Action,
+Publish, and Legacy Convergence`. Required starting branch and commit:
+`master` at `938dde0ef8e74885b6755c152f6b225ed5dcc696`.
+
+Canonical constraints carried forward from the user's instructions:
+`WEOS-CANON-004` Diagnosis Education Standards, `WEOS-CANON-006` AI Draft
+Standards and `WEOS-CANON-007` Governance Record Standards. Work is limited to
+Workspace v1 operational convergence; no new Education, Clinical Case or graph
+governance semantics are authorized.
+
+## Current Behavior
+
+WS-CLOSE-001 added Education candidate, revision and publication work packets,
+but the queue can still duplicate or omit some Education lifecycle tasks, exact
+standing Education revision visibility is thin, the Publish workflow does not
+fully separate Case publication from Education publication, governed conflict
+messages are still generic in places, and the legacy Education panel remains a
+competing routine surface.
+
+## Required Invariant
+
+Editors can complete routine Education and Clinical Case editorial work from the
+normal workspace without legacy/API/Prisma knowledge: queue items open exact
+packets, packet actions execute through the workspace action registry/runner,
+state refreshes after governed actions, next tasks are derived from refreshed
+canonical read models, and current/approved/published Education revision
+standing is visible without conflating approval and publication.
+
+## Scope
+
+Included: workspace queue lifecycle mapping, Education packet deep links,
+post-action refresh/conflict handling, Publish workflow separation, concise
+Education standing summary, governance-history display from existing records,
+legacy Education panel deconfliction, focused dashboard tests and builds.
+Backend changes are allowed only if the existing workspace read model cannot
+project exact Education approval/publication standing from existing EDU-003
+records.
+
+Excluded: backend governance redesign, new schema/migration, Knowledge Graph
+provenance redesign, learner exposure changes, Clinical Case governance
+redesign, APP-008C/APP-008D, institutional authority assignment and generic
+cross-artifact governance.
+
+## Files Expected To Change
+
+- `.agent/PLANS.md`
+- `doctordle-backend/src/modules/admin/*` only if read-model projection is
+  required
+- `analytics-dashboard/src/api/admin.types.ts`
+- `analytics-dashboard/src/features/editorial/EditorialDiagnosisWorkspacePage.tsx`
+- `analytics-dashboard/src/features/editorial/workspace/actions/*`
+- `analytics-dashboard/src/features/editorial/workspace/components/*`
+- `analytics-dashboard/src/features/editorial/workspace/boards/EducationBoard.tsx`
+- `analytics-dashboard/src/features/editorial/workspace/workflows/*`
+- `analytics-dashboard/src/features/editorial/workspace/viewModels/*`
+- focused dashboard tests
+
+## Prohibited Changes
+
+No schema or migration. No direct mutation from queue components. No optimistic
+approval/publication inference. No candidate material exposure to learners or
+case generation. No weakening confirmation gates. No deleting legacy
+maintenance surfaces without proof it is safe.
+
+## Data Model Implications
+
+None expected.
+
+## API Implications
+
+Prefer existing workspace DTOs. If exact standing summary requires backend work,
+extend the diagnosis workspace read model additively from existing EDU-003
+approval/publication records.
+
+## Migration Plan
+
+None.
+
+## Compatibility Strategy
+
+Legacy Education UI remains accessible as a compatibility/manual maintenance
+surface, but routine governed work should route to canonical workspace packets.
+
+## Testing Strategy
+
+Run focused Education packet, editorial workflow view-model, review queue,
+workspace action policy/runner, publish workflow and legacy deconfliction tests
+where present; run `analytics-dashboard` tests/build and `git diff --check`.
+Run backend build/focused backend tests only if backend read-model code changes.
+
+## Rollback/Recovery
+
+Changes are code-only and can be reverted by the final commit. No data is
+modified.
+
+## Progress
+
+- [x] Verify starting HEAD, branch and clean worktree.
+- [x] Read WEOS repository instructions and package authority.
+- [x] Re-trace WS-CLOSE-001 implementation and current queue/action/publish surfaces.
+- [x] Implement queue and deep-link convergence.
+- [x] Implement standing summary/history visibility.
+- [x] Deconflict legacy Education routine UX.
+- [x] Add focused tests.
+- [x] Run verification.
+- [ ] Commit if closure criteria are met.
+
+## Discoveries
+
+- Starting checkout is clean on `master` at `938dde0`.
+- Existing EDU-003 governance records are persisted, but the workspace read
+  model did not expose latest standing approval or standing publication
+  summaries, so WS-CLOSE-002 needed a narrow read-only backend projection.
+- Focused dashboard, backend workspace, Education governance/candidate,
+  Education section-regeneration and Clinical Case generator/regression specs
+  passed; dashboard and backend builds passed.
+
+## Decisions
+
+- Keep WS-CLOSE-002 centered on workspace operational convergence and only add
+  backend read-model fields if frontend state cannot safely derive exact
+  standing revision visibility from existing projections.
+- Use existing Education approval/publication records for standing summaries
+  and packet history; do not introduce a new governance data model.
+
+## Remaining Risks
+
+- Browser automation availability is unknown.
+- Browser automation was not run for this package; verification is unit/spec and
+  build based.
+
+---
+
 # ExecPlan: WS-CLOSE-001 Canonical Education Work Packets
 
 ## Purpose

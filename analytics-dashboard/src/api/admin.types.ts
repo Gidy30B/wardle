@@ -1405,6 +1405,25 @@ export type EducationPublicationReadiness = {
   materialContextHash: string;
 };
 
+export type EducationGovernanceDecisionSummary = {
+  id: string;
+  kind: 'approval' | 'publication';
+  educationId: string;
+  diagnosisRegistryId: string;
+  educationRevisionId: string;
+  version: number;
+  outcome?: string | null;
+  standing: string;
+  actorUserId: string | null;
+  authorityRationale: string | null;
+  occurredAt: string;
+  effectiveAt?: string | null;
+  withdrawnAt?: string | null;
+  supersedesDecisionId?: string | null;
+  supersedesPublicationId?: string | null;
+  approvalDecisionId?: string | null;
+};
+
 export type AuthorizeDiagnosisEducationPublicationPayload = {
   expectedVersion: number;
   expectedApprovalDecisionId: string;
@@ -1595,6 +1614,7 @@ export type WorkspaceDiagnosisEducationCandidateInventory = {
     needsChanges: number;
     accepted: number;
     awaitingApplication: number;
+    staleAccepted?: number;
     applied: number;
     rejected: number;
     superseded: number;
@@ -2464,6 +2484,9 @@ export type DiagnosisEditorialWorkspace = {
   educationGovernance?: {
     currentRevisionId: string | null;
     currentVersion: number | null;
+    latestApprovedRevision?: EducationGovernanceDecisionSummary | null;
+    standingPublication?: EducationGovernanceDecisionSummary | null;
+    history?: EducationGovernanceDecisionSummary[];
     publicationReadiness: EducationPublicationReadiness | null;
     reviewAction: WorkspaceRecommendedAction | null;
     publicationAction: WorkspaceRecommendedAction | null;

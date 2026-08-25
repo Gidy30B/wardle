@@ -962,7 +962,7 @@ export default function DiagnosisEducationPanel({
       pending: 'Updating education review status...',
       success:
         status === 'PUBLISHED'
-          ? 'Education published for eligible learners.'
+          ? 'Education publication decision submitted; open workspace to confirm exact standing revision.'
           : 'Education review status updated.',
       action: () =>
         reviewDiagnosisEducationForAdmin(client, education.id, {
@@ -1082,7 +1082,7 @@ export default function DiagnosisEducationPanel({
   return (
     <CaseDetailSection
       title="Learn Pearls"
-      description="Diagnosis-level education that powers reusable learner notes. TODO: move this to a diagnosis registry detail page when that workspace exists."
+      description="Compatibility view for diagnosis-level learner notes. Routine candidate review, controlled application, exact revision decisions, and publication now run through the diagnosis workspace."
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {education ? (
@@ -1099,6 +1099,23 @@ export default function DiagnosisEducationPanel({
           feedback={feedback}
           onDismiss={pendingAction ? undefined : clear}
         />
+
+        <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-900">
+          <p className="font-semibold">
+            Canonical Education work runs in the workspace.
+          </p>
+          <p className="mt-1">
+            Use this panel for compatibility and manual maintenance; routine AI
+            generation, candidate decisions, Apply, exact revision review,
+            publication, and withdrawal are completed in workspace packets.
+          </p>
+          <a
+            href={`/editorial/diagnoses/${diagnosisRegistryId}?workflow=content&board=education`}
+            className="mt-3 inline-flex text-sm font-semibold text-cyan-800 underline-offset-4 hover:underline"
+          >
+            Open Education workspace
+          </a>
+        </div>
 
         {loading ? (
           <LoadingState

@@ -18,6 +18,8 @@ import {
   DiagnosisGraphCandidateType,
   DiagnosisGraphFactStatus,
   DiagnosisEducationStatus,
+  DiagnosisEducationPublicationStanding,
+  DiagnosisEducationRevisionApprovalStanding,
   Prisma,
   ValidationOutcome,
 } from '@prisma/client';
@@ -370,6 +372,56 @@ type ClinicalCaseDraftRow = {
     createdAt: Date;
     completedAt: Date | null;
   }>;
+};
+
+type EducationGovernanceDecisionSummary = {
+  id: string;
+  kind: 'approval' | 'publication';
+  educationId: string;
+  diagnosisRegistryId: string;
+  educationRevisionId: string;
+  version: number;
+  outcome?: string | null;
+  standing: string;
+  actorUserId: string | null;
+  authorityRationale: string | null;
+  occurredAt: string;
+  effectiveAt?: string | null;
+  withdrawnAt?: string | null;
+  supersedesDecisionId?: string | null;
+  supersedesPublicationId?: string | null;
+  approvalDecisionId?: string | null;
+};
+
+const educationApprovalDecisionSelect = {
+  id: true,
+  educationId: true,
+  diagnosisRegistryId: true,
+  educationRevisionId: true,
+  version: true,
+  outcome: true,
+  standing: true,
+  actorUserId: true,
+  authorityRationale: true,
+  occurredAt: true,
+  supersedesDecisionId: true,
+};
+
+const educationPublicationDecisionSelect = {
+  id: true,
+  educationId: true,
+  diagnosisRegistryId: true,
+  educationRevisionId: true,
+  version: true,
+  approvalDecisionId: true,
+  readinessResult: true,
+  standing: true,
+  actorUserId: true,
+  authorityRationale: true,
+  occurredAt: true,
+  effectiveAt: true,
+  withdrawnAt: true,
+  supersedesPublicationId: true,
 };
 
 type DiagnosisEducationCandidateRow = {
@@ -4205,6 +4257,11 @@ export class DiagnosisEditorialWorkspaceService {
     const awaitingApplication = items.filter(
       (item) => item.reviewStatus === 'ACCEPTED' && item.applicationAllowed,
     ).length;
+    const staleAccepted = items.filter(
+      (item) =>
+        item.reviewStatus === 'ACCEPTED' &&
+        (!item.applicationAllowed || item.stale),
+    ).length;
     return {
       summary: {
         total: items.length,
@@ -4215,12 +4272,13 @@ export class DiagnosisEditorialWorkspaceService {
         accepted: items.filter((item) => item.reviewStatus === 'ACCEPTED')
           .length,
         awaitingApplication,
+        staleAccepted,
         applied: items.filter((item) => item.reviewStatus === 'APPLIED').length,
         rejected: items.filter((item) => item.reviewStatus === 'REJECTED')
           .length,
         superseded: items.filter((item) => item.reviewStatus === 'SUPERSEDED')
           .length,
-        actionable: pendingReview + awaitingApplication,
+        actionable: pendingReview + awaitingApplication + staleAccepted,
         blockerCount: items.reduce(
           (count, item) => count + item.validation.blockerCount,
           0,
@@ -5001,6 +5059,10 @@ export class DiagnosisEditorialWorkspaceService {
       input.educationCandidates.groups.acceptedAwaitingApplication.find(
         (candidate) => candidate.applicationAllowed,
       );
+    const staleAcceptedEducationCandidate =
+      input.educationCandidates.groups.acceptedAwaitingApplication.find(
+        (candidate) => !candidate.applicationAllowed || candidate.stale,
+      );
 
     if (pendingEducationCandidate) {
       actions.push({
@@ -5023,6 +5085,17 @@ export class DiagnosisEditorialWorkspaceService {
         enabled: true,
         disabledReason: null,
         targetEndpoint: `/api/admin/education/candidates/${acceptedEducationCandidate.id}/apply`,
+      });
+    } else if (staleAcceptedEducationCandidate) {
+      actions.push({
+        id: 'resolve-stale-education-candidate',
+        label: 'Resolve stale education candidate',
+        source: 'education_candidate',
+        severity: 'warning',
+        targetTab: 'education',
+        enabled: true,
+        disabledReason: null,
+        targetEndpoint: `/api/admin/education/candidates/${staleAcceptedEducationCandidate.id}`,
       });
     }
 
@@ -5204,6 +5277,9 @@ export class DiagnosisEditorialWorkspaceService {
   ): Promise<{
     currentRevisionId: string | null;
     currentVersion: number | null;
+    latestApprovedRevision: EducationGovernanceDecisionSummary | null;
+    standingPublication: EducationGovernanceDecisionSummary | null;
+    history: EducationGovernanceDecisionSummary[];
     publicationReadiness: EducationPublicationReadiness | null;
     reviewAction: ActionDescriptor | null;
     publicationAction: ActionDescriptor | null;
@@ -5225,6 +5301,13 @@ export class DiagnosisEditorialWorkspaceService {
         publicationReadiness = null;
       }
     }
+
+    const [latestApprovedRevision, standingPublication, history] =
+      await Promise.all([
+        this.getLatestEducationApprovalSummary(registry.education.id),
+        this.getStandingEducationPublicationSummary(registry.education.id),
+        this.getEducationGovernanceHistory(registry.education.id),
+      ]);
 
     const reviewAction =
       registry.education.editorialStatus === DiagnosisEducationStatus.NEEDS_REVIEW
@@ -5257,9 +5340,128 @@ export class DiagnosisEditorialWorkspaceService {
     return {
       currentRevisionId,
       currentVersion: registry.education.version,
+      latestApprovedRevision,
+      standingPublication,
+      history,
       publicationReadiness,
       reviewAction,
       publicationAction,
+    };
+  }
+
+  private async getLatestEducationApprovalSummary(
+    educationId: string,
+  ): Promise<EducationGovernanceDecisionSummary | null> {
+    const delegate = (this.prisma as any).diagnosisEducationRevisionApprovalDecision;
+    if (!delegate?.findFirst) {
+      return null;
+    }
+
+    const decision = await delegate.findFirst({
+      where: {
+        educationId,
+        outcome: 'APPROVED',
+        standing: DiagnosisEducationRevisionApprovalStanding.STANDING,
+      },
+      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+      select: educationApprovalDecisionSelect,
+    });
+
+    return decision ? this.mapEducationApprovalDecision(decision) : null;
+  }
+
+  private async getStandingEducationPublicationSummary(
+    educationId: string,
+  ): Promise<EducationGovernanceDecisionSummary | null> {
+    const delegate = (this.prisma as any).diagnosisEducationPublicationDecision;
+    if (!delegate?.findFirst) {
+      return null;
+    }
+
+    const decision = await delegate.findFirst({
+      where: {
+        educationId,
+        standing: DiagnosisEducationPublicationStanding.AUTHORIZED,
+      },
+      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+      select: educationPublicationDecisionSelect,
+    });
+
+    return decision ? this.mapEducationPublicationDecision(decision) : null;
+  }
+
+  private async getEducationGovernanceHistory(
+    educationId: string,
+  ): Promise<EducationGovernanceDecisionSummary[]> {
+    const approvalDelegate = (this.prisma as any).diagnosisEducationRevisionApprovalDecision;
+    const publicationDelegate = (this.prisma as any).diagnosisEducationPublicationDecision;
+    const [approvals, publications] = await Promise.all([
+      approvalDelegate?.findMany
+        ? approvalDelegate.findMany({
+            where: { educationId },
+            orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+            take: 8,
+            select: educationApprovalDecisionSelect,
+          })
+        : [],
+      publicationDelegate?.findMany
+        ? publicationDelegate.findMany({
+            where: { educationId },
+            orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+            take: 8,
+            select: educationPublicationDecisionSelect,
+          })
+        : [],
+    ]);
+
+    return [
+      ...approvals.map((decision: unknown) =>
+        this.mapEducationApprovalDecision(decision),
+      ),
+      ...publications.map((decision: unknown) =>
+        this.mapEducationPublicationDecision(decision),
+      ),
+    ].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+  }
+
+  private mapEducationApprovalDecision(
+    decision: any,
+  ): EducationGovernanceDecisionSummary {
+    return {
+      id: decision.id,
+      kind: 'approval',
+      educationId: decision.educationId,
+      diagnosisRegistryId: decision.diagnosisRegistryId,
+      educationRevisionId: decision.educationRevisionId,
+      version: decision.version,
+      outcome: decision.outcome,
+      standing: decision.standing,
+      actorUserId: decision.actorUserId ?? null,
+      authorityRationale: decision.authorityRationale ?? null,
+      occurredAt: this.toIso(decision.occurredAt),
+      supersedesDecisionId: decision.supersedesDecisionId ?? null,
+    };
+  }
+
+  private mapEducationPublicationDecision(
+    decision: any,
+  ): EducationGovernanceDecisionSummary {
+    return {
+      id: decision.id,
+      kind: 'publication',
+      educationId: decision.educationId,
+      diagnosisRegistryId: decision.diagnosisRegistryId,
+      educationRevisionId: decision.educationRevisionId,
+      version: decision.version,
+      outcome: decision.readinessResult,
+      standing: decision.standing,
+      actorUserId: decision.actorUserId ?? null,
+      authorityRationale: decision.authorityRationale ?? null,
+      occurredAt: this.toIso(decision.occurredAt),
+      effectiveAt: decision.effectiveAt ? this.toIso(decision.effectiveAt) : null,
+      withdrawnAt: decision.withdrawnAt ? this.toIso(decision.withdrawnAt) : null,
+      supersedesPublicationId: decision.supersedesPublicationId ?? null,
+      approvalDecisionId: decision.approvalDecisionId ?? null,
     };
   }
 

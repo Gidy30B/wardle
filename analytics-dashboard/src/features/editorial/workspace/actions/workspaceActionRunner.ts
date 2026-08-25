@@ -101,20 +101,81 @@ export async function runWorkspaceAction(
     };
   } catch (error) {
     const errorText = toErrorMessage(error);
-    if (isStaleEducationConflict(errorText)) {
+    const governedFailure = classifyGovernedFailure(errorText);
+    if (governedFailure.refresh) {
       await context.refreshWorkspace();
     }
-    safeCall(context.showError, `${descriptor.failureMessage} ${errorText}`);
+    safeCall(
+      context.showError,
+      `${descriptor.failureMessage} ${governedFailure.message}`,
+    );
 
-    return failure(actionId, descriptor.failureMessage, errorText);
+    return failure(actionId, descriptor.failureMessage, governedFailure.message);
   }
 }
 
-function isStaleEducationConflict(message: string): boolean {
-  return (
-    message.includes('Education changed since this view was loaded.') ||
-    message.includes('Education candidate base version is stale.')
-  );
+function classifyGovernedFailure(message: string): {
+  message: string;
+  refresh: boolean;
+} {
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes('stale education governance command') ||
+    normalized.includes('stale education approval') ||
+    normalized.includes('stale education publication') ||
+    normalized.includes('education changed since this view was loaded') ||
+    normalized.includes('education candidate base version is stale') ||
+    normalized.includes('publication approval decision expectation is stale') ||
+    normalized.includes('active education publication expectation is stale')
+  ) {
+    return {
+      message:
+        'Education changed since this review was opened. Nothing was applied; the workspace has refreshed to show the current governed state.',
+      refresh: true,
+    };
+  }
+  if (normalized.includes('already applied')) {
+    return {
+      message:
+        'This candidate has already been applied. The workspace has refreshed so the resulting revision can be reviewed.',
+      refresh: true,
+    };
+  }
+  if (
+    normalized.includes('already decided') ||
+    normalized.includes('already has a current decision')
+  ) {
+    return {
+      message:
+        'This artifact already has a current decision. The workspace has refreshed to show the next available task.',
+      refresh: true,
+    };
+  }
+  if (
+    normalized.includes('already published') ||
+    normalized.includes('withdrawn') ||
+    normalized.includes('superseded')
+  ) {
+    return {
+      message:
+        'Publication standing changed before this action completed. The workspace has refreshed to show current publication standing.',
+      refresh: true,
+    };
+  }
+  if (normalized.includes('unauthorized') || normalized.includes('forbidden')) {
+    return {
+      message: 'You do not hold authority for this decision.',
+      refresh: false,
+    };
+  }
+  if (normalized.includes('blocker')) {
+    return {
+      message:
+        'Publication cannot be authorized until the listed blockers are resolved.',
+      refresh: true,
+    };
+  }
+  return { message, refresh: false };
 }
 
 function failure(

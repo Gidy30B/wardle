@@ -35,12 +35,20 @@ export type WorkspaceWorkflowNavItem = {
 export type WorkflowNavigationViewModel = {
   activeWorkflowId: WorkspaceWorkflowId;
   activeBoardId: WorkspaceBoardId | null;
+  activePacketTarget: WorkspacePacketTarget | null;
   items: WorkspaceWorkflowNavItem[];
 };
 
 export type WorkflowSearchTarget = {
   workflowId: WorkspaceWorkflowId;
   boardId?: WorkspaceBoardId | null;
+  packetType?: WorkspacePacketTarget['type'] | null;
+  packetId?: string | null;
+};
+
+export type WorkspacePacketTarget = {
+  type: 'educationCandidate' | 'educationRevision' | 'educationPublication' | 'caseDraft' | 'caseRevision' | 'casePublication';
+  id: string;
 };
 
 export const WORKSPACE_WORKFLOW_NAV_ITEMS: WorkspaceWorkflowNavItem[] = [
@@ -141,6 +149,8 @@ export function buildWorkflowNavigationViewModel(params: {
   workflowParam?: string | null;
   boardParam?: string | null;
   legacyTabParam?: string | null;
+  packetTypeParam?: string | null;
+  packetIdParam?: string | null;
 }): WorkflowNavigationViewModel {
   const activeWorkflowId = resolveWorkflowId(
     params.workflowParam,
@@ -158,6 +168,10 @@ export function buildWorkflowNavigationViewModel(params: {
   return {
     activeWorkflowId,
     activeBoardId,
+    activePacketTarget: resolvePacketTarget(
+      params.packetTypeParam,
+      params.packetIdParam,
+    ),
     items: WORKSPACE_WORKFLOW_NAV_ITEMS,
   };
 }
@@ -213,7 +227,33 @@ export function buildWorkflowSearchParams(
     next.delete('board');
   }
 
+  if (target.packetType && target.packetId) {
+    next.set('packet', target.packetType);
+    next.set('packetId', target.packetId);
+  } else {
+    next.delete('packet');
+    next.delete('packetId');
+  }
+
   return next;
+}
+
+function resolvePacketTarget(
+  packetType: string | null | undefined,
+  packetId: string | null | undefined,
+): WorkspacePacketTarget | null {
+  if (!packetType || !packetId) return null;
+  if (
+    packetType === 'educationCandidate' ||
+    packetType === 'educationRevision' ||
+    packetType === 'educationPublication' ||
+    packetType === 'caseDraft' ||
+    packetType === 'caseRevision' ||
+    packetType === 'casePublication'
+  ) {
+    return { type: packetType, id: packetId };
+  }
+  return null;
 }
 
 function isWorkspaceWorkflowId(

@@ -193,6 +193,18 @@ test('education revision and publication actions carry exact governance payloads
       note: 'Workspace Education publication decision.',
     },
   );
+  assert.deepEqual(
+    getDeferredReviewItemActions({
+      kind: 'educationPublication',
+      sourceId: 'revision-1',
+      status: 'PUBLISHED',
+      raw: {
+        publicationDecisionId: 'publication-1',
+      },
+    }),
+    ['educationPublication.withdraw'],
+  );
+  assert.equal(isActionSafeForWorkflowShell('educationPublication.withdraw'), true);
 });
 
 test('case revisions expose start review and confirmation-gated APP-006 approval', () => {

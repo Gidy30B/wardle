@@ -2,6 +2,7 @@ import StatusBadge from '../../../../components/ui/StatusBadge';
 import type { ReviewQueueItemViewModel } from '../viewModels/editorialWorkflowViewModel.ts';
 import type {
   WorkspaceBoardId,
+  WorkspacePacketTarget,
   WorkspaceWorkflowId,
 } from '../viewModels/workflowNavigationViewModel.ts';
 import {
@@ -29,6 +30,8 @@ export function ReviewQueueItem({
   onNavigate?: (target: {
     workflowId: WorkspaceWorkflowId;
     boardId?: WorkspaceBoardId | null;
+    packetType?: WorkspacePacketTarget['type'] | null;
+    packetId?: string | null;
   }) => void;
   actionAccess?: WorkspaceActionAccess;
   pendingAction?: string | null;
@@ -104,6 +107,7 @@ export function ReviewQueueItem({
             onNavigate?.({
               workflowId: item.targetWorkflow,
               boardId: item.targetBoard ?? null,
+              ...packetTargetForItem(item),
             })
           }
           className="mt-3 text-xs font-semibold text-[var(--color-teal)] transition hover:text-teal-200"
@@ -136,4 +140,29 @@ export function ReviewQueueItem({
       ) : null}
     </article>
   );
+}
+
+function packetTargetForItem(
+  item: ReviewQueueItemViewModel,
+): { packetType?: WorkspacePacketTarget['type']; packetId?: string } {
+  if (!item.sourceId) return {};
+  if (item.kind === 'education_candidate') {
+    return { packetType: 'educationCandidate', packetId: item.sourceId };
+  }
+  if (item.kind === 'education_revision') {
+    return { packetType: 'educationRevision', packetId: item.sourceId };
+  }
+  if (item.kind === 'education_publication') {
+    return { packetType: 'educationPublication', packetId: item.sourceId };
+  }
+  if (item.kind === 'clinical_case_draft') {
+    return { packetType: 'caseDraft', packetId: item.sourceId };
+  }
+  if (item.kind === 'case_revision') {
+    return { packetType: 'caseRevision', packetId: item.sourceId };
+  }
+  if (item.kind === 'publication_authorization') {
+    return { packetType: 'casePublication', packetId: item.sourceId };
+  }
+  return {};
 }

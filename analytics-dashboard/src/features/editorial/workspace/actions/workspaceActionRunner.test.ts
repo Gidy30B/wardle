@@ -240,6 +240,64 @@ test('runner returns structured failure when an executor fails', async () => {
   assert.match(errorMessages[0], /Unable to request teaching rule changes/);
 });
 
+test('runner refreshes and normalizes stale Education governance conflicts', async () => {
+  let refreshCount = 0;
+  const errorMessages: string[] = [];
+  const executors: WorkspaceActionExecutorMap = {
+    educationRevision: async () => {
+      throw new Error(
+        'Stale education approval: expected version 2, current version 3',
+      );
+    },
+  };
+
+  const result = await runWorkspaceAction(
+    'educationRevision.approve',
+    {
+      educationId: 'education-1',
+      revisionId: 'revision-2',
+      expectedVersion: 2,
+      confirmed: true,
+    },
+    makeContext({
+      refreshWorkspace: async () => {
+        refreshCount += 1;
+      },
+      showError: (message) => errorMessages.push(message),
+    }),
+    executors,
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(refreshCount, 1);
+  assert.match(result.error ?? '', /Education changed since this review was opened/);
+  assert.match(errorMessages[0], /Nothing was applied/);
+});
+
+test('runner refreshes already-applied Education candidate conflicts', async () => {
+  let refreshed = false;
+  const executors: WorkspaceActionExecutorMap = {
+    educationCandidate: async () => {
+      throw new Error('Candidate already applied');
+    },
+  };
+
+  const result = await runWorkspaceAction(
+    'educationCandidate.apply',
+    { candidateId: 'candidate-1', confirmed: true },
+    makeContext({
+      refreshWorkspace: async () => {
+        refreshed = true;
+      },
+    }),
+    executors,
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(refreshed, true);
+  assert.match(result.error ?? '', /already been applied/i);
+});
+
 test('runner treats notification callbacks as best-effort', async () => {
   const executors: WorkspaceActionExecutorMap = {
     teachingRule: async () => ({ saved: true }),

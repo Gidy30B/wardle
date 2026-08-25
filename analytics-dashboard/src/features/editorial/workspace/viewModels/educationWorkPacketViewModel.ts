@@ -1,6 +1,7 @@
 import type {
   DiagnosisEditorialWorkspace,
   DiagnosisEducationCandidate,
+  EducationGovernanceDecisionSummary,
   DiagnosisEducationRevisionAnalysis,
   EducationPublicationReadiness,
   JsonValue,
@@ -116,11 +117,18 @@ export type EducationPublicationPacketViewModel = {
     expectedVersion: number;
     expectedApprovalDecisionId: string | null;
     expectedActivePublicationDecisionId: string | null;
+    publicationDecisionId: string | null;
   };
   confirmationMessage: string;
 };
 
+export type EducationStandingSummaryViewModel = {
+  rows: EducationPacketFact[];
+  detail: string;
+};
+
 export type EducationWorkPacketsViewModel = {
+  standingSummary: EducationStandingSummaryViewModel;
   candidates: EducationCandidatePacketViewModel[];
   revision: EducationRevisionPacketViewModel | null;
   publication: EducationPublicationPacketViewModel | null;
@@ -145,7 +153,44 @@ export function buildEducationWorkPackets(
         )
       : null;
 
-  return { candidates, revision, publication };
+  return {
+    standingSummary: buildEducationStandingSummary(workspace),
+    candidates,
+    revision,
+    publication,
+  };
+}
+
+function buildEducationStandingSummary(
+  workspace: DiagnosisEditorialWorkspace,
+): EducationStandingSummaryViewModel {
+  const governance = workspace.educationGovernance;
+  const currentVersion = workspace.education.version ?? governance?.currentVersion;
+  const approved = governance?.latestApprovedRevision ?? null;
+  const published = governance?.standingPublication ?? null;
+  const detail =
+    published && currentVersion && published.version < currentVersion
+      ? `Current editable material is v${currentVersion}; learner publication remains v${published.version}.`
+      : approved && currentVersion && approved.version === currentVersion
+        ? 'Current editable material has standing approval; publication is still a separate decision.'
+        : 'Standing is derived from exact Education revision governance records.';
+
+  return {
+    rows: [
+      fact('Current editable revision', versionLabel(currentVersion)),
+      fact(
+        'Latest approved revision',
+        approved ? revisionDecisionLabel(approved) : 'None',
+        approved ? 'success' : 'neutral',
+      ),
+      fact(
+        'Standing published revision',
+        published ? publicationDecisionLabel(published) : 'None',
+        published ? 'success' : 'neutral',
+      ),
+    ],
+    detail,
+  };
 }
 
 function buildEducationCandidatePacket(
@@ -332,7 +377,10 @@ function buildEducationRevisionPacket(
       blockers: revision.quality.blockers,
       warnings: revision.quality.warnings,
     },
-    history: sourceCandidate?.history ?? [],
+    history: [
+      ...(sourceCandidate?.history ?? []),
+      ...educationGovernanceHistory(workspace),
+    ],
     actionIds,
     actionTarget: {
       educationId: revision.educationId,
@@ -349,10 +397,19 @@ function buildEducationPublicationPacket(
   revision: DiagnosisEducationRevisionAnalysis,
   readiness: EducationPublicationReadiness,
 ): EducationPublicationPacketViewModel {
+  const standingPublication =
+    workspace.educationGovernance?.standingPublication ?? null;
+  const alreadyStanding =
+    standingPublication?.educationRevisionId === readiness.educationRevisionId &&
+    standingPublication?.standing === 'AUTHORIZED';
   const actionIds: WorkspaceActionId[] =
-    readiness.result === 'READY' && Boolean(readiness.approvalDecisionId)
+    readiness.result === 'READY' &&
+    Boolean(readiness.approvalDecisionId) &&
+    !alreadyStanding
       ? ['educationPublication.authorizeRevision']
-      : [];
+      : standingPublication
+        ? ['educationPublication.withdraw']
+        : [];
 
   return {
     type: 'educationPublication',
@@ -374,7 +431,9 @@ function buildEducationPublicationPacket(
       fact('Current editable', versionLabel(readiness.currentEducationVersion)),
       fact(
         'Current standing publication',
-        readiness.activePublicationDecisionId ?? 'None',
+        standingPublication
+          ? publicationDecisionLabel(standingPublication)
+          : readiness.activePublicationDecisionId ?? 'None',
       ),
       fact(
         'Publication effect',
@@ -393,10 +452,39 @@ function buildEducationPublicationPacket(
       expectedApprovalDecisionId: readiness.approvalDecisionId,
       expectedActivePublicationDecisionId:
         readiness.activePublicationDecisionId,
+      publicationDecisionId: standingPublication?.id ?? null,
     },
     confirmationMessage:
       'Authorize learner publication for this exact approved Education revision? This is separate from approval and may supersede the current standing publication.',
   };
+}
+
+function educationGovernanceHistory(
+  workspace: DiagnosisEditorialWorkspace,
+): EducationGovernanceHistoryEntry[] {
+  return (workspace.educationGovernance?.history ?? []).map((decision) => ({
+    id: decision.id,
+    event:
+      decision.kind === 'approval'
+        ? `Revision ${decision.outcome ?? 'decision'} (${decision.standing})`
+        : `Publication ${decision.standing}`,
+    actorUserId: decision.actorUserId,
+    at: decision.occurredAt,
+    rationale: decision.authorityRationale,
+    target: `v${decision.version} ${decision.educationRevisionId}`,
+  }));
+}
+
+function revisionDecisionLabel(
+  decision: EducationGovernanceDecisionSummary,
+): string {
+  return `v${decision.version} (${decision.id})`;
+}
+
+function publicationDecisionLabel(
+  decision: EducationGovernanceDecisionSummary,
+): string {
+  return `v${decision.version} (${decision.id})`;
 }
 
 function candidateActions(

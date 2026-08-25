@@ -142,6 +142,8 @@ export default function EditorialDiagnosisWorkspacePage() {
         workflowParam: searchParams.get('workflow'),
         boardParam: searchParams.get('board'),
         legacyTabParam: searchParams.get('tab'),
+        packetTypeParam: searchParams.get('packet'),
+        packetIdParam: searchParams.get('packetId'),
       }),
     [searchParams],
   );
@@ -158,18 +160,34 @@ export default function EditorialDiagnosisWorkspacePage() {
     (
       workflowId: WorkspaceWorkflowId,
       boardId?: WorkspaceBoardId | null,
+      packetType?: Parameters<typeof buildWorkflowSearchParams>[1]['packetType'],
+      packetId?: string | null,
     ) => {
       const next = buildWorkflowSearchParams(searchParams, {
         workflowId,
         boardId,
+        packetType,
+        packetId,
       });
       setSearchParams(next, { replace: true });
     },
     [searchParams, setSearchParams],
   );
   const setActiveWorkflowTarget = useCallback(
-    (target: { workflowId: WorkspaceWorkflowId; boardId?: WorkspaceBoardId | null }) => {
-      setActiveWorkflow(target.workflowId, target.boardId);
+    (
+      target: {
+        workflowId: WorkspaceWorkflowId;
+        boardId?: WorkspaceBoardId | null;
+        packetType?: Parameters<typeof buildWorkflowSearchParams>[1]['packetType'];
+        packetId?: string | null;
+      },
+    ) => {
+      setActiveWorkflow(
+        target.workflowId,
+        target.boardId,
+        target.packetType,
+        target.packetId,
+      );
     },
     [setActiveWorkflow],
   );

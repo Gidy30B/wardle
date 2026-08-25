@@ -287,6 +287,7 @@ export type EducationBoardViewModel = WorkflowBoardSummary & {
   teachingRisks: ContentTeachingRiskViewModel[];
   candidatePackets: EducationCandidatePacketViewModel[];
   revisionPacket: EducationRevisionPacketViewModel | null;
+  standingSummary: ReturnType<typeof buildEducationWorkPackets>['standingSummary'];
 };
 
 export type ScoringSystemsBoardViewModel = WorkflowBoardSummary & {
@@ -403,6 +404,7 @@ export function buildEditorialWorkflowViewModel(
     workspace,
     educationWorkPackets.candidates,
     educationWorkPackets.revision,
+    educationWorkPackets.standingSummary,
   );
   const scoringSystemsBoard = buildScoringSystemsBoard(contentCoverage);
   const mnemonicsBoard = buildMnemonicsBoard(contentCoverage);
@@ -1035,6 +1037,7 @@ function buildEducationBoard(
   workspace: DiagnosisEditorialWorkspace,
   candidatePackets: EducationCandidatePacketViewModel[],
   revisionPacket: EducationRevisionPacketViewModel | null,
+  standingSummary: ReturnType<typeof buildEducationWorkPackets>['standingSummary'],
 ): EducationBoardViewModel {
   const blockers = contentCoverage.education.filter(
     (section) => section.tone === 'danger',
@@ -1059,6 +1062,7 @@ function buildEducationBoard(
     ),
     candidatePackets,
     revisionPacket,
+    standingSummary,
   };
 }
 
@@ -1287,6 +1291,13 @@ function mapEducationGovernanceQueueItems(
   const readiness = governance.publicationReadiness;
   if (readiness && governance.currentRevisionId) {
     const ready = readiness.result === 'READY';
+    const alreadyStanding =
+      governance.standingPublication?.educationRevisionId ===
+        readiness.educationRevisionId &&
+      governance.standingPublication?.standing === 'AUTHORIZED';
+    if (ready && alreadyStanding) {
+      return items;
+    }
     items.push({
       id: `education-publication:${readiness.educationId}:${readiness.educationRevisionId}`,
       kind: 'education_publication',
@@ -1306,6 +1317,7 @@ function mapEducationGovernanceQueueItems(
         expectedApprovalDecisionId: readiness.approvalDecisionId,
         expectedActivePublicationDecisionId:
           readiness.activePublicationDecisionId,
+        publicationDecisionId: governance.standingPublication?.id,
         ready,
       },
       groupId: ready ? 'governance' : 'publicationBlockers',
@@ -1326,25 +1338,37 @@ function mapEducationGovernanceQueueItems(
 function mapEducationCandidateQueueItem(
   candidate: DiagnosisEducationCandidate,
 ): ReviewQueueItemViewModel[] {
+  const staleAccepted =
+    candidate.reviewStatus === 'ACCEPTED' &&
+    (!candidate.applicationAllowed || candidate.stale);
   if (
     candidate.reviewStatus !== 'PENDING_REVIEW' &&
-    !candidate.applicationAllowed
+    !candidate.applicationAllowed &&
+    !staleAccepted
   ) {
     return [];
   }
 
   const apply =
-    candidate.reviewStatus === 'ACCEPTED' && candidate.applicationAllowed;
+    candidate.reviewStatus === 'ACCEPTED' &&
+    candidate.applicationAllowed &&
+    !candidate.stale;
   return [
     {
       id: apply
         ? `education-candidate-apply:${candidate.id}`
+        : staleAccepted
+          ? `education-candidate-stale:${candidate.id}`
         : `education-candidate:${candidate.id}`,
       kind: 'education_candidate',
       severity:
-        (candidate.validation?.blockerCount ?? 0) > 0 ? 'blocker' : 'warning',
+        staleAccepted || (candidate.validation?.blockerCount ?? 0) > 0
+          ? 'blocker'
+          : 'warning',
       title: apply
         ? 'Apply accepted Education candidate'
+        : staleAccepted
+          ? 'Resolve stale Education candidate'
         : 'Review generated Education candidate',
       detail:
         candidate.scope === 'SECTION' && candidate.section
@@ -1353,11 +1377,13 @@ function mapEducationCandidateQueueItem(
       targetWorkflow: 'content',
       targetBoard: 'education',
       sourceId: candidate.id,
-      reviewStatus: candidate.reviewStatus,
+      reviewStatus: staleAccepted ? 'STALE_ACCEPTED' : candidate.reviewStatus,
       raw: candidate,
       groupId: 'drafts',
       editorialReason: apply
         ? 'Accepted Education candidate is awaiting separate controlled application.'
+        : staleAccepted
+          ? 'Education changed after this candidate was accepted; nothing has been applied and the current Education state must be reviewed.'
         : 'AI-generated Education remains candidate knowledge until human review.',
       metadata: [
         `Scope: ${candidate.scope}`,

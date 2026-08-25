@@ -129,4 +129,27 @@ describe('workflowNavigationViewModel', () => {
     assert.equal(next.get('workflow'), 'reasoning');
     assert.equal(next.get('board'), 'diagnosticReasoning');
   });
+
+  it('preserves exact packet identity for queue to packet deep links', () => {
+    const params = new URLSearchParams('workflow=reviewQueue');
+    const next = buildWorkflowSearchParams(params, {
+      workflowId: 'content',
+      boardId: 'education',
+      packetType: 'educationCandidate',
+      packetId: 'candidate-1',
+    });
+    const viewModel = buildWorkflowNavigationViewModel({
+      workflowParam: next.get('workflow'),
+      boardParam: next.get('board'),
+      packetTypeParam: next.get('packet'),
+      packetIdParam: next.get('packetId'),
+    });
+
+    assert.equal(next.get('packet'), 'educationCandidate');
+    assert.equal(next.get('packetId'), 'candidate-1');
+    assert.deepEqual(viewModel.activePacketTarget, {
+      type: 'educationCandidate',
+      id: 'candidate-1',
+    });
+  });
 });

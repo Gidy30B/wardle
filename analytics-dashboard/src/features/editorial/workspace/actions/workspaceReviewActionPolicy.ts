@@ -78,6 +78,7 @@ const WORKFLOW_SAFE_ACTIONS = new Set<WorkspaceActionId>([
   'educationRevision.reject',
   'educationRevision.requestChanges',
   'educationPublication.authorizeRevision',
+  'educationPublication.withdraw',
   'caseRevision.startReview',
   'caseRevision.approve',
   'publication.authorizeRevision',
@@ -334,6 +335,9 @@ function applicableActions(subject: SafeReviewSubject): WorkspaceActionId[] {
     const raw = recordPayload(subject);
     if (subject.status === 'READY' && raw.ready === true) {
       return ['educationPublication.authorizeRevision'];
+    }
+    if (raw.publicationDecisionId) {
+      return ['educationPublication.withdraw'];
     }
   }
 

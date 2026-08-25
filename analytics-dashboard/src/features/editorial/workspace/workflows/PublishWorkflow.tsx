@@ -11,15 +11,18 @@ export function PublishWorkflow({
   viewModel,
   actionAccess,
   pendingAction,
+  activePacketTarget,
   onRunAction,
   onNavigate,
 }: WorkspaceWorkflowComponentProps) {
   const workflow = viewModel.publish;
-  const publicationGovernanceItems = viewModel.reviewQueue.items.filter(
+  const casePublicationItems = viewModel.reviewQueue.items.filter(
     (item) =>
       item.kind === 'publication_authorization' ||
-      item.kind === 'case_revision' ||
-      item.kind === 'education_publication',
+      item.kind === 'case_revision',
+  );
+  const educationPublicationItems = viewModel.reviewQueue.items.filter(
+    (item) => item.kind === 'education_publication',
   );
 
   return (
@@ -47,22 +50,12 @@ export function PublishWorkflow({
       </CompactPanel>
 
       <CompactPanel
-        title="Governed publication path"
-        subtitle="Case and Education publication work remain exact-revision decisions with artifact-specific authority."
+        title="Case publication path"
+        subtitle="Case publication remains tied to exact CaseRevision approval and schedule binding visibility."
       >
-        {workflow.educationPublicationPacket ? (
-          <div className="mb-3">
-            <EducationPublicationPacket
-              packet={workflow.educationPublicationPacket}
-              actionAccess={actionAccess}
-              pendingAction={pendingAction}
-              onRunAction={onRunAction}
-            />
-          </div>
-        ) : null}
-        {publicationGovernanceItems.length ? (
+        {casePublicationItems.length ? (
           <div className="space-y-2">
-            {publicationGovernanceItems.map((item) => (
+            {casePublicationItems.map((item) => (
               <ReviewQueueItem
                 key={item.id}
                 item={item}
@@ -77,6 +70,42 @@ export function PublishWorkflow({
           <BoardEmptyState
             title="No publication governance items"
             detail="Exact revision approval, publication authorization, and schedule binding are complete or not yet applicable."
+          />
+        )}
+      </CompactPanel>
+
+      <CompactPanel
+        title="Education publication path"
+        subtitle="Education publication is a separate exact-revision authorization; approval alone is not learner publication."
+      >
+        {workflow.educationPublicationPacket ? (
+          <EducationPublicationPacket
+            packet={workflow.educationPublicationPacket}
+            actionAccess={actionAccess}
+            pendingAction={pendingAction}
+            highlighted={
+              activePacketTarget?.type === 'educationPublication' &&
+              activePacketTarget.id === workflow.educationPublicationPacket.id
+            }
+            onRunAction={onRunAction}
+          />
+        ) : educationPublicationItems.length ? (
+          <div className="space-y-2">
+            {educationPublicationItems.map((item) => (
+              <ReviewQueueItem
+                key={item.id}
+                item={item}
+                actionAccess={actionAccess}
+                pendingAction={pendingAction}
+                onRunAction={onRunAction}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </div>
+        ) : (
+          <BoardEmptyState
+            title="No Education publication task"
+            detail="Education has no ready publication decision or blocker needing workspace action."
           />
         )}
       </CompactPanel>
