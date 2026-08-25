@@ -65,15 +65,42 @@ describe('TeachingRulesAdminService', () => {
         .fn()
         .mockResolvedValue({ rulesUpserted: 1 }),
     };
+    const briefService = {
+      getApprovedBriefContext: jest.fn().mockResolvedValue({
+        id: 'brief-1',
+        status: 'APPROVED',
+        version: 1,
+        summary: 'DKA requires ketosis with metabolic acidosis.',
+        learningGoals: ['Distinguish DKA from HHS.'],
+        requiredTeachingRuleIds: [],
+        requiredMimicIds: ['HHS'],
+        requiredPitfalls: ['Potassium can fall after insulin'],
+        keyInvestigations: ['beta-hydroxybutyrate'],
+        managementAnchors: ['potassium check before insulin'],
+        difficultyGuidance: [],
+        caseGenerationGuidance: [],
+        educationGuidance: [],
+        graphGuidance: [],
+      }),
+    };
+    const lifecyclePolicy = {
+      assertTeachingRuleGenerationReady: jest.fn().mockResolvedValue({}),
+    };
 
     return {
       prisma,
       curriculumProvider,
       seedService,
+      briefService,
+      lifecyclePolicy,
       service: new TeachingRulesAdminService(
         prisma as never,
         curriculumProvider as never,
         seedService as never,
+        undefined,
+        undefined,
+        briefService as never,
+        lifecyclePolicy as never,
       ),
     };
   }
@@ -202,6 +229,18 @@ describe('TeachingRulesAdminService', () => {
     );
   });
 
+  it('blocks generated candidates before Editorial Brief approval', async () => {
+    const { lifecyclePolicy, prisma, service } = buildService();
+    lifecyclePolicy.assertTeachingRuleGenerationReady.mockRejectedValueOnce(
+      new BadRequestException('Approved Editorial Brief is required'),
+    );
+
+    await expect(
+      service.generateCandidateRules(diagnosisRegistryId),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.diagnosisTeachingRule.create).not.toHaveBeenCalled();
+  });
+
   it('validates selected teaching unit ids against provider output', async () => {
     const { service } = buildService();
 
@@ -215,8 +254,8 @@ describe('TeachingRulesAdminService', () => {
 
     await service.seedLegacyRulesForDiagnosis(diagnosisRegistryId);
 
-    expect(seedService.seedLegacyTeachingRulesForDiagnosis).toHaveBeenCalledWith(
-      diagnosisRegistryId,
-    );
+    expect(
+      seedService.seedLegacyTeachingRulesForDiagnosis,
+    ).toHaveBeenCalledWith(diagnosisRegistryId);
   });
 });

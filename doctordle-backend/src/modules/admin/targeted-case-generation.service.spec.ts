@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { TargetedCaseGenerationService } from './targeted-case-generation.service';
 
 describe('TargetedCaseGenerationService', () => {
@@ -52,16 +52,22 @@ describe('TargetedCaseGenerationService', () => {
     const teachingRulesAdminService = {
       validateTeachingUnitIds: jest.fn().mockResolvedValue(undefined),
     };
+    const lifecyclePolicy = {
+      assertCaseGenerationReady: jest.fn().mockResolvedValue({}),
+    };
     const service = new TargetedCaseGenerationService(
       prisma as never,
       caseGenerator as never,
       clinicalCaseDraftService as never,
       teachingRulesAdminService as never,
+      undefined,
+      lifecyclePolicy as never,
     );
 
     return {
       caseGenerator,
       clinicalCaseDraftService,
+      lifecyclePolicy,
       prisma,
       service,
       teachingRulesAdminService,
@@ -102,6 +108,36 @@ describe('TargetedCaseGenerationService', () => {
     expect(result.generatedCase).toBeNull();
     expect(result.validation?.status).toBe('PASSED');
     expect(result.qualityProjection).toBeNull();
+  });
+
+  it('blocks case generation before downstream work when scaffold is incomplete', async () => {
+    const {
+      caseGenerator,
+      lifecyclePolicy,
+      prisma,
+      service,
+      teachingRulesAdminService,
+    } = buildService();
+    lifecyclePolicy.assertCaseGenerationReady.mockRejectedValueOnce(
+      new ConflictException('Case generation is blocked'),
+    );
+
+    await expect(
+      service.generate({
+        diagnosisRegistryId,
+        payload: {
+          difficulty: 'MEDIUM',
+          teachingUnitIds: ['migratory_rlq_pain'],
+          mimicDiagnosisIds: [mimicDiagnosisId],
+        },
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(
+      teachingRulesAdminService.validateTeachingUnitIds,
+    ).not.toHaveBeenCalled();
+    expect(prisma.diagnosisRegistry.findMany).not.toHaveBeenCalled();
+    expect(caseGenerator.generateBatch).not.toHaveBeenCalled();
   });
 
   it('rejects invalid teachingUnitIds for the target diagnosis', async () => {

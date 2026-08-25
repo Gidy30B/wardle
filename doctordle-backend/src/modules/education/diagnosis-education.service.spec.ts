@@ -575,6 +575,9 @@ function buildService(overrides: { generationContextBuilder?: unknown } = {}) {
   const candidateService = {
     createWholeCandidate: jest.fn().mockResolvedValue(candidate),
   };
+  const lifecyclePolicy = {
+    assertEducationGenerationReady: jest.fn().mockResolvedValue({}),
+  };
   const tx = {
     diagnosisEducation: {
       update: jest.fn(),
@@ -633,9 +636,12 @@ function buildService(overrides: { generationContextBuilder?: unknown } = {}) {
       undefined,
       undefined,
       candidateService as never,
+      undefined,
+      lifecyclePolicy as never,
     ),
     candidateService,
     candidate,
+    lifecyclePolicy,
   };
 }
 
@@ -1455,15 +1461,11 @@ describe('DiagnosisEducationService', () => {
     expect(request.messages[1].content).toContain(
       'content names test plus expected finding',
     );
-    expect(request.messages[1].content).toContain(
-      'diagnosisSpecificGuidance',
-    );
+    expect(request.messages[1].content).toContain('diagnosisSpecificGuidance');
     expect(request.messages[1].content).toContain('expectedNamedSigns');
     expect(request.messages[1].content).toContain('expectedMimics');
     expect(request.messages[1].content).toContain('expectedPitfalls');
-    expect(request.messages[1].content).toContain(
-      'expectedManagementAnchors',
-    );
+    expect(request.messages[1].content).toContain('expectedManagementAnchors');
     expect(request.messages[1].content).toContain('atomicityGuidance');
     expect(request.messages[1].content).toContain('HIGH_YIELD_DISCRIMINATOR');
     expect(request.messages[1].content).toContain(
@@ -1475,22 +1477,18 @@ describe('DiagnosisEducationService', () => {
       'why it matters diagnostically',
     );
     expect(request.messages[0].content).toContain('probability shift');
-    expect(request.messages[1].content).toContain('Avoid broad syndrome paragraphs');
+    expect(request.messages[1].content).toContain(
+      'Avoid broad syndrome paragraphs',
+    );
     expect(request.messages[0].content).toContain('not trivia');
     expect(request.messages[0].content).toContain('Differentials must compare');
     expect(request.messages[0].content).toContain(
       'mentally assign each teaching concept to exactly one primary section',
     );
-    expect(request.messages[0].content).toContain(
-      'Avoid synonym duplicates',
-    );
+    expect(request.messages[0].content).toContain('Avoid synonym duplicates');
     expect(request.messages[1].content).toContain('sectionOwnership');
-    expect(request.messages[1].content).toContain(
-      'clinicalPattern max 3',
-    );
-    expect(request.messages[1].content).toContain(
-      'scoringSystems max 2',
-    );
+    expect(request.messages[1].content).toContain('clinicalPattern max 3');
+    expect(request.messages[1].content).toContain('scoringSystems max 2');
     expect(request.messages[1].content).toContain(
       'Periumbilical pain -> RLQ pain -> movement sensitivity -> focal peritonism',
     );
@@ -1510,7 +1508,9 @@ describe('DiagnosisEducationService', () => {
     expect(request.messages[1].content).toContain('rebound');
     expect(request.messages[1].content).toContain('MANTRELS');
     expect(request.messages[1].content).toContain('WHY_IT_MATTERS');
-    expect(request.messages[1].content).toContain('Periumbilical pain migrated to RLQ');
+    expect(request.messages[1].content).toContain(
+      'Periumbilical pain migrated to RLQ',
+    );
     expect(request.messages[1].content).toContain('Rovsing sign is present');
     expect(request.messages[1].content).toContain('Mild leukocytosis');
     expect(request.messages[1].content).toContain(
@@ -1607,9 +1607,7 @@ describe('DiagnosisEducationService', () => {
       messages: Array<{ role: string; content: string }>;
     };
     expect(request.messages[1].content).toContain('compactGenerationContext');
-    expect(request.messages[1].content).toContain(
-      'McBurney point tenderness',
-    );
+    expect(request.messages[1].content).toContain('McBurney point tenderness');
     expect(request.messages[1].content).toContain(
       'Localized peritoneal signs argue against gastroenteritis.',
     );
@@ -1745,9 +1743,9 @@ describe('DiagnosisEducationService', () => {
     expect(Number(promptMetricPayload?.promptCharacterCount)).toBeLessThan(
       22_000,
     );
-    expect(Number(promptMetricPayload?.approximatePromptTokenCount)).toBeLessThan(
-      5_500,
-    );
+    expect(
+      Number(promptMetricPayload?.approximatePromptTokenCount),
+    ).toBeLessThan(5_500);
   });
 
   it('collects quality warnings for generic low-density education', () => {
@@ -1920,6 +1918,35 @@ describe('DiagnosisEducationService', () => {
     expect(tx.diagnosisEducation.create).not.toHaveBeenCalled();
   });
 
+  it('blocks education generation before model invocation when scaffold is incomplete', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    process.env.AI_EDUCATION_GENERATION_ENABLED = 'true';
+    resetEnvCacheForTests();
+    const { candidateService, lifecyclePolicy, prisma, service } =
+      buildService();
+    lifecyclePolicy.assertEducationGenerationReady.mockRejectedValueOnce(
+      new ConflictException('Education generation is blocked'),
+    );
+    const create = jest.fn();
+    Object.defineProperty(service, 'openaiClient', {
+      value: {
+        chat: {
+          completions: {
+            create,
+          },
+        },
+      },
+    });
+
+    await expect(
+      service.generateDraft('registry-1', 'admin-1'),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(create).not.toHaveBeenCalled();
+    expect(prisma.diagnosisRegistry.findUnique).not.toHaveBeenCalled();
+    expect(candidateService.createWholeCandidate).not.toHaveBeenCalled();
+  });
+
   it('does not expose generated needs-review content to players', async () => {
     const { prisma, service } = buildService();
     prisma.diagnosisEducation.findFirst.mockResolvedValue(null);
@@ -2015,9 +2042,7 @@ describe('DiagnosisEducationService', () => {
       editorialStatus: DiagnosisEducationStatus.PUBLISHED,
       version: 3,
     });
-    prisma.diagnosisEducation.findUnique.mockResolvedValue(
-      existing,
-    );
+    prisma.diagnosisEducation.findUnique.mockResolvedValue(existing);
     const create = mockOpenAiDraft(
       service,
       JSON.stringify(buildValidGeneratedDraft()),

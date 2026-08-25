@@ -6,7 +6,7 @@ import {
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { DiagnosisRegistryStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import OpenAI from 'openai';
 import { zodResponseFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
@@ -124,11 +124,7 @@ const differentialPreflightCategorySchema = z.enum([
   'broadly_related_only',
 ]);
 
-const differentialPreflightVerdictSchema = z.enum([
-  'valid',
-  'weak',
-  'invalid',
-]);
+const differentialPreflightVerdictSchema = z.enum(['valid', 'weak', 'invalid']);
 
 const differentialPreflightAssessmentSchema = z.object({
   diagnosis: z.string(),
@@ -203,8 +199,7 @@ const IMAGING_OBJECTIVE_FINDING_PATTERN =
   /\b(shows|demonstrates|reveals|identifies|notable for)\b.+\b(opac\w*|consolidation|effusion|edema|fracture|mass|lesion|infiltrate|ischemia|hemorrhage|dilation|dilated|enlarged|cavitary|obstruction|stone|appendix|wall thickening|stranding|abscess)\b/i;
 const FEMALE_PATIENT_PATTERN =
   /\b(female|woman|girl|pregnant|postpartum|mother|she|her)\b/i;
-const MALE_PATIENT_PATTERN =
-  /\b(male|man|boy|father|he|his|him)\b/i;
+const MALE_PATIENT_PATTERN = /\b(male|man|boy|father|he|his|him)\b/i;
 const FEMALE_SPECIFIC_DIFFERENTIAL_PATTERN =
   /\b(ovarian|uterine|endometrial|fallopian|adnexal|ectopic pregnancy|pregnancy|pregnant|gynecologic|gynaecologic|pelvic inflammatory disease|pid)\b/i;
 const MALE_SPECIFIC_DIFFERENTIAL_PATTERN =
@@ -266,7 +261,9 @@ type PersistedGeneratedExplanation = GeneratedCase['explanation'] & {
       }>;
       mimicDiagnosisIds: string[];
       mimics: string[];
-      clueRevealStrategy: NonNullable<GenerateCaseInput['clueRevealStrategy']> | null;
+      clueRevealStrategy: NonNullable<
+        GenerateCaseInput['clueRevealStrategy']
+      > | null;
       discriminatorTarget: GenerateCaseInput['discriminatorTarget'] | null;
     };
     reasoningPathTrace?: {
@@ -347,7 +344,9 @@ export class CaseGeneratorService {
     private readonly caseTeachingAlignmentService: CaseTeachingAlignmentService = new CaseTeachingAlignmentService(),
     private readonly differentialMappingService?: DifferentialMappingService,
     @Optional()
-    private readonly lifecyclePolicy?: DiagnosisRegistryLifecyclePolicyService,
+    private readonly lifecyclePolicy: DiagnosisRegistryLifecyclePolicyService = new DiagnosisRegistryLifecyclePolicyService(
+      prisma,
+    ),
     @Optional()
     private readonly clinicalCaseDraftService?: ClinicalCaseDraftService,
   ) {
@@ -413,12 +412,11 @@ export class CaseGeneratorService {
     let lastError: Error | null = null;
     for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt += 1) {
       try {
-        const generatedCase =
-          await this.requestGeneratedCaseForRegistryTarget({
-            input: input.generation,
-            target: input.target,
-            attempt,
-          });
+        const generatedCase = await this.requestGeneratedCaseForRegistryTarget({
+          input: input.generation,
+          target: input.target,
+          attempt,
+        });
         const normalizedCase = this.normalizeCase(generatedCase);
         this.validateCaseForRegistryTarget(normalizedCase, input.target);
 
@@ -632,7 +630,10 @@ export class CaseGeneratorService {
     }
 
     if (
-      !this.matchesRegistryTargetTerm(generatedCase.explanation.diagnosis, target)
+      !this.matchesRegistryTargetTerm(
+        generatedCase.explanation.diagnosis,
+        target,
+      )
     ) {
       throw new BadRequestException(
         `Generated case explanation diagnosis "${generatedCase.explanation.diagnosis}" does not match fixed diagnosis "${target.displayLabel}"`,
@@ -878,7 +879,10 @@ export class CaseGeneratorService {
         'finalReasonLessLikely must be non-empty and case-specific',
       );
 
-      if (!Array.isArray(item.ruledOutByClues) || item.ruledOutByClues.length === 0) {
+      if (
+        !Array.isArray(item.ruledOutByClues) ||
+        item.ruledOutByClues.length === 0
+      ) {
         throw new BadRequestException(
           `Differential "${item.diagnosis}" must include at least one ruledOutByClues entry`,
         );
@@ -973,9 +977,7 @@ export class CaseGeneratorService {
   }
 
   private inferPatientAge(generatedCase: GeneratedCase): number | null {
-    const caseText = generatedCase.clues
-      .map((clue) => clue.value)
-      .join(' ');
+    const caseText = generatedCase.clues.map((clue) => clue.value).join(' ');
     const match = caseText.match(/\b(\d{1,3})[- ]year[- ]old\b/i);
     if (!match) {
       return null;
@@ -1021,7 +1023,9 @@ export class CaseGeneratorService {
     }
 
     const clueTokens = new Set(this.extractMeaningfulTokens(normalizedClue));
-    const overlap = evidenceTokens.filter((token) => clueTokens.has(token)).length;
+    const overlap = evidenceTokens.filter((token) =>
+      clueTokens.has(token),
+    ).length;
     return overlap / evidenceTokens.length >= 0.6;
   }
 
@@ -1029,7 +1033,9 @@ export class CaseGeneratorService {
     return value
       .split(' ')
       .map((token) => token.trim())
-      .filter((token) => token.length >= 3 && !DIAGNOSIS_ACRONYM_STOPWORDS.has(token));
+      .filter(
+        (token) => token.length >= 3 && !DIAGNOSIS_ACRONYM_STOPWORDS.has(token),
+      );
   }
 
   normalizeCase(generatedCase: GeneratedCase): GeneratedCase {
@@ -1056,8 +1062,8 @@ export class CaseGeneratorService {
         keyFindings: generatedCase.explanation.keyFindings
           .map((finding) => finding.trim())
           .filter((finding) => finding.length > 0),
-        differentialAnalysis: generatedCase.explanation.differentialAnalysis.map(
-          (item) => ({
+        differentialAnalysis:
+          generatedCase.explanation.differentialAnalysis.map((item) => ({
             diagnosis: item.diagnosis.trim(),
             whyPlausibleEarly: item.whyPlausibleEarly.trim(),
             ruledOutByClues: item.ruledOutByClues.map((ruleOut) => ({
@@ -1066,8 +1072,7 @@ export class CaseGeneratorService {
               reason: ruleOut.reason.trim(),
             })),
             finalReasonLessLikely: item.finalReasonLessLikely.trim(),
-          }),
-        ),
+          })),
         ...(generationQuality ? { generationQuality } : {}),
       } as GeneratedCase['explanation'],
     };
@@ -1352,10 +1357,10 @@ export class CaseGeneratorService {
           batchId: input.batchId,
           sequence: input.index + 1,
           generationContext,
-          targetedTeachingUnitIds:
-            input.options.targetedCase?.teachingUnitIds,
+          targetedTeachingUnitIds: input.options.targetedCase?.teachingUnitIds,
           targetedMimics: input.options.targetedCase?.mimics,
-          reasoningPathContext: input.options.targetedCase?.reasoningPathContext,
+          reasoningPathContext:
+            input.options.targetedCase?.reasoningPathContext,
           clueRevealStrategy: input.options.targetedCase?.clueRevealStrategy,
           discriminatorTarget: input.options.targetedCase?.discriminatorTarget,
         };
@@ -1398,9 +1403,8 @@ export class CaseGeneratorService {
         });
 
         if (rejectionReason) {
-          const failureCategory = this.categoryFromBatchRejectionReason(
-            rejectionReason,
-          );
+          const failureCategory =
+            this.categoryFromBatchRejectionReason(rejectionReason);
           input.qualityState.rejected += 1;
           lastRejected = {
             answer: normalizedCase.answer,
@@ -1410,7 +1414,8 @@ export class CaseGeneratorService {
           this.recordBatchFailure(input.failureTracker, {
             index: input.index,
             answer: normalizedCase.answer,
-            plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
+            plannerDiagnosis:
+              input.plannerSlot?.diagnosis?.displayLabel ?? null,
             category: failureCategory,
             message: rejectionReason,
             attempt,
@@ -1427,7 +1432,8 @@ export class CaseGeneratorService {
             specialty: quality?.specialty ?? null,
             estimatedDifficulty: quality?.estimatedDifficulty ?? null,
             generationMode: 'registry_target',
-            plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
+            plannerDiagnosis:
+              input.plannerSlot?.diagnosis?.displayLabel ?? null,
             generationContextBuilt,
           });
           continue;
@@ -1455,7 +1461,8 @@ export class CaseGeneratorService {
             selectionSource: input.options.diagnosisRegistryIds?.length
               ? 'explicit_diagnosis_registry_ids'
               : 'generation_planner',
-            sourceIssue: input.options.targetedCase?.discriminatorTarget ?? null,
+            sourceIssue:
+              input.options.targetedCase?.discriminatorTarget ?? null,
           },
         );
 
@@ -1475,7 +1482,8 @@ export class CaseGeneratorService {
           this.recordBatchFailure(input.failureTracker, {
             index: input.index,
             answer: normalizedCase.answer,
-            plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
+            plannerDiagnosis:
+              input.plannerSlot?.diagnosis?.displayLabel ?? null,
             category: failureCategory,
             message: failureCategory,
             attempt,
@@ -1492,7 +1500,8 @@ export class CaseGeneratorService {
             specialty: quality?.specialty ?? null,
             estimatedDifficulty: quality?.estimatedDifficulty ?? null,
             generationMode: 'registry_target',
-            plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
+            plannerDiagnosis:
+              input.plannerSlot?.diagnosis?.displayLabel ?? null,
             generationContextBuilt,
           });
           continue;
@@ -1516,7 +1525,8 @@ export class CaseGeneratorService {
             specialty: quality?.specialty ?? null,
             estimatedDifficulty: quality?.estimatedDifficulty ?? null,
             generationMode: 'registry_target',
-            plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
+            plannerDiagnosis:
+              input.plannerSlot?.diagnosis?.displayLabel ?? null,
             generationContextBuilt,
             saveDiagnosisSource: 'registry',
           }),
@@ -1555,7 +1565,8 @@ export class CaseGeneratorService {
             failureCategory,
             failureMessage: lastError.message,
             generationMode: 'registry_target',
-            plannerDiagnosis: input.plannerSlot?.diagnosis?.displayLabel ?? null,
+            plannerDiagnosis:
+              input.plannerSlot?.diagnosis?.displayLabel ?? null,
             generationContextBuilt,
             rejectionReason: lastError.message,
             saveDiagnosisSource: 'registry',
@@ -1597,10 +1608,7 @@ export class CaseGeneratorService {
   private async buildGenerationContextForSlot(input: {
     diagnosisRegistryId: string | null;
   }): Promise<GenerateCaseInput['generationContext'] | undefined> {
-    if (
-      !input.diagnosisRegistryId ||
-      !this.generationContextBuilder
-    ) {
+    if (!input.diagnosisRegistryId || !this.generationContextBuilder) {
       return undefined;
     }
 
@@ -1714,7 +1722,9 @@ export class CaseGeneratorService {
         index,
         diagnosis,
         duplicatePrevented: false,
-        selectionStatus: diagnosis ? ('selected' as const) : ('unavailable' as const),
+        selectionStatus: diagnosis
+          ? ('selected' as const)
+          : ('unavailable' as const),
         repeatReason:
           index >= targets.length ? 'targeted_diagnoses_reused' : null,
         existingCaseCount: diagnosis?.existingCaseCount ?? null,
@@ -1785,7 +1795,12 @@ export class CaseGeneratorService {
         },
       },
     });
-    const byId = new Map(rows.map((row) => [row.id, row]));
+    const eligibleIds =
+      await this.lifecyclePolicy.getCaseGenerationEligibleRegistryIds(
+        rows.map((row) => row.id),
+      );
+    const eligibleRows = rows.filter((row) => eligibleIds.has(row.id));
+    const byId = new Map(eligibleRows.map((row) => [row.id, row]));
     const missingIds = diagnosisRegistryIds.filter((id) => !byId.has(id));
     if (missingIds.length) {
       throw new BadRequestException(
@@ -1818,14 +1833,7 @@ export class CaseGeneratorService {
   }
 
   private getGeneratableRegistryWhere(): Prisma.DiagnosisRegistryWhereInput {
-    return (
-      this.lifecyclePolicy?.getGeneratableRegistryWhere() ?? {
-        active: true,
-        status: DiagnosisRegistryStatus.ACTIVE,
-        isPlayable: true,
-        isGeneratable: true,
-      }
-    );
+    return this.lifecyclePolicy.getGeneratableRegistryWhere();
   }
 
   private async requestGeneratedCaseForRegistryTarget(input: {
@@ -1989,7 +1997,9 @@ export class CaseGeneratorService {
       .join('\n');
   }
 
-  private buildConceptGuidedCaseSection(input: GenerateCaseInput): string | undefined {
+  private buildConceptGuidedCaseSection(
+    input: GenerateCaseInput,
+  ): string | undefined {
     const context = input.generationContext;
     if (!context?.requiredTeachingUnits?.length) {
       return undefined;
@@ -2007,13 +2017,15 @@ export class CaseGeneratorService {
       context.difficultyStrategy?.revealCoreUnitByClue ??
       (difficulty === 'hard' ? 4 : difficulty === 'easy' ? 2 : 3);
     const unitLines = selectedUnits.map((unit) => {
-      const manifestations = unit.acceptableManifestations.slice(0, 4).join(' | ');
+      const manifestations = unit.acceptableManifestations
+        .slice(0, 4)
+        .join(' | ');
       return `* ${unit.id}: ${unit.label}. Choose one manifestation, such as: ${manifestations}. Rationale: ${unit.rationale}`;
     });
     const avoidTooEarly = context.difficultyStrategy?.avoidTooEarly ?? [];
     const keepAlive = input.targetedMimics?.length
       ? input.targetedMimics.map((mimic) => mimic.diagnosis)
-      : context.difficultyGuidance?.keepAliveDifferentials ?? [];
+      : (context.difficultyGuidance?.keepAliveDifferentials ?? []);
     const revealStrategy = this.clueRevealStrategyInstruction(
       input.clueRevealStrategy,
     );
@@ -2047,20 +2059,26 @@ export class CaseGeneratorService {
       .join('\n');
   }
 
-  private buildReasoningPathCaseSection(input: GenerateCaseInput): string | undefined {
+  private buildReasoningPathCaseSection(
+    input: GenerateCaseInput,
+  ): string | undefined {
     const context = input.reasoningPathContext;
     if (!context) {
       return undefined;
     }
 
-    const evidenceLines = context.evidenceRelationships.slice(0, 8).map(
-      (relationship) =>
-        `* ${relationship.evidenceNode.displayLabel} (${relationship.relationshipType}): ${relationship.reasoningSummary ?? 'Use as supported evidence only.'}`,
-    );
-    const teachingLines = context.teachingRelationships.slice(0, 6).map(
-      (relationship) =>
-        `* ${relationship.relationshipType}/${relationship.teachingPurpose}: ${relationship.discriminatorSummary ?? relationship.commonConfusionReason ?? relationship.learnerPitfall ?? 'Use to preserve the intended contrast.'}`,
-    );
+    const evidenceLines = context.evidenceRelationships
+      .slice(0, 8)
+      .map(
+        (relationship) =>
+          `* ${relationship.evidenceNode.displayLabel} (${relationship.relationshipType}): ${relationship.reasoningSummary ?? 'Use as supported evidence only.'}`,
+      );
+    const teachingLines = context.teachingRelationships
+      .slice(0, 6)
+      .map(
+        (relationship) =>
+          `* ${relationship.relationshipType}/${relationship.teachingPurpose}: ${relationship.discriminatorSummary ?? relationship.commonConfusionReason ?? relationship.learnerPitfall ?? 'Use to preserve the intended contrast.'}`,
+      );
 
     return [
       '',
@@ -2097,13 +2115,17 @@ export class CaseGeneratorService {
   }
 
   private selectCaseTeachingUnits(input: {
-    units: NonNullable<GenerateCaseInput['generationContext']>['requiredTeachingUnits'];
+    units: NonNullable<
+      GenerateCaseInput['generationContext']
+    >['requiredTeachingUnits'];
     difficulty: 'easy' | 'medium' | 'hard';
     requestedTeachingUnitIds?: string[];
   }) {
     const targetCount =
       input.difficulty === 'hard' ? 2 : input.difficulty === 'easy' ? 4 : 3;
-    const caseUnits = input.units.filter((unit) => unit.appliesToCaseGeneration);
+    const caseUnits = input.units.filter(
+      (unit) => unit.appliesToCaseGeneration,
+    );
     const requestedIds = new Set(input.requestedTeachingUnitIds ?? []);
     const requested = caseUnits.filter((unit) => requestedIds.has(unit.id));
     if (requested.length) {
@@ -2111,7 +2133,9 @@ export class CaseGeneratorService {
     }
 
     const critical = caseUnits.filter((unit) => unit.importance === 'critical');
-    const remaining = caseUnits.filter((unit) => unit.importance !== 'critical');
+    const remaining = caseUnits.filter(
+      (unit) => unit.importance !== 'critical',
+    );
 
     return [...critical, ...remaining].slice(0, targetCount);
   }
@@ -2183,7 +2207,9 @@ export class CaseGeneratorService {
       generationContext: context,
       selectedTeachingUnits: selectedUnits,
     });
-    const coveredCount = report.selectedUnits.filter((unit) => unit.covered).length;
+    const coveredCount = report.selectedUnits.filter(
+      (unit) => unit.covered,
+    ).length;
 
     this.logger.log(
       JSON.stringify({
@@ -2389,7 +2415,9 @@ export class CaseGeneratorService {
 
     throw new BadRequestException(
       `Generated case failed differential preflight: ${
-        issueSummary.length > 0 ? issueSummary.join('; ') : 'quality gate failed'
+        issueSummary.length > 0
+          ? issueSummary.join('; ')
+          : 'quality gate failed'
       }`,
     );
   }
@@ -2497,8 +2525,7 @@ export class CaseGeneratorService {
         event: input.reasoningPathContext
           ? 'case.generate.constrained_draft_metadata'
           : 'case.generate.unconstrained_fallback_metadata',
-        reasoningPathId:
-          reasoningPathTrace.reasoningPathId ?? null,
+        reasoningPathId: reasoningPathTrace.reasoningPathId ?? null,
         reasoningGoal: reasoningPathTrace.reasoningGoal ?? null,
         constrained: generationGovernance.constrained,
         hallucinationRisk: generationGovernance.hallucinationRisk,
@@ -2514,23 +2541,22 @@ export class CaseGeneratorService {
       ...generatedCase,
       explanation: {
         ...generatedCase.explanation,
-      generationQuality: {
-        version: 'case-generator:v2',
-        critiqueScore: critique.score,
-        critiquePassed: critique.passed,
-        critiqueIssues: critique.issues,
-        critiqueRecommendations: critique.recommendations,
-        differentialRuleOutScore: critique.differentialRuleOutScore,
-        differentialPlausibilityScore:
-          critique.differentialPlausibilityScore,
-        differentialDiscriminationScore:
-          critique.differentialDiscriminationScore,
-        clinicalEdgeValidityScore: critique.clinicalEdgeValidityScore,
-        invalidReasoningEdges: critique.invalidReasoningEdges,
-        educationalValueScore: critique.educationalValueScore,
-        graphConsistencyScore: critique.graphConsistencyScore,
-        ...metadata,
-      },
+        generationQuality: {
+          version: 'case-generator:v2',
+          critiqueScore: critique.score,
+          critiquePassed: critique.passed,
+          critiqueIssues: critique.issues,
+          critiqueRecommendations: critique.recommendations,
+          differentialRuleOutScore: critique.differentialRuleOutScore,
+          differentialPlausibilityScore: critique.differentialPlausibilityScore,
+          differentialDiscriminationScore:
+            critique.differentialDiscriminationScore,
+          clinicalEdgeValidityScore: critique.clinicalEdgeValidityScore,
+          invalidReasoningEdges: critique.invalidReasoningEdges,
+          educationalValueScore: critique.educationalValueScore,
+          graphConsistencyScore: critique.graphConsistencyScore,
+          ...metadata,
+        },
       },
     } as GeneratedCase;
   }
@@ -2619,7 +2645,9 @@ export class CaseGeneratorService {
   private buildReasoningPathTrace(
     input: GenerateCaseInput,
   ): NonNullable<
-    NonNullable<PersistedGeneratedExplanation['generationQuality']>['reasoningPathTrace']
+    NonNullable<
+      PersistedGeneratedExplanation['generationQuality']
+    >['reasoningPathTrace']
   > {
     const context = input.reasoningPathContext;
     if (!context) {
@@ -2681,7 +2709,9 @@ export class CaseGeneratorService {
   private buildGenerationGovernance(
     input: GenerateCaseInput,
   ): NonNullable<
-    NonNullable<PersistedGeneratedExplanation['generationQuality']>['generationGovernance']
+    NonNullable<
+      PersistedGeneratedExplanation['generationQuality']
+    >['generationGovernance']
   > {
     const warnings = input.reasoningPathContext
       ? []
@@ -3039,7 +3069,9 @@ export class CaseGeneratorService {
     }
 
     if (
-      message.includes('rule-out evidence must be copied or tightly paraphrased')
+      message.includes(
+        'rule-out evidence must be copied or tightly paraphrased',
+      )
     ) {
       return 'differential_grounding';
     }
@@ -3332,11 +3364,9 @@ export class CaseGeneratorService {
       }))
       .sort((left, right) => left.order - right.order)
       .map((clue) =>
-        [
-          clue.order,
-          clue.type,
-          this.normalizeClinicalText(clue.value),
-        ].join(':'),
+        [clue.order, clue.type, this.normalizeClinicalText(clue.value)].join(
+          ':',
+        ),
       );
 
     return [
@@ -3369,9 +3399,7 @@ export class CaseGeneratorService {
     });
 
     for (const existingCase of existingCases) {
-      const clues = Array.isArray(existingCase.clues)
-        ? existingCase.clues
-        : [];
+      const clues = Array.isArray(existingCase.clues) ? existingCase.clues : [];
       const parsedClues = clinicalClueSchema.array().safeParse(clues);
       if (!parsedClues.success) {
         continue;

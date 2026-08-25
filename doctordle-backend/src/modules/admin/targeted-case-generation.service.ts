@@ -10,6 +10,7 @@ import type {
 } from './clue-progression-analysis.service';
 import { ReasoningPathService } from './reasoning-path.service';
 import { TeachingRulesAdminService } from './teaching-rules-admin.service';
+import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
 
 export type TargetedCaseDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
 
@@ -44,12 +45,18 @@ export class TargetedCaseGenerationService {
     private readonly clinicalCaseDraftService: ClinicalCaseDraftService,
     private readonly teachingRulesAdminService?: TeachingRulesAdminService,
     private readonly reasoningPathService?: ReasoningPathService,
+    private readonly lifecyclePolicy: DiagnosisRegistryLifecyclePolicyService = new DiagnosisRegistryLifecyclePolicyService(
+      prisma,
+    ),
   ) {}
 
   async generate(input: {
     diagnosisRegistryId: string;
     payload: TargetedCaseGenerationPayload;
   }) {
+    await this.lifecyclePolicy.assertCaseGenerationReady(
+      input.diagnosisRegistryId,
+    );
     const teachingUnitIds = this.validateTeachingUnitIds(
       input.payload.teachingUnitIds,
     );
@@ -180,7 +187,9 @@ export class TargetedCaseGenerationService {
         }),
         affectedArtifactType: 'TARGETED_DISCRIMINATOR_CASE_DRAFT',
         affectedArtifactId:
-          result.generatedDraft?.id ?? target.caseId ?? input.diagnosisRegistryId,
+          result.generatedDraft?.id ??
+          target.caseId ??
+          input.diagnosisRegistryId,
         reviewStatus: 'PENDING_REVIEW',
         createdByUserId: input.userId ?? null,
       },
@@ -316,7 +325,9 @@ export class TargetedCaseGenerationService {
       throw new BadRequestException('mimicDiagnosisIds supports at most 5 IDs');
     }
 
-    return [...new Set(value.map((item) => this.uuid(item, 'mimicDiagnosisIds')))];
+    return [
+      ...new Set(value.map((item) => this.uuid(item, 'mimicDiagnosisIds'))),
+    ];
   }
 
   private async resolveMimics(mimicDiagnosisIds: string[]) {
@@ -475,7 +486,8 @@ export class TargetedCaseGenerationService {
       acceptEffect: caseDraft
         ? 'Marks the case draft repair as accepted for editorial case drafting; it does not publish.'
         : 'Marks the clue revision proposal as accepted for editorial repair; it does not mutate published cases.',
-      rejectEffect: 'Keeps the detected gap open and records that this draft should not be used.',
+      rejectEffect:
+        'Keeps the detected gap open and records that this draft should not be used.',
       requestChangesHint:
         'Name the missing clinical evidence, clue timing, or learner-confusion issue the next draft should fix.',
       safetyNotes: [

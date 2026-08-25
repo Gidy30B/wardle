@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -55,6 +56,9 @@ type RegistryLifecycleRow = {
   teachingRules: Array<{
     id: string;
     status: string;
+    category?: string | null;
+    importance?: string | null;
+    appliesToEducation?: boolean;
     appliesToCaseGeneration: boolean;
   }>;
   cases: Array<{
@@ -125,8 +129,50 @@ export type DiagnosisRegistryLifecycleReport = {
   recommendations: string[];
 };
 
+export type ScaffoldReadinessStage =
+  | 'METADATA_READY'
+  | 'BOOTSTRAP_READY'
+  | 'SCAFFOLD_IN_REVIEW'
+  | 'SCAFFOLD_READY'
+  | 'EDUCATION_GENERATION_READY'
+  | 'CASE_GENERATION_READY';
+
+export type ScaffoldReadinessEvaluation = {
+  stage: ScaffoldReadinessStage;
+  ready: boolean;
+  blockers: string[];
+  warnings: string[];
+  missing: string[];
+  nextAction: string | null;
+  summary: string;
+};
+
+export type ScaffoldReadinessReport = {
+  diagnosisRegistryId: string;
+  metadata: ScaffoldReadinessEvaluation;
+  bootstrap: ScaffoldReadinessEvaluation;
+  scaffold: ScaffoldReadinessEvaluation;
+  educationGeneration: ScaffoldReadinessEvaluation;
+  caseGeneration: ScaffoldReadinessEvaluation;
+};
+
 const APPROVED_RULE_STATUSES = new Set(['APPROVED', 'PUBLISHED', 'ACTIVE']);
 const APPROVED_BRIEF_STATUSES = new Set(['APPROVED', 'PUBLISHED', 'ACTIVE']);
+const REVIEWABLE_BRIEF_STATUSES = new Set([
+  'DRAFT',
+  'NEEDS_REVIEW',
+  'APPROVED',
+  'ACTIVE',
+]);
+const SCAFFOLD_RULE_CATEGORIES = new Set([
+  'differential_concept',
+  'finding_concept',
+  'exam_mechanism',
+  'investigation_concept',
+  'management_concept',
+  'pitfall_concept',
+  'recall_concept',
+]);
 const APPROVED_EDUCATION_STATUSES = new Set<DiagnosisEducationStatus>([
   DiagnosisEducationStatus.APPROVED,
   DiagnosisEducationStatus.PUBLISHED,
@@ -159,6 +205,75 @@ export class DiagnosisRegistryLifecyclePolicyService {
     const registry = await this.loadRegistry(diagnosisRegistryId);
     const counts = await this.loadCounts(registry);
     return this.buildReport(registry, counts);
+  }
+
+  async getScaffoldReadiness(
+    diagnosisRegistryId: string,
+  ): Promise<ScaffoldReadinessReport> {
+    const registry = await this.loadRegistry(diagnosisRegistryId);
+    return this.buildScaffoldReadiness(registry);
+  }
+
+  async assertBootstrapReady(diagnosisRegistryId: string) {
+    const readiness = await this.getScaffoldReadiness(diagnosisRegistryId);
+    if (!readiness.bootstrap.ready) {
+      throw new ConflictException(
+        this.blockedMessage('Editorial Brief bootstrap', readiness.bootstrap),
+      );
+    }
+    return readiness;
+  }
+
+  async assertTeachingRuleGenerationReady(diagnosisRegistryId: string) {
+    const readiness = await this.getScaffoldReadiness(diagnosisRegistryId);
+    const missingApprovedBrief = readiness.scaffold.missing.some((item) =>
+      item.includes('Editorial Brief'),
+    );
+    const blockers = [
+      ...readiness.metadata.blockers,
+      ...(missingApprovedBrief ? ['Approved Editorial Brief is required'] : []),
+    ];
+    if (blockers.length) {
+      throw new ConflictException(
+        this.blockedMessage('Teaching Rule generation', {
+          ...readiness.scaffold,
+          ready: false,
+          blockers,
+          missing: [
+            ...readiness.metadata.missing,
+            ...(missingApprovedBrief ? ['approved Editorial Brief'] : []),
+          ],
+          nextAction: readiness.scaffold.nextAction,
+        }),
+      );
+    }
+    return readiness;
+  }
+
+  async assertEducationGenerationReady(diagnosisRegistryId: string) {
+    const readiness = await this.getScaffoldReadiness(diagnosisRegistryId);
+    if (!readiness.educationGeneration.ready) {
+      throw new ConflictException(
+        this.blockedMessage(
+          'Education generation',
+          readiness.educationGeneration,
+        ),
+      );
+    }
+    return readiness;
+  }
+
+  async assertCaseGenerationReady(diagnosisRegistryId: string) {
+    const readiness = await this.getScaffoldReadiness(diagnosisRegistryId);
+    if (!readiness.caseGeneration.ready) {
+      throw new ConflictException(
+        this.blockedMessage(
+          'Clinical Case generation',
+          readiness.caseGeneration,
+        ),
+      );
+    }
+    return readiness;
   }
 
   async performAction(input: {
@@ -285,7 +400,9 @@ export class DiagnosisRegistryLifecyclePolicyService {
     ];
 
     if (counts.unresolvedDifferentialCount > 0) {
-      blockers.push('Unresolved differential mappings should be reviewed first');
+      blockers.push(
+        'Unresolved differential mappings should be reviewed first',
+      );
     }
 
     return this.evaluation(blockers, warnings, 0);
@@ -370,8 +487,14 @@ export class DiagnosisRegistryLifecyclePolicyService {
       warnings.push('Diagnosis is already dictionary-active');
     }
 
-    if (!registry.displayLabel || !registry.canonicalName || !registry.canonicalNormalized) {
-      blockers.push('Display label, canonical name, and normalized canonical key are required');
+    if (
+      !registry.displayLabel ||
+      !registry.canonicalName ||
+      !registry.canonicalNormalized
+    ) {
+      blockers.push(
+        'Display label, canonical name, and normalized canonical key are required',
+      );
       score -= 25;
     }
 
@@ -381,7 +504,9 @@ export class DiagnosisRegistryLifecyclePolicyService {
     }
 
     if (!registry.category && !registry.bodySystem) {
-      blockers.push('Category or body system must be assigned before dictionary activation');
+      blockers.push(
+        'Category or body system must be assigned before dictionary activation',
+      );
       score -= 15;
     }
 
@@ -396,7 +521,9 @@ export class DiagnosisRegistryLifecyclePolicyService {
     }
 
     if (registry.isDescriptive || registry.isCompositional) {
-      blockers.push('Descriptive or compositional entries require manual safety review before dictionary activation');
+      blockers.push(
+        'Descriptive or compositional entries require manual safety review before dictionary activation',
+      );
       score -= 15;
     }
 
@@ -468,16 +595,16 @@ export class DiagnosisRegistryLifecyclePolicyService {
     }
 
     if (counts.duplicateCanonicalCount > 0 || counts.duplicateAliasCount > 0) {
-      warnings.push('Duplicate registry risk should be reviewed before generation');
+      warnings.push(
+        'Duplicate registry risk should be reviewed before generation',
+      );
       score -= 10;
     }
 
     return this.evaluation(blockers, warnings, score);
   }
 
-  isEditorialVisible(registry: {
-    status: DiagnosisRegistryStatus;
-  }): boolean {
+  isEditorialVisible(registry: { status: DiagnosisRegistryStatus }): boolean {
     return registry.status !== DiagnosisRegistryStatus.DEPRECATED;
   }
 
@@ -517,6 +644,80 @@ export class DiagnosisRegistryLifecyclePolicyService {
       isPlayable: true,
       isGeneratable: true,
     };
+  }
+
+  async getCaseGenerationEligibleRegistryIds(
+    diagnosisRegistryIds: string[],
+  ): Promise<Set<string>> {
+    if (!diagnosisRegistryIds.length) {
+      return new Set();
+    }
+    const rows = await this.prisma.diagnosisRegistry.findMany({
+      where: {
+        id: { in: diagnosisRegistryIds },
+      },
+      select: {
+        id: true,
+        canonicalName: true,
+        canonicalNormalized: true,
+        displayLabel: true,
+        status: true,
+        active: true,
+        isPlayable: true,
+        isGeneratable: true,
+        onboardingStatus: true,
+        specialty: true,
+        category: true,
+        bodySystem: true,
+        difficultyBand: true,
+        isDescriptive: true,
+        isCompositional: true,
+        education: {
+          select: {
+            id: true,
+            editorialStatus: true,
+            publishedAt: true,
+          },
+        },
+        editorialBrief: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+        teachingRules: {
+          select: {
+            id: true,
+            status: true,
+            category: true,
+            importance: true,
+            appliesToEducation: true,
+            appliesToCaseGeneration: true,
+          },
+        },
+        cases: {
+          select: {
+            id: true,
+            editorialStatus: true,
+            publishedAt: true,
+            currentRevisionId: true,
+          },
+        },
+        graphFacts: {
+          where: { status: DiagnosisGraphFactStatus.ACTIVE },
+          select: { id: true },
+        },
+      },
+    });
+    return new Set(
+      rows
+        .filter(
+          (row) =>
+            this.buildScaffoldReadiness(row as RegistryLifecycleRow)
+              .caseGeneration.ready,
+        )
+        .map((row) => row.id),
+    );
   }
 
   getPlayableRegistryWhere(): Prisma.DiagnosisRegistryWhereInput {
@@ -575,6 +776,9 @@ export class DiagnosisRegistryLifecyclePolicyService {
           select: {
             id: true,
             status: true,
+            category: true,
+            importance: true,
+            appliesToEducation: true,
             appliesToCaseGeneration: true,
           },
         },
@@ -691,8 +895,7 @@ export class DiagnosisRegistryLifecyclePolicyService {
         isPlayable: registry.isPlayable,
         isGeneratable: registry.isGeneratable,
         onboardingStatus: registry.onboardingStatus,
-        activationReviewedByUserId:
-          registry.activationReviewedByUserId ?? null,
+        activationReviewedByUserId: registry.activationReviewedByUserId ?? null,
         activationReviewedAt: registry.activationReviewedAt
           ? registry.activationReviewedAt.toISOString()
           : null,
@@ -768,7 +971,8 @@ export class DiagnosisRegistryLifecyclePolicyService {
           isPlayable: true,
           isGeneratable: input.isGeneratable ?? false,
           onboardingStatus:
-            input.onboardingStatus === DiagnosisEditorialOnboardingStatus.COMPLETE
+            input.onboardingStatus ===
+            DiagnosisEditorialOnboardingStatus.COMPLETE
               ? DiagnosisEditorialOnboardingStatus.COMPLETE
               : DiagnosisEditorialOnboardingStatus.READY_FOR_REVIEW,
           activationReviewedByUser: { connect: { id: input.reviewerUserId } },
@@ -816,32 +1020,32 @@ export class DiagnosisRegistryLifecyclePolicyService {
   private hasApprovedEducation(registry: RegistryLifecycleRow): boolean {
     return Boolean(
       registry.education &&
-        APPROVED_EDUCATION_STATUSES.has(registry.education.editorialStatus),
+      APPROVED_EDUCATION_STATUSES.has(registry.education.editorialStatus),
     );
   }
 
   private hasApprovedBrief(registry: RegistryLifecycleRow): boolean {
     return Boolean(
       registry.editorialBrief &&
-        APPROVED_BRIEF_STATUSES.has(registry.editorialBrief.status),
+      APPROVED_BRIEF_STATUSES.has(registry.editorialBrief.status),
     );
   }
 
   private hasApprovedTeachingRules(registry: RegistryLifecycleRow): boolean {
-    return registry.teachingRules.some((rule) =>
+    return (registry.teachingRules ?? []).some((rule) =>
       APPROVED_RULE_STATUSES.has(rule.status),
     );
   }
 
   private hasCaseGenerationRules(registry: RegistryLifecycleRow): boolean {
-    return registry.teachingRules.some(
+    return (registry.teachingRules ?? []).some(
       (rule) =>
         rule.appliesToCaseGeneration && APPROVED_RULE_STATUSES.has(rule.status),
     );
   }
 
   private hasUsableCase(registry: RegistryLifecycleRow): boolean {
-    return registry.cases.some(
+    return (registry.cases ?? []).some(
       (caseRecord) =>
         caseRecord.editorialStatus &&
         USABLE_CASE_STATUSES.has(caseRecord.editorialStatus) &&
@@ -850,14 +1054,305 @@ export class DiagnosisRegistryLifecyclePolicyService {
   }
 
   private hasGraphReadiness(registry: RegistryLifecycleRow): boolean {
-    return registry.graphFacts.length > 0;
+    return (registry.graphFacts ?? []).length > 0;
+  }
+
+  private buildScaffoldReadiness(
+    registry: RegistryLifecycleRow,
+  ): ScaffoldReadinessReport {
+    const metadata = this.metadataReadiness(registry);
+    const bootstrap = this.bootstrapReadiness(registry, metadata);
+    const scaffold = this.scaffoldReadiness(registry, metadata);
+    const educationGeneration = this.downstreamGenerationReadiness({
+      stage: 'EDUCATION_GENERATION_READY',
+      registry,
+      metadata,
+      scaffold,
+      requireGeneratableFlag: false,
+    });
+    const caseGeneration = this.downstreamGenerationReadiness({
+      stage: 'CASE_GENERATION_READY',
+      registry,
+      metadata,
+      scaffold,
+      requireGeneratableFlag: true,
+    });
+
+    return {
+      diagnosisRegistryId: registry.id,
+      metadata,
+      bootstrap,
+      scaffold,
+      educationGeneration,
+      caseGeneration,
+    };
+  }
+
+  private metadataReadiness(
+    registry: RegistryLifecycleRow,
+  ): ScaffoldReadinessEvaluation {
+    const blockers: string[] = [];
+    const missing: string[] = [];
+
+    if (!registry.canonicalName?.trim()) {
+      blockers.push('Canonical diagnosis name is required');
+      missing.push('canonicalName');
+    }
+    if (!registry.displayLabel?.trim()) {
+      blockers.push('Display label is required');
+      missing.push('displayLabel');
+    }
+    if (!registry.canonicalNormalized?.trim()) {
+      blockers.push('Normalized canonical key is required');
+      missing.push('canonicalNormalized');
+    }
+    if (!this.isActive(registry)) {
+      blockers.push('Diagnosis must be active before scaffold generation');
+      missing.push('active diagnosis');
+    }
+    if (!registry.specialty?.trim()) {
+      blockers.push('Specialty is required before scaffold generation');
+      missing.push('specialty');
+    }
+    if (!registry.category?.trim() && !registry.bodySystem?.trim()) {
+      blockers.push(
+        'Category or body system is required before scaffold generation',
+      );
+      missing.push('category or bodySystem');
+    }
+
+    return this.scaffoldEvaluation({
+      stage: 'METADATA_READY',
+      ready: blockers.length === 0,
+      blockers,
+      warnings: registry.difficultyBand
+        ? []
+        : ['Difficulty band is not assigned'],
+      missing,
+      nextAction: blockers.length ? 'Complete diagnosis metadata' : null,
+      summary:
+        blockers.length === 0
+          ? 'Metadata is ready for scaffold bootstrap'
+          : 'Metadata is incomplete for scaffold bootstrap',
+    });
+  }
+
+  private bootstrapReadiness(
+    registry: RegistryLifecycleRow,
+    metadata: ScaffoldReadinessEvaluation,
+  ): ScaffoldReadinessEvaluation {
+    return this.scaffoldEvaluation({
+      stage: 'BOOTSTRAP_READY',
+      ready: metadata.ready,
+      blockers: metadata.ready ? [] : [...metadata.blockers],
+      warnings: [...metadata.warnings],
+      missing: [...metadata.missing],
+      nextAction: metadata.ready
+        ? 'Generate Editorial Brief'
+        : metadata.nextAction,
+      summary: metadata.ready
+        ? 'Editorial Brief bootstrap is available'
+        : 'Editorial Brief bootstrap is blocked by metadata',
+    });
+  }
+
+  private scaffoldReadiness(
+    registry: RegistryLifecycleRow,
+    metadata: ScaffoldReadinessEvaluation,
+  ): ScaffoldReadinessEvaluation {
+    const blockers = [...metadata.blockers];
+    const warnings = [...metadata.warnings];
+    const missing = [...metadata.missing];
+    const approvedBrief = this.hasApprovedBrief(registry);
+    const reviewableBrief = Boolean(
+      registry.editorialBrief &&
+      REVIEWABLE_BRIEF_STATUSES.has(registry.editorialBrief.status),
+    );
+    const rules = this.approvedScaffoldRules(registry);
+    const educationRules = rules.filter((rule) => rule.appliesToEducation);
+    const caseRules = rules.filter((rule) => rule.appliesToCaseGeneration);
+    const categories = new Set(
+      rules.map((rule) => rule.category).filter(Boolean),
+    );
+    const hasClinicalPattern =
+      categories.has('finding_concept') ||
+      categories.has('exam_mechanism') ||
+      categories.has('differential_concept');
+    const hasOperationalAnchor =
+      categories.has('investigation_concept') ||
+      categories.has('management_concept') ||
+      categories.has('pitfall_concept');
+
+    if (!registry.editorialBrief) {
+      blockers.push('Editorial Brief is missing');
+      missing.push('Editorial Brief');
+    } else if (!approvedBrief) {
+      blockers.push('Editorial Brief must be approved or active');
+      missing.push('approved Editorial Brief');
+    }
+    if (reviewableBrief && !approvedBrief) {
+      warnings.push('Editorial Brief is awaiting review');
+    }
+    if (educationRules.length < 3 || caseRules.length < 2) {
+      blockers.push('Approved Teaching Rules are insufficient');
+      missing.push('approved Teaching Rules');
+    }
+    if (!hasClinicalPattern) {
+      blockers.push(
+        'Teaching Rules must include diagnostic reasoning concepts',
+      );
+      missing.push('diagnostic reasoning Teaching Rules');
+    }
+    if (!hasOperationalAnchor) {
+      blockers.push(
+        'Teaching Rules must include investigation, management, or pitfall anchors',
+      );
+      missing.push('operational Teaching Rule anchors');
+    }
+    if (
+      !rules.some(
+        (rule) => rule.importance === 'critical' || rule.importance === 'high',
+      )
+    ) {
+      blockers.push('At least one high-importance Teaching Rule is required');
+      missing.push('high-importance Teaching Rule');
+    }
+    if (!rules.length && approvedBrief) {
+      warnings.push('Teaching Rules are still being assembled');
+    }
+
+    const nextAction = this.nextScaffoldAction({
+      registry,
+      approvedBrief,
+      rules,
+      blockers,
+    });
+    return this.scaffoldEvaluation({
+      stage: blockers.length ? 'SCAFFOLD_IN_REVIEW' : 'SCAFFOLD_READY',
+      ready: blockers.length === 0,
+      blockers,
+      warnings,
+      missing,
+      nextAction,
+      summary:
+        blockers.length === 0
+          ? 'Educational scaffold is ready'
+          : 'Educational scaffold is incomplete',
+    });
+  }
+
+  private downstreamGenerationReadiness(input: {
+    stage: 'EDUCATION_GENERATION_READY' | 'CASE_GENERATION_READY';
+    registry: RegistryLifecycleRow;
+    metadata: ScaffoldReadinessEvaluation;
+    scaffold: ScaffoldReadinessEvaluation;
+    requireGeneratableFlag: boolean;
+  }): ScaffoldReadinessEvaluation {
+    const blockers = [...input.metadata.blockers, ...input.scaffold.blockers];
+    const missing = [...input.metadata.missing, ...input.scaffold.missing];
+    const warnings = [...input.metadata.warnings, ...input.scaffold.warnings];
+
+    if (input.requireGeneratableFlag) {
+      if (!this.isPlayable(input.registry)) {
+        blockers.push('Diagnosis must be playable before Case generation');
+        missing.push('playable diagnosis');
+      }
+      if (!input.registry.isGeneratable) {
+        blockers.push(
+          'Diagnosis must be marked generatable before Case generation',
+        );
+        missing.push('isGeneratable');
+      }
+    }
+
+    return this.scaffoldEvaluation({
+      stage: input.stage,
+      ready: blockers.length === 0,
+      blockers,
+      warnings,
+      missing,
+      nextAction: blockers.length ? input.scaffold.nextAction : null,
+      summary:
+        blockers.length === 0
+          ? input.stage === 'CASE_GENERATION_READY'
+            ? 'Clinical Case generation is ready'
+            : 'Education generation is ready'
+          : input.stage === 'CASE_GENERATION_READY'
+            ? 'Clinical Case generation is blocked until the educational scaffold is complete'
+            : 'Education generation is blocked until the educational scaffold is complete',
+    });
+  }
+
+  private approvedScaffoldRules(registry: RegistryLifecycleRow) {
+    return (registry.teachingRules ?? []).filter(
+      (rule) =>
+        APPROVED_RULE_STATUSES.has(rule.status) &&
+        (!rule.category || SCAFFOLD_RULE_CATEGORIES.has(rule.category)),
+    );
+  }
+
+  private nextScaffoldAction(input: {
+    registry: RegistryLifecycleRow;
+    approvedBrief: boolean;
+    rules: RegistryLifecycleRow['teachingRules'];
+    blockers: string[];
+  }): string | null {
+    if (!input.blockers.length) {
+      return null;
+    }
+    if (!input.registry.editorialBrief) {
+      return 'Generate Editorial Brief';
+    }
+    if (!input.approvedBrief) {
+      return 'Review Editorial Brief';
+    }
+    if (!input.rules.length) {
+      return 'Generate Teaching Rule Candidates';
+    }
+    return 'Review Teaching Rules';
+  }
+
+  private scaffoldEvaluation(input: {
+    stage: ScaffoldReadinessStage;
+    ready: boolean;
+    blockers: string[];
+    warnings: string[];
+    missing: string[];
+    nextAction: string | null;
+    summary: string;
+  }): ScaffoldReadinessEvaluation {
+    return {
+      stage: input.stage,
+      ready: input.ready,
+      blockers: this.unique(input.blockers),
+      warnings: this.unique(input.warnings),
+      missing: this.unique(input.missing),
+      nextAction: input.nextAction,
+      summary: input.summary,
+    };
+  }
+
+  private blockedMessage(
+    action: string,
+    readiness: ScaffoldReadinessEvaluation,
+  ) {
+    return {
+      code: readiness.stage,
+      message: `${action} is blocked because the educational scaffold is incomplete.`,
+      blockers: readiness.blockers,
+      warnings: readiness.warnings,
+      missing: readiness.missing,
+      nextRecommendedAction: readiness.nextAction,
+    };
   }
 
   private isActive(registry: {
     status: DiagnosisRegistryStatus;
     active: boolean;
   }): boolean {
-    return registry.status === DiagnosisRegistryStatus.ACTIVE && registry.active;
+    return (
+      registry.status === DiagnosisRegistryStatus.ACTIVE && registry.active
+    );
   }
 
   private evaluation(
@@ -883,19 +1378,30 @@ export class DiagnosisRegistryLifecyclePolicyService {
     const recommendations: string[] = [];
 
     if (!input.activation.allowed) {
-      recommendations.push('Resolve activation blockers before enabling registry visibility');
+      recommendations.push(
+        'Resolve activation blockers before enabling registry visibility',
+      );
     }
 
-    if (!input.dictionaryActivation.allowed && !this.isDictionaryVisible(input.registry)) {
-      recommendations.push('Complete dictionary activation metadata before gameplay visibility');
+    if (
+      !input.dictionaryActivation.allowed &&
+      !this.isDictionaryVisible(input.registry)
+    ) {
+      recommendations.push(
+        'Complete dictionary activation metadata before gameplay visibility',
+      );
     }
 
     if (!input.playability.allowed) {
-      recommendations.push('Prepare at least one usable case before marking playable');
+      recommendations.push(
+        'Prepare at least one usable case before marking playable',
+      );
     }
 
     if (!input.generatability.allowed) {
-      recommendations.push('Approve generation brief and teaching rules before enabling generation');
+      recommendations.push(
+        'Approve generation brief and teaching rules before enabling generation',
+      );
     }
 
     if (!input.registry.isPlayable && input.playability.allowed) {

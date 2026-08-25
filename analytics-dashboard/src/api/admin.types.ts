@@ -53,21 +53,21 @@ export type GenerateCasesPayload = {
   diagnosisRegistryIds?: string[];
 };
 
-export type GenerationMode = 'registry_balanced' | 'diagnosis_targeted';
+export type GenerationMode = "registry_balanced" | "diagnosis_targeted";
 
 export type GenerationResultTab =
-  | 'all'
-  | 'created'
-  | 'skipped'
-  | 'failed'
-  | 'planner';
+  | "all"
+  | "created"
+  | "skipped"
+  | "failed"
+  | "planner";
 
 export type GenerateCaseSkipReason =
-  | 'duplicate_answer'
-  | 'duplicate_scenario'
-  | 'low_quality'
-  | 'specialty_cluster'
-  | 'difficulty_balance';
+  | "duplicate_answer"
+  | "duplicate_scenario"
+  | "low_quality"
+  | "specialty_cluster"
+  | "difficulty_balance";
 
 export type PlannedGenerationDiagnosis = {
   diagnosisRegistryId: string;
@@ -107,7 +107,7 @@ export type PlannedGenerationSlot = {
   index: number;
   diagnosis: PlannedGenerationDiagnosis | null;
   duplicatePrevented: boolean;
-  selectionStatus: 'selected' | 'unavailable';
+  selectionStatus: "selected" | "unavailable";
   repeatReason: string | null;
   existingCaseCount: number | null;
   recentUsePenaltyApplied: boolean;
@@ -118,7 +118,7 @@ export type PlannedGenerationSlot = {
 export type GenerateCaseResultItem =
   | {
       index: number;
-      status: 'draft_created';
+      status: "draft_created";
       draftId: string;
       diagnosisRegistryId: string;
       answer: string;
@@ -127,13 +127,13 @@ export type GenerateCaseResultItem =
     }
   | {
       index: number;
-      status: 'skipped';
+      status: "skipped";
       reason: GenerateCaseSkipReason;
       answer: string;
     }
   | {
       index: number;
-      status: 'failed';
+      status: "failed";
       error: string;
     };
 
@@ -153,17 +153,17 @@ export type GenerateCasesResult = {
 };
 
 export type ClinicalCaseDraftReviewDecision =
-  | 'ACCEPT'
-  | 'REJECT'
-  | 'REQUEST_CHANGES';
+  | "ACCEPT"
+  | "REJECT"
+  | "REQUEST_CHANGES";
 
 export type ClinicalCaseDraftReviewStatus =
-  | 'PENDING_REVIEW'
-  | 'CHANGES_REQUESTED'
-  | 'ACCEPTED'
-  | 'REJECTED'
-  | 'SUPERSEDED'
-  | 'APPLIED';
+  | "PENDING_REVIEW"
+  | "CHANGES_REQUESTED"
+  | "ACCEPTED"
+  | "REJECTED"
+  | "SUPERSEDED"
+  | "APPLIED";
 
 export type ClinicalCaseDraft = {
   id: string;
@@ -280,7 +280,7 @@ export type ReviewClinicalCaseDraftPayload = {
 };
 
 export type ClinicalCaseDraftApplicationResult = {
-  status: 'applied';
+  status: "applied";
   draftId: string;
   caseId: string;
   caseRevisionId: string;
@@ -321,7 +321,7 @@ export type WorkspaceCaseRevisionGovernance = {
   };
   publication: {
     readiness: {
-      result: 'READY' | 'BLOCKED' | string;
+      result: "READY" | "BLOCKED" | string;
       blockers: Array<{ code: string; type: string; message: string }>;
       warnings: Array<{ code: string; type: string; message: string }>;
       publicationAuthorized: boolean;
@@ -395,13 +395,13 @@ export type CaseRevisionPublicationDecision = {
   createdAt: string;
 };
 
-export type TargetedCaseDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
+export type TargetedCaseDifficulty = "EASY" | "MEDIUM" | "HARD";
 
 export type ClueRevealStrategy =
-  | 'classic'
-  | 'early_anchor'
-  | 'late_discriminator'
-  | 'progressive_narrowing';
+  | "classic"
+  | "early_anchor"
+  | "late_discriminator"
+  | "progressive_narrowing";
 
 export type GenerateTargetedCasePayload = {
   difficulty: TargetedCaseDifficulty;
@@ -413,13 +413,13 @@ export type GenerateTargetedCasePayload = {
 };
 
 export type DiscriminatorGenerationIntent =
-  | 'missing_discriminator_case'
-  | 'weak_discriminator_case'
-  | 'persistent_confusion_case'
-  | 'must_not_miss_separation'
-  | 'late_lock_in_repair'
-  | 'weak_clue_transition'
-  | 'heuristic_only_repair';
+  | "missing_discriminator_case"
+  | "weak_discriminator_case"
+  | "persistent_confusion_case"
+  | "must_not_miss_separation"
+  | "late_lock_in_repair"
+  | "weak_clue_transition"
+  | "heuristic_only_repair";
 
 export type TargetedDiscriminatorGenerationRequest = {
   caseId?: string;
@@ -450,149 +450,149 @@ export type GenerateClueRevisionProposalPayload = {
 };
 
 export type CaseEditorialStatus =
-  | 'DRAFT'
-  | 'VALIDATING'
-  | 'VALIDATED'
-  | 'REVIEW'
-  | 'NEEDS_EDIT'
-  | 'APPROVED'
-  | 'READY_TO_PUBLISH'
-  | 'PUBLISHED'
-  | 'REJECTED';
+  | "DRAFT"
+  | "VALIDATING"
+  | "VALIDATED"
+  | "REVIEW"
+  | "NEEDS_EDIT"
+  | "APPROVED"
+  | "READY_TO_PUBLISH"
+  | "PUBLISHED"
+  | "REJECTED";
 
-export type ValidationOutcome = 'PASSED' | 'FAILED' | 'ERROR';
+export type ValidationOutcome = "PASSED" | "FAILED" | "ERROR";
 
-export type ReviewDecision = 'APPROVED' | 'REJECTED' | 'NEEDS_EDIT';
+export type ReviewDecision = "APPROVED" | "REJECTED" | "NEEDS_EDIT";
 
-export type CaseSource = 'GENERATED' | 'MANUAL' | 'ADMIN_EDIT' | 'RESTORED';
+export type CaseSource = "GENERATED" | "MANUAL" | "ADMIN_EDIT" | "RESTORED";
 
-export type PublishTrack = 'DAILY' | 'PREMIUM' | 'PRACTICE';
+export type PublishTrack = "DAILY" | "PREMIUM" | "PRACTICE";
 
-export type EditorialQueueFilter = 'all' | 'review' | 'publish';
+export type EditorialQueueFilter = "all" | "review" | "publish";
 
 export type DiagnosisRegistryStatus =
-  | 'ACTIVE'
-  | 'HIDDEN'
-  | 'DEPRECATED'
-  | 'DRAFT';
+  | "ACTIVE"
+  | "HIDDEN"
+  | "DEPRECATED"
+  | "DRAFT";
 
-export type DiagnosisDifficultyBand = 'BASIC' | 'INTERMEDIATE' | 'ADVANCED';
+export type DiagnosisDifficultyBand = "BASIC" | "INTERMEDIATE" | "ADVANCED";
 
 export type DiagnosisEducationStatus =
-  | 'DRAFT'
-  | 'GENERATED'
-  | 'NEEDS_REVIEW'
-  | 'NEEDS_EDIT'
-  | 'APPROVED'
-  | 'PUBLISHED'
-  | 'REJECTED'
-  | 'ARCHIVED';
+  | "DRAFT"
+  | "GENERATED"
+  | "NEEDS_REVIEW"
+  | "NEEDS_EDIT"
+  | "APPROVED"
+  | "PUBLISHED"
+  | "REJECTED"
+  | "ARCHIVED";
 
 export type DiagnosisEducationSource =
-  | 'MANUAL'
-  | 'AI_ASSISTED'
-  | 'IMPORTED'
-  | 'HYBRID';
+  | "MANUAL"
+  | "AI_ASSISTED"
+  | "IMPORTED"
+  | "HYBRID";
 
 export type DiagnosisGraphCandidateType =
-  | 'FINDING'
-  | 'INVESTIGATION'
-  | 'MIMIC'
-  | 'PITFALL'
-  | 'MANAGEMENT'
-  | 'COMPLICATION'
-  | 'RECALL_PROMPT'
-  | 'CASE_REASONING';
+  | "FINDING"
+  | "INVESTIGATION"
+  | "MIMIC"
+  | "PITFALL"
+  | "MANAGEMENT"
+  | "COMPLICATION"
+  | "RECALL_PROMPT"
+  | "CASE_REASONING";
 
-export type DiagnosisGraphSourceType = 'CASE' | 'DIAGNOSIS_EDUCATION';
+export type DiagnosisGraphSourceType = "CASE" | "DIAGNOSIS_EDUCATION";
 
 export type DiagnosisGraphCandidateStatus =
-  | 'CANDIDATE'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'MERGED';
+  | "CANDIDATE"
+  | "APPROVED"
+  | "REJECTED"
+  | "MERGED";
 
-export type DiagnosisGraphFactStatus = 'ACTIVE' | 'ARCHIVED';
+export type DiagnosisGraphFactStatus = "ACTIVE" | "ARCHIVED";
 
 export type DiagnosisTeachingRelationshipType =
-  | 'DIFFERENTIAL_DISCRIMINATOR'
-  | 'MIMIC_CONFUSION'
-  | 'SHARED_PRESENTATION'
-  | 'ESCALATION_CONTRAST'
-  | 'MANAGEMENT_CONTRAST'
-  | 'INVESTIGATION_CONTRAST'
-  | 'COMPLICATION_RELATIONSHIP';
+  | "DIFFERENTIAL_DISCRIMINATOR"
+  | "MIMIC_CONFUSION"
+  | "SHARED_PRESENTATION"
+  | "ESCALATION_CONTRAST"
+  | "MANAGEMENT_CONTRAST"
+  | "INVESTIGATION_CONTRAST"
+  | "COMPLICATION_RELATIONSHIP";
 
 export type DiagnosisTeachingRelationshipPurpose =
-  | 'TEACH_DISCRIMINATOR'
-  | 'PREVENT_COMMON_ERROR'
-  | 'BUILD_DDX_CLUSTER'
-  | 'SUPPORT_CASE_GENERATION'
-  | 'SUPPORT_EDUCATION'
-  | 'SUPPORT_RECALL';
+  | "TEACH_DISCRIMINATOR"
+  | "PREVENT_COMMON_ERROR"
+  | "BUILD_DDX_CLUSTER"
+  | "SUPPORT_CASE_GENERATION"
+  | "SUPPORT_EDUCATION"
+  | "SUPPORT_RECALL";
 
 export type DiagnosisTeachingRelationshipStatus =
-  | 'CANDIDATE'
-  | 'NEEDS_REVIEW'
-  | 'ACTIVE'
-  | 'REJECTED'
-  | 'DEPRECATED';
+  | "CANDIDATE"
+  | "NEEDS_REVIEW"
+  | "ACTIVE"
+  | "REJECTED"
+  | "DEPRECATED";
 
 export type EvidenceType =
-  | 'SYMPTOM'
-  | 'EXAM'
-  | 'LAB'
-  | 'IMAGING'
-  | 'RISK_FACTOR'
-  | 'HISTORY'
-  | 'MANAGEMENT'
-  | 'COMPLICATION'
-  | 'EPIDEMIOLOGY';
+  | "SYMPTOM"
+  | "EXAM"
+  | "LAB"
+  | "IMAGING"
+  | "RISK_FACTOR"
+  | "HISTORY"
+  | "MANAGEMENT"
+  | "COMPLICATION"
+  | "EPIDEMIOLOGY";
 
 export type ClinicalCategory =
-  | 'PAIN'
-  | 'BLEEDING'
-  | 'INFECTION'
-  | 'NEUROLOGIC'
-  | 'RESPIRATORY'
-  | 'CARDIOVASCULAR'
-  | 'GI'
-  | 'ENDOCRINE'
-  | 'RENAL'
-  | 'TRAUMA'
-  | 'OTHER';
+  | "PAIN"
+  | "BLEEDING"
+  | "INFECTION"
+  | "NEUROLOGIC"
+  | "RESPIRATORY"
+  | "CARDIOVASCULAR"
+  | "GI"
+  | "ENDOCRINE"
+  | "RENAL"
+  | "TRAUMA"
+  | "OTHER";
 
 export type EvidenceNodeStatus =
-  | 'CANDIDATE'
-  | 'ACTIVE'
-  | 'REJECTED'
-  | 'DEPRECATED';
+  | "CANDIDATE"
+  | "ACTIVE"
+  | "REJECTED"
+  | "DEPRECATED";
 
 export type DiagnosisEvidenceRelationshipType =
-  | 'SUPPORTS'
-  | 'DISCRIMINATES'
-  | 'ESCALATES'
-  | 'RULES_OUT'
-  | 'COMPLICATION_SIGNAL'
-  | 'MANAGEMENT_SIGNAL';
+  | "SUPPORTS"
+  | "DISCRIMINATES"
+  | "ESCALATES"
+  | "RULES_OUT"
+  | "COMPLICATION_SIGNAL"
+  | "MANAGEMENT_SIGNAL";
 
 export type DiagnosisEvidenceRelationshipStatus =
-  | 'CANDIDATE'
-  | 'ACTIVE'
-  | 'REJECTED'
-  | 'DEPRECATED';
+  | "CANDIDATE"
+  | "ACTIVE"
+  | "REJECTED"
+  | "DEPRECATED";
 
 export type DifferentialResolutionStatus =
-  | 'RESOLVED'
-  | 'AMBIGUOUS'
-  | 'UNRESOLVED'
-  | 'REJECTED';
+  | "RESOLVED"
+  | "AMBIGUOUS"
+  | "UNRESOLVED"
+  | "REJECTED";
 
 export type DifferentialLinkRole =
-  | 'PRIMARY_MIMIC'
-  | 'DIFFERENTIAL'
-  | 'IMPORTANT_EXCLUSION'
-  | 'TEACHING_DIFFERENTIAL';
+  | "PRIMARY_MIMIC"
+  | "DIFFERENTIAL"
+  | "IMPORTANT_EXCLUSION"
+  | "TEACHING_DIFFERENTIAL";
 
 export type StructuredDifferentialLink = {
   id?: string;
@@ -611,10 +611,10 @@ export type DifferentialCoverageSummary = {
 };
 
 export type DifferentialMappingSourceType =
-  | 'case'
-  | 'case_revision'
-  | 'education'
-  | 'education_revision';
+  | "case"
+  | "case_revision"
+  | "education"
+  | "education_revision";
 
 export type DifferentialMappingSuggestion = {
   diagnosisRegistryId: string;
@@ -655,35 +655,35 @@ export type DifferentialMappingReviewItem = {
 };
 
 export type DifferentialMappingFilters = {
-  sourceType?: 'case' | 'education';
+  sourceType?: "case" | "education";
   diagnosisRegistryId?: string;
   status?: DifferentialResolutionStatus;
 };
 
 export type ResolveDifferentialMappingPayload =
   | {
-      action: 'link_existing';
+      action: "link_existing";
       targetDiagnosisRegistryId: string;
       reason?: string;
     }
   | {
-      action: 'add_alias_to_existing';
+      action: "add_alias_to_existing";
       targetDiagnosisRegistryId: string;
       aliasText: string;
       reason?: string;
     }
   | {
-      action: 'reject';
+      action: "reject";
       reason?: string;
     };
 
 export type DiagnosisRegistryCandidateStatus =
-  | 'CANDIDATE'
-  | 'NEEDS_REVIEW'
-  | 'REJECTED'
-  | 'MERGED'
-  | 'APPROVED_PENDING_CREATE'
-  | 'CREATED';
+  | "CANDIDATE"
+  | "NEEDS_REVIEW"
+  | "REJECTED"
+  | "MERGED"
+  | "APPROVED_PENDING_CREATE"
+  | "CREATED";
 
 export type DiagnosisRegistryDuplicateSummary = {
   id: string;
@@ -832,18 +832,18 @@ export type DiagnosisRegistryCandidateQueueSummary = {
 };
 
 export type DiagnosisEditorialOnboardingStatus =
-  | 'NEW'
-  | 'RULES_STARTED'
-  | 'BRIEF_STARTED'
-  | 'EDUCATION_STARTED'
-  | 'CASE_STARTED'
-  | 'READY_FOR_REVIEW'
-  | 'COMPLETE';
+  | "NEW"
+  | "RULES_STARTED"
+  | "BRIEF_STARTED"
+  | "EDUCATION_STARTED"
+  | "CASE_STARTED"
+  | "READY_FOR_REVIEW"
+  | "COMPLETE";
 
 export type DiagnosisEditorialOnboardingAction =
-  | 'mark_ready_for_review'
-  | 'mark_complete'
-  | 'reopen';
+  | "mark_ready_for_review"
+  | "mark_complete"
+  | "reopen";
 
 export type DiagnosisEditorialOnboardingSummary = {
   newlyCreatedDiagnoses: number;
@@ -860,15 +860,15 @@ export type CreateRegistryCandidatePayload = {
 
 export type ReviewRegistryCandidatePayload =
   | {
-      action: 'mark_needs_review';
+      action: "mark_needs_review";
       note?: string;
     }
   | {
-      action: 'reject';
+      action: "reject";
       note?: string;
     }
   | {
-      action: 'merge_duplicate_candidate';
+      action: "merge_duplicate_candidate";
       duplicateCandidateId: string;
       note?: string;
     };
@@ -992,10 +992,10 @@ export type DiagnosisTeachingRelationship = {
 };
 
 export type DiagnosisTeachingRelationshipReviewAction =
-  | 'activate'
-  | 'reject'
-  | 'deprecate'
-  | 'needs_review';
+  | "activate"
+  | "reject"
+  | "deprecate"
+  | "needs_review";
 
 export type DiagnosisTeachingRelationshipGenerateResult = {
   createdCount: number;
@@ -1005,24 +1005,24 @@ export type DiagnosisTeachingRelationshipGenerateResult = {
 };
 
 export type ReasoningGoal =
-  | 'DIFFERENTIAL_DISCRIMINATION'
-  | 'ESCALATION_RECOGNITION'
-  | 'MANAGEMENT_CONTRAST'
-  | 'COMPLICATION_RECOGNITION'
-  | 'EARLY_PRESENTATION_RECOGNITION'
-  | 'RESOURCE_LIMITED_REASONING';
+  | "DIFFERENTIAL_DISCRIMINATION"
+  | "ESCALATION_RECOGNITION"
+  | "MANAGEMENT_CONTRAST"
+  | "COMPLICATION_RECOGNITION"
+  | "EARLY_PRESENTATION_RECOGNITION"
+  | "RESOURCE_LIMITED_REASONING";
 
 export type GenerationPurpose =
-  | 'CASE_GENERATION'
-  | 'TEACHING_RULE_GENERATION'
-  | 'EDUCATION_GENERATION'
-  | 'RECALL_GENERATION';
+  | "CASE_GENERATION"
+  | "TEACHING_RULE_GENERATION"
+  | "EDUCATION_GENERATION"
+  | "RECALL_GENERATION";
 
 export type ReasoningPathStatus =
-  | 'CANDIDATE'
-  | 'ACTIVE'
-  | 'REJECTED'
-  | 'DEPRECATED';
+  | "CANDIDATE"
+  | "ACTIVE"
+  | "REJECTED"
+  | "DEPRECATED";
 
 export type ReasoningPath = {
   id: string;
@@ -1042,7 +1042,7 @@ export type ReasoningPath = {
   recommendedClueDistribution: Record<string, number>;
   generationPurpose: GenerationPurpose;
   readinessScore: number;
-  readinessTier: 'ready' | 'partial' | 'weak' | string;
+  readinessTier: "ready" | "partial" | "weak" | string;
   readinessReasons: string[];
   reasoningQualityWarnings: string[];
   status: ReasoningPathStatus;
@@ -1057,10 +1057,10 @@ export type ReasoningPath = {
 };
 
 export type ReasoningPathReviewAction =
-  | 'activate'
-  | 'reject'
-  | 'deprecate'
-  | 'needs_review';
+  | "activate"
+  | "reject"
+  | "deprecate"
+  | "needs_review";
 
 export type ReasoningPathGenerateResult = {
   createdCount: number;
@@ -1171,7 +1171,7 @@ export type DiagnosisEvidenceRelationship = {
   };
 };
 
-export type EvidenceGraphReviewAction = 'activate' | 'reject' | 'deprecate';
+export type EvidenceGraphReviewAction = "activate" | "reject" | "deprecate";
 
 export type EvidenceGraphGenerateResult = {
   createdCount: number;
@@ -1191,30 +1191,30 @@ export type MergeDiagnosisGraphCandidatePayload = {
 };
 
 export type ResolveMimicCandidatePayload = {
-  action: 'link_existing' | 'add_alias_to_existing' | 'reject';
+  action: "link_existing" | "add_alias_to_existing" | "reject";
   targetDiagnosisRegistryId?: string;
   aliasText?: string;
   reason?: string;
 };
 
 export type DiagnosisMappingStatus =
-  | 'MATCHED'
-  | 'REVIEW_REQUIRED'
-  | 'UNRESOLVED'
-  | 'NEW_REGISTRY_ENTRY_NEEDED';
+  | "MATCHED"
+  | "REVIEW_REQUIRED"
+  | "UNRESOLVED"
+  | "NEW_REGISTRY_ENTRY_NEEDED";
 
 export type DiagnosisMappingMethod =
-  | 'EXACT_ALIAS'
-  | 'NORMALIZED_ALIAS'
-  | 'EDITOR_SELECTED'
-  | 'MANUAL_CREATED'
-  | 'LEGACY_BACKFILL'
-  | 'NONE';
+  | "EXACT_ALIAS"
+  | "NORMALIZED_ALIAS"
+  | "EDITOR_SELECTED"
+  | "MANUAL_CREATED"
+  | "LEGACY_BACKFILL"
+  | "NONE";
 
 export type DiagnosisPublishReadinessReason =
-  | 'missing_registry_link'
-  | 'mapping_not_publish_ready'
-  | 'registry_not_publishable';
+  | "missing_registry_link"
+  | "mapping_not_publish_ready"
+  | "registry_not_publishable";
 
 export type JsonPrimitive = string | number | boolean | null;
 
@@ -1283,14 +1283,14 @@ export type DiagnosisEducationSummary = {
 };
 
 export type PearlType =
-  | 'PATTERN_RECOGNITION'
-  | 'HIGH_YIELD_DISCRIMINATOR'
-  | 'PITFALL'
-  | 'ESCALATION_RED_FLAG'
-  | 'MANAGEMENT'
-  | 'MNEMONIC'
-  | 'EXAM'
-  | 'INVESTIGATION';
+  | "PATTERN_RECOGNITION"
+  | "HIGH_YIELD_DISCRIMINATOR"
+  | "PITFALL"
+  | "ESCALATION_RED_FLAG"
+  | "MANAGEMENT"
+  | "MNEMONIC"
+  | "EXAM"
+  | "INVESTIGATION";
 
 export type PearlCritique = {
   genericityScore?: number;
@@ -1379,9 +1379,9 @@ export type DiagnosisEducationRevision = {
 };
 
 export type DiagnosisEducationRevisionApprovalOutcome =
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'CHANGES_REQUIRED';
+  | "APPROVED"
+  | "REJECTED"
+  | "CHANGES_REQUIRED";
 
 export type DecideDiagnosisEducationRevisionPayload = {
   outcome: DiagnosisEducationRevisionApprovalOutcome;
@@ -1396,7 +1396,7 @@ export type EducationPublicationReadiness = {
   diagnosisRegistryId: string;
   educationRevisionId: string;
   version: number;
-  result: 'READY' | 'BLOCKED' | 'STALE';
+  result: "READY" | "BLOCKED" | "STALE";
   blockers: Array<{ code: string; message: string }>;
   warnings: Array<{ code: string; message: string }>;
   approvalDecisionId: string | null;
@@ -1407,7 +1407,7 @@ export type EducationPublicationReadiness = {
 
 export type EducationGovernanceDecisionSummary = {
   id: string;
-  kind: 'approval' | 'publication';
+  kind: "approval" | "publication";
   educationId: string;
   diagnosisRegistryId: string;
   educationRevisionId: string;
@@ -1457,7 +1457,7 @@ export type WorkspaceCoverageWarning = {
   code: string;
   item?: string;
   section?: string;
-  severity?: 'warning' | 'blocker' | string;
+  severity?: "warning" | "blocker" | string;
 };
 
 export type WorkspaceSectionScores = Record<string, number>;
@@ -1476,17 +1476,17 @@ export type WorkspaceQualityReport = {
 };
 
 export type EducationRegenerableSection =
-  | 'differentials'
-  | 'investigations'
-  | 'examPearls'
-  | 'management';
+  | "differentials"
+  | "investigations"
+  | "examPearls"
+  | "management";
 
 export type WorkspaceSectionFailureSummary = {
   section:
     | EducationRegenerableSection
-    | 'pitfalls'
-    | 'recallPrompts'
-    | 'findings';
+    | "pitfalls"
+    | "recallPrompts"
+    | "findings";
   score: number | null;
   coverageScore: number | null;
   patternComplianceScore: number | null;
@@ -1501,26 +1501,26 @@ export type RegenerateEducationSectionPayload = {
   expectedVersion: number;
 };
 
-export type DiagnosisEducationCandidateScope = 'WHOLE' | 'SECTION';
+export type DiagnosisEducationCandidateScope = "WHOLE" | "SECTION";
 
 export type DiagnosisEducationCandidateStatus =
-  | 'PENDING_REVIEW'
-  | 'ACCEPTED'
-  | 'REJECTED'
-  | 'NEEDS_CHANGES'
-  | 'SUPERSEDED'
-  | 'APPLIED';
+  | "PENDING_REVIEW"
+  | "ACCEPTED"
+  | "REJECTED"
+  | "NEEDS_CHANGES"
+  | "SUPERSEDED"
+  | "APPLIED";
 
 export type DiagnosisEducationCandidateReviewDecision =
-  | 'ACCEPT'
-  | 'REJECT'
-  | 'REQUEST_CHANGES';
+  | "ACCEPT"
+  | "REJECT"
+  | "REQUEST_CHANGES";
 
 export type DiagnosisEducationCandidateApplicationStatus =
-  | 'NOT_REQUESTED'
-  | 'PENDING'
-  | 'SUCCESS'
-  | 'CONFLICT';
+  | "NOT_REQUESTED"
+  | "PENDING"
+  | "SUCCESS"
+  | "CONFLICT";
 
 export type DiagnosisEducationCandidate = {
   id: string;
@@ -1654,7 +1654,7 @@ export type WorkspaceGraphSummary = {
     total: number;
     byType: Record<string, number>;
   };
-  readiness: 'none' | 'candidate_only' | 'review_needed' | 'fact_ready';
+  readiness: "none" | "candidate_only" | "review_needed" | "fact_ready";
 };
 
 export type WorkspaceCaseSummary = {
@@ -1688,7 +1688,7 @@ export type DiagnosisWorkspaceProjection = {
     promotedGraphFactCount: number;
   };
   education: {
-    status: 'missing' | 'draft' | 'review' | 'published' | 'archived';
+    status: "missing" | "draft" | "review" | "published" | "archived";
     id?: string;
     version?: number;
     editorialStatus?: string;
@@ -1751,7 +1751,7 @@ export type DiagnosisEducationRevisionCompareResult = {
     fromScore: number | null;
     toScore: number | null;
     delta: number | null;
-    direction: 'improved' | 'regressed' | 'unchanged';
+    direction: "improved" | "regressed" | "unchanged";
   }>;
   changedSections: string[];
   overallDelta: number;
@@ -1763,17 +1763,17 @@ export type DiagnosisEducationRevisionCompareResult = {
 };
 
 export type DiagnosisWorkspaceOverallStatus =
-  | 'ready'
-  | 'needs_review'
-  | 'blocked'
-  | 'insufficient_data';
+  | "ready"
+  | "needs_review"
+  | "blocked"
+  | "insufficient_data";
 
 export type DiagnosisWorkspaceQualitySummary = {
   diagnosisRegistryId: string;
   diagnosisName: string;
   overallWorkspaceStatus: DiagnosisWorkspaceOverallStatus;
   educationQuality: {
-    status: 'missing' | 'draft' | 'review' | 'published' | 'archived';
+    status: "missing" | "draft" | "review" | "published" | "archived";
     version: number | null;
     score: number | null;
     graphReadiness: number | null;
@@ -1781,7 +1781,7 @@ export type DiagnosisWorkspaceQualitySummary = {
     warningCount: number;
   };
   caseQuality: {
-    status: 'missing' | 'good' | 'warning' | 'blocker' | 'unknown';
+    status: "missing" | "good" | "warning" | "blocker" | "unknown";
     totalCases: number;
     usableCases: number;
     blockerCount: number;
@@ -1794,7 +1794,7 @@ export type DiagnosisWorkspaceQualitySummary = {
     missingItems: WorkspaceCoverageWarning[];
   };
   graphReadiness: {
-    status: 'none' | 'candidate_only' | 'review_needed' | 'fact_ready';
+    status: "none" | "candidate_only" | "review_needed" | "fact_ready";
     candidateCount: number;
     factCount: number;
     reviewableCandidateCount: number;
@@ -1809,7 +1809,7 @@ export type DiagnosisWorkspaceQualitySummary = {
     previousVersion: number | null;
     overallDelta: number | null;
     graphReadinessDelta: number | null;
-    direction: 'improved' | 'regressed' | 'unchanged' | 'unknown';
+    direction: "improved" | "regressed" | "unchanged" | "unknown";
   };
   sectionHealth: WorkspaceSectionFailureSummary[];
   blockers: string[];
@@ -1818,10 +1818,10 @@ export type DiagnosisWorkspaceQualitySummary = {
 };
 
 export type WorkspaceLifecycleState =
-  | 'complete'
-  | 'warning'
-  | 'blocked'
-  | 'not_started';
+  | "complete"
+  | "warning"
+  | "blocked"
+  | "not_started";
 
 export type WorkspaceLifecycle = {
   curriculum: WorkspaceLifecycleState;
@@ -1832,15 +1832,15 @@ export type WorkspaceLifecycle = {
   ready: WorkspaceLifecycleState;
 };
 
-export type WorkspaceReadinessSeverity = 'info' | 'warning' | 'blocker';
+export type WorkspaceReadinessSeverity = "info" | "warning" | "blocker";
 
 export type WorkspaceTargetTab =
-  | 'overview'
-  | 'teaching-rules'
-  | 'editorial-brief'
-  | 'education'
-  | 'cases'
-  | 'graph';
+  | "overview"
+  | "teaching-rules"
+  | "editorial-brief"
+  | "education"
+  | "cases"
+  | "graph";
 
 export type WorkspaceReadinessItem = {
   severity: WorkspaceReadinessSeverity;
@@ -1855,9 +1855,9 @@ export type WorkspaceCoverageMatrixRow = {
   teachingRuleId: string | null;
   stableKey: string;
   title: string;
-  category: DiagnosisTeachingRuleCategory | 'legacy_teaching_rule' | string;
+  category: DiagnosisTeachingRuleCategory | "legacy_teaching_rule" | string;
   importance: DiagnosisTeachingRuleImportance | string;
-  ruleStatus: DiagnosisTeachingRuleStatus | 'LEGACY' | 'UNKNOWN' | string;
+  ruleStatus: DiagnosisTeachingRuleStatus | "LEGACY" | "UNKNOWN" | string;
   educationCoverage: TeachingUnitCoverageStatus;
   caseCoverage: TeachingUnitCoverageStatus;
   graphCoverage: TeachingUnitCoverageStatus;
@@ -1900,7 +1900,7 @@ export type DiagnosisEditorialOnboarding = {
   onboardingStatus: DiagnosisEditorialOnboardingStatus;
   onboardingStartedAt: string | null;
   onboardingCompletedAt: string | null;
-  readiness: 'in_progress' | 'ready_for_review' | 'complete' | string;
+  readiness: "in_progress" | "ready_for_review" | "complete" | string;
   progress: {
     completedComponents: number;
     totalComponents: number;
@@ -1939,7 +1939,7 @@ export type UnsupportedClaimBySection = {
   sectionType: string;
   claimId: string;
   claimText: string;
-  severity: 'info' | 'warning' | 'blocker';
+  severity: "info" | "warning" | "blocker";
   artifactId: string;
   evidenceIds: string[];
   repairTarget: string;
@@ -1955,7 +1955,7 @@ export type LearningGoalCoverageRow = {
   coveredByCaseIds: string[];
   uncoveredDiscriminators: string[];
   missingMimics: string[];
-  generationPriority: 'low' | 'medium' | 'high' | string;
+  generationPriority: "low" | "medium" | "high" | string;
   coveragePct: number;
 };
 
@@ -1993,8 +1993,8 @@ export type CaseEscalationCoverageRow = {
   evidenceStrength: number;
   reasoningPathId: string | null;
   notes: string | null;
-  coverageSource?: 'explicit' | 'inferred' | string;
-  status?: 'explicitly_covered' | 'inferred_covered' | 'needs_review' | string;
+  coverageSource?: "explicit" | "inferred" | string;
+  status?: "explicitly_covered" | "inferred_covered" | "needs_review" | string;
   updatedAt?: string;
 };
 
@@ -2009,13 +2009,13 @@ export type AiDraftRevisionAudit = {
   affectedArtifactType: string;
   affectedArtifactId: string;
   reviewStatus:
-    | 'DRAFT'
-    | 'REVIEW_REQUIRED'
-    | 'PENDING_REVIEW'
-    | 'ACCEPTED'
-    | 'REJECTED'
-    | 'NEEDS_CHANGES'
-    | 'SUPERSEDED'
+    | "DRAFT"
+    | "REVIEW_REQUIRED"
+    | "PENDING_REVIEW"
+    | "ACCEPTED"
+    | "REJECTED"
+    | "NEEDS_CHANGES"
+    | "SUPERSEDED"
     | string;
   createdByUserId: string | null;
   reviewerUserId?: string | null;
@@ -2028,13 +2028,13 @@ export type AiDraftRevisionAudit = {
   discriminator?: string;
   sourceClueOrder?: number | null;
   sourceClueIndex?: number | null;
-  targetTab?: 'cases' | 'differential-map' | string;
+  targetTab?: "cases" | "differential-map" | string;
   discriminatorDraftReview?: DiscriminatorDraftReviewPayload;
 };
 
 export type DiscriminatorDraftKind =
-  | 'targeted_discriminator_case'
-  | 'clue_revision_proposal';
+  | "targeted_discriminator_case"
+  | "clue_revision_proposal";
 
 export type DiscriminatorDraftReviewPayload = {
   draftKind: DiscriminatorDraftKind;
@@ -2076,9 +2076,9 @@ export type DiscriminatorDraftReview = {
   actionType: string;
   affectedArtifactType: string;
   affectedArtifactId: string;
-  reviewStatus: AiDraftRevisionAudit['reviewStatus'];
+  reviewStatus: AiDraftRevisionAudit["reviewStatus"];
   createdAt: string;
-  targetTab: 'cases' | 'differential-map' | string;
+  targetTab: "cases" | "differential-map" | string;
   draftKind: DiscriminatorDraftKind;
   generationIntent: DiscriminatorGenerationIntent | string;
   mimicName: string;
@@ -2087,15 +2087,15 @@ export type DiscriminatorDraftReview = {
   sourceClueOrder?: number | null;
   sourceClueIndex?: number | null;
   acceptedMaterializationStatus?:
-    | 'not_applicable'
-    | 'materialized'
-    | 'approved'
-    | 'applied'
-    | 'rejected'
-    | 'superseded'
-    | 'accepted_audit_only'
-    | 'blocked_case_not_editable'
-    | 'pending';
+    | "not_applicable"
+    | "materialized"
+    | "approved"
+    | "applied"
+    | "rejected"
+    | "superseded"
+    | "accepted_audit_only"
+    | "blocked_case_not_editable"
+    | "pending";
   revisionDraftId?: string;
   discriminatorDraftReview: DiscriminatorDraftReviewPayload;
 };
@@ -2140,10 +2140,10 @@ export type ApplyCaseClueRevisionDraftResult = CaseClueRevisionDraft & {
 };
 
 export type AiDraftDecisionAction =
-  | 'accept'
-  | 'reject'
-  | 'request-changes'
-  | 'supersede';
+  | "accept"
+  | "reject"
+  | "request-changes"
+  | "supersede";
 
 export type CaseLearningGoalCoveragePayload = {
   caseId: string;
@@ -2202,15 +2202,15 @@ export type MaturityBreakdown = {
   overall: number;
 };
 
-export type EditorialRiskTier = 'low' | 'medium' | 'high' | 'critical' | string;
+export type EditorialRiskTier = "low" | "medium" | "high" | "critical" | string;
 export type EditorialWorkflowQueueId =
-  | 'needs_review'
-  | 'high_publication_risk'
-  | 'weak_discriminator_coverage'
-  | 'unsupported_claims'
-  | 'sparse_diagnosis'
-  | 'draft_heavy'
-  | 'escalation_coverage_gaps'
+  | "needs_review"
+  | "high_publication_risk"
+  | "weak_discriminator_coverage"
+  | "unsupported_claims"
+  | "sparse_diagnosis"
+  | "draft_heavy"
+  | "escalation_coverage_gaps"
   | string;
 
 export type EditorialPrioritization = {
@@ -2256,13 +2256,13 @@ export type EditorialPrioritization = {
 };
 
 export type ClueProgressionSignal =
-  | 'premature_lock_in'
-  | 'insufficient_discrimination'
-  | 'abrupt_giveaway'
-  | 'stagnant_progression'
-  | 'unresolved_mimic'
-  | 'escalation_missing'
-  | 'weak_transition'
+  | "premature_lock_in"
+  | "insufficient_discrimination"
+  | "abrupt_giveaway"
+  | "stagnant_progression"
+  | "unresolved_mimic"
+  | "escalation_missing"
+  | "weak_transition"
   | string;
 
 export type CaseClueProgressionState = {
@@ -2278,9 +2278,9 @@ export type CaseClueProgressionState = {
   ambiguityScore: number;
   prematureLeakFlag: boolean;
   unresolvedAmbiguityFlag: boolean;
-  learnerConfusionRisk: 'low' | 'medium' | 'high' | string;
+  learnerConfusionRisk: "low" | "medium" | "high" | string;
   editorialConcern: string | null;
-  progressionQuality: 'strong' | 'watch' | 'weak' | string;
+  progressionQuality: "strong" | "watch" | "weak" | string;
 };
 
 export type CaseMimicCollapse = {
@@ -2294,31 +2294,31 @@ export type CaseDiscriminatorEmergence = {
   clueIndex: number;
   signal: string;
   evidence: string;
-  strength: 'low' | 'medium' | 'high' | string;
+  strength: "low" | "medium" | "high" | string;
 };
 
 export type CaseDifferentialElimination = {
   mimicDiagnosisId?: string;
   mimicName: string;
   relationshipType?: string;
-  initialPlausibility: 'low' | 'medium' | 'high' | string;
+  initialPlausibility: "low" | "medium" | "high" | string;
   finalStatus:
-    | 'eliminated'
-    | 'persistent'
-    | 'unresolved'
-    | 'not_applicable'
+    | "eliminated"
+    | "persistent"
+    | "unresolved"
+    | "not_applicable"
     | string;
   eliminatedAtClueIndex?: number;
   eliminatedAtClueOrder?: number;
   eliminatedBy?: string;
   discriminatorUsed?: string;
-  eliminationStrength: 'weak' | 'moderate' | 'strong' | string;
-  educationalValue: 'low' | 'medium' | 'high' | string;
+  eliminationStrength: "weak" | "moderate" | "strong" | string;
+  educationalValue: "low" | "medium" | "high" | string;
   prematureCollapseRisk: boolean;
   remainingConfusionRisk: boolean;
-  annotationSource?: 'editorial' | 'heuristic' | string;
+  annotationSource?: "editorial" | "heuristic" | string;
   annotationId?: string;
-  editorialConfidence?: 'low' | 'medium' | 'high' | string;
+  editorialConfidence?: "low" | "medium" | "high" | string;
   notes?: string;
 };
 
@@ -2331,8 +2331,8 @@ export type CaseClueDiscriminatorAnnotation = {
   eliminatedDiagnosisName: string;
   discriminator: string;
   reasoning: string | null;
-  eliminationStrength: 'weak' | 'moderate' | 'strong' | string;
-  educationalValue: 'low' | 'medium' | 'high' | string;
+  eliminationStrength: "weak" | "moderate" | "strong" | string;
+  educationalValue: "low" | "medium" | "high" | string;
   reviewerUserId: string | null;
   reviewedAt: string | null;
   createdAt: string;
@@ -2346,8 +2346,8 @@ export type CreateCaseClueDiscriminatorAnnotationPayload = {
   eliminatedDiagnosisName: string;
   discriminator: string;
   reasoning?: string | null;
-  eliminationStrength: 'weak' | 'moderate' | 'strong';
-  educationalValue: 'low' | 'medium' | 'high';
+  eliminationStrength: "weak" | "moderate" | "strong";
+  educationalValue: "low" | "medium" | "high";
 };
 
 export type UpdateCaseClueDiscriminatorAnnotationPayload =
@@ -2399,10 +2399,11 @@ export type DiagnosisEditorialWorkspace = {
   };
   onboarding?: DiagnosisEditorialOnboarding | null;
   onboardingStatus?: DiagnosisEditorialOnboardingStatus | null;
-  onboardingProgress?: DiagnosisEditorialOnboarding['progress'] | null;
-  onboardingRecommendations?: DiagnosisEditorialOnboarding['recommendedActions'];
+  onboardingProgress?: DiagnosisEditorialOnboarding["progress"] | null;
+  onboardingRecommendations?: DiagnosisEditorialOnboarding["recommendedActions"];
   lifecycle: WorkspaceLifecycle;
   lifecycleGovernance?: DiagnosisRegistryLifecycleReport | null;
+  scaffoldReadiness?: DiagnosisScaffoldReadinessReport | null;
   unsupportedClaimsBySection?: UnsupportedClaimBySection[];
   learningGoalCoverage?: LearningGoalCoverageRow[];
   caseLearningGoalCoverage?: CaseLearningGoalCoverageRow[];
@@ -2418,12 +2419,12 @@ export type DiagnosisEditorialWorkspace = {
   clinicalCaseDrafts?: WorkspaceClinicalCaseDraftInventory;
   educationCandidates?: WorkspaceDiagnosisEducationCandidateInventory;
   workspaceSummary: {
-    status: DiagnosisWorkspaceOverallStatus | 'ready' | 'needs_review' | string;
+    status: DiagnosisWorkspaceOverallStatus | "ready" | "needs_review" | string;
     overallScore: number | null;
     graphReadiness: number | string | null;
     educationScore: number | null;
     caseQualitySummary:
-      | DiagnosisWorkspaceQualitySummary['caseQuality']
+      | DiagnosisWorkspaceQualitySummary["caseQuality"]
       | WorkspaceCaseSummary;
     blockers: string[];
     warnings: string[];
@@ -2463,7 +2464,7 @@ export type DiagnosisEditorialWorkspace = {
   education: {
     id: string | null;
     status:
-      | DiagnosisWorkspaceQualitySummary['educationQuality']['status']
+      | DiagnosisWorkspaceQualitySummary["educationQuality"]["status"]
       | string;
     version: number | null;
     qualityScore: number | null;
@@ -2518,7 +2519,7 @@ export type DiagnosisEditorialWorkspace = {
         targetedGenerationOpportunityCount?: number;
         byGenerationIntent?: Record<string, number>;
       };
-      latest: WorkspaceCaseSummary['latest'] | null;
+      latest: WorkspaceCaseSummary["latest"] | null;
     };
     items: Array<{
       id: string;
@@ -2535,10 +2536,10 @@ export type DiagnosisEditorialWorkspace = {
   };
   graph: {
     readiness:
-      | 'none'
-      | 'candidate_only'
-      | 'review_needed'
-      | 'fact_ready'
+      | "none"
+      | "candidate_only"
+      | "review_needed"
+      | "fact_ready"
       | string;
     factCount: number;
     candidateCount: number;
@@ -2585,19 +2586,46 @@ export type DiagnosisEditorialWorkspace = {
 };
 
 export type DiagnosisRegistryLifecycleAction =
-  | 'activate'
-  | 'activate_for_dictionary'
-  | 'deactivate'
-  | 'mark_playable'
-  | 'unmark_playable'
-  | 'mark_generatable'
-  | 'unmark_generatable';
+  | "activate"
+  | "activate_for_dictionary"
+  | "deactivate"
+  | "mark_playable"
+  | "unmark_playable"
+  | "mark_generatable"
+  | "unmark_generatable";
 
 export type DiagnosisRegistryLifecycleEvaluation = {
   allowed: boolean;
   blockers: string[];
   warnings: string[];
   readinessScore: number;
+};
+
+export type DiagnosisScaffoldReadinessStage =
+  | "METADATA_READY"
+  | "BOOTSTRAP_READY"
+  | "SCAFFOLD_IN_REVIEW"
+  | "SCAFFOLD_READY"
+  | "EDUCATION_GENERATION_READY"
+  | "CASE_GENERATION_READY";
+
+export type DiagnosisScaffoldReadinessEvaluation = {
+  stage: DiagnosisScaffoldReadinessStage;
+  ready: boolean;
+  blockers: string[];
+  warnings: string[];
+  missing: string[];
+  nextAction: string | null;
+  summary: string;
+};
+
+export type DiagnosisScaffoldReadinessReport = {
+  diagnosisRegistryId: string;
+  metadata: DiagnosisScaffoldReadinessEvaluation;
+  bootstrap: DiagnosisScaffoldReadinessEvaluation;
+  scaffold: DiagnosisScaffoldReadinessEvaluation;
+  educationGeneration: DiagnosisScaffoldReadinessEvaluation;
+  caseGeneration: DiagnosisScaffoldReadinessEvaluation;
 };
 
 export type DiagnosisRegistryLifecycleReport = {
@@ -2727,7 +2755,7 @@ export type RegistryLifecycleNormalizeResult = {
   blockers: RegistryLifecycleRowSummary[];
 };
 
-export type RegistryMergeSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'BLOCKED';
+export type RegistryMergeSeverity = "LOW" | "MEDIUM" | "HIGH" | "BLOCKED";
 
 export type RegistryMergeAnalysisPayload = {
   sourceDiagnosisRegistryId: string;
@@ -2766,7 +2794,7 @@ export type RegistryMergeAnalysis = {
   warnings: string[];
   readiness: {
     score: number;
-    label: 'ready' | 'needs_review' | 'blocked';
+    label: "ready" | "needs_review" | "blocked";
   };
   impact: Record<string, number>;
   conflicts: {
@@ -2818,33 +2846,33 @@ export type CompleteDuplicateKeeperPayload = {
   aliases?: Array<{
     term: string;
     acceptedForMatch?: boolean;
-    kind?: 'CANONICAL' | 'ACCEPTED' | 'ABBREVIATION' | 'SEARCH_ONLY';
+    kind?: "CANONICAL" | "ACCEPTED" | "ABBREVIATION" | "SEARCH_ONLY";
   }>;
   reason?: string;
 };
 
 export type CompleteDuplicateKeeperResult = RegistryMergeExecutionResult & {
-  action: 'COMPLETE_DUPLICATE_KEEPER';
+  action: "COMPLETE_DUPLICATE_KEEPER";
   keeperRegistryId: string;
   lifecycle: DiagnosisRegistryLifecycleReport;
 };
 
 export type EditorialInboxItemType =
-  | 'teachingRules'
-  | 'briefs'
-  | 'education'
-  | 'cases'
-  | 'graphCandidates'
-  | 'differentials'
-  | 'registryCandidates'
-  | 'onboarding'
-  | 'mergeRisks';
+  | "teachingRules"
+  | "briefs"
+  | "education"
+  | "cases"
+  | "graphCandidates"
+  | "differentials"
+  | "registryCandidates"
+  | "onboarding"
+  | "mergeRisks";
 
-export type EditorialInboxSeverity = 'blocker' | 'urgent' | 'normal' | 'low';
+export type EditorialInboxSeverity = "blocker" | "urgent" | "normal" | "low";
 
 export type EditorialInboxQuery = {
-  type?: EditorialInboxItemType | '';
-  severity?: EditorialInboxSeverity | '';
+  type?: EditorialInboxItemType | "";
+  severity?: EditorialInboxSeverity | "";
   status?: string;
   specialty?: string;
   limit?: number;
@@ -2884,58 +2912,58 @@ export type EditorialInboxResponse = {
 };
 
 export type EditorialCoverageWeakness =
-  | 'missing_teaching_rules'
-  | 'weak_teaching_rules'
-  | 'missing_required_differentials'
-  | 'weak_differential_breadth'
-  | 'unresolved_differentials'
-  | 'missing_playable_cases'
-  | 'missing_graph_coverage'
-  | 'stalled_onboarding'
-  | 'duplicate_risk'
-  | 'merge_risk';
+  | "missing_teaching_rules"
+  | "weak_teaching_rules"
+  | "missing_required_differentials"
+  | "weak_differential_breadth"
+  | "unresolved_differentials"
+  | "missing_playable_cases"
+  | "missing_graph_coverage"
+  | "stalled_onboarding"
+  | "duplicate_risk"
+  | "merge_risk";
 
-export type EvidenceReadinessTier = 'ready' | 'partial' | 'weak';
+export type EvidenceReadinessTier = "ready" | "partial" | "weak";
 
 export type EvidenceCoverageWeakness =
-  | 'missing_evidence_graph'
-  | 'missing_discriminator_evidence'
-  | 'weak_evidence_diversity'
-  | 'missing_case_evidence'
-  | 'missing_education_evidence'
-  | 'missing_rule_evidence'
-  | 'missing_teaching_relationship_evidence'
-  | 'overused_evidence_pattern'
-  | 'missing_imaging_discriminator'
-  | 'missing_lab_discriminator'
-  | 'weak_escalation_evidence'
-  | 'weak_complication_evidence'
-  | 'missing_management_contrast'
-  | 'missing_reasoning_path_coverage'
-  | 'weak_reasoning_diversity'
-  | 'missing_constrained_teaching_rule_generation'
-  | 'missing_constrained_education_generation'
-  | 'unconstrained_educational_draft'
-  | 'low_trust_generated_draft'
-  | 'blocked_generated_draft'
-  | 'hallucination_risk_generated_draft';
+  | "missing_evidence_graph"
+  | "missing_discriminator_evidence"
+  | "weak_evidence_diversity"
+  | "missing_case_evidence"
+  | "missing_education_evidence"
+  | "missing_rule_evidence"
+  | "missing_teaching_relationship_evidence"
+  | "overused_evidence_pattern"
+  | "missing_imaging_discriminator"
+  | "missing_lab_discriminator"
+  | "weak_escalation_evidence"
+  | "weak_complication_evidence"
+  | "missing_management_contrast"
+  | "missing_reasoning_path_coverage"
+  | "weak_reasoning_diversity"
+  | "missing_constrained_teaching_rule_generation"
+  | "missing_constrained_education_generation"
+  | "unconstrained_educational_draft"
+  | "low_trust_generated_draft"
+  | "blocked_generated_draft"
+  | "hallucination_risk_generated_draft";
 
 export type ReasoningDraftArtifactType =
-  | 'CASE'
-  | 'TEACHING_RULE'
-  | 'EDUCATION'
-  | 'EDUCATION_SECTION';
+  | "CASE"
+  | "TEACHING_RULE"
+  | "EDUCATION"
+  | "EDUCATION_SECTION";
 
 export type ReasoningDraftTrustTier =
-  | 'HIGH_TRUST'
-  | 'REVIEW_REQUIRED'
-  | 'LOW_TRUST'
-  | 'BLOCKED';
+  | "HIGH_TRUST"
+  | "REVIEW_REQUIRED"
+  | "LOW_TRUST"
+  | "BLOCKED";
 
 export type ReasoningDraftValidationStatus =
-  | 'PASSED'
-  | 'NEEDS_REVIEW'
-  | 'FAILED';
+  | "PASSED"
+  | "NEEDS_REVIEW"
+  | "FAILED";
 
 export type ReasoningDraftValidationRun = {
   id: string;
@@ -2960,19 +2988,19 @@ export type ReasoningDraftValidationRun = {
 };
 
 export type ReasoningDraftValidationFilters = {
-  artifactType?: ReasoningDraftArtifactType | '';
+  artifactType?: ReasoningDraftArtifactType | "";
   diagnosisRegistryId?: string;
-  trustTier?: ReasoningDraftTrustTier | '';
-  validationStatus?: ReasoningDraftValidationStatus | '';
+  trustTier?: ReasoningDraftTrustTier | "";
+  validationStatus?: ReasoningDraftValidationStatus | "";
   limit?: number;
 };
 
 export type EvidenceCoverageFilters = {
   specialty?: string;
-  evidenceWeakness?: EvidenceCoverageWeakness | '';
-  readinessTier?: EvidenceReadinessTier | '';
+  evidenceWeakness?: EvidenceCoverageWeakness | "";
+  readinessTier?: EvidenceReadinessTier | "";
   playableOnly?: boolean;
-  onboardingStatus?: DiagnosisEditorialOnboardingStatus | '';
+  onboardingStatus?: DiagnosisEditorialOnboardingStatus | "";
 };
 
 export type EvidenceCoverageReadinessItem = {
@@ -3017,7 +3045,11 @@ export type EvidenceCoverageDiagnosis = {
   evidenceByType: Record<string, number>;
   missingEvidence: Array<{ type: EvidenceCoverageWeakness; label: string }>;
   redundancy: {
-    overusedEvidence: Array<{ evidenceKey: string; count: number; reason: string }>;
+    overusedEvidence: Array<{
+      evidenceKey: string;
+      count: number;
+      reason: string;
+    }>;
     lowDiversity: boolean;
     repeatedDiscriminators: Array<{ evidenceKey: string; count: number }>;
     shallowReasoningPatterns: string[];
@@ -3069,9 +3101,9 @@ export type EvidenceCoverageOverview = {
 
 export type EditorialCoverageFilters = {
   specialty?: string;
-  lifecycleState?: DiagnosisRegistryStatus | '';
-  onboardingState?: DiagnosisEditorialOnboardingStatus | '';
-  coverageWeakness?: EditorialCoverageWeakness | '';
+  lifecycleState?: DiagnosisRegistryStatus | "";
+  onboardingState?: DiagnosisEditorialOnboardingStatus | "";
+  coverageWeakness?: EditorialCoverageWeakness | "";
   playableOnly?: boolean;
 };
 
@@ -3106,7 +3138,7 @@ export type EditorialCoverageDiagnosis = {
   };
   education: {
     status: DiagnosisEducationStatus | null;
-    completeness: 'missing' | 'weak' | 'partial' | 'complete';
+    completeness: "missing" | "weak" | "partial" | "complete";
     version: number | null;
   };
   inventory: {
@@ -3140,9 +3172,9 @@ export type EditorialCoverageDiagnosis = {
       sectionId?: string;
       sectionType: string;
       claimText: string;
-      targetTab?: WorkspaceTargetTab | 'clinical-picture' | string;
+      targetTab?: WorkspaceTargetTab | "clinical-picture" | string;
       repairable?: boolean;
-      severity: WorkspaceReadinessSeverity | 'blocker' | 'warning' | string;
+      severity: WorkspaceReadinessSeverity | "blocker" | "warning" | string;
       blocksPublication?: boolean;
       createdAt: string;
     }>;
@@ -3236,11 +3268,11 @@ export type EditorialCoverageOverview = {
     overusedEvidencePatterns: number;
     evidenceCoverageGaps: number;
   };
-  evidenceCoverageReadiness: EvidenceCoverageOverview['summary'];
+  evidenceCoverageReadiness: EvidenceCoverageOverview["summary"];
   reviewCoverage: {
     inbox: EditorialInboxSummary;
     stalledOnboarding: number;
-    reviewBacklogByType: EditorialInboxSummary['byType'];
+    reviewBacklogByType: EditorialInboxSummary["byType"];
   };
   weakDiagnoses: EditorialCoverageDiagnosis[];
   specialties: EditorialCoverageSpecialty[];
@@ -3254,21 +3286,26 @@ export type EditorialCoverageOverview = {
   };
 };
 
-export type CurriculumPriorityTier = 'high' | 'medium' | 'low';
+export type CurriculumPriorityTier = "high" | "medium" | "low";
 
 export type CurriculumPlannerFilters = {
   specialty?: string;
-  onboardingStatus?: DiagnosisEditorialOnboardingStatus | '';
-  onboardingState?: DiagnosisEditorialOnboardingStatus | '';
-  lifecycleState?: DiagnosisRegistryStatus | '';
+  onboardingStatus?: DiagnosisEditorialOnboardingStatus | "";
+  onboardingState?: DiagnosisEditorialOnboardingStatus | "";
+  lifecycleState?: DiagnosisRegistryStatus | "";
   lifecycleReadiness?: string;
-  priorityTier?: CurriculumPriorityTier | '';
+  priorityTier?: CurriculumPriorityTier | "";
   track?: string;
   playableOnly?: boolean;
 };
 
 export type CurriculumDependency = {
-  type: 'shared_differential' | 'mimic' | 'specialty' | 'teaching_rule' | 'graph';
+  type:
+    | "shared_differential"
+    | "mimic"
+    | "specialty"
+    | "teaching_rule"
+    | "graph";
   diagnosisRegistryId: string;
   diagnosisName: string;
   strength: number;
@@ -3337,7 +3374,7 @@ export type CurriculumTrack = {
 };
 
 export type CurriculumDependencyCluster = {
-  type: CurriculumDependency['type'];
+  type: CurriculumDependency["type"];
   label: string;
   diagnosisIds: string[];
   diagnosisNames: string[];
@@ -3409,10 +3446,10 @@ export type RegistryMergeRelated = {
 };
 
 export type TeachingUnitCoverageStatus =
-  | 'covered'
-  | 'partial'
-  | 'missing'
-  | 'unknown';
+  | "covered"
+  | "partial"
+  | "missing"
+  | "unknown";
 
 export type TeachingUnitCoverageMap = {
   diagnosisRegistryId: string;
@@ -3437,40 +3474,40 @@ export type TeachingUnitCoverageMap = {
 };
 
 export type DiagnosisTeachingRuleCategory =
-  | 'differential_concept'
-  | 'finding_concept'
-  | 'exam_mechanism'
-  | 'investigation_concept'
-  | 'pitfall_concept'
-  | 'management_concept'
-  | 'recall_concept';
+  | "differential_concept"
+  | "finding_concept"
+  | "exam_mechanism"
+  | "investigation_concept"
+  | "pitfall_concept"
+  | "management_concept"
+  | "recall_concept";
 
 export type DiagnosisTeachingRuleImportance =
-  | 'critical'
-  | 'high'
-  | 'supporting';
+  | "critical"
+  | "high"
+  | "supporting";
 
 export type DiagnosisTeachingRuleStatus =
-  | 'CANDIDATE'
-  | 'NEEDS_REVIEW'
-  | 'APPROVED'
-  | 'ACTIVE'
-  | 'DEPRECATED'
-  | 'REJECTED';
+  | "CANDIDATE"
+  | "NEEDS_REVIEW"
+  | "APPROVED"
+  | "ACTIVE"
+  | "DEPRECATED"
+  | "REJECTED";
 
 export type DiagnosisTeachingRuleSource =
-  | 'LEGACY_SEED'
-  | 'EDITOR_CREATED'
-  | 'LEARNED_FROM_REVISION'
-  | 'GENERATED'
-  | 'GRAPH_DERIVED';
+  | "LEGACY_SEED"
+  | "EDITOR_CREATED"
+  | "LEARNED_FROM_REVISION"
+  | "GENERATED"
+  | "GRAPH_DERIVED";
 
 export type DiagnosisTeachingRuleReviewAction =
-  | 'approve'
-  | 'activate'
-  | 'reject'
-  | 'deprecate'
-  | 'needs_review';
+  | "approve"
+  | "activate"
+  | "reject"
+  | "deprecate"
+  | "needs_review";
 
 export type DiagnosisTeachingRule = {
   id: string;
@@ -3534,18 +3571,18 @@ export type DiagnosisTeachingRuleSeedResult = {
 };
 
 export type DiagnosisEditorialBriefStatus =
-  | 'DRAFT'
-  | 'NEEDS_REVIEW'
-  | 'APPROVED'
-  | 'ACTIVE'
-  | 'DEPRECATED';
+  | "DRAFT"
+  | "NEEDS_REVIEW"
+  | "APPROVED"
+  | "ACTIVE"
+  | "DEPRECATED";
 
 export type DiagnosisEditorialBriefReviewAction =
-  | 'approve'
-  | 'activate'
-  | 'deprecate'
-  | 'needs_review'
-  | 'draft';
+  | "approve"
+  | "activate"
+  | "deprecate"
+  | "needs_review"
+  | "draft";
 
 export type DiagnosisEditorialBrief = {
   id: string;
@@ -3642,7 +3679,7 @@ export type EditorialCaseReview = {
   decidedAt: string | null;
 };
 
-export type CaseQualityStatus = 'good' | 'warning' | 'blocker' | 'unknown';
+export type CaseQualityStatus = "good" | "warning" | "blocker" | "unknown";
 
 export type CaseQualityDimension = {
   status: CaseQualityStatus;
@@ -3774,7 +3811,7 @@ export type GenerateTargetedCaseResult = {
   result: GenerateCasesResult;
   generatedDraft?: ClinicalCaseDraft | null;
   generatedCase: EditorialCaseDetail | null;
-  validation: EditorialCaseDetail['validationRuns'][number] | null;
+  validation: EditorialCaseDetail["validationRuns"][number] | null;
   qualityProjection: AdminCaseQualityProjection | null;
 };
 
@@ -3860,7 +3897,7 @@ export type RestoreCaseRevisionResult = {
   };
   validationRun: Pick<
     EditorialCaseValidationRun,
-    'id' | 'outcome' | 'validatorVersion' | 'startedAt' | 'completedAt'
+    "id" | "outcome" | "validatorVersion" | "startedAt" | "completedAt"
   >;
 };
 
@@ -3886,7 +3923,7 @@ export type DiagnosisRegistrySearchItem = {
   excludedClueTypes?: string[] | null;
   searchPriority: number;
   aliasPreview: string[];
-  matchSource: 'canonical' | 'accepted_alias' | 'abbreviation' | 'search_only';
+  matchSource: "canonical" | "accepted_alias" | "abbreviation" | "search_only";
 };
 
 export type SearchDiagnosisRegistryQuery = {
@@ -3946,7 +3983,7 @@ export type UpdateDiagnosisRegistryMetadataPayload = {
 
 export type DiagnosisRegistryMetadataSuggestion = {
   diagnosisRegistryId: string;
-  source: 'heuristic';
+  source: "heuristic";
   aliases: Array<{
     term: string;
     normalizedTerm: string;
@@ -4025,14 +4062,14 @@ export type RestoreCaseRevisionPayload = {
 
 export type AddDiagnosisAliasPayload = {
   alias: string;
-  kind?: 'CANONICAL' | 'ACCEPTED' | 'ABBREVIATION' | 'SEARCH_ONLY';
+  kind?: "CANONICAL" | "ACCEPTED" | "ABBREVIATION" | "SEARCH_ONLY";
   acceptedForMatch?: boolean;
 };
 
 export type CreateDiagnosisRegistryResult = {
   diagnosisId: string;
   diagnosisRegistryId: string;
-  mappingMethod: 'MANUAL_CREATED';
+  mappingMethod: "MANUAL_CREATED";
   registry: EditorialDiagnosisRegistrySummary;
 };
 

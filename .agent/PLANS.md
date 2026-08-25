@@ -1134,3 +1134,69 @@ Cases workflow/Diagnostic Cases board.
 Batch generation results now carry `diagnosisRegistryId` for draft-created
 items so the standalone Generate page can link to the workspace review packet
 path without client-side inference.
+
+## WEOS SCAFFOLD-BOOT-001 - Diagnosis-Specific Educational Scaffold Bootstrap
+
+Date: 2026-08-25
+Repository: `C:\Users\user\DxLab-master-live`
+Starting HEAD: `29f90830b8501b32e74ea632ed46a9d361c085af`
+Scope: implement diagnosis scaffold bootstrap and generation readiness gates
+without schema changes.
+
+## Objective
+
+Prevent empty/new diagnoses from producing generic scaffold-looking content
+that downstream Education or Case generation treats as sufficient context.
+Require metadata readiness before Editorial Brief bootstrap, approved/active
+Brief before generated Teaching Rules, and scaffold readiness before Education
+or Case generation.
+
+## Files Expected
+
+- `doctordle-backend/src/modules/diagnosis-registry/diagnosis-registry-lifecycle-policy.service.ts`
+- `doctordle-backend/src/modules/education/diagnosis-editorial-brief.service.ts`
+- `doctordle-backend/src/modules/admin/teaching-rules-admin.service.ts`
+- `doctordle-backend/src/modules/education/diagnosis-education.service.ts`
+- `doctordle-backend/src/modules/admin/targeted-case-generation.service.ts`
+- `doctordle-backend/src/modules/case-generator/*`
+- `doctordle-backend/src/modules/admin/diagnosis-editorial-workspace.service.ts`
+- `analytics-dashboard/src/features/editorial/*`
+- `analytics-dashboard/src/features/cases/*`
+- focused backend and dashboard tests
+- WEOS documentation/gap notes
+
+## Constraints
+
+No schema migration unless proven necessary. No workspace architecture reopen.
+No Education/Cases lifecycle redesign. No automatic approval. Static knowledge
+packs can enrich bootstrap but cannot bypass human-approved scaffold.
+
+## Progress
+
+- [x] Read package and verify starting HEAD/worktree.
+- [x] Revalidate current dependency graph.
+- [x] Add lifecycle-owned scaffold readiness projection.
+- [x] Make Editorial Brief bootstrap diagnosis-specific and validate generic-only output.
+- [x] Require approved/active Brief for generated Teaching Rule candidates.
+- [x] Gate Education candidate generation by scaffold readiness.
+- [x] Gate Case generation by scaffold readiness, including `isGeneratable` bypass.
+- [x] Expose readiness in workspace read model and recommendations.
+- [x] Gate dashboard buttons with backend readiness.
+- [x] Add focused tests.
+- [x] Update documentation.
+- [x] Run verification and commit.
+
+## Risks
+
+The existing Canon baseline remains draft/approval-not-proven in repository
+records, but this task supplies explicit implementation scope. Keep runtime
+changes bounded to scaffold bootstrap and generation readiness.
+
+Provider-backed initial Editorial Brief bootstrap was not added in this package;
+the attempted direct OpenAI brief-generation path was rejected by the tool safety
+review. Runtime now validates and enriches bootstrap output from local/static
+sources where available, and blocks generic-only scaffold output.
+
+Verification completed: Prisma format, Prisma validate, Prisma generate,
+focused backend scaffold/Education/Teaching Rule/Case generation specs, backend
+build, dashboard tests, dashboard build, and `git diff --check`.

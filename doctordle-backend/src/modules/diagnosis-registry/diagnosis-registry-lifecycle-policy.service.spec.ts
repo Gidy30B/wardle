@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import {
   CaseEditorialStatus,
   DiagnosisEditorialOnboardingStatus,
@@ -56,10 +56,14 @@ function buildRegistry(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function buildPrisma(registry = buildRegistry(), counts: number[] = [0, 0, 0, 0, 0]) {
+function buildPrisma(
+  registry = buildRegistry(),
+  counts: number[] = [0, 0, 0, 0, 0],
+) {
   return {
     diagnosisRegistry: {
       findUnique: jest.fn().mockResolvedValue(registry),
+      findMany: jest.fn().mockResolvedValue([registry]),
       update: jest.fn().mockResolvedValue({
         id: 'registry-1',
         status: DiagnosisRegistryStatus.ACTIVE,
@@ -91,7 +95,9 @@ function buildPrisma(registry = buildRegistry(), counts: number[] = [0, 0, 0, 0,
 describe('DiagnosisRegistryLifecyclePolicyService', () => {
   it('allows activation when governance assets are ready', async () => {
     const prisma = buildPrisma();
-    const service = new DiagnosisRegistryLifecyclePolicyService(prisma as never);
+    const service = new DiagnosisRegistryLifecyclePolicyService(
+      prisma as never,
+    );
 
     const result = await service.getLifecycle('registry-1');
 
@@ -114,7 +120,9 @@ describe('DiagnosisRegistryLifecyclePolicyService', () => {
       }),
       [1, 1, 1, 0, 0],
     );
-    const service = new DiagnosisRegistryLifecyclePolicyService(prisma as never);
+    const service = new DiagnosisRegistryLifecyclePolicyService(
+      prisma as never,
+    );
 
     const result = await service.getLifecycle('registry-1');
 
@@ -142,7 +150,9 @@ describe('DiagnosisRegistryLifecyclePolicyService', () => {
         isPlayable: true,
       }),
     );
-    const service = new DiagnosisRegistryLifecyclePolicyService(prisma as never);
+    const service = new DiagnosisRegistryLifecyclePolicyService(
+      prisma as never,
+    );
 
     const result = await service.getLifecycle('registry-1');
 
@@ -157,7 +167,9 @@ describe('DiagnosisRegistryLifecyclePolicyService', () => {
         onboardingStatus: DiagnosisEditorialOnboardingStatus.NEW,
       }),
     );
-    const service = new DiagnosisRegistryLifecyclePolicyService(prisma as never);
+    const service = new DiagnosisRegistryLifecyclePolicyService(
+      prisma as never,
+    );
 
     await expect(
       service.performAction({
@@ -171,7 +183,9 @@ describe('DiagnosisRegistryLifecyclePolicyService', () => {
 
   it('updates activation metadata when activation is allowed', async () => {
     const prisma = buildPrisma();
-    const service = new DiagnosisRegistryLifecyclePolicyService(prisma as never);
+    const service = new DiagnosisRegistryLifecyclePolicyService(
+      prisma as never,
+    );
 
     await service.performAction({
       diagnosisRegistryId: 'registry-1',
@@ -202,7 +216,9 @@ describe('DiagnosisRegistryLifecyclePolicyService', () => {
         cases: [],
       }),
     );
-    const service = new DiagnosisRegistryLifecyclePolicyService(prisma as never);
+    const service = new DiagnosisRegistryLifecyclePolicyService(
+      prisma as never,
+    );
 
     const result = await service.performAction({
       diagnosisRegistryId: 'registry-1',
@@ -252,7 +268,9 @@ describe('DiagnosisRegistryLifecyclePolicyService', () => {
         bodySystem: null,
       }),
     );
-    const service = new DiagnosisRegistryLifecyclePolicyService(prisma as never);
+    const service = new DiagnosisRegistryLifecyclePolicyService(
+      prisma as never,
+    );
 
     await expect(
       service.performAction({
@@ -270,7 +288,9 @@ describe('DiagnosisRegistryLifecyclePolicyService', () => {
         isCompositional: true,
       }),
     );
-    const service = new DiagnosisRegistryLifecyclePolicyService(prisma as never);
+    const service = new DiagnosisRegistryLifecyclePolicyService(
+      prisma as never,
+    );
 
     const result = await service.getLifecycle('registry-1');
 
@@ -318,5 +338,93 @@ describe('DiagnosisRegistryLifecyclePolicyService', () => {
       isPlayable: true,
     });
     expect(DiagnosisGraphFactStatus.ACTIVE).toBe('ACTIVE');
+  });
+
+  it('blocks teaching rules, education, and cases for active empty diagnoses without scaffold', async () => {
+    const prisma = buildPrisma(
+      buildRegistry({
+        status: DiagnosisRegistryStatus.ACTIVE,
+        active: true,
+        isPlayable: true,
+        isGeneratable: true,
+        education: null,
+        editorialBrief: null,
+        teachingRules: [],
+        cases: [],
+        graphFacts: [],
+      }),
+    );
+    const service = new DiagnosisRegistryLifecyclePolicyService(
+      prisma as never,
+    );
+
+    const readiness = await service.getScaffoldReadiness('registry-1');
+
+    expect(readiness.metadata.ready).toBe(true);
+    expect(readiness.bootstrap.ready).toBe(true);
+    expect(readiness.scaffold.ready).toBe(false);
+    expect(readiness.scaffold.missing).toContain('Editorial Brief');
+    expect(readiness.educationGeneration.ready).toBe(false);
+    expect(readiness.caseGeneration.ready).toBe(false);
+    await expect(
+      service.assertTeachingRuleGenerationReady('registry-1'),
+    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(
+      service.assertEducationGenerationReady('registry-1'),
+    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(
+      service.assertCaseGenerationReady('registry-1'),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('allows downstream generation only when approved scaffold rules cover education and cases', async () => {
+    const scaffoldRules = [
+      {
+        id: 'rule-1',
+        status: 'APPROVED',
+        category: 'differential_concept',
+        importance: 'critical',
+        appliesToEducation: true,
+        appliesToCaseGeneration: true,
+      },
+      {
+        id: 'rule-2',
+        status: 'ACTIVE',
+        category: 'investigation_concept',
+        importance: 'high',
+        appliesToEducation: true,
+        appliesToCaseGeneration: true,
+      },
+      {
+        id: 'rule-3',
+        status: 'APPROVED',
+        category: 'management_concept',
+        importance: 'supporting',
+        appliesToEducation: true,
+        appliesToCaseGeneration: false,
+      },
+    ];
+    const prisma = buildPrisma(
+      buildRegistry({
+        status: DiagnosisRegistryStatus.ACTIVE,
+        active: true,
+        isPlayable: true,
+        isGeneratable: true,
+        teachingRules: scaffoldRules,
+      }),
+    );
+    const service = new DiagnosisRegistryLifecyclePolicyService(
+      prisma as never,
+    );
+
+    const readiness = await service.getScaffoldReadiness('registry-1');
+    const eligibleIds = await service.getCaseGenerationEligibleRegistryIds([
+      'registry-1',
+    ]);
+
+    expect(readiness.scaffold.ready).toBe(true);
+    expect(readiness.educationGeneration.ready).toBe(true);
+    expect(readiness.caseGeneration.ready).toBe(true);
+    expect(eligibleIds.has('registry-1')).toBe(true);
   });
 });

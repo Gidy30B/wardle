@@ -2,9 +2,12 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma, type DiagnosisEditorialBrief } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
+import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
+import { EducationKnowledgeRulesService } from './education-knowledge-rules.service';
 
 const VALID_STATUSES = [
   'DRAFT',
@@ -56,7 +59,14 @@ export type EditorialBriefContext = {
 
 @Injectable()
 export class DiagnosisEditorialBriefService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly lifecyclePolicy: DiagnosisRegistryLifecyclePolicyService = new DiagnosisRegistryLifecyclePolicyService(
+      prisma,
+    ),
+    @Optional()
+    private readonly educationKnowledgeRulesService: EducationKnowledgeRulesService = new EducationKnowledgeRulesService(),
+  ) {}
 
   async getBrief(diagnosisRegistryId: string) {
     const diagnosis = await this.requireDiagnosis(diagnosisRegistryId);
@@ -115,7 +125,9 @@ export class DiagnosisEditorialBriefService {
     await this.requireBrief(diagnosisRegistryId);
     const data = this.toUpdateInput(payload);
     if (!Object.keys(data).length) {
-      throw new BadRequestException('No supported editorial brief fields provided');
+      throw new BadRequestException(
+        'No supported editorial brief fields provided',
+      );
     }
 
     const brief = await this.prisma.diagnosisEditorialBrief.update({
@@ -131,10 +143,7 @@ export class DiagnosisEditorialBriefService {
   async reviewBrief(diagnosisRegistryId: string, action: unknown) {
     await this.requireDiagnosis(diagnosisRegistryId);
     await this.requireBrief(diagnosisRegistryId);
-    if (
-      typeof action !== 'string' ||
-      !(action in REVIEW_ACTION_TO_STATUS)
-    ) {
+    if (typeof action !== 'string' || !(action in REVIEW_ACTION_TO_STATUS)) {
       throw new BadRequestException('Invalid editorial brief review action');
     }
 
@@ -142,7 +151,9 @@ export class DiagnosisEditorialBriefService {
       where: { diagnosisRegistryId },
       data: {
         status:
-          REVIEW_ACTION_TO_STATUS[action as keyof typeof REVIEW_ACTION_TO_STATUS],
+          REVIEW_ACTION_TO_STATUS[
+            action as keyof typeof REVIEW_ACTION_TO_STATUS
+          ],
         version: { increment: 1 },
       },
     });
@@ -150,12 +161,14 @@ export class DiagnosisEditorialBriefService {
   }
 
   async generateBrief(diagnosisRegistryId: string) {
+    await this.lifecyclePolicy.assertBootstrapReady(diagnosisRegistryId);
     const context = await this.loadGenerationContext(diagnosisRegistryId);
     if (!context) {
       throw new NotFoundException('Diagnosis registry entry not found');
     }
 
     const payload = this.buildGeneratedPayload(context);
+    this.validateBootstrapPayload(payload, context);
     const existing = await this.prisma.diagnosisEditorialBrief.findUnique({
       where: { diagnosisRegistryId },
     });
@@ -218,6 +231,12 @@ export class DiagnosisEditorialBriefService {
         specialty: true,
         bodySystem: true,
         difficultyBand: true,
+        aliases: {
+          where: { active: true },
+          select: { term: true },
+          orderBy: [{ acceptedForMatch: 'desc' }, { rank: 'asc' }],
+          take: 20,
+        },
         teachingRules: {
           where: {
             status: { in: ['ACTIVE', 'APPROVED'] },
@@ -285,10 +304,17 @@ export class DiagnosisEditorialBriefService {
 
   private buildGeneratedPayload(
     context: NonNullable<
-      Awaited<ReturnType<DiagnosisEditorialBriefService['loadGenerationContext']>>
+      Awaited<
+        ReturnType<DiagnosisEditorialBriefService['loadGenerationContext']>
+      >
     >,
-  ): Omit<Prisma.DiagnosisEditorialBriefCreateInput, 'diagnosisRegistry' | 'status'> {
+  ): Omit<
+    Prisma.DiagnosisEditorialBriefCreateInput,
+    'diagnosisRegistry' | 'status'
+  > {
     const diagnosisName = context.displayLabel || context.canonicalName;
+    const knowledgeGuidance =
+      this.educationKnowledgeRulesService.getGuidance(context);
     const criticalRules = context.teachingRules.filter(
       (rule) => rule.importance === 'critical',
     );
@@ -301,7 +327,9 @@ export class DiagnosisEditorialBriefService {
     const caseRules = context.teachingRules.filter(
       (rule) => rule.appliesToCaseGeneration,
     );
-    const graphRules = context.teachingRules.filter((rule) => rule.appliesToGraph);
+    const graphRules = context.teachingRules.filter(
+      (rule) => rule.appliesToGraph,
+    );
     const education =
       context.education &&
       ['PUBLISHED', 'APPROVED'].includes(context.education.editorialStatus)
@@ -317,18 +345,39 @@ export class DiagnosisEditorialBriefService {
         .map((candidate) => candidate.targetDiagnosisRegistryId)
         .filter((id): id is string => Boolean(id)),
     ]);
-    const mimicNames = this.unique([
-      ...context.graphFacts
-        .filter((fact) => fact.type === 'MIMIC')
-        .map((fact) => this.targetName(fact)),
-      ...context.graphCandidates
-        .filter((candidate) => candidate.type === 'MIMIC')
-        .map((candidate) => this.targetName(candidate) ?? candidate.rawText),
-    ].filter((item): item is string => Boolean(item)));
+    const mimicNames = this.unique(
+      [
+        ...context.graphFacts
+          .filter((fact) => fact.type === 'MIMIC')
+          .map((fact) => this.targetName(fact)),
+        ...context.graphCandidates
+          .filter((candidate) => candidate.type === 'MIMIC')
+          .map((candidate) => this.targetName(candidate) ?? candidate.rawText),
+      ].filter((item): item is string => Boolean(item)),
+    );
 
     const ruleTitles = context.teachingRules.map((rule) => rule.title);
+    const requiredFindings = knowledgeGuidance?.expectedNamedSigns ?? [];
+    const requiredInvestigations =
+      knowledgeGuidance?.expectedInvestigations ?? [];
+    const requiredMimics = knowledgeGuidance?.expectedMimics ?? [];
+    const requiredPitfalls = knowledgeGuidance?.expectedPitfalls ?? [];
+    const requiredManagementAnchors =
+      knowledgeGuidance?.expectedManagementAnchors ?? [];
     const learningGoals = this.limit(
       [
+        ...requiredFindings
+          .slice(0, 2)
+          .map((finding) => `Use ${finding} to reason about ${diagnosisName}.`),
+        ...requiredMimics
+          .slice(0, 2)
+          .map((mimic) => `Distinguish ${diagnosisName} from ${mimic}.`),
+        ...requiredInvestigations
+          .slice(0, 1)
+          .map(
+            (investigation) =>
+              `Interpret ${investigation} in suspected ${diagnosisName}.`,
+          ),
         ...criticalRules.map((rule) => `Master ${rule.title}.`),
         ...highRules.map((rule) => `Use ${rule.title} in diagnosis reasoning.`),
         ...ruleTitles.map((title) => `Recognize ${title}.`),
@@ -343,9 +392,16 @@ export class DiagnosisEditorialBriefService {
           criticalRules.length
             ? `Prioritize ${criticalRules.map((rule) => rule.title).join(', ')}.`
             : null,
+          requiredFindings.length
+            ? `Anchor the illness script in ${requiredFindings
+                .slice(0, 3)
+                .join(', ')}.`
+            : null,
           mimicNames.length
             ? `Keep mimics plausible: ${mimicNames.slice(0, 4).join(', ')}.`
-            : null,
+            : requiredMimics.length
+              ? `Keep mimics plausible: ${requiredMimics.slice(0, 4).join(', ')}.`
+              : null,
         ]
           .filter(Boolean)
           .join(' '),
@@ -359,6 +415,7 @@ export class DiagnosisEditorialBriefService {
           ...context.teachingRules
             .filter((rule) => rule.category === 'pitfall_concept')
             .map((rule) => rule.title),
+          ...requiredPitfalls,
           ...this.jsonStrings(education?.pitfalls),
         ],
         8,
@@ -368,6 +425,7 @@ export class DiagnosisEditorialBriefService {
           ...context.teachingRules
             .filter((rule) => rule.category === 'investigation_concept')
             .map((rule) => rule.title),
+          ...requiredInvestigations,
           ...this.jsonStrings(education?.investigations),
         ],
         8,
@@ -377,6 +435,7 @@ export class DiagnosisEditorialBriefService {
           ...context.teachingRules
             .filter((rule) => rule.category === 'management_concept')
             .map((rule) => rule.title),
+          ...requiredManagementAnchors,
           ...this.jsonStrings(education?.management),
         ],
         8,
@@ -398,7 +457,11 @@ export class DiagnosisEditorialBriefService {
             ? `Preserve mimics through early and mid clues: ${mimicNames
                 .slice(0, 5)
                 .join(', ')}.`
-            : null,
+            : requiredMimics.length
+              ? `Preserve mimics through early and mid clues: ${requiredMimics
+                  .slice(0, 5)
+                  .join(', ')}.`
+              : null,
           'Avoid clue sequences that collapse the differential immediately.',
         ].filter((item): item is string => Boolean(item)),
         6,
@@ -407,7 +470,11 @@ export class DiagnosisEditorialBriefService {
         [
           educationRules.length
             ? `Make education explicitly cover ${educationRules.length} approved teaching rules.`
-            : null,
+            : learningGoals.length
+              ? `Make education explicitly cover: ${learningGoals
+                  .slice(0, 4)
+                  .join(' ')}`
+              : null,
           'Use discriminators, management implications, and trap-avoidance language.',
         ].filter((item): item is string => Boolean(item)),
         6,
@@ -461,7 +528,10 @@ export class DiagnosisEditorialBriefService {
       data.summary = this.requiredString(payload.summary, 'summary');
     }
     if (payload.learningGoals !== undefined) {
-      data.learningGoals = this.jsonArray(payload.learningGoals, 'learningGoals');
+      data.learningGoals = this.jsonArray(
+        payload.learningGoals,
+        'learningGoals',
+      );
     }
     if (payload.requiredTeachingRuleIds !== undefined) {
       data.requiredTeachingRuleIds = this.jsonArray(
@@ -476,13 +546,19 @@ export class DiagnosisEditorialBriefService {
       data.requiredPitfalls = this.optionalJsonArray(payload.requiredPitfalls);
     }
     if (payload.keyInvestigations !== undefined) {
-      data.keyInvestigations = this.optionalJsonArray(payload.keyInvestigations);
+      data.keyInvestigations = this.optionalJsonArray(
+        payload.keyInvestigations,
+      );
     }
     if (payload.managementAnchors !== undefined) {
-      data.managementAnchors = this.optionalJsonArray(payload.managementAnchors);
+      data.managementAnchors = this.optionalJsonArray(
+        payload.managementAnchors,
+      );
     }
     if (payload.difficultyGuidance !== undefined) {
-      data.difficultyGuidance = this.optionalJsonArray(payload.difficultyGuidance);
+      data.difficultyGuidance = this.optionalJsonArray(
+        payload.difficultyGuidance,
+      );
     }
     if (payload.caseGenerationGuidance !== undefined) {
       data.caseGenerationGuidance = this.optionalJsonArray(
@@ -490,7 +566,9 @@ export class DiagnosisEditorialBriefService {
       );
     }
     if (payload.educationGuidance !== undefined) {
-      data.educationGuidance = this.optionalJsonArray(payload.educationGuidance);
+      data.educationGuidance = this.optionalJsonArray(
+        payload.educationGuidance,
+      );
     }
     if (payload.graphGuidance !== undefined) {
       data.graphGuidance = this.optionalJsonArray(payload.graphGuidance);
@@ -540,6 +618,80 @@ export class DiagnosisEditorialBriefService {
       educationGuidance: this.jsonStrings(brief.educationGuidance),
       graphGuidance: this.jsonStrings(brief.graphGuidance),
     };
+  }
+
+  private validateBootstrapPayload(
+    payload: Omit<
+      Prisma.DiagnosisEditorialBriefCreateInput,
+      'diagnosisRegistry' | 'status'
+    >,
+    context: NonNullable<
+      Awaited<
+        ReturnType<DiagnosisEditorialBriefService['loadGenerationContext']>
+      >
+    >,
+  ) {
+    const diagnosisName = context.displayLabel || context.canonicalName;
+    const text = [
+      payload.summary,
+      ...this.jsonStrings(payload.learningGoals),
+      ...this.jsonStrings(payload.requiredPitfalls),
+      ...this.jsonStrings(payload.keyInvestigations),
+      ...this.jsonStrings(payload.managementAnchors),
+      ...this.jsonStrings(payload.caseGenerationGuidance),
+      ...this.jsonStrings(payload.educationGuidance),
+    ].join(' ');
+    const genericOnlyPatterns = [
+      'should be taught as a reasoning pattern',
+      'use progressive clue reveal',
+      'escalate from pattern recognition',
+      'avoid clue sequences that collapse',
+      'use discriminators, management implications',
+      'prefer discriminator and mechanism facts',
+    ];
+    const lowerText = text.toLowerCase();
+    const nonGenericText = genericOnlyPatterns.reduce(
+      (current, pattern) => current.replace(pattern, ''),
+      lowerText,
+    );
+    const hasDiagnosisIdentity = lowerText.includes(
+      diagnosisName.toLowerCase(),
+    );
+    const hasLearningGoals =
+      this.jsonStrings(payload.learningGoals).length >= 2;
+    const hasSpecificClinicalAnchor =
+      this.jsonStrings(payload.keyInvestigations).length > 0 ||
+      this.jsonStrings(payload.requiredPitfalls).length > 0 ||
+      this.jsonStrings(payload.managementAnchors).length > 0 ||
+      this.jsonStrings(payload.requiredMimicIds).length > 0 ||
+      /\b(?:sign|score|test|imaging|ct|ultrasound|mimic|distinguish|unlike|rather than|favors|argues against)\b/i.test(
+        nonGenericText,
+      );
+
+    if (
+      !hasDiagnosisIdentity ||
+      !hasLearningGoals ||
+      !hasSpecificClinicalAnchor
+    ) {
+      throw new BadRequestException({
+        code: 'BOOTSTRAP_VALIDATION_FAILED',
+        message:
+          'Editorial Brief bootstrap could not produce diagnosis-specific scaffold content from approved local sources.',
+        blockers: [
+          !hasDiagnosisIdentity
+            ? 'Diagnosis identity is missing from brief'
+            : null,
+          !hasLearningGoals
+            ? 'Diagnosis-specific learning goals are required'
+            : null,
+          !hasSpecificClinicalAnchor
+            ? 'Diagnosis-specific clinical anchors are required'
+            : null,
+        ].filter((item): item is string => Boolean(item)),
+        nextRecommendedAction:
+          'Add diagnosis-specific registry notes, static knowledge support, graph facts, or manual Editorial Brief content for review.',
+      });
+    }
   }
 
   private requiredString(value: unknown, field: string): string {
@@ -608,7 +760,10 @@ export class DiagnosisEditorialBriefService {
   }
 
   private targetName(value: {
-    targetDiagnosisRegistry?: { displayLabel: string; canonicalName: string } | null;
+    targetDiagnosisRegistry?: {
+      displayLabel: string;
+      canonicalName: string;
+    } | null;
   }) {
     return (
       value.targetDiagnosisRegistry?.displayLabel ||

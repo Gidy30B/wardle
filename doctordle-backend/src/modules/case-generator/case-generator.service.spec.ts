@@ -524,6 +524,17 @@ describe('CaseGeneratorService', () => {
         validationStatus: 'PASSED',
       }),
     };
+    const lifecyclePolicy = {
+      getGeneratableRegistryWhere: jest.fn().mockReturnValue({
+        active: true,
+        status: 'ACTIVE',
+        isPlayable: true,
+        isGeneratable: true,
+      }),
+      getCaseGenerationEligibleRegistryIds: jest
+        .fn()
+        .mockImplementation((ids: string[]) => Promise.resolve(new Set(ids))),
+    };
 
     const service = new CaseGeneratorService(
       prisma as never,
@@ -533,7 +544,7 @@ describe('CaseGeneratorService', () => {
       generationContextBuilder as never,
       undefined,
       undefined,
-      undefined,
+      lifecyclePolicy as never,
       clinicalCaseDraftService as never,
     );
 
@@ -544,6 +555,7 @@ describe('CaseGeneratorService', () => {
       diagnosisRegistryLinkService,
       generationPlannerService,
       generationContextBuilder,
+      lifecyclePolicy,
       clinicalCaseDraftService,
       service,
     };
@@ -607,8 +619,12 @@ describe('CaseGeneratorService', () => {
   });
 
   it('persists a generated case draft through a fixed registry target', async () => {
-    const { clinicalCaseDraftService, diagnosisRegistryLinkService, service, tx } =
-      buildService();
+    const {
+      clinicalCaseDraftService,
+      diagnosisRegistryLinkService,
+      service,
+      tx,
+    } = buildService();
 
     await service.saveCaseForRegistryTarget(
       buildGeneratedCase(),
@@ -678,11 +694,7 @@ describe('CaseGeneratorService', () => {
 
   it('rejects sex-specific differentials that conflict with patient sex', () => {
     const { service } = buildService();
-    const differentials = [
-      'Gastroenteritis',
-      'Renal colic',
-      'Ovarian torsion',
-    ];
+    const differentials = ['Gastroenteritis', 'Renal colic', 'Ovarian torsion'];
     const generatedCase = buildGeneratedCase({
       answer: 'Appendicitis',
       clues: [
@@ -756,11 +768,7 @@ describe('CaseGeneratorService', () => {
 
   it('allows ovarian torsion as a differential when patient sex is compatible', () => {
     const { service } = buildService();
-    const differentials = [
-      'Gastroenteritis',
-      'Renal colic',
-      'Ovarian torsion',
-    ];
+    const differentials = ['Gastroenteritis', 'Renal colic', 'Ovarian torsion'];
     const generatedCase = buildGeneratedCase({
       answer: 'Appendicitis',
       clues: [
@@ -848,9 +856,7 @@ describe('CaseGeneratorService', () => {
       service.validateCase(
         buildGeneratedCase({
           clues: buildGeneratedCase().clues.map((clue) =>
-            clue.order === 4
-              ? { ...clue, value: 'BNP is elevated' }
-              : clue,
+            clue.order === 4 ? { ...clue, value: 'BNP is elevated' } : clue,
           ),
         }),
       ),
@@ -880,9 +886,7 @@ describe('CaseGeneratorService', () => {
       service.validateCase(
         buildGeneratedCase({
           clues: buildGeneratedCase().clues.map((clue) =>
-            clue.order === 2
-              ? { ...clue, value: 'Vitals are unstable' }
-              : clue,
+            clue.order === 2 ? { ...clue, value: 'Vitals are unstable' } : clue,
           ),
         }),
       ),
@@ -1180,8 +1184,12 @@ describe('CaseGeneratorService', () => {
   });
 
   it('saves registry-first drafts against the planned diagnosis label and registry link', async () => {
-    const { clinicalCaseDraftService, diagnosisRegistryLinkService, tx, service } =
-      buildService();
+    const {
+      clinicalCaseDraftService,
+      diagnosisRegistryLinkService,
+      tx,
+      service,
+    } = buildService();
     const target = buildPlannedDiagnosis();
 
     await service.saveCaseForRegistryTarget(buildGeneratedCase(), target);
@@ -1263,7 +1271,8 @@ describe('CaseGeneratorService', () => {
     const create = jest.fn().mockResolvedValue(
       mockCompletion({
         ...buildGeneratedCase(),
-        answer: 'Intracranial mass with associated edema due to primary brain tumor',
+        answer:
+          'Intracranial mass with associated edema due to primary brain tumor',
       }),
     );
 
@@ -1360,9 +1369,11 @@ describe('CaseGeneratorService', () => {
         mockCompletion(buildDifferentialPreflight(generatedCase.differentials)),
       )
       .mockResolvedValueOnce(
-        mockCompletion(buildCritique({
-          recommendations: ['Ready for editorial review'],
-        })),
+        mockCompletion(
+          buildCritique({
+            recommendations: ['Ready for editorial review'],
+          }),
+        ),
       );
 
     Object.defineProperty(service, 'openaiClient', {
@@ -2845,9 +2856,7 @@ describe('CaseGeneratorService', () => {
     expect(saveCaseSpy).not.toHaveBeenCalled();
     expect(result.created).toBe(0);
     expect(result.draftCreated).toBe(1);
-    expect(result.plannerDiagnostics[0].diagnosis?.displayLabel).toBe(
-      'Asthma',
-    );
+    expect(result.plannerDiagnostics[0].diagnosis?.displayLabel).toBe('Asthma');
   });
 
   it('generates a targeted registry-first case for one diagnosisRegistryId', async () => {
@@ -2955,7 +2964,10 @@ describe('CaseGeneratorService', () => {
 
   it('rejects retired legacy generation mode before provider invocation', async () => {
     const { service } = buildService();
-    const generateTargetSpy = jest.spyOn(service, 'generateCaseForRegistryTarget');
+    const generateTargetSpy = jest.spyOn(
+      service,
+      'generateCaseForRegistryTarget',
+    );
     const registrySaveSpy = jest.spyOn(service, 'saveCaseForRegistryTarget');
 
     await expect(
@@ -2978,7 +2990,9 @@ describe('CaseGeneratorService', () => {
       .fn()
       .mockResolvedValueOnce(mockCompletion(buildGeneratedCase()))
       .mockResolvedValueOnce(
-        mockCompletion(buildDifferentialPreflight(buildGeneratedCase().differentials)),
+        mockCompletion(
+          buildDifferentialPreflight(buildGeneratedCase().differentials),
+        ),
       )
       .mockResolvedValueOnce(mockCompletion(buildCritique()));
     const saveCaseSpy = jest.spyOn(service, 'saveCase');
@@ -3110,7 +3124,10 @@ describe('CaseGeneratorService', () => {
       buildGeneratedCase({
         clues: buildGeneratedCase().clues.map((clue) =>
           clue.order === 0
-            ? { ...clue, value: 'Teenager with intermittent cough after pollen exposure' }
+            ? {
+                ...clue,
+                value: 'Teenager with intermittent cough after pollen exposure',
+              }
             : clue,
         ),
       }),

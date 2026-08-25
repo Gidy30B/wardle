@@ -4,10 +4,19 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { GenerationPurpose, Prisma, type DiagnosisTeachingRule } from '@prisma/client';
+import {
+  GenerationPurpose,
+  Prisma,
+  type DiagnosisTeachingRule,
+} from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service';
 import { DiagnosisCurriculumProviderService } from '../education/diagnosis-curriculum-provider.service';
 import { DiagnosisTeachingRuleSeedService } from '../education/diagnosis-teaching-rule-seed.service';
+import {
+  DiagnosisEditorialBriefService,
+  type EditorialBriefContext,
+} from '../education/diagnosis-editorial-brief.service';
+import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
 import {
   ReasoningPathService,
   type EducationalReasoningGenerationContext,
@@ -66,6 +75,13 @@ type TeachingRuleWritePayload = {
   source?: unknown;
 };
 
+type TeachingRuleSourceItem = {
+  title: string;
+  category: string;
+  manifestation?: string;
+  importance?: string;
+};
+
 @Injectable()
 export class TeachingRulesAdminService {
   private readonly logger = new Logger(TeachingRulesAdminService.name);
@@ -76,6 +92,10 @@ export class TeachingRulesAdminService {
     private readonly teachingRuleSeedService: DiagnosisTeachingRuleSeedService,
     private readonly reasoningPathService?: ReasoningPathService,
     private readonly reasoningDraftValidationService?: ReasoningDraftValidationService,
+    private readonly diagnosisEditorialBriefService?: DiagnosisEditorialBriefService,
+    private readonly lifecyclePolicy: DiagnosisRegistryLifecyclePolicyService = new DiagnosisRegistryLifecyclePolicyService(
+      prisma,
+    ),
   ) {}
 
   async listRules(diagnosisRegistryId: string) {
@@ -92,7 +112,10 @@ export class TeachingRulesAdminService {
     };
   }
 
-  async createRule(diagnosisRegistryId: string, payload: TeachingRuleWritePayload) {
+  async createRule(
+    diagnosisRegistryId: string,
+    payload: TeachingRuleWritePayload,
+  ) {
     await this.requireDiagnosis(diagnosisRegistryId);
     const data = this.toCreateInput(diagnosisRegistryId, payload);
 
@@ -116,7 +139,9 @@ export class TeachingRulesAdminService {
     await this.requireRule(ruleId);
     const data = this.toUpdateInput(payload);
     if (!Object.keys(data).length) {
-      throw new BadRequestException('No supported teaching rule fields provided');
+      throw new BadRequestException(
+        'No supported teaching rule fields provided',
+      );
     }
 
     try {
@@ -140,10 +165,7 @@ export class TeachingRulesAdminService {
 
   async reviewRule(ruleId: string, action: unknown) {
     await this.requireRule(ruleId);
-    if (
-      typeof action !== 'string' ||
-      !(action in REVIEW_ACTION_TO_STATUS)
-    ) {
+    if (typeof action !== 'string' || !(action in REVIEW_ACTION_TO_STATUS)) {
       throw new BadRequestException('Invalid teaching rule review action');
     }
 
@@ -151,16 +173,32 @@ export class TeachingRulesAdminService {
       where: { id: ruleId },
       data: {
         status:
-          REVIEW_ACTION_TO_STATUS[action as keyof typeof REVIEW_ACTION_TO_STATUS],
+          REVIEW_ACTION_TO_STATUS[
+            action as keyof typeof REVIEW_ACTION_TO_STATUS
+          ],
       },
     });
     return this.toDto(rule);
   }
 
   async generateCandidateRules(diagnosisRegistryId: string) {
+    await this.lifecyclePolicy.assertTeachingRuleGenerationReady(
+      diagnosisRegistryId,
+    );
     const registry = await this.loadGenerationContext(diagnosisRegistryId);
     if (!registry) {
       throw new NotFoundException('Diagnosis registry entry not found');
+    }
+    const approvedBrief =
+      await this.getApprovedBriefContext(diagnosisRegistryId);
+    if (!approvedBrief) {
+      throw new BadRequestException({
+        code: 'BRIEF_NOT_APPROVED',
+        message:
+          'Teaching Rule generation is blocked until the Editorial Brief is approved or active.',
+        missing: ['approved Editorial Brief'],
+        nextRecommendedAction: 'Review Editorial Brief',
+      });
     }
 
     const reasoningContext =
@@ -168,7 +206,11 @@ export class TeachingRulesAdminService {
         diagnosisRegistryId,
         purpose: GenerationPurpose.TEACHING_RULE_GENERATION,
       });
-    const candidates = this.buildCandidates(registry, reasoningContext);
+    const candidates = this.buildCandidates(
+      registry,
+      reasoningContext,
+      approvedBrief,
+    );
     const created: DiagnosisTeachingRule[] = [];
 
     for (const candidate of candidates) {
@@ -191,11 +233,11 @@ export class TeachingRulesAdminService {
       }
 
       const rule = await this.prisma.diagnosisTeachingRule.create({
-          data: {
-            diagnosisRegistry: { connect: { id: diagnosisRegistryId } },
-            ...candidate,
-          },
-        });
+        data: {
+          diagnosisRegistry: { connect: { id: diagnosisRegistryId } },
+          ...candidate,
+        },
+      });
       created.push(rule);
       await this.reasoningDraftValidationService?.runAfterGeneration({
         artifactType: 'TEACHING_RULE',
@@ -297,7 +339,9 @@ export class TeachingRulesAdminService {
         'importance',
       ),
       rationale: this.optionalString(payload.rationale),
-      acceptableManifestations: this.jsonArray(payload.acceptableManifestations),
+      acceptableManifestations: this.jsonArray(
+        payload.acceptableManifestations,
+      ),
       requiredDifferentials: this.jsonArray(payload.requiredDifferentials),
       expectedEvidence: this.jsonObject(payload.expectedEvidence),
       difficultyHints: this.jsonObject(payload.difficultyHints),
@@ -324,21 +368,54 @@ export class TeachingRulesAdminService {
     payload: TeachingRuleWritePayload,
   ): Prisma.DiagnosisTeachingRuleUpdateInput {
     const data: Prisma.DiagnosisTeachingRuleUpdateInput = {};
-    if (payload.stableKey !== undefined) data.stableKey = this.stableKey(payload.stableKey);
-    if (payload.title !== undefined) data.title = this.requiredString(payload.title, 'title');
-    if (payload.category !== undefined) data.category = this.enumValue(payload.category, VALID_CATEGORIES, 'category');
-    if (payload.importance !== undefined) data.importance = this.enumValue(payload.importance, VALID_IMPORTANCE, 'importance');
-    if (payload.rationale !== undefined) data.rationale = this.optionalString(payload.rationale);
-    if (payload.acceptableManifestations !== undefined) data.acceptableManifestations = this.jsonArray(payload.acceptableManifestations);
-    if (payload.requiredDifferentials !== undefined) data.requiredDifferentials = this.jsonArray(payload.requiredDifferentials);
-    if (payload.expectedEvidence !== undefined) data.expectedEvidence = this.jsonObject(payload.expectedEvidence);
-    if (payload.difficultyHints !== undefined) data.difficultyHints = this.jsonObject(payload.difficultyHints);
-    if (payload.avoidTooEarly !== undefined) data.avoidTooEarly = this.optionalBoolean(payload.avoidTooEarly, false);
-    if (payload.appliesToEducation !== undefined) data.appliesToEducation = this.optionalBoolean(payload.appliesToEducation, true);
-    if (payload.appliesToCaseGeneration !== undefined) data.appliesToCaseGeneration = this.optionalBoolean(payload.appliesToCaseGeneration, true);
-    if (payload.appliesToGraph !== undefined) data.appliesToGraph = this.optionalBoolean(payload.appliesToGraph, false);
-    if (payload.status !== undefined) data.status = this.enumValue(payload.status, VALID_STATUSES, 'status');
-    if (payload.source !== undefined) data.source = this.enumValue(payload.source, VALID_SOURCES, 'source');
+    if (payload.stableKey !== undefined)
+      data.stableKey = this.stableKey(payload.stableKey);
+    if (payload.title !== undefined)
+      data.title = this.requiredString(payload.title, 'title');
+    if (payload.category !== undefined)
+      data.category = this.enumValue(
+        payload.category,
+        VALID_CATEGORIES,
+        'category',
+      );
+    if (payload.importance !== undefined)
+      data.importance = this.enumValue(
+        payload.importance,
+        VALID_IMPORTANCE,
+        'importance',
+      );
+    if (payload.rationale !== undefined)
+      data.rationale = this.optionalString(payload.rationale);
+    if (payload.acceptableManifestations !== undefined)
+      data.acceptableManifestations = this.jsonArray(
+        payload.acceptableManifestations,
+      );
+    if (payload.requiredDifferentials !== undefined)
+      data.requiredDifferentials = this.jsonArray(
+        payload.requiredDifferentials,
+      );
+    if (payload.expectedEvidence !== undefined)
+      data.expectedEvidence = this.jsonObject(payload.expectedEvidence);
+    if (payload.difficultyHints !== undefined)
+      data.difficultyHints = this.jsonObject(payload.difficultyHints);
+    if (payload.avoidTooEarly !== undefined)
+      data.avoidTooEarly = this.optionalBoolean(payload.avoidTooEarly, false);
+    if (payload.appliesToEducation !== undefined)
+      data.appliesToEducation = this.optionalBoolean(
+        payload.appliesToEducation,
+        true,
+      );
+    if (payload.appliesToCaseGeneration !== undefined)
+      data.appliesToCaseGeneration = this.optionalBoolean(
+        payload.appliesToCaseGeneration,
+        true,
+      );
+    if (payload.appliesToGraph !== undefined)
+      data.appliesToGraph = this.optionalBoolean(payload.appliesToGraph, false);
+    if (payload.status !== undefined)
+      data.status = this.enumValue(payload.status, VALID_STATUSES, 'status');
+    if (payload.source !== undefined)
+      data.source = this.enumValue(payload.source, VALID_SOURCES, 'source');
     return data;
   }
 
@@ -373,16 +450,67 @@ export class TeachingRulesAdminService {
     });
   }
 
+  private async getApprovedBriefContext(diagnosisRegistryId: string) {
+    const serviceContext =
+      await this.diagnosisEditorialBriefService?.getApprovedBriefContext(
+        diagnosisRegistryId,
+      );
+    if (serviceContext) {
+      return serviceContext;
+    }
+    const brief = await this.prisma.diagnosisEditorialBrief.findFirst({
+      where: {
+        diagnosisRegistryId,
+        status: { in: ['APPROVED', 'ACTIVE'] },
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+    });
+    if (!brief) {
+      return null;
+    }
+    return {
+      id: brief.id,
+      status: brief.status,
+      version: brief.version,
+      summary: brief.summary,
+      learningGoals: this.stringArray(brief.learningGoals) ?? [],
+      requiredTeachingRuleIds:
+        this.stringArray(brief.requiredTeachingRuleIds) ?? [],
+      requiredMimicIds: this.stringArray(brief.requiredMimicIds) ?? [],
+      requiredPitfalls: this.stringArray(brief.requiredPitfalls) ?? [],
+      keyInvestigations: this.stringArray(brief.keyInvestigations) ?? [],
+      managementAnchors: this.stringArray(brief.managementAnchors) ?? [],
+      difficultyGuidance: this.stringArray(brief.difficultyGuidance) ?? [],
+      caseGenerationGuidance:
+        this.stringArray(brief.caseGenerationGuidance) ?? [],
+      educationGuidance: this.stringArray(brief.educationGuidance) ?? [],
+      graphGuidance: this.stringArray(brief.graphGuidance) ?? [],
+    } satisfies EditorialBriefContext;
+  }
+
   private buildCandidates(
-    registry: NonNullable<Awaited<ReturnType<TeachingRulesAdminService['loadGenerationContext']>>>,
+    registry: NonNullable<
+      Awaited<ReturnType<TeachingRulesAdminService['loadGenerationContext']>>
+    >,
     reasoningContext?: EducationalReasoningGenerationContext,
+    approvedBrief?: EditorialBriefContext,
   ) {
-    const textItems = [
+    const textItems: TeachingRuleSourceItem[] = [
+      ...this.briefTeachingItems(approvedBrief),
       ...this.reasoningTeachingItems(reasoningContext),
-      ...this.sectionItems(registry.education?.differentials, 'differential_concept'),
-      ...this.sectionItems(registry.education?.investigations, 'investigation_concept'),
+      ...this.sectionItems(
+        registry.education?.differentials,
+        'differential_concept',
+      ),
+      ...this.sectionItems(
+        registry.education?.investigations,
+        'investigation_concept',
+      ),
       ...this.sectionItems(registry.education?.examPearls, 'exam_mechanism'),
-      ...this.sectionItems(registry.education?.management, 'management_concept'),
+      ...this.sectionItems(
+        registry.education?.management,
+        'management_concept',
+      ),
       ...this.sectionItems(registry.education?.pitfalls, 'pitfall_concept'),
       ...registry.graphFacts.map((fact) => ({
         title: fact.label,
@@ -410,7 +538,11 @@ export class TeachingRulesAdminService {
         stableKey,
         title,
         category: this.enumValue(item.category, VALID_CATEGORIES, 'category'),
-        importance: 'supporting',
+        importance: this.enumValue(
+          item.importance ?? 'supporting',
+          VALID_IMPORTANCE,
+          'importance',
+        ),
         rationale: reasoningContext?.constrained
           ? `Candidate constrained by reasoning path ${reasoningContext.reasoningPathId} for ${registry.displayLabel || registry.canonicalName}.`
           : `Candidate inferred from existing editorial material for ${registry.displayLabel || registry.canonicalName}.`,
@@ -425,7 +557,10 @@ export class TeachingRulesAdminService {
         appliesToGraph: false,
         status: 'CANDIDATE',
         source: 'GENERATED',
-      } satisfies Omit<Prisma.DiagnosisTeachingRuleCreateInput, 'diagnosisRegistry'>);
+      } satisfies Omit<
+        Prisma.DiagnosisTeachingRuleCreateInput,
+        'diagnosisRegistry'
+      >);
       if (candidates.length >= 8) break;
     }
 
@@ -451,11 +586,18 @@ export class TeachingRulesAdminService {
       .filter((item): item is Record<string, unknown> => Boolean(item))
       .map((item) => ({
         title:
-          this.firstString(item.title, item.content, item.finding, item.action) ??
-          '',
+          this.firstString(
+            item.title,
+            item.content,
+            item.finding,
+            item.action,
+          ) ?? '',
         manifestation:
-          this.firstString(item.content, item.discriminator, item.whyItMatters) ??
-          '',
+          this.firstString(
+            item.content,
+            item.discriminator,
+            item.whyItMatters,
+          ) ?? '',
         category,
       }));
   }
@@ -463,7 +605,7 @@ export class TeachingRulesAdminService {
   private reasoningTeachingItems(
     reasoningContext?: EducationalReasoningGenerationContext,
   ) {
-    if (!reasoningContext) return [];
+    if (!reasoningContext?.constrained) return [];
     return [
       ...reasoningContext.requiredTeachingPoints.map((point) => ({
         title: point,
@@ -475,12 +617,67 @@ export class TeachingRulesAdminService {
         category: 'finding_concept',
         manifestation: evidence,
       })),
-      ...reasoningContext.plannerRecommendations.map((recommendation) => ({
-        title: recommendation,
-        category: 'recall_concept',
-        manifestation: recommendation,
-      })),
     ];
+  }
+
+  private briefTeachingItems(brief?: EditorialBriefContext) {
+    if (!brief) return [];
+    return [
+      ...brief.learningGoals.map((goal) => ({
+        title: goal,
+        category: 'recall_concept',
+        manifestation: goal,
+        importance: 'high',
+      })),
+      ...brief.requiredMimicIds.map((mimic) => ({
+        title: `Distinguish from ${mimic}`,
+        category: 'differential_concept',
+        manifestation: mimic,
+        importance: 'critical',
+      })),
+      ...brief.requiredPitfalls.map((pitfall) => ({
+        title: pitfall,
+        category: 'pitfall_concept',
+        manifestation: pitfall,
+        importance: 'high',
+      })),
+      ...brief.keyInvestigations.map((investigation) => ({
+        title: investigation,
+        category: 'investigation_concept',
+        manifestation: investigation,
+        importance: 'high',
+      })),
+      ...brief.managementAnchors.map((anchor) => ({
+        title: anchor,
+        category: 'management_concept',
+        manifestation: anchor,
+        importance: 'supporting',
+      })),
+      ...brief.caseGenerationGuidance.map((guidance) => ({
+        title: guidance,
+        category: 'differential_concept',
+        manifestation: guidance,
+        importance: 'supporting',
+      })),
+      ...brief.educationGuidance.map((guidance) => ({
+        title: guidance,
+        category: 'recall_concept',
+        manifestation: guidance,
+        importance: 'supporting',
+      })),
+      ...brief.difficultyGuidance.map((guidance) => ({
+        title: guidance,
+        category: 'pitfall_concept',
+        manifestation: guidance,
+        importance: 'supporting',
+      })),
+    ].filter((item) => !this.isWorkflowAdvice(item.title));
+  }
+
+  private isWorkflowAdvice(value: string) {
+    return /\b(?:activate a reasoning path|expand discriminator education|editor should review|before relying on generated)\b/i.test(
+      value,
+    );
   }
 
   private expectedEvidenceMetadata(
@@ -525,18 +722,18 @@ export class TeachingRulesAdminService {
           reasoningContext.sourceEvidenceRelationshipIds,
         coverageGapsAddressed: reasoningContext.coverageGapsAddressed,
         discriminatorEvidenceUsed: reasoningContext.discriminatorEvidenceUsed,
-        generationCoverageSnapshot:
-          reasoningContext.generationCoverageSnapshot,
+        generationCoverageSnapshot: reasoningContext.generationCoverageSnapshot,
         warnings: reasoningContext.warnings,
-        reasoningQualityWarnings:
-          reasoningContext.reasoningQualityWarnings,
+        reasoningQualityWarnings: reasoningContext.reasoningQualityWarnings,
       },
     };
   }
 
   private caseTeachingUnits(cases: Array<{ explanation: unknown }>) {
     return cases.flatMap((caseRecord) => {
-      const quality = this.asObject(this.asObject(caseRecord.explanation)?.generationQuality);
+      const quality = this.asObject(
+        this.asObject(caseRecord.explanation)?.generationQuality,
+      );
       const alignment = this.asObject(quality?.teachingAlignment);
       const units = Array.isArray(alignment?.selectedUnits)
         ? alignment.selectedUnits
@@ -568,9 +765,8 @@ export class TeachingRulesAdminService {
       generationMetadata:
         this.asObject(rule.difficultyHints)?.generatedBecause ?? null,
       reasoningQualityWarnings: this.stringArray(
-        this.asObject(
-          this.asObject(rule.difficultyHints)?.generatedBecause,
-        )?.reasoningQualityWarnings,
+        this.asObject(this.asObject(rule.difficultyHints)?.generatedBecause)
+          ?.reasoningQualityWarnings,
       ),
       avoidTooEarly: rule.avoidTooEarly,
       appliesToEducation: rule.appliesToEducation,
@@ -603,7 +799,8 @@ export class TeachingRulesAdminService {
 
   private optionalString(value: unknown): string | null {
     if (value === null || value === undefined) return null;
-    if (typeof value !== 'string') throw new BadRequestException('Expected string');
+    if (typeof value !== 'string')
+      throw new BadRequestException('Expected string');
     return value.trim() || null;
   }
 
@@ -620,7 +817,8 @@ export class TeachingRulesAdminService {
 
   private jsonArray(value: unknown): Prisma.InputJsonValue {
     if (value === undefined || value === null) return [];
-    if (!Array.isArray(value)) throw new BadRequestException('Expected array JSON');
+    if (!Array.isArray(value))
+      throw new BadRequestException('Expected array JSON');
     return value as Prisma.InputJsonValue;
   }
 
@@ -634,7 +832,8 @@ export class TeachingRulesAdminService {
 
   private optionalBoolean(value: unknown, fallback: boolean): boolean {
     if (value === undefined || value === null) return fallback;
-    if (typeof value !== 'boolean') throw new BadRequestException('Expected boolean');
+    if (typeof value !== 'boolean')
+      throw new BadRequestException('Expected boolean');
     return value;
   }
 
@@ -646,7 +845,8 @@ export class TeachingRulesAdminService {
 
   private firstString(...values: unknown[]): string | null {
     const value = values.find(
-      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+      (item): item is string =>
+        typeof item === 'string' && item.trim().length > 0,
     );
     return value?.trim() ?? null;
   }

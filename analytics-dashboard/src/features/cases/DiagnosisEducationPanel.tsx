@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   compareDiagnosisEducationRevisions,
   createDiagnosisEducationForAdmin,
@@ -48,22 +48,22 @@ import {
   type JsonValue,
   type ReasoningDraftValidationRun,
   type UpsertDiagnosisEducationPayload,
-} from '../../api/admin';
-import { ApiError, type ApiClient } from '../../api/client';
-import ActionFeedback from '../../components/ui/ActionFeedback';
-import LoadingState from '../../components/ui/LoadingState';
-import StatusBadge from '../../components/ui/StatusBadge';
-import { useActionFeedback } from '../../hooks/useActionFeedback';
-import CaseDetailSection from './CaseDetailSection';
-import { formatDateLabel, formatLabel } from './cases.helpers';
-import DiagnosisWorkspaceSummaryCard from './education/DiagnosisWorkspaceSummaryCard';
-import EditorialBriefCard from './education/EditorialBriefCard';
-import RevisionCompareCard from './education/RevisionCompareCard';
-import RevisionHistoryCard from './education/RevisionHistoryCard';
-import TargetedCaseGenerationCard from './education/TargetedCaseGenerationCard';
-import TeachingRulesCard from './education/TeachingRulesCard';
-import TeachingUnitCoverageCard from './education/TeachingUnitCoverageCard';
-import WorkspaceQualityCard from './education/WorkspaceQualityCard';
+} from "../../api/admin";
+import { ApiError, type ApiClient } from "../../api/client";
+import ActionFeedback from "../../components/ui/ActionFeedback";
+import LoadingState from "../../components/ui/LoadingState";
+import StatusBadge from "../../components/ui/StatusBadge";
+import { useActionFeedback } from "../../hooks/useActionFeedback";
+import CaseDetailSection from "./CaseDetailSection";
+import { formatDateLabel, formatLabel } from "./cases.helpers";
+import DiagnosisWorkspaceSummaryCard from "./education/DiagnosisWorkspaceSummaryCard";
+import EditorialBriefCard from "./education/EditorialBriefCard";
+import RevisionCompareCard from "./education/RevisionCompareCard";
+import RevisionHistoryCard from "./education/RevisionHistoryCard";
+import TargetedCaseGenerationCard from "./education/TargetedCaseGenerationCard";
+import TeachingRulesCard from "./education/TeachingRulesCard";
+import TeachingUnitCoverageCard from "./education/TeachingUnitCoverageCard";
+import WorkspaceQualityCard from "./education/WorkspaceQualityCard";
 
 type DiagnosisEducationPanelProps = {
   client: ApiClient;
@@ -88,27 +88,27 @@ type EducationFormState = {
 };
 
 const emptyForm: EducationFormState = {
-  title: '',
-  definition: '',
-  highYieldTakeaway: '',
-  clinicalPatternText: '',
-  examPearls: [{ label: '', explanation: '' }],
-  differentials: [{ diagnosis: '', distinguishingPoint: '' }],
-  pitfallsText: '',
-  referencesText: '',
-  scoringSystemsJson: '',
-  investigationsJson: '',
-  managementJson: '',
-  complicationsJson: '',
-  recallPromptsJson: '',
+  title: "",
+  definition: "",
+  highYieldTakeaway: "",
+  clinicalPatternText: "",
+  examPearls: [{ label: "", explanation: "" }],
+  differentials: [{ diagnosis: "", distinguishingPoint: "" }],
+  pitfallsText: "",
+  referencesText: "",
+  scoringSystemsJson: "",
+  investigationsJson: "",
+  managementJson: "",
+  complicationsJson: "",
+  recallPromptsJson: "",
 };
 
 const reviewableStatuses = new Set<DiagnosisEducationStatus>([
-  'DRAFT',
-  'GENERATED',
-  'NEEDS_REVIEW',
-  'NEEDS_EDIT',
-  'APPROVED',
+  "DRAFT",
+  "GENERATED",
+  "NEEDS_REVIEW",
+  "NEEDS_EDIT",
+  "APPROVED",
 ]);
 
 export default function DiagnosisEducationPanel({
@@ -116,7 +116,9 @@ export default function DiagnosisEducationPanel({
   diagnosisRegistryId,
   diagnosisLabel,
 }: DiagnosisEducationPanelProps) {
-  const [education, setEducation] = useState<DiagnosisEducationRecord | null>(null);
+  const [education, setEducation] = useState<DiagnosisEducationRecord | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -132,9 +134,9 @@ export default function DiagnosisEducationPanel({
   const [workspaceSummary, setWorkspaceSummary] =
     useState<DiagnosisWorkspaceQualitySummary | null>(null);
   const [workspaceSummaryLoading, setWorkspaceSummaryLoading] = useState(false);
-  const [workspaceSummaryError, setWorkspaceSummaryError] = useState<string | null>(
-    null,
-  );
+  const [workspaceSummaryError, setWorkspaceSummaryError] = useState<
+    string | null
+  >(null);
   const [teachingUnitCoverage, setTeachingUnitCoverage] =
     useState<TeachingUnitCoverageMap | null>(null);
   const [teachingUnitCoverageLoading, setTeachingUnitCoverageLoading] =
@@ -160,21 +162,22 @@ export default function DiagnosisEducationPanel({
   const [mimicCandidates, setMimicCandidates] = useState<
     DiagnosisGraphCandidate[]
   >([]);
-  const [generatedTargetedCase, setGeneratedTargetedCase] =
-    useState<GenerateTargetedCaseResult['generatedCase'] | null>(null);
+  const [generatedTargetedCase, setGeneratedTargetedCase] = useState<
+    GenerateTargetedCaseResult["generatedCase"] | null
+  >(null);
   const [revisionHistory, setRevisionHistory] = useState<
     DiagnosisEducationRevisionAnalysis[]
   >([]);
   const [revisionHistoryLoading, setRevisionHistoryLoading] = useState(false);
-  const [revisionHistoryError, setRevisionHistoryError] = useState<string | null>(
-    null,
-  );
+  const [revisionHistoryError, setRevisionHistoryError] = useState<
+    string | null
+  >(null);
   const [revisionCompare, setRevisionCompare] =
     useState<DiagnosisEducationRevisionCompareResult | null>(null);
   const [revisionCompareLoading, setRevisionCompareLoading] = useState(false);
-  const [revisionCompareError, setRevisionCompareError] = useState<string | null>(
-    null,
-  );
+  const [revisionCompareError, setRevisionCompareError] = useState<
+    string | null
+  >(null);
   const [compareFromVersion, setCompareFromVersion] = useState<number | null>(
     null,
   );
@@ -183,9 +186,18 @@ export default function DiagnosisEducationPanel({
   const { feedback, clear, showError, showPending, showSuccess } =
     useActionFeedback();
 
-  const isPublished = education?.editorialStatus === 'PUBLISHED';
+  const isPublished = education?.editorialStatus === "PUBLISHED";
   const canEdit = !isPublished;
-  const canGenerate = Boolean(diagnosisRegistryId);
+  const canGenerate =
+    Boolean(diagnosisRegistryId) &&
+    (workspaceProjection?.readiness.generationReady ?? true);
+  const generationDisabledReason =
+    diagnosisRegistryId &&
+    workspaceProjection &&
+    !workspaceProjection.readiness.generationReady
+      ? (workspaceProjection.readiness.nextActions[0] ??
+        "Complete the educational scaffold first.")
+      : null;
   const generateLabel = getGenerateActionLabel(education);
 
   const resetRevisionCompare = useCallback(() => {
@@ -265,7 +277,10 @@ export default function DiagnosisEducationPanel({
         setEditorialBriefError(null);
         setRevisionHistoryError(null);
         setDraftValidationRuns([]);
-        const response = await getDiagnosisEducationForAdmin(client, registryId);
+        const response = await getDiagnosisEducationForAdmin(
+          client,
+          registryId,
+        );
         if (!active) {
           return;
         }
@@ -273,11 +288,19 @@ export default function DiagnosisEducationPanel({
         setEducation(response.education);
         setQualityWarnings(response.qualityWarnings ?? []);
         setPublishBlockers(response.publishBlockers ?? []);
-        setForm(toFormState(response.education, response.diagnosisRegistry.canonicalName));
+        setForm(
+          toFormState(
+            response.education,
+            response.diagnosisRegistry.canonicalName,
+          ),
+        );
         setEditorOpen(!response.education);
 
         try {
-          const projection = await getDiagnosisWorkspaceProjection(client, registryId);
+          const projection = await getDiagnosisWorkspaceProjection(
+            client,
+            registryId,
+          );
           if (!active) {
             return;
           }
@@ -292,7 +315,7 @@ export default function DiagnosisEducationPanel({
           setWorkspaceError(
             error instanceof Error
               ? error.message
-            : 'Failed to load editorial quality projection.',
+              : "Failed to load editorial quality projection.",
           );
         }
 
@@ -315,7 +338,7 @@ export default function DiagnosisEducationPanel({
           setWorkspaceSummaryError(
             error instanceof Error
               ? error.message
-              : 'Failed to load workspace quality summary.',
+              : "Failed to load workspace quality summary.",
           );
         }
 
@@ -336,7 +359,7 @@ export default function DiagnosisEducationPanel({
           setTeachingUnitCoverageError(
             error instanceof Error
               ? error.message
-              : 'Failed to load teaching unit coverage.',
+              : "Failed to load teaching unit coverage.",
           );
         }
 
@@ -354,7 +377,7 @@ export default function DiagnosisEducationPanel({
           setTeachingRulesError(
             error instanceof Error
               ? error.message
-              : 'Failed to load teaching rules.',
+              : "Failed to load teaching rules.",
           );
         }
 
@@ -388,14 +411,14 @@ export default function DiagnosisEducationPanel({
           setEditorialBriefError(
             error instanceof Error
               ? error.message
-              : 'Failed to load editorial brief.',
+              : "Failed to load editorial brief.",
           );
         }
 
         try {
           const mimics = await getDiagnosisGraphCandidates(client, {
             diagnosisRegistryId: registryId,
-            type: 'MIMIC',
+            type: "MIMIC",
           });
           if (!active) {
             return;
@@ -403,8 +426,8 @@ export default function DiagnosisEducationPanel({
           setMimicCandidates(
             mimics.filter(
               (candidate) =>
-                candidate.status === 'CANDIDATE' ||
-                candidate.status === 'APPROVED',
+                candidate.status === "CANDIDATE" ||
+                candidate.status === "APPROVED",
             ),
           );
         } catch {
@@ -415,7 +438,10 @@ export default function DiagnosisEducationPanel({
         }
 
         try {
-          const revisions = await getDiagnosisEducationRevisions(client, registryId);
+          const revisions = await getDiagnosisEducationRevisions(
+            client,
+            registryId,
+          );
           if (!active) {
             return;
           }
@@ -430,7 +456,7 @@ export default function DiagnosisEducationPanel({
           setRevisionHistoryError(
             error instanceof Error
               ? error.message
-              : 'Failed to load revision history.',
+              : "Failed to load revision history.",
           );
           resetRevisionCompare();
         }
@@ -442,7 +468,7 @@ export default function DiagnosisEducationPanel({
         if (
           error instanceof ApiError &&
           error.status === 404 &&
-          !error.message.toLowerCase().includes('not available')
+          !error.message.toLowerCase().includes("not available")
         ) {
           setEducation(null);
           setForm({ ...emptyForm, title: diagnosisLabel });
@@ -469,7 +495,7 @@ export default function DiagnosisEducationPanel({
         setLoadError(
           error instanceof Error
             ? error.message
-            : 'Failed to load diagnosis education.',
+            : "Failed to load diagnosis education.",
         );
       } finally {
         if (active) {
@@ -515,7 +541,7 @@ export default function DiagnosisEducationPanel({
     if (compareFromVersion === compareToVersion) {
       setRevisionCompare(null);
       setRevisionCompareLoading(false);
-      setRevisionCompareError('Choose two different revisions to compare.');
+      setRevisionCompareError("Choose two different revisions to compare.");
       return;
     }
 
@@ -549,7 +575,7 @@ export default function DiagnosisEducationPanel({
         setRevisionCompareError(
           error instanceof Error
             ? error.message
-            : 'Failed to compare education revisions.',
+            : "Failed to compare education revisions.",
         );
       } finally {
         if (active) {
@@ -596,7 +622,12 @@ export default function DiagnosisEducationPanel({
       setEducation(response.education);
       setQualityWarnings(response.qualityWarnings ?? []);
       setPublishBlockers(response.publishBlockers ?? []);
-      setForm(toFormState(response.education, response.diagnosisRegistry.canonicalName));
+      setForm(
+        toFormState(
+          response.education,
+          response.diagnosisRegistry.canonicalName,
+        ),
+      );
       setEditorOpen(!response.education);
 
       try {
@@ -610,7 +641,7 @@ export default function DiagnosisEducationPanel({
         setWorkspaceError(
           error instanceof Error
             ? error.message
-            : 'Failed to load editorial quality projection.',
+            : "Failed to load editorial quality projection.",
         );
       }
 
@@ -625,7 +656,7 @@ export default function DiagnosisEducationPanel({
         setWorkspaceSummaryError(
           error instanceof Error
             ? error.message
-            : 'Failed to load workspace quality summary.',
+            : "Failed to load workspace quality summary.",
         );
       }
 
@@ -640,40 +671,50 @@ export default function DiagnosisEducationPanel({
         setTeachingUnitCoverageError(
           error instanceof Error
             ? error.message
-          : 'Failed to load teaching unit coverage.',
+            : "Failed to load teaching unit coverage.",
         );
       }
 
       try {
-        const rules = await getDiagnosisTeachingRules(client, diagnosisRegistryId);
+        const rules = await getDiagnosisTeachingRules(
+          client,
+          diagnosisRegistryId,
+        );
         setTeachingRules(rules);
       } catch (error) {
         setTeachingRules(null);
         setTeachingRulesError(
-          error instanceof Error ? error.message : 'Failed to load teaching rules.',
+          error instanceof Error
+            ? error.message
+            : "Failed to load teaching rules.",
         );
       }
 
       try {
-        const brief = await getDiagnosisEditorialBrief(client, diagnosisRegistryId);
+        const brief = await getDiagnosisEditorialBrief(
+          client,
+          diagnosisRegistryId,
+        );
         setEditorialBrief(brief);
       } catch (error) {
         setEditorialBrief(null);
         setEditorialBriefError(
-          error instanceof Error ? error.message : 'Failed to load editorial brief.',
+          error instanceof Error
+            ? error.message
+            : "Failed to load editorial brief.",
         );
       }
 
       try {
         const mimics = await getDiagnosisGraphCandidates(client, {
           diagnosisRegistryId,
-          type: 'MIMIC',
+          type: "MIMIC",
         });
         setMimicCandidates(
           mimics.filter(
             (candidate) =>
-              candidate.status === 'CANDIDATE' ||
-              candidate.status === 'APPROVED',
+              candidate.status === "CANDIDATE" ||
+              candidate.status === "APPROVED",
           ),
         );
       } catch {
@@ -689,7 +730,9 @@ export default function DiagnosisEducationPanel({
       } catch (error) {
         setRevisionHistory([]);
         setRevisionHistoryError(
-          error instanceof Error ? error.message : 'Failed to load revision history.',
+          error instanceof Error
+            ? error.message
+            : "Failed to load revision history.",
         );
         resetRevisionCompare();
       }
@@ -717,8 +760,8 @@ export default function DiagnosisEducationPanel({
       showSuccess(config.success);
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Action failed.';
-      if (message.includes('Education changed since this view was loaded.')) {
+      const message = error instanceof Error ? error.message : "Action failed.";
+      if (message.includes("Education changed since this view was loaded.")) {
         await refreshEducation();
       }
       showError(message);
@@ -735,11 +778,14 @@ export default function DiagnosisEducationPanel({
       !diagnosisRegistryId ||
       !canGenerate
     ) {
+      if (generationDisabledReason) {
+        showError(generationDisabledReason);
+      }
       return;
     }
 
     generateInFlightRef.current = true;
-    setPendingAction('generate');
+    setPendingAction("generate");
     const confirmed = window.confirm(
       getGenerateConfirmationMessage(education, diagnosisLabel),
     );
@@ -751,11 +797,11 @@ export default function DiagnosisEducationPanel({
 
     try {
       await runAction({
-        id: 'generate',
+        id: "generate",
         pending: education
-          ? 'Generating education candidate...'
-          : 'Generating initial education candidate...',
-        success: 'Education candidate created for review.',
+          ? "Generating education candidate..."
+          : "Generating initial education candidate...",
+        success: "Education candidate created for review.",
         action: () =>
           generateDiagnosisEducationDraft(
             client,
@@ -768,14 +814,20 @@ export default function DiagnosisEducationPanel({
     }
   }
 
-  async function handleGenerateTargetedCase(payload: GenerateTargetedCasePayload) {
+  async function handleGenerateTargetedCase(
+    payload: GenerateTargetedCasePayload,
+  ) {
     if (!diagnosisRegistryId || pendingAction !== null) {
+      return;
+    }
+    if (generationDisabledReason) {
+      showError(generationDisabledReason);
       return;
     }
 
     try {
-      setPendingAction('targeted-case');
-      showPending('Generating targeted case...');
+      setPendingAction("targeted-case");
+      showPending("Generating targeted case...");
       const result = await generateTargetedDiagnosisCase(
         client,
         diagnosisRegistryId,
@@ -783,12 +835,12 @@ export default function DiagnosisEducationPanel({
       );
       setGeneratedTargetedCase(result.generatedCase);
       await refreshEducation();
-      showSuccess('Targeted case generated for review.');
+      showSuccess("Targeted case generated for review.");
     } catch (error) {
       showError(
         error instanceof Error
           ? error.message
-          : 'Failed to generate targeted case.',
+          : "Failed to generate targeted case.",
       );
     } finally {
       setPendingAction(null);
@@ -801,9 +853,9 @@ export default function DiagnosisEducationPanel({
     }
 
     return runAction({
-      id: 'teaching-rule-generate',
-      pending: 'Generating teaching rule candidates...',
-      success: 'Teaching rule candidates generated for review.',
+      id: "teaching-rule-generate",
+      pending: "Generating teaching rule candidates...",
+      success: "Teaching rule candidates generated for review.",
       action: () =>
         generateDiagnosisTeachingRuleCandidates(client, diagnosisRegistryId),
     });
@@ -815,10 +867,11 @@ export default function DiagnosisEducationPanel({
     }
 
     return runAction({
-      id: 'teaching-rule-seed',
-      pending: 'Seeding legacy teaching rules...',
-      success: 'Legacy teaching rules seeded for this diagnosis.',
-      action: () => seedLegacyDiagnosisTeachingRules(client, diagnosisRegistryId),
+      id: "teaching-rule-seed",
+      pending: "Seeding legacy teaching rules...",
+      success: "Legacy teaching rules seeded for this diagnosis.",
+      action: () =>
+        seedLegacyDiagnosisTeachingRules(client, diagnosisRegistryId),
     });
   }
 
@@ -830,9 +883,9 @@ export default function DiagnosisEducationPanel({
     }
 
     return runAction({
-      id: 'teaching-rule-create',
-      pending: 'Creating teaching rule...',
-      success: 'Teaching rule created.',
+      id: "teaching-rule-create",
+      pending: "Creating teaching rule...",
+      success: "Teaching rule created.",
       action: () =>
         createDiagnosisTeachingRule(client, diagnosisRegistryId, payload),
     });
@@ -847,9 +900,9 @@ export default function DiagnosisEducationPanel({
     }
 
     return runAction({
-      id: 'teaching-rule-update',
-      pending: 'Updating teaching rule...',
-      success: 'Teaching rule updated.',
+      id: "teaching-rule-update",
+      pending: "Updating teaching rule...",
+      success: "Teaching rule updated.",
       action: () => updateDiagnosisTeachingRule(client, ruleId, payload),
     });
   }
@@ -864,8 +917,8 @@ export default function DiagnosisEducationPanel({
 
     return runAction({
       id: `teaching-rule-${action}`,
-      pending: 'Updating teaching rule status...',
-      success: 'Teaching rule status updated.',
+      pending: "Updating teaching rule status...",
+      success: "Teaching rule status updated.",
       action: () => reviewDiagnosisTeachingRule(client, ruleId, action),
     });
   }
@@ -876,10 +929,11 @@ export default function DiagnosisEducationPanel({
     }
 
     return runAction({
-      id: 'editorial-brief-generate',
-      pending: 'Generating editorial brief...',
-      success: 'Editorial brief draft generated for review.',
-      action: () => generateDiagnosisEditorialBrief(client, diagnosisRegistryId),
+      id: "editorial-brief-generate",
+      pending: "Generating editorial brief...",
+      success: "Editorial brief draft generated for review.",
+      action: () =>
+        generateDiagnosisEditorialBrief(client, diagnosisRegistryId),
     });
   }
 
@@ -891,10 +945,11 @@ export default function DiagnosisEducationPanel({
     }
 
     return runAction({
-      id: 'editorial-brief-create',
-      pending: 'Creating editorial brief...',
-      success: 'Editorial brief created.',
-      action: () => createDiagnosisEditorialBrief(client, diagnosisRegistryId, payload),
+      id: "editorial-brief-create",
+      pending: "Creating editorial brief...",
+      success: "Editorial brief created.",
+      action: () =>
+        createDiagnosisEditorialBrief(client, diagnosisRegistryId, payload),
     });
   }
 
@@ -906,10 +961,11 @@ export default function DiagnosisEducationPanel({
     }
 
     return runAction({
-      id: 'editorial-brief-update',
-      pending: 'Updating editorial brief...',
-      success: 'Editorial brief updated.',
-      action: () => updateDiagnosisEditorialBrief(client, diagnosisRegistryId, payload),
+      id: "editorial-brief-update",
+      pending: "Updating editorial brief...",
+      success: "Editorial brief updated.",
+      action: () =>
+        updateDiagnosisEditorialBrief(client, diagnosisRegistryId, payload),
     });
   }
 
@@ -922,9 +978,10 @@ export default function DiagnosisEducationPanel({
 
     return runAction({
       id: `editorial-brief-${action}`,
-      pending: 'Updating editorial brief status...',
-      success: 'Editorial brief status updated.',
-      action: () => reviewDiagnosisEditorialBrief(client, diagnosisRegistryId, action),
+      pending: "Updating editorial brief status...",
+      success: "Editorial brief status updated.",
+      action: () =>
+        reviewDiagnosisEditorialBrief(client, diagnosisRegistryId, action),
     });
   }
 
@@ -939,16 +996,20 @@ export default function DiagnosisEducationPanel({
     }
 
     await runAction({
-      id: 'save',
-      pending: 'Saving education content...',
-      success: 'Education content saved.',
+      id: "save",
+      pending: "Saving education content...",
+      success: "Education content saved.",
       action: () =>
         education
           ? updateDiagnosisEducationForAdmin(client, education.id, {
               ...payload,
               expectedVersion: education.version,
             })
-          : createDiagnosisEducationForAdmin(client, diagnosisRegistryId, payload),
+          : createDiagnosisEducationForAdmin(
+              client,
+              diagnosisRegistryId,
+              payload,
+            ),
     });
   }
 
@@ -959,11 +1020,11 @@ export default function DiagnosisEducationPanel({
 
     await runAction({
       id: `review-${status}`,
-      pending: 'Updating education review status...',
+      pending: "Updating education review status...",
       success:
-        status === 'PUBLISHED'
-          ? 'Education publication decision submitted; open workspace to confirm exact standing revision.'
-          : 'Education review status updated.',
+        status === "PUBLISHED"
+          ? "Education publication decision submitted; open workspace to confirm exact standing revision."
+          : "Education review status updated.",
       action: () =>
         reviewDiagnosisEducationForAdmin(client, education.id, {
           status,
@@ -996,7 +1057,9 @@ export default function DiagnosisEducationPanel({
     });
   }
 
-  function buildPayload(state: EducationFormState): UpsertDiagnosisEducationPayload | null {
+  function buildPayload(
+    state: EducationFormState,
+  ): UpsertDiagnosisEducationPayload | null {
     try {
       return {
         title: state.title.trim() || diagnosisLabel,
@@ -1033,7 +1096,9 @@ export default function DiagnosisEducationPanel({
               : {}),
             ...(pearl.critique ? { critique: pearl.critique } : {}),
           }))
-          .filter((pearl) => (pearl.label && pearl.explanation) || pearl.content),
+          .filter(
+            (pearl) => (pearl.label && pearl.explanation) || pearl.content,
+          ),
         differentials: state.differentials
           .map((item) => ({
             diagnosis: item.diagnosis.trim(),
@@ -1054,14 +1119,25 @@ export default function DiagnosisEducationPanel({
           parseLines(state.pitfallsText),
         ),
         references: parseLines(state.referencesText),
-        scoringSystems: parseJsonField(state.scoringSystemsJson, 'Scoring systems'),
-        investigations: parseJsonField(state.investigationsJson, 'Investigations'),
-        management: parseJsonField(state.managementJson, 'Management'),
-        complications: parseJsonField(state.complicationsJson, 'Complications'),
-        recallPrompts: parseJsonField(state.recallPromptsJson, 'Recall prompts'),
+        scoringSystems: parseJsonField(
+          state.scoringSystemsJson,
+          "Scoring systems",
+        ),
+        investigations: parseJsonField(
+          state.investigationsJson,
+          "Investigations",
+        ),
+        management: parseJsonField(state.managementJson, "Management"),
+        complications: parseJsonField(state.complicationsJson, "Complications"),
+        recallPrompts: parseJsonField(
+          state.recallPromptsJson,
+          "Recall prompts",
+        ),
       };
     } catch (error) {
-      showError(error instanceof Error ? error.message : 'Invalid education payload.');
+      showError(
+        error instanceof Error ? error.message : "Invalid education payload.",
+      );
       return null;
     }
   }
@@ -1073,7 +1149,8 @@ export default function DiagnosisEducationPanel({
         description="Link the case to a diagnosis registry entry before creating reusable diagnosis education."
       >
         <p className="text-sm text-slate-500">
-          Diagnosis-level education needs a registry ID so it can be reused across cases.
+          Diagnosis-level education needs a registry ID so it can be reused
+          across cases.
         </p>
       </CaseDetailSection>
     );
@@ -1139,14 +1216,14 @@ export default function DiagnosisEducationPanel({
               validationRun={latestValidationRun(
                 draftValidationRuns,
                 education?.id,
-                ['EDUCATION', 'EDUCATION_SECTION'],
+                ["EDUCATION", "EDUCATION_SECTION"],
               )}
             />
 
             {isPublished ? (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                Published education stays visible to learners while a regenerated
-                draft version is reviewed.
+                Published education stays visible to learners while a
+                regenerated draft version is reviewed.
               </div>
             ) : null}
 
@@ -1189,7 +1266,7 @@ export default function DiagnosisEducationPanel({
                 void handleReviewTeachingRule(ruleId, action)
               }
               validationRuns={draftValidationRuns.filter(
-                (run) => run.artifactType === 'TEACHING_RULE',
+                (run) => run.artifactType === "TEACHING_RULE",
               )}
             />
 
@@ -1203,7 +1280,7 @@ export default function DiagnosisEducationPanel({
               coverage={teachingUnitCoverage}
               mimicCandidates={mimicCandidates}
               disabled={!diagnosisRegistryId || pendingAction !== null}
-              pending={pendingAction === 'targeted-case'}
+              pending={pendingAction === "targeted-case"}
               generatedCase={generatedTargetedCase}
               onGenerate={(payload) => void handleGenerateTargetedCase(payload)}
             />
@@ -1264,7 +1341,7 @@ export default function DiagnosisEducationPanel({
                     onClick={() => setEditorOpen((value) => !value)}
                     className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
                   >
-                    {editorOpen ? 'Hide editor' : 'Edit content'}
+                    {editorOpen ? "Hide editor" : "Edit content"}
                   </button>
                   <button
                     type="button"
@@ -1272,17 +1349,18 @@ export default function DiagnosisEducationPanel({
                     disabled={pendingAction !== null}
                     className="rounded-xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {pendingAction === 'save' ? 'Saving...' : 'Save changes'}
+                    {pendingAction === "save" ? "Saving..." : "Save changes"}
                   </button>
                 </>
               ) : null}
 
-              {education && reviewableStatuses.has(education.editorialStatus) ? (
+              {education &&
+              reviewableStatuses.has(education.editorialStatus) ? (
                 <>
-                  {education.editorialStatus !== 'APPROVED' ? (
+                  {education.editorialStatus !== "APPROVED" ? (
                     <button
                       type="button"
-                      onClick={() => void handleReview('APPROVED')}
+                      onClick={() => void handleReview("APPROVED")}
                       disabled={pendingAction !== null}
                       className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
@@ -1291,7 +1369,7 @@ export default function DiagnosisEducationPanel({
                   ) : null}
                   <button
                     type="button"
-                    onClick={() => void handleReview('PUBLISHED')}
+                    onClick={() => void handleReview("PUBLISHED")}
                     disabled={pendingAction !== null}
                     className="rounded-xl border border-emerald-200 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
@@ -1303,7 +1381,7 @@ export default function DiagnosisEducationPanel({
               {education ? (
                 <button
                   type="button"
-                  onClick={() => void handleReview('ARCHIVED')}
+                  onClick={() => void handleReview("ARCHIVED")}
                   disabled={pendingAction !== null}
                   className="rounded-xl border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -1340,7 +1418,8 @@ function ResolvedDifferentialLinksCard({
             Resolved differential links
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            Registry-linked identities used by editorial tools and graph coverage.
+            Registry-linked identities used by editorial tools and graph
+            coverage.
           </p>
         </div>
         <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
@@ -1418,7 +1497,7 @@ function HeaderState({
             disabled={generateDisabled}
             className="rounded-xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {pendingAction === 'generate' ? 'Generating...' : generateLabel}
+            {pendingAction === "generate" ? "Generating..." : generateLabel}
           </button>
           <button
             type="button"
@@ -1436,10 +1515,22 @@ function HeaderState({
     <div className="space-y-3">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <MetaTile label="Version" value={`v${education.version}`} />
-        <MetaTile label="Generated" value={formatDateLabel(education.generatedAt)} />
-        <MetaTile label="Reviewed" value={formatDateLabel(education.reviewedAt)} />
-        <MetaTile label="Published" value={formatDateLabel(education.publishedAt)} />
-        <MetaTile label="Updated" value={formatDateLabel(education.updatedAt)} />
+        <MetaTile
+          label="Generated"
+          value={formatDateLabel(education.generatedAt)}
+        />
+        <MetaTile
+          label="Reviewed"
+          value={formatDateLabel(education.reviewedAt)}
+        />
+        <MetaTile
+          label="Published"
+          value={formatDateLabel(education.publishedAt)}
+        />
+        <MetaTile
+          label="Updated"
+          value={formatDateLabel(education.updatedAt)}
+        />
       </div>
       <EducationGeneratedBecause references={education.references} />
       <DraftTrustBlock validationRun={validationRun} />
@@ -1450,7 +1541,7 @@ function HeaderState({
           disabled={generateDisabled}
           className="rounded-xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {pendingAction === 'generate' ? 'Generating...' : generateLabel}
+          {pendingAction === "generate" ? "Generating..." : generateLabel}
         </button>
       </div>
     </div>
@@ -1473,7 +1564,9 @@ function DraftTrustBlock({
     <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-slate-900">Validated against</span>
-        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${trustTone(validationRun.trustTier)}`}>
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${trustTone(validationRun.trustTier)}`}
+        >
           {formatLabel(validationRun.trustTier)}
         </span>
         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
@@ -1484,18 +1577,33 @@ function DraftTrustBlock({
         </span>
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-3">
-        <InlineMeta label="Path" value={validationRun.reasoningPathId ?? 'No active path'} />
-        <InlineMeta label="Artifact" value={formatLabel(validationRun.artifactType)} />
-        <InlineMeta label="Checked" value={formatDateLabel(validationRun.createdAt)} />
+        <InlineMeta
+          label="Path"
+          value={validationRun.reasoningPathId ?? "No active path"}
+        />
+        <InlineMeta
+          label="Artifact"
+          value={formatLabel(validationRun.artifactType)}
+        />
+        <InlineMeta
+          label="Checked"
+          value={formatDateLabel(validationRun.createdAt)}
+        />
       </div>
       {blockers.length ? (
-        <p className="mt-2 text-rose-700">Blockers: {blockers.slice(0, 3).join(', ')}</p>
+        <p className="mt-2 text-rose-700">
+          Blockers: {blockers.slice(0, 3).join(", ")}
+        </p>
       ) : null}
       {warnings.length ? (
-        <p className="mt-1 text-amber-800">Warnings: {warnings.slice(0, 3).join(', ')}</p>
+        <p className="mt-1 text-amber-800">
+          Warnings: {warnings.slice(0, 3).join(", ")}
+        </p>
       ) : null}
       {risks.length ? (
-        <p className="mt-1 text-amber-800">Risk signals: {risks.slice(0, 3).join(', ')}</p>
+        <p className="mt-1 text-amber-800">
+          Risk signals: {risks.slice(0, 3).join(", ")}
+        </p>
       ) : null}
     </div>
   );
@@ -1505,14 +1613,14 @@ function getGenerateActionLabel(
   education: DiagnosisEducationRecord | null,
 ): string {
   if (!education) {
-    return 'Generate draft';
+    return "Generate draft";
   }
 
-  if (education.editorialStatus === 'PUBLISHED') {
-    return 'Regenerate new draft version';
+  if (education.editorialStatus === "PUBLISHED") {
+    return "Regenerate new draft version";
   }
 
-  return 'Regenerate draft';
+  return "Regenerate draft";
 }
 
 function getGenerateConfirmationMessage(
@@ -1523,11 +1631,11 @@ function getGenerateConfirmationMessage(
     return `Generate an AI-assisted education draft for ${diagnosisLabel}? The draft will require review before learners can see it.`;
   }
 
-  if (education.editorialStatus === 'PUBLISHED') {
+  if (education.editorialStatus === "PUBLISHED") {
     return `Generate a new AI-assisted draft version for ${diagnosisLabel}? The currently published version will stay visible to learners until the new draft is reviewed and published.`;
   }
 
-  if (education.editorialStatus === 'APPROVED') {
+  if (education.editorialStatus === "APPROVED") {
     return `Regenerate the approved education draft for ${diagnosisLabel}? This creates a new version for review and will replace the current editable draft.`;
   }
 
@@ -1536,10 +1644,10 @@ function getGenerateConfirmationMessage(
 
 function formatSectionActionLabel(section: EducationRegenerableSection) {
   const labels: Record<EducationRegenerableSection, string> = {
-    differentials: 'Differentials',
-    investigations: 'Investigations',
-    examPearls: 'Exam Pearls',
-    management: 'Management',
+    differentials: "Differentials",
+    investigations: "Investigations",
+    examPearls: "Exam Pearls",
+    management: "Management",
   };
 
   return labels[section];
@@ -1548,9 +1656,9 @@ function formatSectionActionLabel(section: EducationRegenerableSection) {
 function formatDifferentialRole(role: string) {
   return role
     .toLowerCase()
-    .split('_')
+    .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
+    .join(" ");
 }
 
 function MetaTile({ label, value }: { label: string; value: string }) {
@@ -1564,7 +1672,11 @@ function MetaTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-function EducationGeneratedBecause({ references }: { references: JsonValue | null }) {
+function EducationGeneratedBecause({
+  references,
+}: {
+  references: JsonValue | null;
+}) {
   const metadata = latestGeneratedBecause(references);
   if (!metadata) return null;
   const constrained = metadata.constrained === true;
@@ -1578,37 +1690,44 @@ function EducationGeneratedBecause({ references }: { references: JsonValue | nul
         <span
           className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
             constrained
-              ? 'bg-emerald-100 text-emerald-800'
-              : 'bg-amber-100 text-amber-800'
+              ? "bg-emerald-100 text-emerald-800"
+              : "bg-amber-100 text-amber-800"
           }`}
         >
-          {constrained ? 'Constrained' : 'Unconstrained'}
+          {constrained ? "Constrained" : "Unconstrained"}
         </span>
-        {typeof metadata.hallucinationRisk === 'string' ? (
+        {typeof metadata.hallucinationRisk === "string" ? (
           <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-600">
             Risk {metadata.hallucinationRisk}
           </span>
         ) : null}
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-3">
-        <InlineMeta label="Goal" value={stringFromJson(metadata.reasoningGoal)} />
+        <InlineMeta
+          label="Goal"
+          value={stringFromJson(metadata.reasoningGoal)}
+        />
         <InlineMeta
           label="Path"
-          value={stringFromJson(metadata.reasoningPathId) ?? 'No active path'}
+          value={stringFromJson(metadata.reasoningPathId) ?? "No active path"}
         />
         <InlineMeta
           label="Section"
-          value={stringFromJson(metadata.section) ?? 'Full draft'}
+          value={stringFromJson(metadata.section) ?? "Full draft"}
         />
       </div>
       {evidence.length ? (
-        <p className="mt-2">Discriminator evidence: {evidence.slice(0, 5).join(', ')}</p>
+        <p className="mt-2">
+          Discriminator evidence: {evidence.slice(0, 5).join(", ")}
+        </p>
       ) : null}
-      {gaps.length ? <p className="mt-1">Coverage gaps: {gaps.join(', ')}</p> : null}
+      {gaps.length ? (
+        <p className="mt-1">Coverage gaps: {gaps.join(", ")}</p>
+      ) : null}
       {warnings.length ? (
         <ul className="mt-2 list-disc space-y-1 pl-4 text-amber-800">
           {warnings.slice(0, 5).map((warning) => (
-            <li key={warning}>{warning.replace(/_/g, ' ')}</li>
+            <li key={warning}>{warning.replace(/_/g, " ")}</li>
           ))}
         </ul>
       ) : null}
@@ -1616,11 +1735,17 @@ function EducationGeneratedBecause({ references }: { references: JsonValue | nul
   );
 }
 
-function InlineMeta({ label, value }: { label: string; value?: string | null }) {
+function InlineMeta({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | null;
+}) {
   return (
     <div>
       <span className="font-semibold text-slate-500">{label}: </span>
-      <span>{value || 'None'}</span>
+      <span>{value || "None"}</span>
     </div>
   );
 }
@@ -1722,17 +1847,13 @@ function EducationEditor({
         hint="One reference per line"
         value={form.referencesText}
         disabled={disabled}
-        onChange={(referencesText) =>
-          onFormChange({ ...form, referencesText })
-        }
+        onChange={(referencesText) => onFormChange({ ...form, referencesText })}
       />
 
       <details
         className="rounded-xl border border-slate-200 bg-slate-50 p-4"
         open={advancedOpen}
-        onToggle={(event) =>
-          onAdvancedOpenChange(event.currentTarget.open)
-        }
+        onToggle={(event) => onAdvancedOpenChange(event.currentTarget.open)}
       >
         <summary className="cursor-pointer text-sm font-semibold text-slate-900">
           Advanced JSON sections
@@ -1835,7 +1956,9 @@ function TextArea({
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       />
-      {hint ? <span className="block text-sm text-slate-500">{hint}</span> : null}
+      {hint ? (
+        <span className="block text-sm text-slate-500">{hint}</span>
+      ) : null}
     </label>
   );
 }
@@ -1855,7 +1978,10 @@ function PearlRows({
         Exam pearls
       </p>
       {rows.map((row, index) => (
-        <div key={index} className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div
+          key={index}
+          className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3"
+        >
           <div className="grid gap-2 md:grid-cols-[1fr_2fr_auto]">
             <input
               type="text"
@@ -1892,7 +2018,9 @@ function PearlRows({
             <button
               type="button"
               disabled={disabled || rows.length === 1}
-              onClick={() => onChange(rows.filter((_, rowIndex) => rowIndex !== index))}
+              onClick={() =>
+                onChange(rows.filter((_, rowIndex) => rowIndex !== index))
+              }
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Remove
@@ -1913,7 +2041,7 @@ function PearlRows({
       <button
         type="button"
         disabled={disabled}
-        onClick={() => onChange([...rows, { label: '', explanation: '' }])}
+        onClick={() => onChange([...rows, { label: "", explanation: "" }])}
         className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
       >
         Add pearl
@@ -1971,7 +2099,9 @@ function DifferentialRows({
           <button
             type="button"
             disabled={disabled || rows.length === 1}
-            onClick={() => onChange(rows.filter((_, rowIndex) => rowIndex !== index))}
+            onClick={() =>
+              onChange(rows.filter((_, rowIndex) => rowIndex !== index))
+            }
             className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Remove
@@ -1982,7 +2112,7 @@ function DifferentialRows({
         type="button"
         disabled={disabled}
         onClick={() =>
-          onChange([...rows, { diagnosis: '', distinguishingPoint: '' }])
+          onChange([...rows, { diagnosis: "", distinguishingPoint: "" }])
         }
         className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
       >
@@ -2004,7 +2134,7 @@ function PearlWarningBadges({ warnings }: { warnings: string[] }) {
           key={warning}
           className="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700"
         >
-          {warning.replace(/_/g, ' ')}
+          {warning.replace(/_/g, " ")}
         </span>
       ))}
       {warnings.length > 4 ? (
@@ -2019,9 +2149,9 @@ function PearlWarningBadges({ warnings }: { warnings: string[] }) {
 function pearlTypeLabel(type: string) {
   return type
     .toLowerCase()
-    .split('_')
+    .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+    .join(" ");
 }
 
 function EducationPreview({
@@ -2090,11 +2220,12 @@ function toFormState(
   const summary = asRecord(education.summary);
   return {
     title: education.title,
-    definition: typeof summary.definition === 'string' ? summary.definition : '',
+    definition:
+      typeof summary.definition === "string" ? summary.definition : "",
     highYieldTakeaway:
-      typeof summary.highYieldTakeaway === 'string'
+      typeof summary.highYieldTakeaway === "string"
         ? summary.highYieldTakeaway
-        : '',
+        : "",
     clinicalPatternText: stringifyLines(education.clinicalPattern),
     examPearls: parsePearls(education.examPearls),
     differentials: parseDifferentials(education.differentials),
@@ -2116,21 +2247,29 @@ function toPreview(
   return {
     takeaway: hydrated.highYieldTakeaway || hydrated.definition,
     recognition: education
-      ? previewLinesFromJson(education.clinicalPattern, parseLines(hydrated.clinicalPatternText))
+      ? previewLinesFromJson(
+          education.clinicalPattern,
+          parseLines(hydrated.clinicalPatternText),
+        )
       : parseLines(hydrated.clinicalPatternText),
-    pearls: hydrated.examPearls.filter((pearl) => pearl.label && pearl.explanation),
+    pearls: hydrated.examPearls.filter(
+      (pearl) => pearl.label && pearl.explanation,
+    ),
     differentials: hydrated.differentials.filter(
       (item) => item.diagnosis && item.distinguishingPoint,
     ),
     pitfalls: education
-      ? previewLinesFromJson(education.pitfalls, parseLines(hydrated.pitfallsText))
+      ? previewLinesFromJson(
+          education.pitfalls,
+          parseLines(hydrated.pitfallsText),
+        )
       : parseLines(hydrated.pitfallsText),
   };
 }
 
 function parseLines(value: string): string[] {
   return value
-    .split('\n')
+    .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 }
@@ -2150,39 +2289,42 @@ function hasStructuredArrayItems(value: JsonValue | null | undefined): boolean {
   return Array.isArray(value)
     ? value.some(
         (item) =>
-          typeof item === 'object' && item !== null && !Array.isArray(item),
+          typeof item === "object" && item !== null && !Array.isArray(item),
       )
     : false;
 }
 
 function stringifyLines(value: JsonValue | null): string {
   if (!Array.isArray(value)) {
-    return '';
+    return "";
   }
 
   return value
-    .filter((item): item is string => typeof item === 'string')
-    .join('\n');
+    .filter((item): item is string => typeof item === "string")
+    .join("\n");
 }
 
-function previewLinesFromJson(value: JsonValue | null, fallback: string[]): string[] {
+function previewLinesFromJson(
+  value: JsonValue | null,
+  fallback: string[],
+): string[] {
   if (!Array.isArray(value)) {
     return fallback;
   }
 
   const items = value
     .map((item) => {
-      if (typeof item === 'string') {
+      if (typeof item === "string") {
         return item;
       }
 
       const record = asRecord(item);
       return (
-        stringField(record, 'pattern') ??
-        stringField(record, 'finding') ??
-        stringField(record, 'pitfall') ??
-        stringField(record, 'test') ??
-        stringField(record, 'step') ??
+        stringField(record, "pattern") ??
+        stringField(record, "finding") ??
+        stringField(record, "pitfall") ??
+        stringField(record, "test") ??
+        stringField(record, "step") ??
         null
       );
     })
@@ -2192,7 +2334,7 @@ function previewLinesFromJson(value: JsonValue | null, fallback: string[]): stri
 }
 
 function stringifyJson(value: JsonValue | null): string {
-  return value === null ? '' : JSON.stringify(value, null, 2);
+  return value === null ? "" : JSON.stringify(value, null, 2);
 }
 
 function parseJsonField(value: string, label: string): JsonValue | undefined {
@@ -2210,50 +2352,55 @@ function parseJsonField(value: string, label: string): JsonValue | undefined {
 
 function parsePearls(value: JsonValue | null): DiagnosisEducationPearl[] {
   if (!Array.isArray(value)) {
-    return [{ label: '', explanation: '' }];
+    return [{ label: "", explanation: "" }];
   }
 
   const rows = value
     .map((item) => asRecord(item))
     .map((item) => ({
-      id: typeof item.id === 'string' ? item.id : undefined,
-      type: typeof item.type === 'string' ? item.type as DiagnosisEducationPearl['type'] : undefined,
-      title: typeof item.title === 'string' ? item.title : undefined,
-      content: typeof item.content === 'string' ? item.content : undefined,
+      id: typeof item.id === "string" ? item.id : undefined,
+      type:
+        typeof item.type === "string"
+          ? (item.type as DiagnosisEducationPearl["type"])
+          : undefined,
+      title: typeof item.title === "string" ? item.title : undefined,
+      content: typeof item.content === "string" ? item.content : undefined,
       label:
-        typeof item.label === 'string'
+        typeof item.label === "string"
           ? item.label
-          : typeof item.title === 'string'
+          : typeof item.title === "string"
             ? item.title
-            : '',
+            : "",
       explanation:
-        typeof item.explanation === 'string'
+        typeof item.explanation === "string"
           ? item.explanation
-          : typeof item.content === 'string'
+          : typeof item.content === "string"
             ? item.content
-            : '',
+            : "",
       whyItMatters:
-        typeof item.whyItMatters === 'string' ? item.whyItMatters : undefined,
+        typeof item.whyItMatters === "string" ? item.whyItMatters : undefined,
       discriminator:
-        typeof item.discriminator === 'string' ? item.discriminator : undefined,
+        typeof item.discriminator === "string" ? item.discriminator : undefined,
       managementImplication:
-        typeof item.managementImplication === 'string'
+        typeof item.managementImplication === "string"
           ? item.managementImplication
           : undefined,
       escalationImplication:
-        typeof item.escalationImplication === 'string'
+        typeof item.escalationImplication === "string"
           ? item.escalationImplication
           : undefined,
       trapAvoided:
-        typeof item.trapAvoided === 'string' ? item.trapAvoided : undefined,
+        typeof item.trapAvoided === "string" ? item.trapAvoided : undefined,
       critique: parsePearlCritique(item.critique),
     }))
     .filter((item) => item.label || item.explanation);
 
-  return rows.length > 0 ? rows : [{ label: '', explanation: '' }];
+  return rows.length > 0 ? rows : [{ label: "", explanation: "" }];
 }
 
-function parsePearlCritique(value: unknown): DiagnosisEducationPearl['critique'] {
+function parsePearlCritique(
+  value: unknown,
+): DiagnosisEducationPearl["critique"] {
   const record = asRecord(value);
   if (!Array.isArray(record.warnings)) {
     return undefined;
@@ -2261,27 +2408,27 @@ function parsePearlCritique(value: unknown): DiagnosisEducationPearl['critique']
 
   return {
     genericityScore:
-      typeof record.genericityScore === 'number'
+      typeof record.genericityScore === "number"
         ? record.genericityScore
         : undefined,
     discriminatorStrength:
-      typeof record.discriminatorStrength === 'number'
+      typeof record.discriminatorStrength === "number"
         ? record.discriminatorStrength
         : undefined,
     operationalReasoningScore:
-      typeof record.operationalReasoningScore === 'number'
+      typeof record.operationalReasoningScore === "number"
         ? record.operationalReasoningScore
         : undefined,
     memorabilityScore:
-      typeof record.memorabilityScore === 'number'
+      typeof record.memorabilityScore === "number"
         ? record.memorabilityScore
         : undefined,
     managementImpactScore:
-      typeof record.managementImpactScore === 'number'
+      typeof record.managementImpactScore === "number"
         ? record.managementImpactScore
         : undefined,
     warnings: record.warnings.filter(
-      (warning): warning is string => typeof warning === 'string',
+      (warning): warning is string => typeof warning === "string",
     ),
   };
 }
@@ -2290,31 +2437,31 @@ function parseDifferentials(
   value: JsonValue | null,
 ): DiagnosisEducationDifferential[] {
   if (!Array.isArray(value)) {
-    return [{ diagnosis: '', distinguishingPoint: '' }];
+    return [{ diagnosis: "", distinguishingPoint: "" }];
   }
 
   const rows = value
     .map((item) => asRecord(item))
     .map((item) => ({
-      diagnosis: typeof item.diagnosis === 'string' ? item.diagnosis : '',
+      diagnosis: typeof item.diagnosis === "string" ? item.diagnosis : "",
       whyConfused:
-        typeof item.whyConfused === 'string' ? item.whyConfused : undefined,
+        typeof item.whyConfused === "string" ? item.whyConfused : undefined,
       distinguishingPoint:
-        typeof item.distinguishingPoint === 'string'
+        typeof item.distinguishingPoint === "string"
           ? item.distinguishingPoint
-          : '',
+          : "",
       keySeparator:
-        typeof item.keySeparator === 'string' ? item.keySeparator : undefined,
+        typeof item.keySeparator === "string" ? item.keySeparator : undefined,
       classicTrap:
-        typeof item.classicTrap === 'string' ? item.classicTrap : undefined,
+        typeof item.classicTrap === "string" ? item.classicTrap : undefined,
     }))
     .filter((item) => item.diagnosis || item.distinguishingPoint);
 
-  return rows.length > 0 ? rows : [{ diagnosis: '', distinguishingPoint: '' }];
+  return rows.length > 0 ? rows : [{ diagnosis: "", distinguishingPoint: "" }];
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
 }
@@ -2334,13 +2481,14 @@ function latestGeneratedBecause(value: JsonValue | null) {
 function latestValidationRun(
   runs: ReasoningDraftValidationRun[],
   artifactId: string | undefined,
-  artifactTypes: ReasoningDraftValidationRun['artifactType'][],
+  artifactTypes: ReasoningDraftValidationRun["artifactType"][],
 ) {
   if (!artifactId) return null;
   return (
     runs.find(
       (run) =>
-        run.artifactId === artifactId && artifactTypes.includes(run.artifactType),
+        run.artifactId === artifactId &&
+        artifactTypes.includes(run.artifactType),
     ) ?? null
   );
 }
@@ -2349,7 +2497,7 @@ function signalMessages(value: JsonValue): string[] {
   if (!Array.isArray(value)) return [];
   return value
     .map((item) => {
-      if (typeof item === 'string') return item;
+      if (typeof item === "string") return item;
       const record = asRecord(item);
       return stringFromJson(record.message) ?? stringFromJson(record.code);
     })
@@ -2357,29 +2505,33 @@ function signalMessages(value: JsonValue): string[] {
 }
 
 function trustTone(tier: string) {
-  if (tier === 'HIGH_TRUST') return 'bg-emerald-100 text-emerald-800';
-  if (tier === 'BLOCKED') return 'bg-rose-100 text-rose-800';
-  if (tier === 'LOW_TRUST') return 'bg-orange-100 text-orange-800';
-  return 'bg-amber-100 text-amber-800';
+  if (tier === "HIGH_TRUST") return "bg-emerald-100 text-emerald-800";
+  if (tier === "BLOCKED") return "bg-rose-100 text-rose-800";
+  if (tier === "LOW_TRUST") return "bg-orange-100 text-orange-800";
+  return "bg-amber-100 text-amber-800";
 }
 
 function jsonStringList(value: unknown): string[] {
   return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    ? value.filter(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
+      )
     : [];
 }
 
 function stringFromJson(value: unknown): string | null {
-  return typeof value === 'string' && value.trim().length > 0
+  return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : null;
 }
 
-function stringField(record: Record<string, unknown>, key: string): string | null {
+function stringField(
+  record: Record<string, unknown>,
+  key: string,
+): string | null {
   const value = record[key];
-  return typeof value === 'string' && value.trim().length > 0
-    ? value
-    : null;
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
 function replaceAt<T>(items: T[], index: number, value: T): T[] {
@@ -2403,25 +2555,25 @@ function sortRevisionsNewestFirst(
 function qualityWarningCopy(warning: string): string {
   const copy: Record<string, string> = {
     generic_filler_phrases_detected:
-      'Generic teaching phrases detected; tighten into diagnostic discriminators.',
+      "Generic teaching phrases detected; tighten into diagnostic discriminators.",
     low_diagnostic_reasoning_density:
-      'Low diagnostic reasoning density; add why this finding shifts suspicion.',
+      "Low diagnostic reasoning density; add why this finding shifts suspicion.",
     missing_structured_why_layer:
-      'Missing structured why-layer fields; add why findings matter diagnostically.',
+      "Missing structured why-layer fields; add why findings matter diagnostically.",
     missing_comparative_differential_reasoning:
-      'Differentials need stronger contrast, not just mimic summaries.',
+      "Differentials need stronger contrast, not just mimic summaries.",
     missing_why_it_matters_recall_prompt:
-      'Recall prompts should include at least one why-it-matters question.',
+      "Recall prompts should include at least one why-it-matters question.",
     typed_pearl_generic_phrase:
-      'Typed pearl warning: generic phrase detected; rewrite as operational reasoning.',
+      "Typed pearl warning: generic phrase detected; rewrite as operational reasoning.",
     typed_pearl_missing_operational_reasoning:
-      'Typed pearl warning: add discriminator, management impact, escalation logic, or trap avoided.',
+      "Typed pearl warning: add discriminator, management impact, escalation logic, or trap avoided.",
     typed_pearl_weak_discriminator:
-      'Typed pearl warning: discriminator pearl needs a stronger contrast against mimics.',
+      "Typed pearl warning: discriminator pearl needs a stronger contrast against mimics.",
     typed_pearl_duplicate_teaching_point:
-      'Typed pearl warning: duplicate teaching point detected.',
+      "Typed pearl warning: duplicate teaching point detected.",
     generic_exam_pearl_why_layer:
-      'Exam pearl why-layer is too generic; explain what changes clinically.',
+      "Exam pearl why-layer is too generic; explain what changes clinically.",
   };
 
   return copy[warning] ?? warning;
@@ -2429,15 +2581,15 @@ function qualityWarningCopy(warning: string): string {
 
 function publishBlockerCopy(blocker: string): string {
   const copy: Record<string, string> = {
-    missing_summary: 'Publish blocker: summary definition is missing.',
+    missing_summary: "Publish blocker: summary definition is missing.",
     contains_drug_dosing:
-      'Publish blocker: content contains drug dosing and must be reviewed.',
+      "Publish blocker: content contains drug dosing and must be reviewed.",
     contains_patient_specific_advice:
-      'Publish blocker: content sounds patient-specific rather than educational.',
+      "Publish blocker: content sounds patient-specific rather than educational.",
     high_risk_sections_need_references:
-      'Publish blocker: management, investigations, or scoring content needs references.',
+      "Publish blocker: management, investigations, or scoring content needs references.",
     typed_pearl_missing_required_content:
-      'Publish blocker: typed pearl is missing id, type, or content.',
+      "Publish blocker: typed pearl is missing id, type, or content.",
   };
 
   return copy[blocker] ?? `Publish blocker: ${blocker}`;

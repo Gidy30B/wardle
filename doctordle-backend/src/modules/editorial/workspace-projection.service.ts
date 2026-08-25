@@ -13,6 +13,7 @@ import {
   type SectionFailureSummary,
 } from '../education/education-section-quality-classifier.service';
 import { DiagnosisCurriculumProviderService } from '../education/diagnosis-curriculum-provider.service';
+import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
 
 type WorkspaceEducationStatus =
   | 'missing'
@@ -154,6 +155,9 @@ export class WorkspaceProjectionService {
     private readonly educationKnowledgeRulesService: EducationKnowledgeRulesService = new EducationKnowledgeRulesService(),
     private readonly diagnosisCurriculumProviderService: DiagnosisCurriculumProviderService = new DiagnosisCurriculumProviderService(),
     private readonly educationSectionQualityClassifier: EducationSectionQualityClassifier = new EducationSectionQualityClassifier(),
+    private readonly lifecyclePolicy: DiagnosisRegistryLifecyclePolicyService = new DiagnosisRegistryLifecyclePolicyService(
+      prisma,
+    ),
   ) {}
 
   async getProjection(
@@ -260,6 +264,8 @@ export class WorkspaceProjectionService {
       ),
       factCount: registry.graphFacts.length,
     });
+    const scaffoldReadiness =
+      await this.lifecyclePolicy.getScaffoldReadiness(diagnosisRegistryId);
     const readiness = this.buildReadiness({
       hasDiagnosis: true,
       educationStatus: education.status,
@@ -267,6 +273,7 @@ export class WorkspaceProjectionService {
       educationWarnings: qualityReport?.warnings ?? [],
       caseCount: registry.cases.length,
       graphReadiness,
+      scaffoldReadiness,
     });
 
     return {
@@ -426,7 +433,11 @@ export class WorkspaceProjectionService {
       return 'none';
     }
 
-    if (input.candidateStatuses.some((status) => this.isReviewableCandidateStatus(status))) {
+    if (
+      input.candidateStatuses.some((status) =>
+        this.isReviewableCandidateStatus(status),
+      )
+    ) {
       return 'review_needed';
     }
 
@@ -440,6 +451,11 @@ export class WorkspaceProjectionService {
     educationWarnings: string[];
     caseCount: number;
     graphReadiness: WorkspaceGraphReadiness;
+    scaffoldReadiness?: Awaited<
+      ReturnType<
+        DiagnosisRegistryLifecyclePolicyService['getScaffoldReadiness']
+      >
+    >;
   }) {
     const missing: string[] = [];
     const nextActions: string[] = [];
@@ -448,14 +464,30 @@ export class WorkspaceProjectionService {
       warning.startsWith('missing_required_'),
     );
 
-    if (!hasEducation) {
+    if (
+      !hasEducation &&
+      (input.scaffoldReadiness?.educationGeneration.ready ?? true)
+    ) {
       missing.push('education');
       nextActions.push('Generate education draft');
     }
 
-    if (!input.caseCount) {
+    if (
+      !input.caseCount &&
+      (input.scaffoldReadiness?.caseGeneration.ready ?? true)
+    ) {
       missing.push('cases');
       nextActions.push('Generate more cases');
+    }
+
+    if (input.scaffoldReadiness && !input.scaffoldReadiness.scaffold.ready) {
+      missing.push('educational scaffold');
+      nextActions.push(
+        input.scaffoldReadiness.scaffold.nextAction ??
+          (input.scaffoldReadiness.bootstrap.ready
+            ? 'Generate Editorial Brief'
+            : 'Complete diagnosis metadata'),
+      );
     }
 
     if (hasEducation && input.educationBlockers.length) {
@@ -468,7 +500,9 @@ export class WorkspaceProjectionService {
       input.educationStatus !== 'published'
     ) {
       nextActions.push(
-        hasCoverageWarnings ? 'Resolve required teaching coverage' : 'Publish education',
+        hasCoverageWarnings
+          ? 'Resolve required teaching coverage'
+          : 'Publish education',
       );
     }
 
@@ -479,7 +513,9 @@ export class WorkspaceProjectionService {
     }
 
     return {
-      generationReady: input.hasDiagnosis,
+      generationReady:
+        input.hasDiagnosis &&
+        (input.scaffoldReadiness?.educationGeneration.ready ?? true),
       educationReadyForReview:
         hasEducation && input.educationBlockers.length === 0,
       publishReady:

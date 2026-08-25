@@ -1,5 +1,5 @@
-import { Injectable, Optional } from '@nestjs/common';
-import { DiagnosisRegistryStatus, Prisma } from '@prisma/client';
+import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/db/prisma.service.js';
 import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service.js';
 import type { PlannedGenerationDiagnosis } from './case-generator.types.js';
@@ -28,8 +28,9 @@ export type DiagnosisSelectionResult = {
 export class DiagnosisSelectionService {
   constructor(
     private readonly prisma: PrismaService,
-    @Optional()
-    private readonly lifecyclePolicy?: DiagnosisRegistryLifecyclePolicyService,
+    private readonly lifecyclePolicy: DiagnosisRegistryLifecyclePolicyService = new DiagnosisRegistryLifecyclePolicyService(
+      prisma,
+    ),
   ) {}
 
   async selectDiagnoses(
@@ -59,12 +60,7 @@ export class DiagnosisSelectionService {
       ? this.mapDifficultyFilter(input.difficulty)
       : undefined;
     const where: Prisma.DiagnosisRegistryWhereInput = {
-      ...(this.lifecyclePolicy?.getGeneratableRegistryWhere() ?? {
-        active: true,
-        status: DiagnosisRegistryStatus.ACTIVE,
-        isPlayable: true,
-        isGeneratable: true,
-      }),
+      ...this.lifecyclePolicy.getGeneratableRegistryWhere(),
       ...(input.specialty
         ? {
             specialty: {
@@ -135,8 +131,14 @@ export class DiagnosisSelectionService {
       },
     });
 
+    const eligibleIds =
+      await this.lifecyclePolicy.getCaseGenerationEligibleRegistryIds(
+        rows.map((row) => row.id),
+      );
+    const eligibleRows = rows.filter((row) => eligibleIds.has(row.id));
+
     const now = Date.now();
-    const candidates = rows
+    const candidates = eligibleRows
       .map((row) => ({
         diagnosisRegistryId: row.id,
         legacyDiagnosisId: row.legacyDiagnosisId,
@@ -186,7 +188,9 @@ export class DiagnosisSelectionService {
 
         return left.displayLabel.localeCompare(right.displayLabel);
       })
-      .map(({ metadataFitScore: _metadataFitScore, ...candidate }) => candidate);
+      .map(
+        ({ metadataFitScore: _metadataFitScore, ...candidate }) => candidate,
+      );
     const existingCaseCountByDiagnosis = Object.fromEntries(
       candidates.map((candidate) => [
         candidate.diagnosisRegistryId,

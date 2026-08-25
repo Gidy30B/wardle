@@ -23,6 +23,7 @@ import type {
 import { getEnv } from '../../core/config/env.validation';
 import { PrismaService } from '../../core/db/prisma.service';
 import { GenerationContextBuilder } from '../editorial/generation-context-builder.service';
+import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/diagnosis-registry-lifecycle-policy.service';
 import { EditorialIntentProjectionService } from '../editorial/editorial-intent-projection.service';
 import { DiagnosisGraphExtractionService } from '../diagnosis-graph/diagnosis-graph-extraction.service';
 import { DifferentialMappingService } from '../diagnosis-graph/differential-mapping.service';
@@ -33,9 +34,7 @@ import {
 import { ReasoningDraftValidationService } from '../admin/reasoning-draft-validation.service';
 import type { ReviewDiagnosisEducationDto } from './dto/review-diagnosis-education.dto';
 import type { UpsertDiagnosisEducationDto } from './dto/upsert-diagnosis-education.dto';
-import {
-  EducationDraftQualityValidator,
-} from './education-draft-quality-validator.service';
+import { EducationDraftQualityValidator } from './education-draft-quality-validator.service';
 import { EducationEditorialPatternsService } from './education-editorial-patterns.service';
 import { EducationKnowledgeRulesService } from './education-knowledge-rules.service';
 import { EducationSchemaContractService } from './education-schema-contract.service';
@@ -453,6 +452,9 @@ export class DiagnosisEducationService {
     private readonly reasoningDraftValidationService?: ReasoningDraftValidationService,
     private readonly diagnosisEducationCandidateService?: DiagnosisEducationCandidateService,
     private readonly diagnosisEducationGovernanceService?: DiagnosisEducationGovernanceService,
+    private readonly lifecyclePolicy: DiagnosisRegistryLifecyclePolicyService = new DiagnosisRegistryLifecyclePolicyService(
+      prisma,
+    ),
   ) {
     const env = getEnv();
     if (env.OPENAI_API_KEY) {
@@ -528,18 +530,17 @@ export class DiagnosisEducationService {
     });
 
     if (!education) {
-      const currentEducation =
-        await this.prisma.diagnosisEducation.findUnique({
-          where: { diagnosisRegistryId: input.diagnosisRegistryId },
-          include: {
-            diagnosisRegistry: { select: this.registrySelect() },
-            revisions: {
-              where: { editorialStatus: DiagnosisEducationStatus.PUBLISHED },
-              orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
-              take: 1,
-            },
+      const currentEducation = await this.prisma.diagnosisEducation.findUnique({
+        where: { diagnosisRegistryId: input.diagnosisRegistryId },
+        include: {
+          diagnosisRegistry: { select: this.registrySelect() },
+          revisions: {
+            where: { editorialStatus: DiagnosisEducationStatus.PUBLISHED },
+            orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
+            take: 1,
           },
-        });
+        },
+      });
       const publishedRevision = currentEducation?.revisions[0];
 
       if (currentEducation && publishedRevision) {
@@ -982,6 +983,9 @@ export class DiagnosisEducationService {
     expectedVersion?: number,
   ) {
     this.assertAdminEnabled();
+    await this.lifecyclePolicy.assertEducationGenerationReady(
+      diagnosisRegistryId,
+    );
     const env = getEnv();
     if (!env.AI_EDUCATION_GENERATION_ENABLED) {
       throw new BadRequestException('AI education generation is disabled');
@@ -1065,10 +1069,9 @@ export class DiagnosisEducationService {
           sourceSummary: generationContext.sourceSummary,
           constrained: reasoningContext?.constrained ?? false,
           reasoningPathId: reasoningContext?.reasoningPathId ?? null,
-          reasoningWarnings:
-            reasoningContext?.warnings ?? [
-              'No reasoning path service was available.',
-            ],
+          reasoningWarnings: reasoningContext?.warnings ?? [
+            'No reasoning path service was available.',
+          ],
         }),
       );
       const request: ChatCompletionCreateParamsNonStreaming = {
@@ -1151,8 +1154,7 @@ export class DiagnosisEducationService {
               diagnosis: generationContext.diagnosis,
               diagnosisSpecificGuidance: {
                 forbiddenGenericPatterns:
-                  knowledgeGuidance?.forbiddenGenericPatterns.slice(0, 5) ??
-                  [],
+                  knowledgeGuidance?.forbiddenGenericPatterns.slice(0, 5) ?? [],
                 atomicityGuidance:
                   knowledgeGuidance?.atomicityGuidance.slice(0, 3) ?? [],
                 discriminatorStyle:
@@ -1265,10 +1267,9 @@ export class DiagnosisEducationService {
           diagnosisRegistryId,
           reasoningPathId: reasoningContext?.reasoningPathId ?? null,
           hallucinationRisk: reasoningContext?.hallucinationRisk ?? 'high',
-          warnings:
-            reasoningContext?.warnings ?? [
-              'No reasoning path service was available.',
-            ],
+          warnings: reasoningContext?.warnings ?? [
+            'No reasoning path service was available.',
+          ],
         }),
       );
 
@@ -1388,12 +1389,10 @@ export class DiagnosisEducationService {
           reasoningContext.sourceEvidenceRelationshipIds,
         coverageGapsAddressed: reasoningContext.coverageGapsAddressed,
         discriminatorEvidenceUsed: reasoningContext.discriminatorEvidenceUsed,
-        generationCoverageSnapshot:
-          reasoningContext.generationCoverageSnapshot,
+        generationCoverageSnapshot: reasoningContext.generationCoverageSnapshot,
         plannerRecommendations: reasoningContext.plannerRecommendations,
         warnings: reasoningContext.warnings,
-        reasoningQualityWarnings:
-          reasoningContext.reasoningQualityWarnings,
+        reasoningQualityWarnings: reasoningContext.reasoningQualityWarnings,
       },
     };
   }
@@ -2414,8 +2413,8 @@ export class DiagnosisEducationService {
           .filter((item) =>
             Boolean(
               item.diagnosis ||
-                item.whyPlausibleEarly ||
-                item.finalReasonLessLikely,
+              item.whyPlausibleEarly ||
+              item.finalReasonLessLikely,
             ),
           ),
       };
@@ -2525,10 +2524,13 @@ export class DiagnosisEducationService {
         }),
       );
       try {
-        const completion = await this.openaiClient!.chat.completions.create(input.request, {
-          timeout: OPENAI_EDUCATION_SYNC_ATTEMPT_TIMEOUT_MS,
-          maxRetries: 0,
-        });
+        const completion = await this.openaiClient!.chat.completions.create(
+          input.request,
+          {
+            timeout: OPENAI_EDUCATION_SYNC_ATTEMPT_TIMEOUT_MS,
+            maxRetries: 0,
+          },
+        );
         this.logger.log(
           JSON.stringify({
             event: 'diagnosis_education.generate.openai_success',
@@ -2741,16 +2743,18 @@ export class DiagnosisEducationService {
   }
 
   private async refreshDifferentialMappings(educationId: string) {
-    await this.differentialMappingService?.mapEducation(educationId).catch((error) => {
-      this.logger.error(
-        JSON.stringify({
-          event: 'differential_mapping.education_refresh.failed',
-          educationId,
-          error: error instanceof Error ? error.message : String(error),
-        }),
-        error instanceof Error ? error.stack : undefined,
-      );
-    });
+    await this.differentialMappingService
+      ?.mapEducation(educationId)
+      .catch((error) => {
+        this.logger.error(
+          JSON.stringify({
+            event: 'differential_mapping.education_refresh.failed',
+            educationId,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+          error instanceof Error ? error.stack : undefined,
+        );
+      });
   }
 
   private async createRevisionIfMissing(
@@ -2912,7 +2916,10 @@ export class DiagnosisEducationService {
         snapshot.clinicalPattern,
         education.clinicalPattern,
       ),
-      keySymptoms: this.snapshotValue(snapshot.keySymptoms, education.keySymptoms),
+      keySymptoms: this.snapshotValue(
+        snapshot.keySymptoms,
+        education.keySymptoms,
+      ),
       keySigns: this.snapshotValue(snapshot.keySigns, education.keySigns),
       examPearls: this.snapshotValue(snapshot.examPearls, education.examPearls),
       scoringSystems: this.snapshotValue(

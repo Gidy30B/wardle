@@ -598,6 +598,7 @@ export class DiagnosisEditorialWorkspaceService {
       registryCandidateCountsResult,
       onboardingResult,
       lifecycleGovernanceResult,
+      scaffoldReadinessResult,
       evidenceCoverageResult,
       reasoningPathsResult,
       unsupportedClaimsResult,
@@ -627,6 +628,9 @@ export class DiagnosisEditorialWorkspaceService {
         diagnosisRegistryId,
       ),
       this.diagnosisRegistryLifecyclePolicyService?.getLifecycle(
+        diagnosisRegistryId,
+      ),
+      this.diagnosisRegistryLifecyclePolicyService?.getScaffoldReadiness(
         diagnosisRegistryId,
       ),
       this.evidenceCoverageService?.getDiagnosis(diagnosisRegistryId),
@@ -673,6 +677,7 @@ export class DiagnosisEditorialWorkspaceService {
     const onboarding = this.valueOrNull(onboardingResult) ?? null;
     const lifecycleGovernance =
       this.valueOrNull(lifecycleGovernanceResult) ?? null;
+    const scaffoldReadiness = this.valueOrNull(scaffoldReadinessResult) ?? null;
     const evidenceCoverage = this.valueOrNull(evidenceCoverageResult) ?? null;
     const reasoningPaths = this.valueOrNull(reasoningPathsResult) ?? [];
     const unsupportedClaimsBySection =
@@ -685,13 +690,15 @@ export class DiagnosisEditorialWorkspaceService {
     const materializedClueRevisionDrafts =
       this.projectMaterializedClueRevisionDrafts(registry.cases);
     const clueRevisionDraftsByAuditId = new Map(
-      materializedClueRevisionDrafts.map((draft) => [draft.sourceAuditId, draft]),
+      materializedClueRevisionDrafts.map((draft) => [
+        draft.sourceAuditId,
+        draft,
+      ]),
     );
-    const discriminatorDraftReviews =
-      this.projectDiscriminatorDraftReviews(
-        aiDraftAuditTrail,
-        clueRevisionDraftsByAuditId,
-      );
+    const discriminatorDraftReviews = this.projectDiscriminatorDraftReviews(
+      aiDraftAuditTrail,
+      clueRevisionDraftsByAuditId,
+    );
     const caseGovernanceSnapshots = await this.getCaseGovernanceSnapshots(
       registry.cases,
     );
@@ -729,6 +736,7 @@ export class DiagnosisEditorialWorkspaceService {
       summary,
       coverageGaps,
       compositionWarnings,
+      scaffoldReadiness,
     });
     const recommendedActions = this.buildRecommendedActions({
       registry,
@@ -737,10 +745,12 @@ export class DiagnosisEditorialWorkspaceService {
       graphCandidateCount: graphCandidates.length,
       educationCandidates,
       educationGovernance,
+      scaffoldReadiness,
     });
     const availableActions = this.buildAvailableActions({
       registry,
       hasEducation: Boolean(registry.education),
+      scaffoldReadiness,
     });
     const learningGoalCoverage = this.buildLearningGoalCoverage({
       registry,
@@ -776,44 +786,48 @@ export class DiagnosisEditorialWorkspaceService {
       escalationCoverage,
       learningGoalCoverage,
     });
-    const clueProgressionWarnings = this.buildClueProgressionWarnings(cases.items);
+    const clueProgressionWarnings = this.buildClueProgressionWarnings(
+      cases.items,
+    );
     const editorialPrioritization = this.withClueProgressionPrioritization(
       this.triageProjectionService.project({
-      workspaceBlockerCount: summary?.blockers.length ?? 0,
-      coverageBlockerCount: coverageGaps.filter(
-        (gap) => gap.severity === 'blocker',
-      ).length,
-      missingGraphGapCount: coverageGaps.filter((gap) => gap.missingGraph)
-        .length,
-      unsupportedClaimCount: unsupportedClaimsBySection.length,
-      unsupportedClaimBlockerCount: unsupportedClaimsBySection.filter(
-        (claim) => claim.blocksPublication || claim.severity === 'blocker',
-      ).length,
-      escalationMissing: !escalationCoverage.coversEscalation,
-      totalDifferentials: differentialCoverage.totalDifferentials,
-      resolvedDifferentials: differentialCoverage.resolvedLinks,
-      discriminatorRuleCount: rules.rules.filter((rule) =>
-        ['differential_concept', 'pitfall_concept'].includes(rule.category),
-      ).length,
-      totalCases: cases.summary.total,
-      usableCases: cases.summary.usable,
-      evidenceCoverageScore: evidenceCoverage?.coverageScore ?? null,
-      lowTrustDraftCount:
-        evidenceCoverage?.coverageBreakdown?.lowTrustDraftCount ?? 0,
-      blockedDraftCount:
-        evidenceCoverage?.coverageBreakdown?.blockedDraftCount ?? 0,
-      hallucinationRiskDraftCount:
-        evidenceCoverage?.coverageBreakdown?.hallucinationRiskDraftCount ?? 0,
-      pendingDraftCount: aiDraftAuditTrail.filter((audit) =>
-        ['PENDING_REVIEW', 'REVIEW_REQUIRED'].includes(audit.reviewStatus),
-      ).length + clinicalCaseDrafts.summary.pendingReview +
-        educationCandidates.summary.pendingReview,
-      maturityOverall: maturityGovernance.breakdown.overall,
-      lifecyclePlayable: lifecycle.gameplay === 'complete',
-      lifecycleActive: lifecycle.curriculum !== 'blocked',
-      hasEducation: Boolean(registry.education),
-      activeTeachingRuleCount: rules.rules.length,
-      graphRelationshipCount: registry.graphFacts.length,
+        workspaceBlockerCount: summary?.blockers.length ?? 0,
+        coverageBlockerCount: coverageGaps.filter(
+          (gap) => gap.severity === 'blocker',
+        ).length,
+        missingGraphGapCount: coverageGaps.filter((gap) => gap.missingGraph)
+          .length,
+        unsupportedClaimCount: unsupportedClaimsBySection.length,
+        unsupportedClaimBlockerCount: unsupportedClaimsBySection.filter(
+          (claim) => claim.blocksPublication || claim.severity === 'blocker',
+        ).length,
+        escalationMissing: !escalationCoverage.coversEscalation,
+        totalDifferentials: differentialCoverage.totalDifferentials,
+        resolvedDifferentials: differentialCoverage.resolvedLinks,
+        discriminatorRuleCount: rules.rules.filter((rule) =>
+          ['differential_concept', 'pitfall_concept'].includes(rule.category),
+        ).length,
+        totalCases: cases.summary.total,
+        usableCases: cases.summary.usable,
+        evidenceCoverageScore: evidenceCoverage?.coverageScore ?? null,
+        lowTrustDraftCount:
+          evidenceCoverage?.coverageBreakdown?.lowTrustDraftCount ?? 0,
+        blockedDraftCount:
+          evidenceCoverage?.coverageBreakdown?.blockedDraftCount ?? 0,
+        hallucinationRiskDraftCount:
+          evidenceCoverage?.coverageBreakdown?.hallucinationRiskDraftCount ?? 0,
+        pendingDraftCount:
+          aiDraftAuditTrail.filter((audit) =>
+            ['PENDING_REVIEW', 'REVIEW_REQUIRED'].includes(audit.reviewStatus),
+          ).length +
+          clinicalCaseDrafts.summary.pendingReview +
+          educationCandidates.summary.pendingReview,
+        maturityOverall: maturityGovernance.breakdown.overall,
+        lifecyclePlayable: lifecycle.gameplay === 'complete',
+        lifecycleActive: lifecycle.curriculum !== 'blocked',
+        hasEducation: Boolean(registry.education),
+        activeTeachingRuleCount: rules.rules.length,
+        graphRelationshipCount: registry.graphFacts.length,
       }),
       cases,
       discriminatorDraftReviews,
@@ -838,11 +852,13 @@ export class DiagnosisEditorialWorkspaceService {
           : null,
       },
       onboarding,
-      onboardingStatus: onboarding?.onboardingStatus ?? registry.onboardingStatus,
+      onboardingStatus:
+        onboarding?.onboardingStatus ?? registry.onboardingStatus,
       onboardingProgress: onboarding?.progress ?? null,
       onboardingRecommendations: onboarding?.recommendedActions ?? [],
       lifecycle,
       lifecycleGovernance,
+      scaffoldReadiness,
       workspaceSummary: {
         status:
           summary?.overallWorkspaceStatus ??
@@ -1150,7 +1166,9 @@ export class DiagnosisEditorialWorkspaceService {
   }) {
     const draft = await this.loadCaseClueRevisionDraft(input.draftId);
     if (draft.status === 'APPLIED') {
-      throw new BadRequestException('Applied clue revision drafts cannot be superseded');
+      throw new BadRequestException(
+        'Applied clue revision drafts cannot be superseded',
+      );
     }
     const updated = await this.prisma.caseClueRevisionDraft.update({
       where: { id: draft.id },
@@ -1178,7 +1196,9 @@ export class DiagnosisEditorialWorkspaceService {
       };
     }
     if (draft.status !== 'APPROVED') {
-      throw new BadRequestException('Only approved clue revision drafts can be applied');
+      throw new BadRequestException(
+        'Only approved clue revision drafts can be applied',
+      );
     }
     if (!this.canMaterializeClueRevision(draft.case)) {
       const blocked = await this.prisma.caseClueRevisionDraft.update({
@@ -1232,12 +1252,14 @@ export class DiagnosisEditorialWorkspaceService {
       learningGoalId: input.payload.learningGoalId,
       learningGoal: input.payload.learningGoal,
       coverageStrength: this.clampPercent(input.payload.coverageStrength ?? 0),
-      coveredDiscriminators:
-        (input.payload.coveredDiscriminators ?? []) as Prisma.InputJsonValue,
-      missingDiscriminators:
-        (input.payload.missingDiscriminators ?? []) as Prisma.InputJsonValue,
-      coveredMimics: (input.payload.coveredMimics ?? []) as Prisma.InputJsonValue,
-      missingMimics: (input.payload.missingMimics ?? []) as Prisma.InputJsonValue,
+      coveredDiscriminators: (input.payload.coveredDiscriminators ??
+        []) as Prisma.InputJsonValue,
+      missingDiscriminators: (input.payload.missingDiscriminators ??
+        []) as Prisma.InputJsonValue,
+      coveredMimics: (input.payload.coveredMimics ??
+        []) as Prisma.InputJsonValue,
+      missingMimics: (input.payload.missingMimics ??
+        []) as Prisma.InputJsonValue,
       evidenceSource: input.payload.evidenceSource ?? 'editorial_annotation',
     };
     const row = input.coverageId
@@ -1438,9 +1460,10 @@ export class DiagnosisEditorialWorkspaceService {
     },
     reviewerUserId: string,
   ) {
-    const existing = await this.prisma.caseClueDiscriminatorAnnotation.findFirst({
-      where: { id: annotationId, caseId },
-    });
+    const existing =
+      await this.prisma.caseClueDiscriminatorAnnotation.findFirst({
+        where: { id: annotationId, caseId },
+      });
     if (!existing) {
       throw new NotFoundException('Discriminator annotation not found');
     }
@@ -2139,7 +2162,8 @@ export class DiagnosisEditorialWorkspaceService {
     diagnosisRegistryId: string,
     claimId: string,
   ) {
-    const claims = await this.getUnsupportedClaimsBySection(diagnosisRegistryId);
+    const claims =
+      await this.getUnsupportedClaimsBySection(diagnosisRegistryId);
     return claims.find((claim) => claim.claimId === claimId) ?? null;
   }
 
@@ -2407,7 +2431,8 @@ export class DiagnosisEditorialWorkspaceService {
       return null;
     }
     const mimicName =
-      this.stringValue(embedded.mimicName) ?? this.stringValue(target.mimicName);
+      this.stringValue(embedded.mimicName) ??
+      this.stringValue(target.mimicName);
     const discriminator =
       this.stringValue(embedded.discriminator) ??
       this.stringValue(target.discriminator);
@@ -2566,7 +2591,10 @@ export class DiagnosisEditorialWorkspaceService {
     audit: { actionType: string },
     decision: 'accept' | 'reject' | 'request_changes' | 'supersede',
   ) {
-    if (decision !== 'accept' || !this.isDiscriminatorDraftAudit(audit.actionType)) {
+    if (
+      decision !== 'accept' ||
+      !this.isDiscriminatorDraftAudit(audit.actionType)
+    ) {
       return null;
     }
     if (audit.actionType === 'generate_targeted_discriminator_case') {
@@ -2695,7 +2723,10 @@ export class DiagnosisEditorialWorkspaceService {
     }
 
     const clueRevision = reviewPayload.proposedOutput.clueRevision;
-    if (!clueRevision || (!clueRevision.revisedClue && !clueRevision.addedClue)) {
+    if (
+      !clueRevision ||
+      (!clueRevision.revisedClue && !clueRevision.addedClue)
+    ) {
       return {
         materialized: false,
         status: 'accepted_audit_only',
@@ -2833,7 +2864,9 @@ export class DiagnosisEditorialWorkspaceService {
   private patchCaseCluesForRevisionDraft(draft: CaseClueRevisionDraftWithCase) {
     const clues = this.cloneClueArray(draft.case.clues);
     if (!draft.revisedClue && !draft.addedClue) {
-      throw new BadRequestException('Clue revision draft has no proposed clue text');
+      throw new BadRequestException(
+        'Clue revision draft has no proposed clue text',
+      );
     }
     let targetIndex = this.resolveClueIndex(clues, draft);
     let originalClue: Prisma.JsonValue | undefined =
@@ -2845,7 +2878,10 @@ export class DiagnosisEditorialWorkspaceService {
         );
       }
       originalClue = clues[targetIndex];
-      clues[targetIndex] = this.replaceClueText(clues[targetIndex], draft.revisedClue);
+      clues[targetIndex] = this.replaceClueText(
+        clues[targetIndex],
+        draft.revisedClue,
+      );
     }
     if (draft.addedClue) {
       const insertAt = targetIndex === null ? clues.length : targetIndex + 1;
@@ -2885,9 +2921,10 @@ export class DiagnosisEditorialWorkspaceService {
         if (!clue || typeof clue !== 'object' || Array.isArray(clue)) {
           return false;
         }
-        return this.numberValue(
-          (clue as Record<string, Prisma.JsonValue>).order,
-        ) === draft.clueOrder;
+        return (
+          this.numberValue((clue as Record<string, Prisma.JsonValue>).order) ===
+          draft.clueOrder
+        );
       });
       if (byOrder >= 0) {
         return byOrder;
@@ -2899,7 +2936,10 @@ export class DiagnosisEditorialWorkspaceService {
     return null;
   }
 
-  private replaceClueText(clue: Prisma.JsonValue, text: string): Prisma.JsonValue {
+  private replaceClueText(
+    clue: Prisma.JsonValue,
+    text: string,
+  ): Prisma.JsonValue {
     if (typeof clue === 'string') {
       return text;
     }
@@ -3025,8 +3065,10 @@ export class DiagnosisEditorialWorkspaceService {
         diagnosisId: input.caseRecord.diagnosisId,
         diagnosisRegistryId: input.caseRecord.diagnosisRegistryId,
         proposedDiagnosisText: input.caseRecord.proposedDiagnosisText,
-        diagnosisMappingStatus: input.caseRecord.diagnosisMappingStatus as never,
-        diagnosisMappingMethod: input.caseRecord.diagnosisMappingMethod as never,
+        diagnosisMappingStatus: input.caseRecord
+          .diagnosisMappingStatus as never,
+        diagnosisMappingMethod: input.caseRecord
+          .diagnosisMappingMethod as never,
         diagnosisMappingConfidence: input.caseRecord.diagnosisMappingConfidence,
         diagnosisEditorialNote: input.caseRecord.diagnosisEditorialNote,
         createdByUserId: input.createdByUserId,
@@ -3075,7 +3117,9 @@ export class DiagnosisEditorialWorkspaceService {
             (item as Record<string, Prisma.JsonValue>).sourceAuditId,
           ) === sourceAuditId,
       );
-      return (exists ? currentValue : [...currentValue, repairEntry]) as Prisma.InputJsonValue;
+      return (
+        exists ? currentValue : [...currentValue, repairEntry]
+      ) as Prisma.InputJsonValue;
     }
     if (
       currentValue &&
@@ -3149,7 +3193,10 @@ export class DiagnosisEditorialWorkspaceService {
     },
     reviewerUserId: string,
   ) {
-    if (typeof payload.clueOrder !== 'number' || Number.isNaN(payload.clueOrder)) {
+    if (
+      typeof payload.clueOrder !== 'number' ||
+      Number.isNaN(payload.clueOrder)
+    ) {
       throw new BadRequestException('clueOrder must be numeric');
     }
     const eliminatedDiagnosisName = payload.eliminatedDiagnosisName?.trim();
@@ -3194,7 +3241,9 @@ export class DiagnosisEditorialWorkspaceService {
     field: string,
   ): T {
     if (!allowed.includes(value as T)) {
-      throw new BadRequestException(`${field} must be one of ${allowed.join(', ')}`);
+      throw new BadRequestException(
+        `${field} must be one of ${allowed.join(', ')}`,
+      );
     }
     return value as T;
   }
@@ -3244,7 +3293,9 @@ export class DiagnosisEditorialWorkspaceService {
         diagnosisRegistryId: caseRecord.diagnosisRegistryId,
         caseId: row.caseId,
         actionType,
-        sourceIssue: { source: 'clue_discriminator_annotation' } as Prisma.InputJsonValue,
+        sourceIssue: {
+          source: 'clue_discriminator_annotation',
+        } as Prisma.InputJsonValue,
         inputContext: { caseId: row.caseId } as Prisma.InputJsonValue,
         generatedOutput: this.toInputJson(row),
         affectedArtifactType: 'CASE_CLUE_DISCRIMINATOR_ANNOTATION',
@@ -3428,7 +3479,9 @@ export class DiagnosisEditorialWorkspaceService {
       case?: { editorialStatus: CaseEditorialStatus | null };
     },
   ) {
-    const editable = row.case ? this.canMaterializeClueRevision(row.case) : true;
+    const editable = row.case
+      ? this.canMaterializeClueRevision(row.case)
+      : true;
     const blockedReason = editable ? null : 'Target case is not editable.';
     return {
       id: row.id,
@@ -3450,7 +3503,8 @@ export class DiagnosisEditorialWorkspaceService {
       appliedByUserId: row.appliedByUserId,
       createdAt: this.toIso(row.createdAt),
       updatedAt: this.toIso(row.updatedAt),
-      canEdit: editable && ['PENDING_REVIEW', 'NEEDS_CHANGES'].includes(row.status),
+      canEdit:
+        editable && ['PENDING_REVIEW', 'NEEDS_CHANGES'].includes(row.status),
       canApprove:
         editable && ['PENDING_REVIEW', 'NEEDS_CHANGES'].includes(row.status),
       canApply: editable && row.status === 'APPROVED',
@@ -3520,11 +3574,7 @@ export class DiagnosisEditorialWorkspaceService {
           ),
           missingMimics: this.unique(rows.flatMap((row) => row.missingMimics)),
           generationPriority:
-            strongest >= 80
-              ? 'low'
-              : strongest >= 45
-                ? 'medium'
-                : 'high',
+            strongest >= 80 ? 'low' : strongest >= 45 ? 'medium' : 'high',
           coveragePct: strongest,
         };
       });
@@ -3620,20 +3670,19 @@ export class DiagnosisEditorialWorkspaceService {
         relationship.relationshipType === 'ESCALATES' &&
         relationship.status === 'ACTIVE',
     );
-    const escalationCaseIds =
-      input.caseEscalationCoverage.length
-        ? input.caseEscalationCoverage
-            .filter((annotation) => annotation.covered)
-            .map((annotation) => annotation.caseId)
-        : activeEscalationPath && input.cases.summary.usable
-          ? input.cases.items
-              .filter(
-                (caseItem) =>
-                  this.isUsableCaseStatus(caseItem.editorialStatus) &&
-                  !caseItem.qualityProjection.blockers.length,
-              )
-              .map((caseItem) => caseItem.id)
-          : [];
+    const escalationCaseIds = input.caseEscalationCoverage.length
+      ? input.caseEscalationCoverage
+          .filter((annotation) => annotation.covered)
+          .map((annotation) => annotation.caseId)
+      : activeEscalationPath && input.cases.summary.usable
+        ? input.cases.items
+            .filter(
+              (caseItem) =>
+                this.isUsableCaseStatus(caseItem.editorialStatus) &&
+                !caseItem.qualityProjection.blockers.length,
+            )
+            .map((caseItem) => caseItem.id)
+        : [];
     const escalationType =
       activeEscalationPath?.reasoningGoal ??
       activeEscalationRelationships[0]?.learnerPitfall ??
@@ -3709,7 +3758,8 @@ export class DiagnosisEditorialWorkspaceService {
         covered: true,
         evidenceStrength: activeEscalationPath.escalationEvidenceNodeIds.length,
         reasoningPathId: activeEscalationPath.id,
-        notes: 'Inferred from active reasoning path until explicit case escalation annotations are added.',
+        notes:
+          'Inferred from active reasoning path until explicit case escalation annotations are added.',
         coverageSource: 'inferred' as const,
         updatedAt: caseItem.updatedAt,
         status: 'inferred_covered',
@@ -3755,7 +3805,9 @@ export class DiagnosisEditorialWorkspaceService {
     const caseCoverage = input.cases.summary.total
       ? input.cases.summary.usable / input.cases.summary.total
       : 0;
-    const escalationCoverage = input.escalationCoverage.coversEscalation ? 1 : 0;
+    const escalationCoverage = input.escalationCoverage.coversEscalation
+      ? 1
+      : 0;
     const lifecyclePenalty =
       (input.lifecycleGovernance?.blockers.length ?? 0) * 0.08;
     const blockersPenalty =
@@ -3865,7 +3917,9 @@ export class DiagnosisEditorialWorkspaceService {
   }
 
   private numberValue(value: Prisma.JsonValue | null | undefined) {
-    return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+    return typeof value === 'number' && Number.isFinite(value)
+      ? value
+      : undefined;
   }
 
   private sectionTypeFromArtifact(artifactType: string) {
@@ -3977,9 +4031,8 @@ export class DiagnosisEditorialWorkspaceService {
           context.governanceSnapshots.get(caseRecord.id) ?? null,
         ),
         clueProgression,
-        clueDiscriminatorAnnotations:
-          this.caseClueDiscriminatorAnnotationDtos(
-            caseRecord.clueDiscriminatorAnnotations ?? [],
+        clueDiscriminatorAnnotations: this.caseClueDiscriminatorAnnotationDtos(
+          caseRecord.clueDiscriminatorAnnotations ?? [],
         ),
         clueRevisionDrafts: this.caseClueRevisionDraftDtos(
           caseRecord.clueRevisionDrafts ?? [],
@@ -4063,7 +4116,8 @@ export class DiagnosisEditorialWorkspaceService {
     publicationReadiness: PublicationReadiness | null,
   ) {
     const currentRevisionId = caseRecord.currentRevisionId;
-    const governedApprovalDecisions = caseRecord.governedApprovalDecisions ?? [];
+    const governedApprovalDecisions =
+      caseRecord.governedApprovalDecisions ?? [];
     const publicationDecisions = caseRecord.publicationDecisions ?? [];
     const reviews = caseRecord.reviews ?? [];
     const dailyCases = caseRecord.dailyCases ?? [];
@@ -4088,8 +4142,7 @@ export class DiagnosisEditorialWorkspaceService {
     const latestReview =
       reviews.find(
         (review) =>
-          Boolean(currentRevisionId) &&
-          review.revisionId === currentRevisionId,
+          Boolean(currentRevisionId) && review.revisionId === currentRevisionId,
       ) ?? null;
     const currentRevisionPublications = publicationDecisions.filter(
       (decision) =>
@@ -4130,7 +4183,9 @@ export class DiagnosisEditorialWorkspaceService {
           openReview?.reviewContextIdentity ??
           latestReview?.reviewContextIdentity ??
           null,
-        startedAt: openReview?.createdAt ? this.toIso(openReview.createdAt) : null,
+        startedAt: openReview?.createdAt
+          ? this.toIso(openReview.createdAt)
+          : null,
         decidedAt: latestReview?.decidedAt
           ? this.toIso(latestReview.decidedAt)
           : null,
@@ -4159,8 +4214,7 @@ export class DiagnosisEditorialWorkspaceService {
               result: publicationReadiness.result,
               blockers: publicationReadiness.blockers,
               warnings: publicationReadiness.warnings,
-              publicationAuthorized:
-                publicationReadiness.publicationAuthorized,
+              publicationAuthorized: publicationReadiness.publicationAuthorized,
               currentPublicationStanding:
                 publicationReadiness.currentPublicationStanding,
               activePublicationDecisionId:
@@ -4218,8 +4272,9 @@ export class DiagnosisEditorialWorkspaceService {
     return {
       summary: {
         total: items.length,
-        pendingReview: items.filter((item) => item.reviewStatus === 'PENDING_REVIEW')
-          .length,
+        pendingReview: items.filter(
+          (item) => item.reviewStatus === 'PENDING_REVIEW',
+        ).length,
         changesRequested: items.filter(
           (item) => item.reviewStatus === 'CHANGES_REQUESTED',
         ).length,
@@ -4229,7 +4284,8 @@ export class DiagnosisEditorialWorkspaceService {
           (item) => item.reviewStatus === 'ACCEPTED' && item.applicationAllowed,
         ).length,
         applied: items.filter((item) => item.reviewStatus === 'APPLIED').length,
-        rejected: items.filter((item) => item.reviewStatus === 'REJECTED').length,
+        rejected: items.filter((item) => item.reviewStatus === 'REJECTED')
+          .length,
         blockerCount: items.reduce(
           (count, item) => count + item.validation.blockerCount,
           0,
@@ -4336,7 +4392,9 @@ export class DiagnosisEditorialWorkspaceService {
       generatedAt: this.toIso(candidate.generatedAt),
       createdAt: this.toIso(candidate.createdAt),
       updatedAt: this.toIso(candidate.updatedAt),
-      acceptedAt: candidate.acceptedAt ? this.toIso(candidate.acceptedAt) : null,
+      acceptedAt: candidate.acceptedAt
+        ? this.toIso(candidate.acceptedAt)
+        : null,
       appliedAt: candidate.appliedAt ? this.toIso(candidate.appliedAt) : null,
       resultingEducationId: candidate.resultingEducationId,
       resultingEducationVersion: candidate.resultingEducationVersion,
@@ -4407,9 +4465,8 @@ export class DiagnosisEditorialWorkspaceService {
       (generatedCase.clues ?? snapshot.clues) as Prisma.JsonValue,
     );
     const differentials = this.stringArray(
-      (generatedCase.differentials ?? snapshot.differentials) as
-        | Prisma.JsonValue
-        | null,
+      (generatedCase.differentials ??
+        snapshot.differentials) as Prisma.JsonValue | null,
     );
     const finalDiagnosis =
       this.stringValue(generatedCase.answer) ??
@@ -4492,7 +4549,9 @@ export class DiagnosisEditorialWorkspaceService {
   ) {
     if (purpose === 'TARGETED_DISCRIMINATOR_CASE_DRAFT') {
       const mimic = this.stringValue(discriminatorTarget.mimicName);
-      return mimic ? `Improve discrimination from ${mimic}` : 'Targeted discriminator case';
+      return mimic
+        ? `Improve discrimination from ${mimic}`
+        : 'Targeted discriminator case';
     }
     return 'AI clinical case generation';
   }
@@ -4503,7 +4562,9 @@ export class DiagnosisEditorialWorkspaceService {
   ) {
     const discriminator = this.stringValue(discriminatorTarget.discriminator);
     const learnerRisk = this.stringValue(discriminatorTarget.learnerRisk);
-    const editorialReason = this.stringValue(discriminatorTarget.editorialReason);
+    const editorialReason = this.stringValue(
+      discriminatorTarget.editorialReason,
+    );
     if (discriminator) return discriminator;
     if (learnerRisk) return learnerRisk;
     if (editorialReason) return editorialReason;
@@ -4515,7 +4576,9 @@ export class DiagnosisEditorialWorkspaceService {
       return 'Review generated case';
     }
     if (draft.reviewStatus === ClinicalCaseDraftStatus.ACCEPTED) {
-      return draft.resultingCaseId ? 'Application complete' : 'Apply accepted draft';
+      return draft.resultingCaseId
+        ? 'Application complete'
+        : 'Apply accepted draft';
     }
     if (draft.reviewStatus === ClinicalCaseDraftStatus.CHANGES_REQUESTED) {
       return 'Await revised generation';
@@ -4617,8 +4680,7 @@ export class DiagnosisEditorialWorkspaceService {
         0,
       ),
       persistentConfusionCount: items.reduce(
-        (count, item) =>
-          count + item.clueProgression.persistentConfusionCount,
+        (count, item) => count + item.clueProgression.persistentConfusionCount,
         0,
       ),
       missingDiscriminatorCaseCount: items.filter((item) =>
@@ -4628,8 +4690,7 @@ export class DiagnosisEditorialWorkspaceService {
       ).length,
       explicitDiscriminatorAnnotationCount: items.reduce(
         (count, item) =>
-          count +
-          item.clueProgression.explicitDiscriminatorAnnotationCount,
+          count + item.clueProgression.explicitDiscriminatorAnnotationCount,
         0,
       ),
       heuristicOnlyEliminationCount: items.reduce(
@@ -4660,8 +4721,7 @@ export class DiagnosisEditorialWorkspaceService {
   private warningProgressionSignalCount(analysis: ClueProgressionAnalysis) {
     return (
       analysis.editorialSignals.filter(
-      (signal) =>
-        !['premature_lock_in', 'abrupt_giveaway'].includes(signal),
+        (signal) => !['premature_lock_in', 'abrupt_giveaway'].includes(signal),
       ).length +
       analysis.unresolvedMimicCount +
       analysis.weakEliminationCount +
@@ -4674,7 +4734,7 @@ export class DiagnosisEditorialWorkspaceService {
   private blockingProgressionSignalCount(analysis: ClueProgressionAnalysis) {
     return (
       analysis.editorialSignals.filter((signal) =>
-      ['premature_lock_in', 'abrupt_giveaway'].includes(signal),
+        ['premature_lock_in', 'abrupt_giveaway'].includes(signal),
       ).length + analysis.persistentConfusionCount
     );
   }
@@ -4808,40 +4868,37 @@ export class DiagnosisEditorialWorkspaceService {
       id: hasPendingDiscriminatorDraft
         ? 'review_discriminator_draft'
         : hasGenerationOpportunity
-        ? 'generate_discriminator_draft'
-        : needsEditorialAnnotation
-        ? 'add_editorial_discriminator_annotation'
-        : hasMimicEliminationGap
-        ? 'differential_elimination_gap'
-        : 'clue_progression_quality',
+          ? 'generate_discriminator_draft'
+          : needsEditorialAnnotation
+            ? 'add_editorial_discriminator_annotation'
+            : hasMimicEliminationGap
+              ? 'differential_elimination_gap'
+              : 'clue_progression_quality',
       label: hasPendingDiscriminatorDraft
         ? 'Review discriminator repair draft'
         : hasGenerationOpportunity
-        ? 'Generate discriminator draft'
-        : needsEditorialAnnotation
-        ? 'Add editorial discriminator annotation'
-        : hasMimicEliminationGap
-        ? 'Add discriminator case support'
-        : 'Repair clue progression',
-      reason:
-        hasPendingDiscriminatorDraft
-          ? `${pendingDiscriminatorDraftCount} generated discriminator repair draft${pendingDiscriminatorDraftCount === 1 ? '' : 's'} await editor review.`
-          :
-        hasGenerationOpportunity
+          ? 'Generate discriminator draft'
+          : needsEditorialAnnotation
+            ? 'Add editorial discriminator annotation'
+            : hasMimicEliminationGap
+              ? 'Add discriminator case support'
+              : 'Repair clue progression',
+      reason: hasPendingDiscriminatorDraft
+        ? `${pendingDiscriminatorDraftCount} generated discriminator repair draft${pendingDiscriminatorDraftCount === 1 ? '' : 's'} await editor review.`
+        : hasGenerationOpportunity
           ? 'At least one mimic gap can be repaired by a targeted discriminator case or clue-revision draft.'
-          :
-        needsEditorialAnnotation
-          ? 'At least one mimic separation is heuristic-only or lacks editor-governed discriminator annotation.'
-          :
-        hasMimicEliminationGap
-          ? 'At least one important mimic is not explicitly eliminated by case clues.'
-          :
-        signals.prematureLockInCases || signals.abruptGiveawayCases
-          ? 'At least one case leaks the likely diagnosis too abruptly.'
-          : 'At least one case leaves mimics unresolved through the final clue.',
+          : needsEditorialAnnotation
+            ? 'At least one mimic separation is heuristic-only or lacks editor-governed discriminator annotation.'
+            : hasMimicEliminationGap
+              ? 'At least one important mimic is not explicitly eliminated by case clues.'
+              : signals.prematureLockInCases || signals.abruptGiveawayCases
+                ? 'At least one case leaks the likely diagnosis too abruptly.'
+                : 'At least one case leaves mimics unresolved through the final clue.',
       targetTab: (needsEditorialAnnotation
         ? 'cases'
-        : hasPendingDiscriminatorDraft || hasGenerationOpportunity || hasMimicEliminationGap
+        : hasPendingDiscriminatorDraft ||
+            hasGenerationOpportunity ||
+            hasMimicEliminationGap
           ? 'graph'
           : 'cases') as TargetTab,
       severity,
@@ -5002,8 +5059,33 @@ export class DiagnosisEditorialWorkspaceService {
       DiagnosisEditorialWorkspaceService['buildCoverageGaps']
     >;
     compositionWarnings: string[];
+    scaffoldReadiness: Awaited<
+      ReturnType<
+        DiagnosisRegistryLifecyclePolicyService['getScaffoldReadiness']
+      >
+    > | null;
   }) {
     return [
+      ...(input.scaffoldReadiness
+        ? [
+            ...input.scaffoldReadiness.metadata.blockers.map((message) => ({
+              severity: 'blocker' as const,
+              source: 'scaffold',
+              message,
+              actionId: 'complete-diagnosis-metadata',
+              targetTab: 'overview' as const,
+            })),
+            ...input.scaffoldReadiness.scaffold.blockers.map((message) => ({
+              severity: 'blocker' as const,
+              source: 'scaffold',
+              message,
+              actionId:
+                input.scaffoldReadiness?.scaffold.nextAction ??
+                'complete-educational-scaffold',
+              targetTab: this.targetTabFromMessage(message),
+            })),
+          ]
+        : []),
       ...(input.summary?.blockers.map((message) => ({
         severity: 'blocker' as const,
         source: 'workspace_quality',
@@ -5050,6 +5132,11 @@ export class DiagnosisEditorialWorkspaceService {
         DiagnosisEditorialWorkspaceService['buildEducationGovernanceSummary']
       >
     >;
+    scaffoldReadiness: Awaited<
+      ReturnType<
+        DiagnosisRegistryLifecyclePolicyService['getScaffoldReadiness']
+      >
+    > | null;
   }): ActionDescriptor[] {
     const endpointBase = `/api/admin/diagnosis-workspace/${input.registry.id}`;
     const actions: ActionDescriptor[] = [];
@@ -5107,8 +5194,54 @@ export class DiagnosisEditorialWorkspaceService {
     }
 
     if (
+      input.scaffoldReadiness?.bootstrap.ready &&
+      !input.registry.editorialBrief
+    ) {
+      actions.push({
+        id: 'generate-editorial-brief',
+        label: 'Generate Editorial Brief',
+        source: 'scaffold',
+        severity: 'warning',
+        targetTab: 'editorial-brief',
+        enabled: true,
+        disabledReason: null,
+        targetEndpoint: `${endpointBase}/editorial-brief/generate`,
+      });
+    } else if (
+      input.registry.editorialBrief &&
+      !input.scaffoldReadiness?.scaffold.ready &&
+      input.scaffoldReadiness?.scaffold.nextAction === 'Review Editorial Brief'
+    ) {
+      actions.push({
+        id: 'review-editorial-brief',
+        label: 'Review Editorial Brief',
+        source: 'scaffold',
+        severity: 'warning',
+        targetTab: 'editorial-brief',
+        enabled: true,
+        disabledReason: null,
+      });
+    } else if (
+      input.scaffoldReadiness?.scaffold.nextAction ===
+      'Generate Teaching Rule Candidates'
+    ) {
+      actions.push({
+        id: 'generate-teaching-rule-candidates',
+        label: 'Generate Teaching Rule Candidates',
+        source: 'scaffold',
+        severity: 'warning',
+        targetTab: 'teaching-rules',
+        enabled: true,
+        disabledReason: null,
+        targetEndpoint: `${endpointBase}/teaching-rules/generate`,
+      });
+    }
+
+    if (
       !input.registry.education &&
-      input.educationCandidates.summary.actionable === 0
+      input.educationCandidates.summary.actionable === 0 &&
+      (!input.scaffoldReadiness ||
+        input.scaffoldReadiness.educationGeneration.ready)
     ) {
       actions.push({
         id: 'generate-education',
@@ -5123,7 +5256,10 @@ export class DiagnosisEditorialWorkspaceService {
     }
 
     const caseGap = input.coverageGaps.find((gap) => gap.missingCases);
-    if (caseGap) {
+    if (
+      caseGap &&
+      (!input.scaffoldReadiness || input.scaffoldReadiness.caseGeneration.ready)
+    ) {
       actions.push({
         id: 'generate-targeted-case',
         label: 'Generate aligned case',
@@ -5169,16 +5305,31 @@ export class DiagnosisEditorialWorkspaceService {
   private buildAvailableActions(input: {
     registry: RegistryRow;
     hasEducation: boolean;
+    scaffoldReadiness: Awaited<
+      ReturnType<
+        DiagnosisRegistryLifecyclePolicyService['getScaffoldReadiness']
+      >
+    > | null;
   }): ActionDescriptor[] {
     const endpointBase = `/api/admin/diagnosis-workspace/${input.registry.id}`;
+    const teachingReady =
+      input.scaffoldReadiness?.metadata.ready === true &&
+      !input.scaffoldReadiness.scaffold.missing.includes(
+        'approved Editorial Brief',
+      );
+    const educationReady =
+      input.scaffoldReadiness?.educationGeneration.ready ?? true;
+    const caseReady = input.scaffoldReadiness?.caseGeneration.ready ?? true;
     return [
       {
         id: 'generate-teaching-rule-candidates',
         label: 'Generate teaching rule candidates',
         permission: 'editor',
         targetTab: 'teaching-rules',
-        enabled: true,
-        disabledReason: null,
+        enabled: teachingReady,
+        disabledReason: teachingReady
+          ? null
+          : 'Approve the Editorial Brief first.',
         targetEndpoint: `${endpointBase}/teaching-rules/generate`,
       },
       {
@@ -5204,8 +5355,10 @@ export class DiagnosisEditorialWorkspaceService {
         label: 'Generate education draft',
         permission: 'editor',
         targetTab: 'education',
-        enabled: true,
-        disabledReason: null,
+        enabled: educationReady,
+        disabledReason: educationReady
+          ? null
+          : 'Complete the educational scaffold first.',
         targetEndpoint: `/api/admin/education/diagnoses/${input.registry.id}/generate`,
       },
       {
@@ -5224,8 +5377,10 @@ export class DiagnosisEditorialWorkspaceService {
         label: 'Generate targeted case',
         permission: 'editor',
         targetTab: 'cases',
-        enabled: true,
-        disabledReason: null,
+        enabled: caseReady,
+        disabledReason: caseReady
+          ? null
+          : 'Complete and approve the educational scaffold first.',
         targetEndpoint: `${endpointBase}/generate-case`,
       },
     ];
@@ -5310,7 +5465,8 @@ export class DiagnosisEditorialWorkspaceService {
       ]);
 
     const reviewAction =
-      registry.education.editorialStatus === DiagnosisEducationStatus.NEEDS_REVIEW
+      registry.education.editorialStatus ===
+      DiagnosisEducationStatus.NEEDS_REVIEW
         ? {
             id: 'review-education-revision',
             label: 'Review Education revision',
@@ -5352,7 +5508,8 @@ export class DiagnosisEditorialWorkspaceService {
   private async getLatestEducationApprovalSummary(
     educationId: string,
   ): Promise<EducationGovernanceDecisionSummary | null> {
-    const delegate = (this.prisma as any).diagnosisEducationRevisionApprovalDecision;
+    const delegate = (this.prisma as any)
+      .diagnosisEducationRevisionApprovalDecision;
     if (!delegate?.findFirst) {
       return null;
     }
@@ -5393,8 +5550,10 @@ export class DiagnosisEditorialWorkspaceService {
   private async getEducationGovernanceHistory(
     educationId: string,
   ): Promise<EducationGovernanceDecisionSummary[]> {
-    const approvalDelegate = (this.prisma as any).diagnosisEducationRevisionApprovalDecision;
-    const publicationDelegate = (this.prisma as any).diagnosisEducationPublicationDecision;
+    const approvalDelegate = (this.prisma as any)
+      .diagnosisEducationRevisionApprovalDecision;
+    const publicationDelegate = (this.prisma as any)
+      .diagnosisEducationPublicationDecision;
     const [approvals, publications] = await Promise.all([
       approvalDelegate?.findMany
         ? approvalDelegate.findMany({
@@ -5458,8 +5617,12 @@ export class DiagnosisEditorialWorkspaceService {
       actorUserId: decision.actorUserId ?? null,
       authorityRationale: decision.authorityRationale ?? null,
       occurredAt: this.toIso(decision.occurredAt),
-      effectiveAt: decision.effectiveAt ? this.toIso(decision.effectiveAt) : null,
-      withdrawnAt: decision.withdrawnAt ? this.toIso(decision.withdrawnAt) : null,
+      effectiveAt: decision.effectiveAt
+        ? this.toIso(decision.effectiveAt)
+        : null,
+      withdrawnAt: decision.withdrawnAt
+        ? this.toIso(decision.withdrawnAt)
+        : null,
       supersedesPublicationId: decision.supersedesPublicationId ?? null,
       approvalDecisionId: decision.approvalDecisionId ?? null,
     };
@@ -5488,10 +5651,7 @@ export class DiagnosisEditorialWorkspaceService {
     );
   }
 
-  private extractClaimRepairs(
-    section: string,
-    value: Prisma.JsonValue | null,
-  ) {
+  private extractClaimRepairs(section: string, value: Prisma.JsonValue | null) {
     const records = Array.isArray(value)
       ? this.asRecordArray(value)
       : value && typeof value === 'object'
