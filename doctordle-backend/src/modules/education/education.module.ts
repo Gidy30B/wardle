@@ -67,6 +67,12 @@ import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/d
     DiagnosisEducationService,
     DiagnosisEducationCandidateService,
     DiagnosisEducationGovernanceService,
+    EducationKnowledgeRulesService,
+    EducationTeachingRulesService,
+    DiagnosisCurriculumProviderService,
+    DiagnosisEditorialBriefService,
+    DiagnosisEditorialBriefGenerationService,
+    EditorialBriefDraftQualityValidator,
   ],
 })
 export class EducationModule {}
