@@ -1,7 +1,7 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -22,6 +22,7 @@ import {
   type EducationalReasoningGenerationContext,
 } from './reasoning-path.service';
 import { ReasoningDraftValidationService } from './reasoning-draft-validation.service';
+import { DiagnosisTeachingRuleGenerationService } from './diagnosis-teaching-rule-generation.service';
 
 const VALID_CATEGORIES = [
   'differential_concept',
@@ -75,17 +76,8 @@ type TeachingRuleWritePayload = {
   source?: unknown;
 };
 
-type TeachingRuleSourceItem = {
-  title: string;
-  category: string;
-  manifestation?: string;
-  importance?: string;
-};
-
 @Injectable()
 export class TeachingRulesAdminService {
-  private readonly logger = new Logger(TeachingRulesAdminService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly curriculumProvider: DiagnosisCurriculumProviderService,
@@ -93,6 +85,7 @@ export class TeachingRulesAdminService {
     private readonly reasoningPathService?: ReasoningPathService,
     private readonly reasoningDraftValidationService?: ReasoningDraftValidationService,
     private readonly diagnosisEditorialBriefService?: DiagnosisEditorialBriefService,
+    private readonly teachingRuleGenerationService?: DiagnosisTeachingRuleGenerationService,
     private readonly lifecyclePolicy: DiagnosisRegistryLifecyclePolicyService = new DiagnosisRegistryLifecyclePolicyService(
       prisma,
     ),
@@ -185,10 +178,6 @@ export class TeachingRulesAdminService {
     await this.lifecyclePolicy.assertTeachingRuleGenerationReady(
       diagnosisRegistryId,
     );
-    const registry = await this.loadGenerationContext(diagnosisRegistryId);
-    if (!registry) {
-      throw new NotFoundException('Diagnosis registry entry not found');
-    }
     const approvedBrief =
       await this.getApprovedBriefContext(diagnosisRegistryId);
     if (!approvedBrief) {
@@ -206,14 +195,28 @@ export class TeachingRulesAdminService {
         diagnosisRegistryId,
         purpose: GenerationPurpose.TEACHING_RULE_GENERATION,
       });
-    const candidates = this.buildCandidates(
-      registry,
-      reasoningContext,
+    const generator =
+      this.teachingRuleGenerationService ??
+      new DiagnosisTeachingRuleGenerationService(this.prisma);
+    const generation = await generator.generate({
+      diagnosisRegistryId,
       approvedBrief,
-    );
+      reasoningContext: reasoningContext?.constrained
+        ? reasoningContext
+        : undefined,
+    });
+    await this.assertBriefStillCurrent(diagnosisRegistryId, approvedBrief);
     const created: DiagnosisTeachingRule[] = [];
+    const seenInBatch = new Set<string>();
+    let duplicatesSkipped = 0;
 
-    for (const candidate of candidates) {
+    for (const candidate of generation.candidates) {
+      const dedupeKey = this.candidateDedupeKey(candidate);
+      if (seenInBatch.has(dedupeKey)) {
+        duplicatesSkipped += 1;
+        continue;
+      }
+      seenInBatch.add(dedupeKey);
       const duplicate = await this.prisma.diagnosisTeachingRule.findFirst({
         where: {
           diagnosisRegistryId,
@@ -225,10 +228,22 @@ export class TeachingRulesAdminService {
                 mode: 'insensitive',
               },
             },
+            {
+              AND: [
+                { category: candidate.category },
+                {
+                  title: {
+                    equals: candidate.title,
+                    mode: 'insensitive',
+                  },
+                },
+              ],
+            },
           ],
         },
       });
       if (duplicate) {
+        duplicatesSkipped += 1;
         continue;
       }
 
@@ -245,10 +260,30 @@ export class TeachingRulesAdminService {
       });
     }
 
+    await generator.recordSuccessfulAudit({
+      diagnosisRegistryId,
+      candidateIds: created.map((rule) => rule.id),
+      result: generation,
+    });
+
     return {
       diagnosisRegistryId,
       generatedCount: created.length,
-      generationMetadata: this.generationMetadata(reasoningContext),
+      duplicatesSkipped,
+      validation: generation.validation,
+      provenance: generation.provenance,
+      generationMetadata: {
+        generatedBecause: {
+          provider: generation.provenance.provider,
+          model: generation.provenance.model,
+          contextHash: generation.provenance.contextHash,
+          editorialBriefId: generation.provenance.editorialBriefId,
+          editorialBriefVersion: generation.provenance.editorialBriefVersion,
+          validationStatus: generation.validation.status,
+          warnings: generation.validation.warnings,
+          coverage: generation.validation.coverage,
+        },
+      },
       rules: created.map((rule) => this.toDto(rule)),
     };
   }
@@ -419,44 +454,11 @@ export class TeachingRulesAdminService {
     return data;
   }
 
-  private async loadGenerationContext(diagnosisRegistryId: string) {
-    return this.prisma.diagnosisRegistry.findUnique({
-      where: { id: diagnosisRegistryId },
-      select: {
-        id: true,
-        canonicalName: true,
-        displayLabel: true,
-        education: {
-          select: {
-            examPearls: true,
-            investigations: true,
-            differentials: true,
-            management: true,
-            pitfalls: true,
-          },
-        },
-        graphFacts: {
-          select: { label: true, payload: true },
-        },
-        graphCandidates: {
-          select: { rawText: true, payload: true },
-          take: 20,
-        },
-        cases: {
-          select: { explanation: true },
-          take: 20,
-        },
-      },
-    });
-  }
-
   private async getApprovedBriefContext(diagnosisRegistryId: string) {
-    const serviceContext =
-      await this.diagnosisEditorialBriefService?.getApprovedBriefContext(
+    if (this.diagnosisEditorialBriefService) {
+      return this.diagnosisEditorialBriefService.getApprovedBriefContext(
         diagnosisRegistryId,
       );
-    if (serviceContext) {
-      return serviceContext;
     }
     const brief = await this.prisma.diagnosisEditorialBrief.findFirst({
       where: {
@@ -488,265 +490,48 @@ export class TeachingRulesAdminService {
     } satisfies EditorialBriefContext;
   }
 
-  private buildCandidates(
-    registry: NonNullable<
-      Awaited<ReturnType<TeachingRulesAdminService['loadGenerationContext']>>
-    >,
-    reasoningContext?: EducationalReasoningGenerationContext,
-    approvedBrief?: EditorialBriefContext,
+  private async assertBriefStillCurrent(
+    diagnosisRegistryId: string,
+    brief: EditorialBriefContext,
   ) {
-    const textItems: TeachingRuleSourceItem[] = [
-      ...this.briefTeachingItems(approvedBrief),
-      ...this.reasoningTeachingItems(reasoningContext),
-      ...this.sectionItems(
-        registry.education?.differentials,
-        'differential_concept',
-      ),
-      ...this.sectionItems(
-        registry.education?.investigations,
-        'investigation_concept',
-      ),
-      ...this.sectionItems(registry.education?.examPearls, 'exam_mechanism'),
-      ...this.sectionItems(
-        registry.education?.management,
-        'management_concept',
-      ),
-      ...this.sectionItems(registry.education?.pitfalls, 'pitfall_concept'),
-      ...registry.graphFacts.map((fact) => ({
-        title: fact.label,
-        category: 'finding_concept',
-        manifestation: fact.label,
-      })),
-      ...registry.graphCandidates.map((candidate) => ({
-        title: candidate.rawText,
-        category: 'finding_concept',
-        manifestation: candidate.rawText,
-      })),
-      ...this.caseTeachingUnits(registry.cases),
-    ];
-    const seen = new Set<string>();
-    const candidates = [];
-
-    for (const item of textItems) {
-      const title = this.compactTitle(item.title);
-      const stableKey = this.normalizeKey(title);
-      if (!title || !stableKey || seen.has(stableKey)) {
-        continue;
-      }
-      seen.add(stableKey);
-      candidates.push({
-        stableKey,
-        title,
-        category: this.enumValue(item.category, VALID_CATEGORIES, 'category'),
-        importance: this.enumValue(
-          item.importance ?? 'supporting',
-          VALID_IMPORTANCE,
-          'importance',
-        ),
-        rationale: reasoningContext?.constrained
-          ? `Candidate constrained by reasoning path ${reasoningContext.reasoningPathId} for ${registry.displayLabel || registry.canonicalName}.`
-          : `Candidate inferred from existing editorial material for ${registry.displayLabel || registry.canonicalName}.`,
-        acceptableManifestations: [item.manifestation || title],
-        requiredDifferentials:
-          reasoningContext?.contradictoryDiagnosisIds?.slice(0, 6) ?? [],
-        expectedEvidence: this.expectedEvidenceMetadata(reasoningContext, item),
-        difficultyHints: this.generationMetadata(reasoningContext),
-        avoidTooEarly: false,
-        appliesToEducation: true,
-        appliesToCaseGeneration: true,
-        appliesToGraph: false,
-        status: 'CANDIDATE',
-        source: 'GENERATED',
-      } satisfies Omit<
-        Prisma.DiagnosisTeachingRuleCreateInput,
-        'diagnosisRegistry'
-      >);
-      if (candidates.length >= 8) break;
-    }
-
-    this.logger.log(
-      JSON.stringify({
-        event: reasoningContext?.constrained
-          ? 'teaching_rule.generate.constrained'
-          : 'teaching_rule.generate.unconstrained_fallback',
-        diagnosisRegistryId: registry.id,
-        reasoningPathId: reasoningContext?.reasoningPathId ?? null,
-        generatedCandidateCount: candidates.length,
-        warnings: reasoningContext?.warnings ?? [],
-      }),
-    );
-
-    return candidates;
-  }
-
-  private sectionItems(value: unknown, category: string) {
-    const items = Array.isArray(value) ? value : [];
-    return items
-      .map((item) => this.asObject(item))
-      .filter((item): item is Record<string, unknown> => Boolean(item))
-      .map((item) => ({
-        title:
-          this.firstString(
-            item.title,
-            item.content,
-            item.finding,
-            item.action,
-          ) ?? '',
-        manifestation:
-          this.firstString(
-            item.content,
-            item.discriminator,
-            item.whyItMatters,
-          ) ?? '',
-        category,
-      }));
-  }
-
-  private reasoningTeachingItems(
-    reasoningContext?: EducationalReasoningGenerationContext,
-  ) {
-    if (!reasoningContext?.constrained) return [];
-    return [
-      ...reasoningContext.requiredTeachingPoints.map((point) => ({
-        title: point,
-        category: 'differential_concept',
-        manifestation: point,
-      })),
-      ...reasoningContext.discriminatorEvidenceUsed.map((evidence) => ({
-        title: evidence,
-        category: 'finding_concept',
-        manifestation: evidence,
-      })),
-    ];
-  }
-
-  private briefTeachingItems(brief?: EditorialBriefContext) {
-    if (!brief) return [];
-    return [
-      ...brief.learningGoals.map((goal) => ({
-        title: goal,
-        category: 'recall_concept',
-        manifestation: goal,
-        importance: 'high',
-      })),
-      ...brief.requiredMimicIds.map((mimic) => ({
-        title: `Distinguish from ${mimic}`,
-        category: 'differential_concept',
-        manifestation: mimic,
-        importance: 'critical',
-      })),
-      ...brief.requiredPitfalls.map((pitfall) => ({
-        title: pitfall,
-        category: 'pitfall_concept',
-        manifestation: pitfall,
-        importance: 'high',
-      })),
-      ...brief.keyInvestigations.map((investigation) => ({
-        title: investigation,
-        category: 'investigation_concept',
-        manifestation: investigation,
-        importance: 'high',
-      })),
-      ...brief.managementAnchors.map((anchor) => ({
-        title: anchor,
-        category: 'management_concept',
-        manifestation: anchor,
-        importance: 'supporting',
-      })),
-      ...brief.caseGenerationGuidance.map((guidance) => ({
-        title: guidance,
-        category: 'differential_concept',
-        manifestation: guidance,
-        importance: 'supporting',
-      })),
-      ...brief.educationGuidance.map((guidance) => ({
-        title: guidance,
-        category: 'recall_concept',
-        manifestation: guidance,
-        importance: 'supporting',
-      })),
-      ...brief.difficultyGuidance.map((guidance) => ({
-        title: guidance,
-        category: 'pitfall_concept',
-        manifestation: guidance,
-        importance: 'supporting',
-      })),
-    ].filter((item) => !this.isWorkflowAdvice(item.title));
-  }
-
-  private isWorkflowAdvice(value: string) {
-    return /\b(?:activate a reasoning path|expand discriminator education|editor should review|before relying on generated)\b/i.test(
-      value,
-    );
-  }
-
-  private expectedEvidenceMetadata(
-    reasoningContext: EducationalReasoningGenerationContext | undefined,
-    item: { title: string; category: string; manifestation?: string },
-  ): Prisma.InputJsonValue {
-    return {
-      generation: 'teaching_rule',
-      item,
-      sourceEvidenceRelationshipIds:
-        reasoningContext?.sourceEvidenceRelationshipIds ?? [],
-      discriminatorEvidenceUsed:
-        reasoningContext?.discriminatorEvidenceUsed ?? [],
-      reasoningQualityWarnings:
-        reasoningContext?.reasoningQualityWarnings ?? [],
-    };
-  }
-
-  private generationMetadata(
-    reasoningContext?: EducationalReasoningGenerationContext,
-  ): Prisma.InputJsonValue {
-    if (!reasoningContext) {
-      return {
-        generatedBecause: {
-          constrained: false,
-          confidence: 'lower',
-          hallucinationRisk: 'high',
-          warnings: ['No reasoning path service was available.'],
+    const current = await this.getApprovedBriefContext(diagnosisRegistryId);
+    if (
+      !current ||
+      current.id !== brief.id ||
+      current.version !== brief.version ||
+      current.status !== brief.status
+    ) {
+      throw new ConflictException({
+        code: 'EDITORIAL_BRIEF_CHANGED_DURING_GENERATION',
+        message:
+          'Teaching Rule candidates were not persisted because the Editorial Brief changed during generation.',
+        expected: {
+          id: brief.id,
+          version: brief.version,
+          status: brief.status,
         },
-      };
+        current: current
+          ? {
+              id: current.id,
+              version: current.version,
+              status: current.status,
+            }
+          : null,
+      });
     }
-    return {
-      generatedBecause: {
-        constrained: reasoningContext.constrained,
-        confidence: reasoningContext.confidence,
-        hallucinationRisk: reasoningContext.hallucinationRisk,
-        reasoningPathId: reasoningContext.reasoningPathId,
-        reasoningGoal: reasoningContext.reasoningGoal,
-        sourceTeachingRelationshipIds:
-          reasoningContext.sourceTeachingRelationshipIds,
-        sourceEvidenceRelationshipIds:
-          reasoningContext.sourceEvidenceRelationshipIds,
-        coverageGapsAddressed: reasoningContext.coverageGapsAddressed,
-        discriminatorEvidenceUsed: reasoningContext.discriminatorEvidenceUsed,
-        generationCoverageSnapshot: reasoningContext.generationCoverageSnapshot,
-        warnings: reasoningContext.warnings,
-        reasoningQualityWarnings: reasoningContext.reasoningQualityWarnings,
-      },
-    };
   }
 
-  private caseTeachingUnits(cases: Array<{ explanation: unknown }>) {
-    return cases.flatMap((caseRecord) => {
-      const quality = this.asObject(
-        this.asObject(caseRecord.explanation)?.generationQuality,
-      );
-      const alignment = this.asObject(quality?.teachingAlignment);
-      const units = Array.isArray(alignment?.selectedUnits)
-        ? alignment.selectedUnits
-        : [];
-      return units
-        .map((unit) => this.asObject(unit))
-        .filter((unit): unit is Record<string, unknown> => Boolean(unit))
-        .map((unit) => ({
-          title: this.firstString(unit.label, unit.id) ?? '',
-          manifestation: this.firstString(unit.label, unit.id) ?? '',
-          category: 'recall_concept',
-        }));
-    });
+  private candidateDedupeKey(
+    candidate: Omit<
+      Prisma.DiagnosisTeachingRuleCreateInput,
+      'diagnosisRegistry'
+    >,
+  ) {
+    return [
+      candidate.stableKey,
+      candidate.category,
+      this.normalizeKey(candidate.title),
+    ].join(':');
   }
 
   private toDto(rule: DiagnosisTeachingRule) {
@@ -843,22 +628,10 @@ export class TeachingRulesAdminService {
       : null;
   }
 
-  private firstString(...values: unknown[]): string | null {
-    const value = values.find(
-      (item): item is string =>
-        typeof item === 'string' && item.trim().length > 0,
-    );
-    return value?.trim() ?? null;
-  }
-
   private stringArray(value: unknown): string[] {
     return Array.isArray(value)
       ? value.filter((item): item is string => typeof item === 'string')
       : [];
-  }
-
-  private compactTitle(value: string): string {
-    return value.replace(/\s+/g, ' ').trim().slice(0, 90);
   }
 
   private normalizeKey(value: string): string {

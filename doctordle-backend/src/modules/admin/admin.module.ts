@@ -26,6 +26,8 @@ import { DiagnosisEditorialWorkspaceService } from './diagnosis-editorial-worksp
 import { DiagnosisEditorialOnboardingService } from './diagnosis-editorial-onboarding.service';
 import { TeachingUnitCoverageService } from './teaching-unit-coverage.service';
 import { TeachingRulesAdminService } from './teaching-rules-admin.service';
+import { DiagnosisTeachingRuleGenerationService } from './diagnosis-teaching-rule-generation.service';
+import { TeachingRuleDraftQualityValidator } from './teaching-rule-draft-quality-validator.service';
 import { TargetedCaseGenerationService } from './targeted-case-generation.service';
 import { EditorialReviewInboxService } from './editorial-review-inbox.service';
 import { EditorialCoverageDashboardService } from './editorial-coverage-dashboard.service';
@@ -84,6 +86,8 @@ import { DiagnosisRegistryMergeExecutionService } from '../diagnosis-registry/di
     DiagnosisEditorialOnboardingService,
     TeachingUnitCoverageService,
     TeachingRulesAdminService,
+    DiagnosisTeachingRuleGenerationService,
+    TeachingRuleDraftQualityValidator,
     EditorialReviewInboxService,
     EditorialCoverageDashboardService,
     EditorialTriageProjectionService,

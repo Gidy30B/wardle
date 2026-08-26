@@ -1259,3 +1259,70 @@ except regression coverage. Provider unit tests must mock model responses.
 ## Remaining Risks
 
 Live provider smoke testing is optional and must not be required for CI.
+
+## WEOS SCAFFOLD-GEN-002 - Provider-Backed Teaching Rule Generation
+
+Date: 2026-08-26
+Repository: `C:\Users\user\DxLab-master-live`
+Starting HEAD: `00af3e212da3de3431fc071c68bab47c3b2c7552`
+Scope: implement SCAFFOLD-GEN-002 only, then commit and stop before
+SCAFFOLD-QUAL-001.
+
+## Objective
+
+Replace deterministic/generated Teaching Rule candidates from local downstream
+artifacts with provider-backed, diagnosis-specific Teaching Rule proposals
+derived from an exact approved/active Editorial Brief. Generated rules must
+remain `CANDIDATE`, carry validation/provenance, reject generic or workflow
+content, and leave scaffold readiness dependent on approved/active rules only.
+
+## Files Expected
+
+- `doctordle-backend/src/modules/admin/diagnosis-teaching-rule-generation.service.ts`
+- `doctordle-backend/src/modules/admin/teaching-rule-draft-quality-validator.service.ts`
+- `doctordle-backend/src/modules/admin/teaching-rules-admin.service.ts`
+- `doctordle-backend/src/modules/admin/teaching-rules-admin.service.spec.ts`
+- `doctordle-backend/src/modules/admin/admin.module.ts`
+- WEOS documentation notes
+
+## Constraints
+
+No schema migration unless necessary. No automatic approval/activation. No
+external evidence retrieval. No Education/Case content as bootstrap authority.
+No Graph Fact creation. Provider unit tests must mock model responses.
+
+## Progress
+
+- [x] Verify starting HEAD, branch and clean worktree.
+- [x] Audit current Teaching Rule service, schema, readiness and workspace gate.
+- [x] Add dedicated provider-backed Teaching Rule generator.
+- [x] Add dedicated Teaching Rule draft quality validator.
+- [x] Route candidate generation through approved Brief context and validation.
+- [x] Record provenance through existing narrow AI audit infrastructure.
+- [x] Preserve manual Teaching Rule lifecycle and downstream gates.
+- [x] Add focused tests.
+- [x] Update docs.
+- [x] Run verification and commit.
+
+## Discoveries
+
+- `DiagnosisTeachingRule` already has candidate status, generation source,
+  JSON metadata fields and version, so no new Teaching Rule candidate table is
+  needed for this package.
+- Current deterministic generation reads Education, Cases and graph candidates;
+  Package 2 must replace that bootstrap authority with the exact approved Brief.
+- Existing scaffold readiness already counts only approved/active rules and is
+  suitable for preserving the candidate-vs-ready boundary.
+- The obsolete deterministic Teaching Rule generation helper path read
+  Education, graph candidates and Case explanation material; it has been
+  removed so generated Teaching Rule candidates now flow through the approved
+  Brief/provider boundary only.
+
+## Remaining Risks
+
+Live provider smoke testing is optional and must not be required for CI.
+
+Verification completed: focused Teaching Rule generation/admin/validator specs,
+Editorial Brief/lifecycle/workspace regressions, Education/Case
+generation-context regressions, Graph extraction regression, backend build,
+dashboard tests, dashboard build and `git diff --check`.
