@@ -29,6 +29,7 @@ import {
 import { EducationEditorialPatternsService } from './education-editorial-patterns.service';
 import { EducationKnowledgeRulesService } from './education-knowledge-rules.service';
 import { EducationSchemaContractService } from './education-schema-contract.service';
+import { EducationSectionCoverageService } from './education-section-coverage.service';
 import type { EducationRegenerableSection } from './education-section-quality-classifier.service';
 import { DiagnosisCurriculumProviderService } from './diagnosis-curriculum-provider.service';
 import {
@@ -69,13 +70,6 @@ const SECTION_INSTRUCTION: Record<EducationRegenerableSection, string> = {
     'For each management anchor, use content for action and indication, whyItMatters for rationale, managementImplication for next step, and escalationImplication for consequence; do not repeat diagnostic pattern prose.',
 };
 
-const SECTION_MAX_ITEMS: Record<EducationRegenerableSection, number> = {
-  differentials: 5,
-  investigations: 4,
-  examPearls: 4,
-  management: 4,
-};
-
 type SectionRegenerationResult = {
   qualityReport: ReturnType<EducationDraftQualityValidator['validate']>;
 } & Awaited<
@@ -99,6 +93,7 @@ export class EducationSectionRegenerationService {
     private readonly reasoningPathService?: ReasoningPathService,
     private readonly reasoningDraftValidationService?: ReasoningDraftValidationService,
     private readonly diagnosisEducationCandidateService?: DiagnosisEducationCandidateService,
+    private readonly educationSectionCoverageService: EducationSectionCoverageService = new EducationSectionCoverageService(),
   ) {
     const env = getEnv();
     if (env.OPENAI_API_KEY) {
@@ -160,6 +155,40 @@ export class EducationSectionRegenerationService {
         diagnosisRegistryId: input.diagnosisRegistryId,
         section: input.section,
       });
+    const metadata = {
+      id: registry.id,
+      canonicalName: registry.canonicalName,
+      displayLabel: registry.displayLabel,
+      specialty: registry.specialty,
+      difficultyBand:
+        typeof registry.difficultyBand === 'string'
+          ? registry.difficultyBand
+          : null,
+      aliases: registry.aliases,
+    };
+    const teachingRules =
+      await this.diagnosisCurriculumProviderService.getRules(metadata);
+    const currentDraft = this.buildMergedDraft(registry.education, {
+      section: input.section,
+      replacement: registry.education[input.section] as Prisma.InputJsonArray,
+    });
+    const currentQualityReport = this.educationDraftQualityValidator.validate({
+      draft: currentDraft,
+      guidance: this.educationKnowledgeRulesService.getGuidance(metadata),
+      teachingRules,
+    });
+    const repairSpecification =
+      this.educationSectionCoverageService.buildRepairSpecification({
+        section: input.section,
+        baseEducationId: registry.education.id,
+        baseVersion: registry.education.version,
+        currentSection: registry.education[input.section],
+        teachingRules,
+        currentQuality: this.sectionQualityFindings(
+          currentQualityReport,
+          input.section,
+        ),
+      });
     const request = this.buildRequest({
       section: input.section,
       diagnosis: {
@@ -175,6 +204,7 @@ export class EducationSectionRegenerationService {
       constrainedReasoningContext:
         this.promptReasoningContext(reasoningContext),
       currentEducation: registry.education,
+      repairSpecification,
     });
 
     const startedAt = Date.now();
@@ -194,28 +224,30 @@ export class EducationSectionRegenerationService {
 
     const content = completion.choices[0]?.message?.content;
     const replacement = this.parseSectionResponse(content, input.section);
+    const coverageComparison = this.educationSectionCoverageService.compare({
+      repairSpecification,
+      proposedSection: replacement,
+    });
     const mergedDraft = this.buildMergedDraft(registry.education, {
       section: input.section,
       replacement,
     });
-    const metadata = {
-      id: registry.id,
-      canonicalName: registry.canonicalName,
-      displayLabel: registry.displayLabel,
-      specialty: registry.specialty,
-      difficultyBand:
-        typeof registry.difficultyBand === 'string'
-          ? registry.difficultyBand
-          : null,
-      aliases: registry.aliases,
-    };
-    const teachingRules =
-      await this.diagnosisCurriculumProviderService.getRules(metadata);
     const qualityReport = this.educationDraftQualityValidator.validate({
       draft: mergedDraft,
       guidance: this.educationKnowledgeRulesService.getGuidance(metadata),
       teachingRules,
     });
+    if (coverageComparison.coverageRegression) {
+      qualityReport.blockers.push(
+        'coverage_regression',
+        `coverage_regression_${input.section}`,
+      );
+      qualityReport.warnings.push(
+        ...coverageComparison.coverageRegressionConcepts.map(
+          (concept) => `coverage_regression:${concept.label}`,
+        ),
+      );
+    }
     const referencesWithMetadata = this.attachSectionGenerationMetadata(
       registry.education.references,
       reasoningContext,
@@ -255,6 +287,7 @@ export class EducationSectionRegenerationService {
           section: input.section,
           promptModel: OPENAI_SECTION_MODEL,
           promptVersion: 'diagnosis_education_section_regeneration.v2',
+          repairSpecification,
         },
         sourceArtifactIds: {
           reasoningPathId: reasoningContext?.reasoningPathId ?? null,
@@ -270,6 +303,8 @@ export class EducationSectionRegenerationService {
           metadata: {
             constrained: reasoningContext?.constrained ?? false,
             reasoningPathId: reasoningContext?.reasoningPathId ?? null,
+            repairSpecification,
+            coverageComparison,
           },
         },
         generationProvider: 'openai',
@@ -288,6 +323,9 @@ export class EducationSectionRegenerationService {
     compactGenerationContext: unknown;
     constrainedReasoningContext: unknown;
     currentEducation: DiagnosisEducation;
+    repairSpecification: ReturnType<
+      EducationSectionCoverageService['buildRepairSpecification']
+    >;
   }): ChatCompletionCreateParamsNonStreaming {
     const preserve = [
       'summary',
@@ -312,7 +350,10 @@ export class EducationSectionRegenerationService {
         json_schema: {
           name: 'diagnosis_education_section_regeneration',
           strict: true,
-          schema: this.sectionResponseSchema(input.section),
+          schema: this.sectionResponseSchema(
+            input.section,
+            input.repairSpecification.maxItems,
+          ),
         },
       },
       messages: [
@@ -344,12 +385,17 @@ export class EducationSectionRegenerationService {
             sectionInstruction: SECTION_INSTRUCTION[input.section],
             requiredType: SECTION_TYPE[input.section],
             currentSection: input.currentEducation[input.section],
+            repairSpecification: input.repairSpecification,
             constraints: [
               'Return an object with exactly the requested section key.',
-              `Use 3-${SECTION_MAX_ITEMS[input.section]} typed pearl objects.`,
+              `Use as many typed pearl objects as needed to preserve required coverage, from 1-${input.repairSpecification.maxItems}; do not add filler solely to reach an item count.`,
               'Each item must include id, type, title, content, whyItMatters, discriminator, managementImplication, escalationImplication, trapAvoided.',
               'Use null for unused optional canonical fields.',
               'Content must be 18-45 words and no more than 2 sentences.',
+              'Preserve concepts listed in repairSpecification.preserve when they already satisfy the section contract.',
+              'Repair concepts listed in repairSpecification.repair by improving weak layers without dropping the concept.',
+              'Add concepts listed in repairSpecification.add when they are required by Teaching Rules and missing from the current section.',
+              'Do not lose concepts listed in repairSpecification.mustNotLose; consolidation is allowed only when the proposed content still clearly covers each original concept.',
               'Prefer specific named signs, tests, mimics, mechanisms, and management anchors from compactGenerationContext.',
               'Use constrainedReasoningContext to anchor discriminators, escalation signals, evidence contrasts, and forbidden overlap. If unconstrained, mark unsupported reasoning for editor review instead of inventing it.',
               'Keep scoring systems and clinically established mnemonics in scoringSystems, not examPearls.',
@@ -435,7 +481,10 @@ export class EducationSectionRegenerationService {
     ] as Prisma.InputJsonValue;
   }
 
-  private sectionResponseSchema(section: EducationRegenerableSection) {
+  private sectionResponseSchema(
+    section: EducationRegenerableSection,
+    maxItems = 8,
+  ) {
     const typedPearlSchema = {
       type: 'object',
       additionalProperties: false,
@@ -470,8 +519,8 @@ export class EducationSectionRegenerationService {
       properties: {
         [section]: {
           type: 'array',
-          minItems: 3,
-          maxItems: SECTION_MAX_ITEMS[section],
+          minItems: 1,
+          maxItems,
           items: typedPearlSchema,
         },
       },
@@ -497,8 +546,8 @@ export class EducationSectionRegenerationService {
     const items = record ? record[section] : null;
     if (
       !Array.isArray(items) ||
-      items.length < 3 ||
-      items.length > SECTION_MAX_ITEMS[section]
+      items.length < 1 ||
+      items.length > 8
     ) {
       throw new BadRequestException(
         `AI returned invalid ${section} section shape`,
@@ -579,6 +628,30 @@ export class EducationSectionRegenerationService {
       pitfalls: education.pitfalls,
       recallPrompts: education.recallPrompts,
       references: education.references,
+    };
+  }
+
+  private sectionQualityFindings(
+    qualityReport: ReturnType<EducationDraftQualityValidator['validate']>,
+    section: EducationRegenerableSection,
+  ) {
+    const sectionPrefix = {
+      differentials: ['differential', 'comparative', 'mimic'],
+      investigations: ['investigation', 'scoring', 'test'],
+      examPearls: ['exam', 'finding'],
+      management: ['management'],
+    }[section];
+    const belongs = (code: string) =>
+      sectionPrefix.some((prefix) => code.includes(prefix));
+
+    return {
+      blockers: qualityReport.blockers.filter(belongs),
+      warnings: [
+        ...qualityReport.warnings.filter(belongs),
+        ...qualityReport.coverageWarnings
+          .filter((warning) => warning.section === section)
+          .map((warning) => `${warning.code}:${warning.item}`),
+      ],
     };
   }
 

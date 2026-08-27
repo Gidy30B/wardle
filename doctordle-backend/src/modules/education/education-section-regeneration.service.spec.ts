@@ -102,9 +102,14 @@ describe('EducationSectionRegenerationService', () => {
 
     expect(requestUserPayload(investigation.create)).toEqual(
       expect.objectContaining({
+        repairSpecification: expect.objectContaining({
+          section: 'investigations',
+          mustNotLose: expect.any(Array),
+        }),
         sectionInstruction: expect.stringContaining('expected finding/result'),
         constraints: expect.arrayContaining([
           expect.stringContaining('changes diagnostic reasoning'),
+          expect.stringContaining('Do not lose concepts listed in repairSpecification.mustNotLose'),
         ]),
       }),
     );
@@ -170,6 +175,56 @@ describe('EducationSectionRegenerationService', () => {
     expect(tx.diagnosisEducation.updateMany).not.toHaveBeenCalled();
   });
 
+  it('stores coverage regression findings when regeneration drops meaningful management concepts', async () => {
+    const education = buildEducation({
+      management: cerebralPalsyManagementCurrent(),
+    });
+    const { service, candidateService } = buildService(
+      education,
+      {
+        management: cerebralPalsyManagementWithoutLongitudinalCoverage(),
+      },
+      {
+        displayLabel: 'Cerebral Palsy',
+        canonicalName: 'cerebral_palsy',
+        specialty: 'Neurology',
+        category: 'Neurodevelopmental',
+        bodySystem: 'Neurologic',
+      },
+    );
+
+    await service.regenerateSection({
+      diagnosisRegistryId: 'registry-1',
+      section: 'management',
+      expectedVersion: 3,
+      userId: 'admin-1',
+    });
+
+    const candidateInput = candidateService.createSectionCandidate.mock.calls[0][0];
+    expect(candidateInput.validation.blockers).toEqual(
+      expect.arrayContaining([
+        'coverage_regression',
+        'coverage_regression_management',
+      ]),
+    );
+    expect(candidateInput.validation.metadata.coverageComparison).toEqual(
+      expect.objectContaining({
+        coverageRegression: true,
+        coverageRegressionConcepts: expect.arrayContaining([
+          expect.objectContaining({ label: 'Orthopaedic surveillance' }),
+          expect.objectContaining({ label: 'Family and long-term planning' }),
+        ]),
+      }),
+    );
+    expect(candidateInput.inputContext.repairSpecification).toEqual(
+      expect.objectContaining({
+        section: 'management',
+        baseVersion: 3,
+        maxItems: expect.any(Number),
+      }),
+    );
+  });
+
   it('rejects stale section regeneration before calling OpenAI', async () => {
     const education = buildEducation({ version: 3 });
     const { service, tx, create } = buildService(education, {
@@ -193,6 +248,7 @@ describe('EducationSectionRegenerationService', () => {
 function buildService(
   education: ReturnType<typeof buildEducation>,
   response: Record<string, unknown>,
+  registryOverrides: Record<string, unknown> = {},
 ) {
   const tx = {
     diagnosisEducation: {
@@ -220,6 +276,7 @@ function buildService(
         difficultyBand: 'BASIC',
         aliases: [{ term: 'Acute appendicitis' }],
         education,
+        ...registryOverrides,
       }),
     },
     $transaction: jest.fn(
@@ -336,4 +393,81 @@ function buildSection(type: string, prefix: string) {
     trapAvoided:
       'Avoid anchoring on the shared early presentation.',
   }));
+}
+
+function cerebralPalsyManagementCurrent() {
+  return [
+    managementPearl(
+      'multidisciplinary-diagnosis',
+      'Multidisciplinary diagnosis and GMFCS classification',
+      'Use multidisciplinary diagnosis and gross motor function classification to define severity, functional goals, and communication needs.',
+    ),
+    managementPearl(
+      'therapy',
+      'Physiotherapy and occupational therapy',
+      'Start physiotherapy and occupational therapy to preserve range, strengthen function, support equipment needs, and reduce contractures.',
+    ),
+    managementPearl(
+      'spasticity',
+      'Spasticity management',
+      'Treat spasticity when tone limits hygiene, comfort, sleep, or function, escalating from therapy to medicines or focal treatment.',
+    ),
+    managementPearl(
+      'comorbidity',
+      'Comorbidity screening',
+      'Screen for seizures, feeding difficulty, nutrition, pain, sleep, vision, hearing, and communication comorbidities during follow-up.',
+    ),
+    managementPearl(
+      'orthopaedic-surveillance',
+      'Orthopaedic surveillance',
+      'Maintain orthopaedic surveillance for hip displacement, scoliosis, gait deterioration, and contractures because mobility can worsen silently.',
+    ),
+    managementPearl(
+      'family-planning',
+      'Family and long-term planning',
+      'Include family goals, school support, equipment, transition planning, and respite needs in the long-term care plan.',
+    ),
+  ];
+}
+
+function cerebralPalsyManagementWithoutLongitudinalCoverage() {
+  return [
+    managementPearl(
+      'diagnosis',
+      'Multidisciplinary diagnosis and GMFCS classification',
+      'Coordinate multidisciplinary diagnosis with gross motor function classification to set severity, function, and communication goals.',
+    ),
+    managementPearl(
+      'therapy',
+      'Physiotherapy and occupational therapy',
+      'Use physiotherapy and occupational therapy when motor impairment limits function, range, equipment use, or participation.',
+    ),
+    managementPearl(
+      'spasticity',
+      'Spasticity management',
+      'Treat spasticity when tone causes pain, hygiene difficulty, sleep disruption, or function loss.',
+    ),
+    managementPearl(
+      'comorbidity',
+      'Comorbidity screening',
+      'Screen for seizures, feeding difficulty, nutrition, sleep, pain, vision, hearing, and communication comorbidities.',
+    ),
+  ];
+}
+
+function managementPearl(id: string, title: string, content: string) {
+  return {
+    id,
+    type: 'MANAGEMENT',
+    title,
+    content,
+    whyItMatters:
+      'This changes operational planning because specific management anchors shape follow-up.',
+    discriminator: 'Specific management anchor rather than generic supportive care.',
+    managementImplication:
+      'Use this anchor to guide monitoring, escalation, therapy, or family planning.',
+    escalationImplication:
+      'Delayed recognition can weaken longitudinal function or care coordination.',
+    trapAvoided: 'Avoid replacing specific management with generic advice.',
+  };
 }

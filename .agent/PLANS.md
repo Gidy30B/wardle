@@ -198,6 +198,142 @@ authorized outside normal governed UAT actions.
 ## Discoveries
 
 - Starting checkout is `master` at `9afda7a5e0e20bf209dd92acb591962b01ae5bea`.
+
+---
+
+# ExecPlan: WEOS UAT EDU-REGEN-002 Coverage-Preserving Section Regeneration
+
+## Purpose
+
+Make AI Education section regeneration repair-oriented and coverage-preserving:
+generated section candidates must explicitly record required/current concept
+coverage, identify lost or weakened concepts, and avoid silently replacing a
+clinically richer section with a tidier but narrower proposal.
+
+## Approved Authority
+
+Implementation package: user-provided `WEOS UAT REMEDIATION - EDU-REGEN-002
+Coverage-Preserving Education Section Regeneration`. Starting branch and commit:
+`master` at `19b54ed0ec6b877421206c58f77461ef48cb646f`. No remote push.
+
+## Current Behavior
+
+`EducationSectionRegenerationService.regenerateSection` validates
+`expectedVersion`, sends `currentSection` plus compact context to OpenAI, parses
+a bounded 3-N typed-pearl response, validates the merged draft, and creates a
+section `DiagnosisEducationCandidate`. The prompt says to avoid duplicates, but
+there is no structured preserve/repair/add/must-not-lose repair specification
+and no before/after coverage comparison in candidate metadata. Candidate apply
+already checks the candidate base Education version against current Education
+before changing material.
+
+## Required Invariant
+
+For supported regenerated sections (`differentials`, `investigations`,
+`examPearls`, `management`), the backend derives a deterministic repair spec
+from current section content, quality findings, and applicable Teaching Rules.
+The provider receives that spec. The resulting candidate stores before/after
+coverage classification. If a must-not-lose concept or applicable required
+Teaching Rule is lost, the candidate records `coverage_regression` and the lost
+concepts. Existing candidate-first review/apply/approval/publication boundaries
+remain unchanged.
+
+## Scope
+
+Included: regeneration service prompt/input context, deterministic concept
+extraction/comparison, validation metadata/finding persistence, cardinality
+bounded by coverage need, focused tests including Cerebral Palsy management
+loss, consolidation, duplicate removal, and stale-base apply.
+
+Excluded: schema migration unless unavoidable, AI provenance platform,
+constraint engine, Knowledge Graph changes, workspace redesign, direct
+Education mutation, auto-accept/apply, approval/publication changes, database
+reset, or destructive commands.
+
+## Files Expected To Change
+
+- `.agent/PLANS.md`
+- `doctordle-backend/src/modules/education/education-section-coverage.service.ts`
+- `doctordle-backend/src/modules/education/education-section-coverage.service.spec.ts`
+- `doctordle-backend/src/modules/education/education-section-regeneration.service.ts`
+- `doctordle-backend/src/modules/education/education-section-regeneration.service.spec.ts`
+- `doctordle-backend/src/modules/education/education-section-quality-classifier.service.ts`
+- `doctordle-backend/src/modules/education/education.module.ts`
+- targeted candidate stale-base spec if needed
+
+## Prohibited Changes
+
+No migration/backfill, no database reset, no live data mutation outside normal
+governed UI actions, no direct AI artifact application, no graph authority
+changes, no learner exposure changes, no publication-gating changes, and no
+quality threshold weakening.
+
+## Data Model Implications
+
+No schema change expected. Store repair spec and coverage comparison inside
+existing candidate JSON fields (`inputContext`, `validationWarnings`,
+`validationMetadata`, `validationSummary`).
+
+## API Implications
+
+Existing candidate APIs continue to return candidate JSON. No new route is
+expected; consumers can read additional metadata opportunistically.
+
+## Migration Plan
+
+None.
+
+## Compatibility Strategy
+
+Keep existing section candidate shape and candidate application semantics.
+Existing candidates simply lack the new coverage metadata.
+
+## Testing Strategy
+
+Run focused backend tests for section coverage comparison, section
+regeneration, draft quality validation, schema contract, candidate
+review/application/stale version handling, and then backend build, dashboard
+relevant tests/build, and `git diff --check`. Optional live UAT only after tests
+and without applying coverage-regressing candidates.
+
+## Rollback/Recovery
+
+Code-only changes can be reverted by the final commit. Since no schema/data
+migration is planned, rollback does not require data repair.
+
+## Progress
+
+- [x] Verify starting HEAD and worktree state.
+- [x] Read package and WEOS authority reminders.
+- [x] Audit current regeneration and candidate apply path.
+- [x] Implement deterministic repair specification and coverage comparison.
+- [x] Wire repair spec into prompt, parsing cardinality, and candidate metadata.
+- [x] Add Cerebral Palsy and section-specific regression tests.
+- [x] Run focused verification/builds.
+- [ ] Commit with requested message if fixed.
+
+## Discoveries
+
+- Current regeneration already passes `currentSection` to OpenAI but lacks a
+  structured repair spec or loss classification.
+- Existing candidate application rejects stale base versions with
+  `Education candidate base version is stale. Refresh before applying.`
+- The coverage comparator must avoid matching on repeated boilerplate in
+  `whyItMatters` and implication fields; concept identity now uses title plus
+  section-specific primary clinical content.
+- Focused backend tests, backend build, dashboard tests/build, and
+  `git diff --check` passed. `git diff --check` reported only CRLF warnings.
+
+## Decisions
+
+- Use existing candidate JSON metadata fields instead of adding schema.
+- Keep matching deterministic and bounded with token normalization and small
+  morphology handling; no medical ontology or graph changes in this package.
+
+## Remaining Risks
+
+- Initial deterministic concept matching will be intentionally bounded and not a
+  full medical ontology.
 - Current section regeneration already created candidates and did not directly
   mutate Education; the UAT defect was contract drift between structured fields
   and quality recognition.

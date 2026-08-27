@@ -108,6 +108,10 @@ const BLOCKER_SECTION_MAP: Record<string, EducationQualitySection> = {
   typed_pearl_examPearls_missing_operational_reasoning: 'examPearls',
   typed_pearl_management_missing_operational_reasoning: 'management',
   typed_pearl_pitfalls_missing_operational_reasoning: 'pitfalls',
+  coverage_regression_differentials: 'differentials',
+  coverage_regression_investigations: 'investigations',
+  coverage_regression_examPearls: 'examPearls',
+  coverage_regression_management: 'management',
 };
 
 const COVERAGE_SECTION_MAP: Record<string, EducationQualitySection> = {

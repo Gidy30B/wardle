@@ -20,6 +20,7 @@ import { EducationKnowledgeRulesService } from './education-knowledge-rules.serv
 import { EducationRevisionQualityAnalyzer } from './education-revision-quality-analyzer.service';
 import { EditorialLearningEngineService } from './editorial-learning-engine.service';
 import { EducationSchemaContractService } from './education-schema-contract.service';
+import { EducationSectionCoverageService } from './education-section-coverage.service';
 import { EducationSectionQualityClassifier } from './education-section-quality-classifier.service';
 import { EducationSectionRegenerationService } from './education-section-regeneration.service';
 import { EducationTeachingRulesService } from './education-teaching-rules.service';
@@ -52,6 +53,7 @@ import { DiagnosisRegistryLifecyclePolicyService } from '../diagnosis-registry/d
     DiagnosisRegistryLifecyclePolicyService,
     EducationDraftQualityValidator,
     EducationSchemaContractService,
+    EducationSectionCoverageService,
     EducationEditorialPatternsService,
     EducationRevisionQualityAnalyzer,
     EditorialLearningEngineService,
