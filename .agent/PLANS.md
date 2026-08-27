@@ -88,6 +88,153 @@ Record unresolved authority, technical, data, or verification risks.
 
 ---
 
+# ExecPlan: WEOS UAT Education Section Generation Contract Alignment
+
+## Purpose
+
+Ensure Investigation and Exam Pearl section regeneration produces candidates
+whose structured generation contract aligns with the quality validator, so
+clinically valid content is not blocked only by narrow lexical heuristics while
+true missing expected findings, interpretations, mechanisms, and diagnostic
+impact remain blocked or warned.
+
+## Approved Authority
+
+Implementation package: user-provided `WEOS UAT - ALIGN EDUCATION SECTION
+GENERATION WITH QUALITY VALIDATION`. Required starting branch and commit:
+`master` at `9afda7a5e0e20bf209dd92acb591962b01ae5bea`.
+
+## Current Behavior
+
+Live UAT reports regenerated Investigation and Exam Pearl candidates can reach
+100% teaching-rule coverage but still fail section quality with
+`investigations_all_missing_interpretation` or
+`exam_pearls_all_missing_mechanism`. Current generator, validator, schema
+contract, editorial patterns, and section classifier must be audited from local
+runtime code before changing behavior.
+
+## Required Invariant
+
+Generation-contract-compliant Investigation pearls with test, expected result,
+diagnostic interpretation, and operational consequence must not fail the
+all-missing interpretation blocker. Generation-contract-compliant Exam Pearls
+with bedside finding, mechanism, diagnostic impact, and mimic separator must not
+fail the all-missing mechanism blocker. Invalid generic text must still fail.
+
+## Scope
+
+Included: audit current section regeneration, candidate path, Education
+quality validator, section classifier, schema contract, editorial patterns,
+reasoning trust behavior; align shared section-field semantics where practical;
+update prompts; add round-trip contract and blocker-clearance tests; run
+focused backend/dashboard verification and non-destructive live checks.
+
+Excluded: lowering thresholds, removing blockers, direct Education mutation,
+schema migration, changing candidate/review/apply lifecycle, changing approval
+or publication semantics, weakening reasoning governance unless proven a narrow
+implementation defect.
+
+## Files Expected To Change
+
+- `.agent/PLANS.md`
+- `doctordle-backend/src/modules/education/education-section-regeneration.service.ts`
+- `doctordle-backend/src/modules/education/education-draft-quality-validator.service.ts`
+- `doctordle-backend/src/modules/education/education-schema-contract.service.ts`
+- focused specs for validator, classifier, regeneration, schema contract, and
+  editorial patterns as needed
+
+## Prohibited Changes
+
+No schema/migration. No DB repair or backfill. No generated candidate
+auto-accept/apply. No direct AI mutation. No quality threshold lowering or
+magic-word prompt gaming.
+
+## Data Model Implications
+
+None expected.
+
+## API Implications
+
+None expected unless existing response typing proves inconsistent with the
+canonical field contract.
+
+## Migration Plan
+
+None.
+
+## Compatibility Strategy
+
+Keep existing candidate lifecycle and section JSON shape. Align prompt,
+structured contract, and validator interpretation using additive helper
+semantics rather than changing persisted artifacts.
+
+## Testing Strategy
+
+Run EducationDraftQualityValidator, EducationSectionQualityClassifier,
+EducationSectionRegenerationService, EducationSchemaContractService,
+EducationEditorialPatternsService specs, Education candidate/application
+regressions, backend build, dashboard relevant tests/build, and
+`git diff --check`. Perform live UAT only through governed UI/API actions if
+safe credentials/context are available; otherwise report the auth/data blocker
+precisely.
+
+## Rollback/Recovery
+
+Code-only changes can be reverted by the final commit. No data changes are
+authorized outside normal governed UAT actions.
+
+## Progress
+
+- [x] Verify starting HEAD and tracked clean worktree.
+- [x] Audit current generation, validation, schema and classifier contracts.
+- [x] Inspect generated/applied candidate examples if safely available.
+- [x] Align shared Investigation and Exam Pearl semantics.
+- [x] Update regeneration prompt contract.
+- [x] Add round-trip and blocker-clearance tests.
+- [x] Audit reasoning trust/blocker mismatch and report recommendation.
+- [x] Run focused verification/builds/live checks.
+- [x] Commit if fixed.
+
+## Discoveries
+
+- Starting checkout is `master` at `9afda7a5e0e20bf209dd92acb591962b01ae5bea`.
+- Current section regeneration already created candidates and did not directly
+  mutate Education; the UAT defect was contract drift between structured fields
+  and quality recognition.
+- Recent local Cerebral Palsy section candidates showed generated
+  Investigations using phrases like "helps exclude" and "characterizes", and
+  Exam Pearls using "reflecting"; these were clinically meaningful but missed
+  by narrow validator patterns.
+- Candidate validation runs scored the merged Education artifact, so unrelated
+  weak sections could appear in a section candidate's validation packet; this
+  package preserved that behavior and fixed only semantic recognition.
+- `ReasoningDraftValidationService` intentionally maps `trustScore < 45` to
+  `BLOCKED` even when `blockers=[]`; the local Education run with
+  `trustScore=21` had warnings for unconstrained draft, no active evidence
+  overlap, and absent/generic discriminator.
+- Focused backend specs, candidate/application regressions, backend build,
+  dashboard tests/build, Docker compose build, service recreation, health
+  check, and `git diff --check` passed.
+- Read-only live validation of existing Cerebral Palsy Education version 7
+  after rebuild returned `blockers: []`; item-level Investigation and Exam
+  warnings remain for weaker individual cards.
+
+## Decisions
+
+- Preserve section blockers and thresholds until proven code-level defect; fix
+  contract semantics rather than scoring policy.
+- Keep reasoning trust governance unchanged in this package; recommend a later
+  clarification so score-derived `BLOCKED` is surfaced distinctly from
+  explicit blocker-code-derived `BLOCKED`.
+
+## Remaining Risks
+
+- Governed regenerate/review/apply live UAT was not simulated with direct DB
+  mutation. The package was verified through tests, rebuilt services, and
+  read-only validation of the already-applied local UAT artifact.
+
+---
+
 # ExecPlan: WEOS UAT P0 Cross-Diagnosis Curriculum Leakage
 
 ## Purpose

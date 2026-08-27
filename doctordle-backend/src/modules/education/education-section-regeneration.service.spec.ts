@@ -78,6 +78,46 @@ describe('EducationSectionRegenerationService', () => {
     expect(tx.diagnosisEducation.updateMany).not.toHaveBeenCalled();
   });
 
+  it('sends section-specific canonical field contracts in regeneration prompts', async () => {
+    const education = buildEducation();
+    const investigation = buildService(education, {
+      investigations: buildSection('INVESTIGATION', 'ketones'),
+    });
+    const exam = buildService(education, {
+      examPearls: buildSection('EXAM', 'rovsing'),
+    });
+
+    await investigation.service.regenerateSection({
+      diagnosisRegistryId: 'registry-1',
+      section: 'investigations',
+      expectedVersion: 3,
+      userId: 'admin-1',
+    });
+    await exam.service.regenerateSection({
+      diagnosisRegistryId: 'registry-1',
+      section: 'examPearls',
+      expectedVersion: 3,
+      userId: 'admin-1',
+    });
+
+    expect(requestUserPayload(investigation.create)).toEqual(
+      expect.objectContaining({
+        sectionInstruction: expect.stringContaining('expected finding/result'),
+        constraints: expect.arrayContaining([
+          expect.stringContaining('changes diagnostic reasoning'),
+        ]),
+      }),
+    );
+    expect(requestUserPayload(exam.create)).toEqual(
+      expect.objectContaining({
+        sectionInstruction: expect.stringContaining('mechanism explaining why'),
+        constraints: expect.arrayContaining([
+          expect.stringContaining('diagnostic probability'),
+        ]),
+      }),
+    );
+  });
+
   it('stores published education as the exact candidate base version', async () => {
     const education = buildEducation({
       editorialStatus: DiagnosisEducationStatus.PUBLISHED,
@@ -234,6 +274,14 @@ function buildService(
   ).openaiClient = { chat: { completions: { create } } };
 
   return { service, tx, create, candidateService, candidate };
+}
+
+function requestUserPayload(create: jest.Mock) {
+  const request = create.mock.calls[0][0];
+  const userMessage = request.messages.find(
+    (message: { role: string }) => message.role === 'user',
+  );
+  return JSON.parse(userMessage.content);
 }
 
 function buildEducation(overrides: Partial<Record<string, unknown>> = {}) {

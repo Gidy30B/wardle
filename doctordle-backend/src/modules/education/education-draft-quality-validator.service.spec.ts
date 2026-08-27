@@ -197,6 +197,148 @@ describe('EducationDraftQualityValidator', () => {
     expect(result.scores.graphReadinessScore).toBeGreaterThanOrEqual(0);
   });
 
+  it('accepts generation-contract-compliant investigation interpretations with synonymous clinical language', () => {
+    const result = validator.validate({
+      draft: buildQualityDraft({
+        investigations: [
+          investigationPearl({
+            id: 'pla2r-antibody',
+            title: 'PLA2R antibody',
+            content:
+              'PLA2R antibody testing demonstrates a positive disease-specific signal consistent with primary membranous nephropathy.',
+            whyItMatters:
+              'A positive result increases the likelihood of primary membranous nephropathy and makes lupus nephritis less likely.',
+            managementImplication:
+              'Use the result to prioritize secondary-cause review and decide whether biopsy is still needed.',
+          }),
+          investigationPearl({
+            id: 'urinalysis',
+            title: 'Urinalysis',
+            content:
+              'Urinalysis shows heavy proteinuria with bland sediment rather than active hematuria or cellular casts.',
+            whyItMatters:
+              'Bland nephrotic sediment points toward podocyte injury and argues against nephritic glomerulonephritis.',
+            managementImplication:
+              'Pair urine findings with albumin, creatinine, and serologic testing before immunosuppression decisions.',
+          }),
+          investigationPearl({
+            id: 'serum-albumin',
+            title: 'Serum albumin',
+            content:
+              'Serum albumin is reduced with elevated urine protein quantification, demonstrating nephrotic syndrome severity.',
+            whyItMatters:
+              'The severity result stratifies thrombotic risk and decreases confidence in transient benign proteinuria.',
+            managementImplication:
+              'Use severity to guide anticoagulation discussion, edema treatment, and urgency of nephrology review.',
+          }),
+          investigationPearl({
+            id: 'renal-biopsy',
+            title: 'Renal biopsy',
+            content:
+              'Renal biopsy reveals subepithelial immune deposits, a finding consistent with membranous nephropathy.',
+            whyItMatters:
+              'The histologic pattern confirms immune-complex localization and distinguishes it from minimal change disease.',
+            managementImplication:
+              'Use biopsy when serology or clinical context leaves secondary causes or alternate pathology unresolved.',
+          }),
+        ],
+      }),
+    });
+
+    expect(result.blockers).not.toContain(
+      'investigations_all_missing_interpretation',
+    );
+    expect(result.warnings).not.toContain(
+      'investigation_missing_expected_finding',
+    );
+    expect(result.warnings).not.toContain('investigation_missing_interpretation');
+  });
+
+  it('preserves investigation blockers for generic test-usefulness prose', () => {
+    const result = validator.validate({
+      draft: buildQualityDraft({
+        investigations: [
+          investigationPearl({
+            id: 'generic-ct',
+            title: 'CT',
+            content: 'Order CT because it is useful.',
+            whyItMatters: 'It is helpful and supports the diagnosis.',
+            managementImplication: null,
+          }),
+        ],
+      }),
+    });
+
+    expect(result.blockers).toContain(
+      'investigations_all_missing_interpretation',
+    );
+    expect(result.warnings).toContain('investigation_missing_expected_finding');
+    expect(result.warnings).toContain('investigation_missing_interpretation');
+  });
+
+  it('accepts generation-contract-compliant exam mechanisms and diagnostic impact with synonymous clinical language', () => {
+    const result = validator.validate({
+      draft: buildQualityDraft({
+        examPearls: [
+          examPearl({
+            id: 'pitting-edema',
+            title: 'Pitting edema',
+            content:
+              'Pitting edema results from reduced plasma oncotic pressure as nephrotic protein loss shifts fluid into tissues.',
+            whyItMatters:
+              'This finding increases likelihood of nephrotic syndrome and makes isolated dependent swelling less likely.',
+            discriminator:
+              'Generalized edema with heavy proteinuria rather than isolated venous stasis.',
+          }),
+          examPearl({
+            id: 'periorbital-edema',
+            title: 'Periorbital edema',
+            content:
+              'Periorbital edema is caused by albumin loss and loose eyelid tissue accumulating fluid after recumbency.',
+            whyItMatters:
+              'Morning facial swelling points toward systemic protein loss and argues against isolated ankle venous disease.',
+            discriminator:
+              'Facial plus dependent edema rather than isolated ankle swelling.',
+          }),
+          examPearl({
+            id: 'blood-pressure',
+            title: 'Blood pressure pattern',
+            content:
+              'Preserved blood pressure can arise because membranous nephropathy causes nephrotic protein loss without early nephritic inflammation.',
+            whyItMatters:
+              'The pattern decreases likelihood of rapidly inflammatory nephritic disease when urine sediment is bland.',
+            discriminator:
+              'Bland nephrotic syndrome rather than hypertensive nephritic presentation.',
+          }),
+        ],
+      }),
+    });
+
+    expect(result.blockers).not.toContain('exam_pearls_all_missing_mechanism');
+    expect(result.warnings).not.toContain('exam_missing_mechanism');
+    expect(result.warnings).not.toContain('exam_missing_diagnostic_impact');
+  });
+
+  it('preserves exam mechanism blockers for generic diagnostic support prose', () => {
+    const result = validator.validate({
+      draft: buildQualityDraft({
+        examPearls: [
+          examPearl({
+            id: 'generic-murphy',
+            title: 'Murphy sign',
+            content: 'Murphy sign supports the diagnosis.',
+            whyItMatters: 'It supports the diagnosis.',
+            discriminator: null,
+          }),
+        ],
+      }),
+    });
+
+    expect(result.blockers).toContain('exam_pearls_all_missing_mechanism');
+    expect(result.warnings).toContain('exam_missing_mechanism');
+    expect(result.warnings).toContain('exam_missing_diagnostic_impact');
+  });
+
   it('warns when appendicitis draft misses expected named signs', () => {
     const result = validator.validate({
       guidance: rules.getGuidance({ canonicalName: 'appendicitis' }),
@@ -802,6 +944,40 @@ describe('EducationDraftQualityValidator', () => {
     expect(result.coverageScores.overall).toBe(1);
   });
 });
+
+function investigationPearl(
+  overrides: Partial<Record<string, unknown>>,
+): Record<string, unknown> {
+  return {
+    id: 'investigation',
+    type: 'INVESTIGATION',
+    title: 'Investigation',
+    content: '',
+    whyItMatters: '',
+    discriminator: null,
+    managementImplication: 'Use the result to guide the next diagnostic step.',
+    escalationImplication: null,
+    trapAvoided: null,
+    ...overrides,
+  };
+}
+
+function examPearl(
+  overrides: Partial<Record<string, unknown>>,
+): Record<string, unknown> {
+  return {
+    id: 'exam-pearl',
+    type: 'EXAM',
+    title: 'Exam finding',
+    content: '',
+    whyItMatters: '',
+    discriminator: 'Specific bedside separator rather than a nonspecific mimic.',
+    managementImplication: null,
+    escalationImplication: null,
+    trapAvoided: null,
+    ...overrides,
+  };
+}
 
 function buildQualityDraft(overrides: Record<string, unknown> = {}) {
   return {

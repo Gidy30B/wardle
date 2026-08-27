@@ -62,9 +62,9 @@ const SECTION_INSTRUCTION: Record<EducationRegenerableSection, string> = {
   differentials:
     'For each mimic, use title for diagnosis, content for whyConfused overlap/comparison, discriminator for keySeparator, and trapAvoided for classicTrap.',
   investigations:
-    'For each test, use content for test plus expected finding, whyItMatters for interpretation or trap, and managementImplication only for direct use or limit of the result.',
+    'For each test, use title for the investigation/test; content for the test plus expected finding/result; whyItMatters for diagnostic interpretation of that result; and managementImplication for the operational consequence, next step, or limitation.',
   examPearls:
-    'For each exam pearl, use content for named bedside finding plus mechanism, whyItMatters for diagnostic impact, and discriminator for the mimic separator; do not place scoring systems here.',
+    'For each exam pearl, use title for the named bedside finding; content for the mechanism explaining why the sign occurs; whyItMatters for diagnostic impact or probability shift; and discriminator for the mimic separator where applicable; do not place scoring systems here.',
   management:
     'For each management anchor, use content for action and indication, whyItMatters for rationale, managementImplication for next step, and escalationImplication for consequence; do not repeat diagnostic pattern prose.',
 };
@@ -354,7 +354,8 @@ export class EducationSectionRegenerationService {
               'Use constrainedReasoningContext to anchor discriminators, escalation signals, evidence contrasts, and forbidden overlap. If unconstrained, mark unsupported reasoning for editor review instead of inventing it.',
               'Keep scoring systems and clinically established mnemonics in scoringSystems, not examPearls.',
               'Differentials must include diagnosis/title, whyConfused/content, keySeparator/discriminator, and classicTrap/trapAvoided.',
-              'Investigations must include interpretation or trap, not generic test usefulness prose.',
+              'Investigations must name the expected finding/result and explain how that result changes diagnostic reasoning or next-step interpretation; do not use generic test usefulness prose.',
+              'Exam pearls must name a bedside finding, explain the physiologic or pathologic mechanism, and state how the finding changes diagnostic probability or separates a mimic.',
               'Management must state action principles without repeating diagnostic pattern, exam signs, or investigation interpretation.',
             ],
           }),

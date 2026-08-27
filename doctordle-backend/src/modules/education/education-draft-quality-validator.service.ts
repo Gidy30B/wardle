@@ -844,14 +844,20 @@ export class EducationDraftQualityValidator {
       const scoringSystemComponents = this.asArray(object.components);
       const scoringSystemCaution = this.cleanString(object.caution);
       const test = pearl.title || this.cleanString(object.name) || pearl.content;
-      const expectedFinding = OBJECTIVE_FINDING_PATTERN.test(
-        pearl.content ?? text,
-      ) || scoringSystemComponents.length > 0;
+      const expectedFinding =
+        this.educationSchemaContractService.hasInvestigationExpectedFinding(
+          item,
+        ) || scoringSystemComponents.length > 0;
       const interpretation = pearl.whyItMatters || scoringSystemUse;
       const operationalUse =
         pearl.managementImplication || scoringSystemCaution || scoringSystemUse;
       const hasInterpretation =
-        interpretation !== null && INTERPRETATION_PATTERN.test(interpretation);
+        this.educationSchemaContractService.hasInvestigationInterpretation(
+          item,
+        ) ||
+        Boolean(
+          scoringSystemUse && INTERPRETATION_PATTERN.test(scoringSystemUse),
+        );
 
       if (!expectedFinding) {
         warnings.add('investigation_missing_expected_finding');
@@ -873,7 +879,9 @@ export class EducationDraftQualityValidator {
         Boolean(test || this.cleanString(object.content)),
         expectedFinding,
         hasInterpretation,
-        INTERPRETATION_PATTERN.test(text),
+        this.educationSchemaContractService.hasInvestigationInterpretation(
+          item,
+        ) || INTERPRETATION_PATTERN.test(text),
         !GENERIC_TEST_USEFULNESS_PATTERN.test(text),
         Boolean(operationalUse),
       ]);
@@ -1022,23 +1030,21 @@ export class EducationDraftQualityValidator {
         'discriminator',
       ]);
       const finding = pearl.title || pearl.content;
-      const mechanism = pearl.content;
       const diagnosticImpact = pearl.whyItMatters;
       const genericSupport = /\bsupports (?:the )?diagnosis\b/i.test(text);
       const symptomAsExam = finding ? SYMPTOM_AS_EXAM_PATTERN.test(finding) : false;
       const labAsExam = finding ? LAB_AS_EXAM_PATTERN.test(finding) : false;
       const hasMechanism =
-        Boolean(mechanism) &&
-        /\b(?:because|due to|from|reflects|suggests|indicates|produces|irritat|reproduc|provok|extension|palpation|maneuver|manoeuvre)\b/i.test(
-          mechanism ?? '',
-        );
+        this.educationSchemaContractService.hasExamMechanism(item);
+      const hasDiagnosticImpact =
+        this.educationSchemaContractService.hasDiagnosticImpact(item);
 
       if (!hasMechanism) {
         warnings.add('exam_missing_mechanism');
       } else {
         mechanismCount += 1;
       }
-      if (!diagnosticImpact || this.isGenericWhyLayer(diagnosticImpact)) {
+      if (!diagnosticImpact || !hasDiagnosticImpact) {
         warnings.add('exam_missing_diagnostic_impact');
       }
       if (genericSupport) {
@@ -1054,7 +1060,7 @@ export class EducationDraftQualityValidator {
       return this.scoreParts([
         Boolean(finding),
         hasMechanism,
-        Boolean(diagnosticImpact && !this.isGenericWhyLayer(diagnosticImpact)),
+        Boolean(diagnosticImpact && hasDiagnosticImpact),
         !genericSupport,
         !symptomAsExam,
         !labAsExam,

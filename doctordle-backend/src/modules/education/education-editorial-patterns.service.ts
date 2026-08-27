@@ -17,17 +17,8 @@ export type EducationEditorialPatternComplianceScores = Record<
 const COMPARISON_PATTERN =
   /\b(?:unlike|rather than|whereas|compared with|favors|favours|argues against|distinguish|differentiate|over|instead of|less likely|more likely)\b/i;
 
-const INTERPRETATION_PATTERN =
-  /\b(?:supports|favors|favours|suggests|indicates|argues against|rules out|distinguishes|differentiate|confirms|raises suspicion|lowers suspicion|elevated|reduced|normal|positive|negative)\b/i;
-
-const MECHANISM_PATTERN =
-  /\b(?:because|due to|from|reflects|suggests|indicates|produces|irritat|reproduc|provok|extension|palpation|maneuver|manoeuvre)\b/i;
-
 const INDICATION_PATTERN =
   /\b(?:when|if|for|with|suspected|confirmed|severe|high risk|high-risk|unstable|focal|persistent|progressive)\b/i;
-
-const OBJECTIVE_FINDING_PATTERN =
-  /\b(?:shows?|finding|findings|positive|negative|elevated|reduced|low|high|normal|abnormal|leukocytosis|ketone|ketones|acidosis|consolidation|infiltrate|troponin|lactate|bnp|wbc|ph|bicarbonate|creatinine|score)\b/i;
 
 @Injectable()
 export class EducationEditorialPatternsService {
@@ -97,8 +88,8 @@ export class EducationEditorialPatternsService {
     ]);
     return this.scoreParts([
       Boolean(pearl.title || pearl.content),
-      OBJECTIVE_FINDING_PATTERN.test(pearl.content ?? ''),
-      Boolean(pearl.whyItMatters && INTERPRETATION_PATTERN.test(pearl.whyItMatters)),
+      this.schemaContractService.hasInvestigationExpectedFinding(item),
+      this.schemaContractService.hasInvestigationInterpretation(item),
       Boolean(pearl.managementImplication),
       !/\b(?:useful test|helps diagnose|important test)\b/i.test(text),
     ]);
@@ -113,8 +104,8 @@ export class EducationEditorialPatternsService {
     ]);
     return this.scoreParts([
       Boolean(pearl.title || pearl.content),
-      Boolean(pearl.content && MECHANISM_PATTERN.test(pearl.content)),
-      Boolean(pearl.whyItMatters && INTERPRETATION_PATTERN.test(pearl.whyItMatters)),
+      this.schemaContractService.hasExamMechanism(item),
+      this.schemaContractService.hasDiagnosticImpact(item),
       Boolean(pearl.discriminator || COMPARISON_PATTERN.test(text)),
     ]);
   }
