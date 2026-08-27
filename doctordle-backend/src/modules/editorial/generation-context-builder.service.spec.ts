@@ -286,6 +286,78 @@ describe('GenerationContextBuilder', () => {
     );
   });
 
+  it('does not leak myocardial infarction teaching units into unrelated diagnoses', async () => {
+    const { service } = buildService(
+      buildProjection({
+        diagnosis: {
+          ...buildProjection().diagnosis,
+          displayLabel: 'Dermatitis Herpetiformis',
+          canonicalName: 'dermatitis herpetiformis',
+          specialty: 'Dermatology',
+          category: 'Autoimmune blistering disease',
+          bodySystem: 'Skin',
+          aliases: ['Duhring disease'],
+        },
+        learningGoals: ['Teach extensor grouped vesicles and IgA pattern.'],
+        requiredInvestigations: ['direct immunofluorescence'],
+        requiredMimics: ['bullous pemphigoid'],
+        keyDiscriminators: [
+          {
+            finding: 'Granular IgA in dermal papillae',
+            targetDiagnosis: 'bullous pemphigoid',
+            rationale:
+              'Granular IgA supports dermatitis herpetiformis rather than pemphigoid.',
+            source: 'brief:brief-1',
+          },
+        ],
+      }),
+    );
+
+    const context = await service.build({
+      diagnosisRegistryId: 'registry-dermatology',
+      purpose: 'education',
+    });
+
+    expect(context.requiredTeachingUnits).toEqual([]);
+    expect(context.suggestedManifestations).toEqual([]);
+    expect(JSON.stringify(context)).not.toContain('Troponin dynamics');
+    expect(JSON.stringify(context)).not.toContain('Dissection and PE mimics');
+  });
+
+  it('resolves ischemic stroke context to stroke teaching units rather than MI alias substrings', async () => {
+    const { service } = buildService(
+      buildProjection({
+        diagnosis: {
+          ...buildProjection().diagnosis,
+          displayLabel: 'Ischemic Stroke',
+          canonicalName: 'ischemic stroke',
+          specialty: 'Neurology',
+          category: 'Vascular',
+          bodySystem: 'Neurologic',
+          aliases: ['CVA'],
+        },
+      }),
+    );
+
+    const context = await service.build({
+      diagnosisRegistryId: 'registry-stroke',
+      purpose: 'case',
+    });
+
+    expect(context.requiredTeachingUnits.map((unit) => unit.label)).toEqual(
+      expect.arrayContaining([
+        'Focal neurologic deficit',
+        'Last-known-well time',
+      ]),
+    );
+    expect(context.requiredTeachingUnits.map((unit) => unit.label)).not.toEqual(
+      expect.arrayContaining([
+        'Troponin dynamics',
+        'Dissection and PE mimics',
+      ]),
+    );
+  });
+
   it('uses hard difficulty to delay giveaway manifestations in case context', async () => {
     const { service } = buildService(
       buildProjection({

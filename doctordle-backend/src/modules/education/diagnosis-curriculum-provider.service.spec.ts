@@ -196,6 +196,152 @@ describe('DiagnosisCurriculumProviderService', () => {
     });
   });
 
+  it('does not resolve myocardial infarction rules from substring matches in unrelated diagnoses', async () => {
+    const dermatology = legacyService.getRules({
+      canonicalName: 'dermatitis herpetiformis',
+      displayLabel: 'Dermatitis Herpetiformis',
+    });
+    const renal = legacyService.getRules({
+      canonicalName: 'alport syndrome',
+      displayLabel: 'Alport Syndrome',
+      aliases: ['hereditary nephritis'],
+    });
+    const metabolicBone = legacyService.getRules({
+      canonicalName: 'hypophosphatemic rickets',
+      displayLabel: 'Hypophosphatemic Rickets',
+    });
+    const stroke = legacyService.getRules({
+      canonicalName: 'ischemic stroke',
+      displayLabel: 'Ischemic Stroke',
+    });
+
+    expect(dermatology).toBeNull();
+    expect(renal).toBeNull();
+    expect(metabolicBone).toBeNull();
+    expect(stroke?.diagnosisKey).toBe('ischemic stroke');
+    expect(stroke?.teachingUnits.map((unit) => unit.label)).not.toEqual(
+      expect.arrayContaining([
+        'Troponin dynamics',
+        'Dissection and PE mimics',
+      ]),
+    );
+  });
+
+  it('matches myocardial infarction only by exact phrase or exact alias token', () => {
+    expect(
+      legacyService.getRules({ canonicalName: 'acute myocardial infarction' })
+        ?.diagnosisKey,
+    ).toBe('myocardial infarction');
+    expect(legacyService.getRules({ canonicalName: 'STEMI' })?.diagnosisKey).toBe(
+      'myocardial infarction',
+    );
+    expect(
+      legacyService.getRules({ canonicalName: 'remote mi' })?.diagnosisKey,
+    ).toBe('myocardial infarction');
+    expect(
+      legacyService.getRules({ canonicalName: 'herpetiformis' }),
+    ).toBeNull();
+  });
+
+  it('keeps sequential legacy resolutions isolated across unrelated diagnoses', async () => {
+    const myocardial = await provider.getRules({
+      canonicalName: 'myocardial infarction',
+    });
+    const dermatology = await provider.getRules({
+      canonicalName: 'dermatitis herpetiformis',
+    });
+    const appendicitis = await provider.getRules({ canonicalName: 'appendicitis' });
+
+    expect(myocardial?.teachingUnits.map((unit) => unit.label)).toEqual(
+      expect.arrayContaining([
+        'Troponin dynamics',
+        'Dissection and PE mimics',
+      ]),
+    );
+    expect(dermatology).toBeNull();
+    expect(appendicitis?.diagnosisKey).toBe('appendicitis');
+    expect(appendicitis?.teachingUnits.map((unit) => unit.label)).not.toEqual(
+      expect.arrayContaining([
+        'Troponin dynamics',
+        'Dissection and PE mimics',
+      ]),
+    );
+  });
+
+  it('keeps parallel legacy resolutions isolated across unrelated diagnoses', async () => {
+    const [myocardial, dermatology, renal, appendicitis] = await Promise.all([
+      provider.getRules({ canonicalName: 'myocardial infarction' }),
+      provider.getRules({ canonicalName: 'dermatitis herpetiformis' }),
+      provider.getRules({ canonicalName: 'alport syndrome' }),
+      provider.getRules({ canonicalName: 'appendicitis' }),
+    ]);
+
+    expect(myocardial?.diagnosisKey).toBe('myocardial infarction');
+    expect(dermatology).toBeNull();
+    expect(renal).toBeNull();
+    expect(appendicitis?.diagnosisKey).toBe('appendicitis');
+  });
+
+  it('returns fresh legacy rule-pack objects on repeated calls', () => {
+    const first = legacyService.getRules({ canonicalName: 'myocardial infarction' });
+    const second = legacyService.getRules({
+      canonicalName: 'myocardial infarction',
+    });
+
+    expect(first).not.toBe(second);
+    expect(first?.teachingUnits[0]).not.toBe(second?.teachingUnits[0]);
+    first!.teachingUnits[0].label = 'Mutated outside caller boundary';
+    first!.requiredDifferentials.push('Mutated differential');
+
+    const third = legacyService.getRules({ canonicalName: 'myocardial infarction' });
+    expect(third?.teachingUnits[0].label).toBe('Ischemic symptom pattern');
+    expect(third?.requiredDifferentials).not.toContain('Mutated differential');
+  });
+
+  it('selects persisted teaching rules only for the exact requested registry id', async () => {
+    const appendicitisRules = legacyService.getRules({ canonicalName: 'appendicitis' });
+    const findMany = jest.fn(({ where }) => {
+      if (where.diagnosisRegistryId !== 'registry-appendicitis') {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve(
+        persistedRowsFor(appendicitisRules!, 'registry-appendicitis'),
+      );
+    });
+    const persistedProvider = new DiagnosisCurriculumProviderService(
+      { diagnosisTeachingRule: { findMany } } as never,
+      legacyService,
+    );
+
+    const unrelated = await persistedProvider.getRules({
+      id: 'registry-dermatology',
+      canonicalName: 'dermatitis herpetiformis',
+    });
+    const exact = await persistedProvider.getRules({
+      id: 'registry-appendicitis',
+      canonicalName: 'appendicitis',
+    });
+
+    expect(unrelated).toBeNull();
+    expect(exact?.source).toBe('persisted_teaching_rule');
+    expect(findMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          diagnosisRegistryId: 'registry-dermatology',
+        }),
+      }),
+    );
+    expect(findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          diagnosisRegistryId: 'registry-appendicitis',
+        }),
+      }),
+    );
+  });
+
   it('keeps education quality warnings equivalent to legacy rule input', async () => {
     const validator = new EducationDraftQualityValidator();
     const guidance = new EducationKnowledgeRulesService().getGuidance({

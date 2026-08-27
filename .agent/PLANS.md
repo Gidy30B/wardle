@@ -88,6 +88,147 @@ Record unresolved authority, technical, data, or verification risks.
 
 ---
 
+# ExecPlan: WEOS UAT P0 Cross-Diagnosis Curriculum Leakage
+
+## Purpose
+
+Ensure diagnosis workspace curriculum objectives and downstream generation
+context resolve only from exact-diagnosis approved/active Teaching Rules or an
+unambiguously matching legacy/static pack, never from unrelated diagnosis
+fallbacks or reused mutable state.
+
+## Approved Authority
+
+Implementation package: user-provided `WEOS UAT P0 - CROSS-DIAGNOSIS
+CURRICULUM LEAKAGE`. Required starting branch and commit: `master` at
+`58b814a39dcc57524e5478ea731bd3c5da6cc58f`.
+
+## Current Behavior
+
+Live Docker runtime reportedly shows the same clinically specific Teaching
+Objectives/Teaching Units, including ACS-like objectives, under unrelated
+diagnoses. Runtime source and DB state must be audited before fixing.
+
+## Required Invariant
+
+`DiagnosisCurriculumProviderService.getRules(Diagnosis X)` may return only:
+approved/active persisted `DiagnosisTeachingRule` rows with
+`diagnosisRegistryId === Diagnosis X.id`; a legacy/static rule pack whose
+identity unambiguously matches Diagnosis X; or `null`. No persisted, fallback,
+cached, sequential, or parallel call may leak another diagnosis's objectives.
+
+## Scope
+
+Included: audit of workspace objective read path, populated DB count/title
+inspection, curriculum provider and legacy teaching-rule fallback fix if
+needed, cross-diagnosis isolation tests, GenerationContextBuilder isolation
+verification, count-only live workspace/context verification, backend/dashboard
+verification as applicable.
+
+Excluded: live AI generation, Case/Education generation, schema/migration,
+data repair/backfill/delete, Teaching Rule generation semantic redesign, graph
+work, and scaffold smoke generation.
+
+## Files Expected To Change
+
+- `.agent/PLANS.md`
+- `doctordle-backend/src/modules/education/diagnosis-curriculum-provider.service.ts`
+- `doctordle-backend/src/modules/education/education-teaching-rules.service.ts`
+- focused specs for curriculum provider, teaching rules, coverage and/or
+  generation context if the bug is confirmed in those areas
+
+## Prohibited Changes
+
+No schema or migration. No data mutation except normal non-mutating reads. No
+generation commands. No fabricated generic Teaching Rules. No destructive
+repair of contaminated rows without stopping and reporting first.
+
+## Data Model Implications
+
+None expected.
+
+## API Implications
+
+None expected unless workspace read model proves to be the leakage source.
+
+## Migration Plan
+
+None.
+
+## Compatibility Strategy
+
+Keep legacy/static Teaching Rule fallback as compatibility-only, but make it
+identity-safe: unmatched diagnoses return `null` rather than a default or
+nearby diagnosis pack.
+
+## Testing Strategy
+
+Run focused curriculum provider, legacy teaching rules, TeachingUnitCoverage,
+GenerationContextBuilder, workspace service and SCAFFOLD-GEN-002 relevant
+tests; run backend build, dashboard tests/build if touched or required by
+package, Docker rebuild, live non-generating workspace/context verification,
+and `git diff --check`.
+
+## Rollback/Recovery
+
+Code-only changes can be reverted by the final commit. No data changes are
+authorized; if contaminated persisted rows are found, stop before repair.
+
+## Progress
+
+- [x] Verify starting HEAD and tracked clean worktree.
+- [x] Trace current objective source path.
+- [x] Inspect populated DB Teaching Rule assignment.
+- [x] Identify and fix exact leakage source if confirmed in code.
+- [x] Add cross-diagnosis isolation tests.
+- [x] Verify downstream GenerationContextBuilder isolation.
+- [x] Run tests/builds/live non-generating verification.
+- [x] Commit if fixed.
+
+## Discoveries
+
+- Starting checkout is `master` at `58b814a39dcc57524e5478ea731bd3c5da6cc58f`.
+- Workspace curriculum coverage flows through
+  `TeachingUnitCoverageService.getCoverage` to
+  `DiagnosisCurriculumProviderService.getRules`, which checks exact-ID
+  approved/active persisted `DiagnosisTeachingRule` rows before legacy fallback.
+- The populated database does not persist `Troponin dynamics` or
+  `Dissection and PE mimics` under any diagnosis; the observed titles were not
+  DB contamination.
+- Legacy `EducationTeachingRulesService` matched the myocardial infarction
+  alias `mi` with substring search, so unrelated normalized names containing
+  `mi` could resolve the MI pack.
+- Existing Editorial Brief summaries are diagnosis-scoped QA seed summaries;
+  no obvious MI objective contamination was found in the six Brief summaries.
+- Focused backend tests, SCAFFOLD-GEN-002 regressions, backend build,
+  dashboard tests/build, and `git diff --check` passed.
+- Rebuilt backend/worker images from committed source, recreated the running
+  services, confirmed `/api/health` returns 200, and confirmed backend/worker
+  startup logs.
+- Read-only compiled service checks against the populated DB showed no MI
+  Teaching Unit leakage in workspace coverage for Hypophosphatemic rickets,
+  Cerebral Palsy, Chronic Pulmonary Aspergillosis, Appendicitis, Peptic Ulcer
+  Disease, Diabetic Ketoacidosis, or Sepsis.
+- Read-only compiled `GenerationContextBuilder` checks against the populated DB
+  showed no MI markers for Hypophosphatemic rickets, Cerebral Palsy, Chronic
+  Pulmonary Aspergillosis, Diabetic Ketoacidosis, Sepsis, or Appendicitis.
+
+## Decisions
+
+- Treat wrong/null curriculum as safer than unrelated fallback curriculum.
+- Require exact normalized phrase or exact alias-token matching for legacy
+  diagnosis packs; unmatched diagnoses return `null`.
+- Clone materialized legacy packs so caller mutation cannot affect later
+  diagnosis resolutions.
+
+## Remaining Risks
+
+- Docker Compose still labels backend/worker as `unhealthy` in this local
+  environment, but direct `/api/health` and process logs confirm runtime
+  startup; this appears unrelated to curriculum resolution.
+
+---
+
 # ExecPlan: WEOS WS-CLOSE-002 Queue, Action, Publish and Legacy Convergence
 
 ## Purpose

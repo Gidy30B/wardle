@@ -597,8 +597,9 @@ export class EducationTeachingRulesService {
     definition: TeachingRulePackDefinition,
   ): EducationTeachingRulePack {
     const teachingUnits =
-      definition.teachingUnits ??
-      this.unitsFromLegacyDefinition(definition);
+      definition.teachingUnits?.map((teachingUnit) =>
+        this.cloneTeachingUnit(teachingUnit),
+      ) ?? this.unitsFromLegacyDefinition(definition);
 
     return {
       diagnosisKey: definition.diagnosisKey,
@@ -612,26 +613,36 @@ export class EducationTeachingRulesService {
         ],
       },
       requiredDifferentials:
-        definition.requiredDifferentials ??
+        definition.requiredDifferentials?.slice() ??
         this.manifestationsFor(teachingUnits, 'differential_concept'),
       requiredPitfalls:
-        definition.requiredPitfalls ??
+        definition.requiredPitfalls?.slice() ??
         this.manifestationsFor(teachingUnits, 'pitfall_concept'),
       requiredFindings:
-        definition.requiredFindings ??
+        definition.requiredFindings?.slice() ??
         this.manifestationsFor(teachingUnits, 'finding_concept'),
       requiredInvestigations:
-        definition.requiredInvestigations ??
+        definition.requiredInvestigations?.slice() ??
         this.manifestationsFor(teachingUnits, 'investigation_concept'),
       requiredExamMechanisms:
-        definition.requiredExamMechanisms ??
+        definition.requiredExamMechanisms?.slice() ??
         this.manifestationsFor(teachingUnits, 'exam_mechanism'),
       requiredManagementAnchors:
-        definition.requiredManagementAnchors ??
+        definition.requiredManagementAnchors?.slice() ??
         this.manifestationsFor(teachingUnits, 'management_concept'),
       requiredRecallConcepts:
-        definition.requiredRecallConcepts ??
+        definition.requiredRecallConcepts?.slice() ??
         this.recallConceptsFor(teachingUnits),
+    };
+  }
+
+  private cloneTeachingUnit(teachingUnit: TeachingUnit): TeachingUnit {
+    return {
+      ...teachingUnit,
+      acceptableManifestations: teachingUnit.acceptableManifestations.slice(),
+      ...(teachingUnit.avoidTooEarly
+        ? { avoidTooEarly: teachingUnit.avoidTooEarly.slice() }
+        : {}),
     };
   }
 
@@ -717,24 +728,33 @@ export class EducationTeachingRulesService {
 
   private matchesDiagnosis(normalized: string, diagnosisKey: string): boolean {
     const key = this.normalize(diagnosisKey);
-    if (normalized.includes(key)) {
+    if (this.containsNormalizedPhrase(normalized, key)) {
       return true;
     }
 
+    const tokens = new Set(normalized.split(' ').filter(Boolean));
     if (key === 'diabetic ketoacidosis') {
-      return normalized.includes('dka');
+      return tokens.has('dka');
     }
 
     if (key === 'myocardial infarction') {
       return (
-        normalized.includes('mi') ||
-        normalized.includes('stemi') ||
-        normalized.includes('nstemi') ||
-        normalized.includes('heart attack')
+        tokens.has('mi') ||
+        tokens.has('stemi') ||
+        tokens.has('nstemi') ||
+        this.containsNormalizedPhrase(normalized, 'heart attack')
       );
     }
 
     return false;
+  }
+
+  private containsNormalizedPhrase(normalized: string, phrase: string): boolean {
+    const normalizedPhrase = this.normalize(phrase);
+    if (!normalized || !normalizedPhrase) {
+      return false;
+    }
+    return ` ${normalized} `.includes(` ${normalizedPhrase} `);
   }
 
   private normalize(value: string): string {

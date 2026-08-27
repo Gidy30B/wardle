@@ -129,6 +129,30 @@ describe('TeachingUnitCoverageService', () => {
     );
   });
 
+  it('does not show myocardial infarction objectives for unrelated diagnoses whose names contain mi', async () => {
+    prisma.diagnosisRegistry.findUnique.mockResolvedValue({
+      id: 'registry-dermatology',
+      canonicalName: 'dermatitis herpetiformis',
+      displayLabel: 'Dermatitis Herpetiformis',
+      specialty: 'Dermatology',
+      category: 'Autoimmune blistering disease',
+      bodySystem: 'Skin',
+      clinicalSetting: null,
+      difficultyBand: null,
+      aliases: [{ term: 'Duhring disease' }],
+      education: null,
+      cases: [],
+      graphCandidates: [],
+      graphFacts: [],
+    });
+
+    const result = await service.getCoverage('registry-dermatology');
+
+    expect(result.teachingUnits).toEqual([]);
+    expect(JSON.stringify(result)).not.toContain('Troponin dynamics');
+    expect(JSON.stringify(result)).not.toContain('Dissection and PE mimics');
+  });
+
   it('uses candidate coverage to recommend graph review sensibly', async () => {
     prisma.diagnosisRegistry.findUnique.mockResolvedValue(
       registry({
