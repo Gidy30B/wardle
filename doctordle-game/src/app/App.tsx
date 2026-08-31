@@ -1,5 +1,6 @@
 import { AuthenticateWithRedirectCallback, useAuth } from '@clerk/clerk-react'
 import { AnimatePresence } from 'framer-motion'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { useEffect } from 'react'
 import GamePage from '../pages/GamePage'
 import LandingScreen from './components/LandingScreen'
@@ -16,7 +17,12 @@ import {
 } from '../features/auth/authRedirects'
 import { initPwaInstallPrompt } from '../features/notifications/pwaInstall'
 
-type EntryScreen = 'loading' | 'profile-onboarding' | 'signed-in' | 'signed-out'
+type EntryScreen =
+  | 'loading'
+  | 'onboarding-error'
+  | 'profile-onboarding'
+  | 'signed-in'
+  | 'signed-out'
 
 export default function App() {
   const { getToken, isLoaded, isSignedIn, userId } = useAuth()
@@ -84,6 +90,8 @@ export default function App() {
         ? 'signed-out'
       : userOnboarding.loading
         ? 'loading'
+        : userOnboarding.hasError
+          ? 'onboarding-error'
         : userOnboarding.shouldShowOnboarding
           ? 'profile-onboarding'
           : 'signed-in'
@@ -116,13 +124,21 @@ export default function App() {
         <AnimatedScreen screenKey="signed-out">
           <LandingScreen />
         </AnimatedScreen>
+      ) : screen === 'onboarding-error' ? (
+        <AnimatedScreen screenKey="onboarding-error">
+          <OnboardingRecoveryScreen onRetry={() => void userOnboarding.refetch()} />
+        </AnimatedScreen>
       ) : screen === 'profile-onboarding' ? (
         <AnimatedScreen screenKey="profile-onboarding">
-          <ProfileOnboardingScreen
-            suggestedUsername={userOnboarding.suggestedUsername}
-            onboardingStatus={userOnboarding.onboarding?.onboardingStatus ?? 'PROFILE_REQUIRED'}
-            onComplete={userOnboarding.saveProfile}
-          />
+          {userOnboarding.onboarding ? (
+            <ProfileOnboardingScreen
+              suggestedUsername={userOnboarding.suggestedUsername}
+              onboardingStatus={userOnboarding.onboarding.onboardingStatus}
+              onComplete={userOnboarding.saveProfile}
+            />
+          ) : (
+            <OnboardingRecoveryScreen onRetry={() => void userOnboarding.refetch()} />
+          )}
         </AnimatedScreen>
       ) : (
         <AnimatedScreen screenKey="signed-in">
@@ -130,5 +146,31 @@ export default function App() {
         </AnimatedScreen>
       )}
     </AnimatePresence>
+  )
+}
+
+function OnboardingRecoveryScreen({ onRetry }: { onRetry: () => void }) {
+  return (
+    <main className="flex min-h-[100dvh] items-center justify-center bg-[var(--wardle-color-charcoal)] px-5 py-[calc(env(safe-area-inset-top)+2rem)] text-white">
+      <section className="w-full max-w-sm text-center">
+        <div className="mx-auto flex size-12 items-center justify-center rounded-[14px] border border-[rgba(224,92,92,0.34)] bg-[rgba(224,92,92,0.12)] text-[var(--wardle-color-red)]">
+          <AlertTriangle aria-hidden="true" size={24} strokeWidth={2.4} />
+        </div>
+        <h1 className="mt-5 text-xl font-black text-[var(--wardle-color-mint)]">
+          We could not load your profile
+        </h1>
+        <p className="mt-2 text-sm font-semibold leading-6 text-white/58">
+          Check your connection or sign in again, then retry before continuing.
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-[14px] bg-[var(--wardle-color-teal)] px-5 text-sm font-black text-[var(--wardle-color-charcoal)] shadow-[0_16px_36px_rgba(0,180,166,0.24)] transition hover:bg-[var(--wardle-color-teal-light)] focus:outline-none focus:ring-2 focus:ring-[var(--wardle-color-teal-light)] focus:ring-offset-2 focus:ring-offset-[var(--wardle-color-charcoal)]"
+        >
+          <RefreshCw aria-hidden="true" size={18} strokeWidth={2.6} />
+          Retry profile
+        </button>
+      </section>
+    </main>
   )
 }

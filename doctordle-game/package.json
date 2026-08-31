@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "node --experimental-strip-types src/features/game/react/specialties/specialty-icon-registry.test.ts && node scripts/verify-pwa-build.mjs",
+    "test": "node --experimental-strip-types src/features/profile/useUserOnboarding.test.ts && node --experimental-strip-types src/features/game/react/specialties/specialty-icon-registry.test.ts && node scripts/verify-pwa-build.mjs",
     "preview": "vite preview",
     "cap:sync": "npm run build && cap sync",
     "cap:open:ios": "cap open ios",

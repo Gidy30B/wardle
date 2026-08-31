@@ -9,6 +9,7 @@ import {
   getUserOnboardingApi,
   saveOnboardingProfileApi,
 } from './profile.api'
+import { getOnboardingDecision } from './useUserOnboarding.decision'
 import type { WardleProfileCompletionPayload } from './profile.types'
 
 export function useUserOnboarding() {
@@ -32,6 +33,15 @@ export function useUserOnboarding() {
   })
 
   const suggestedUsername = query.data?.username?.trim() || ''
+  const decision = getOnboardingDecision({
+    authLoaded: isLoaded,
+    signedIn: isSignedIn === true,
+    userId,
+    queryPending: query.isPending && !query.data,
+    querySuccess: query.isSuccess,
+    queryError: query.error,
+    onboarding: query.data ?? null,
+  })
 
   const saveProfile = useCallback(
     async (payload: WardleProfileCompletionPayload) => {
@@ -82,14 +92,11 @@ export function useUserOnboarding() {
 
   return {
     onboarding: query.data ?? null,
-    loading: query.isPending && !query.data,
+    loading: decision.loading,
     error: query.error,
+    hasError: decision.hasError,
     suggestedUsername,
-    shouldShowOnboarding:
-      isLoaded &&
-      isSignedIn &&
-      !query.isPending &&
-      query.data?.onboardingStatus !== 'COMPLETE',
+    shouldShowOnboarding: decision.shouldShowOnboarding,
     saveProfile,
     completeWithOrganization,
     continueIndividually,
